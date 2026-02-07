@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = 'http://localhost:3000/api';
 
 // Status badge component with color coding
 function StatusBadge({ status, large = false }) {
@@ -644,6 +644,261 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
   );
 }
 
+// Edit Equipment Modal
+function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    type: '',
+    protocol: 'modbus',
+    address: ''
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
+
+  // Initialize form data when equipment changes
+  useEffect(() => {
+    if (equipment) {
+      setFormData({
+        name: equipment.name || '',
+        description: equipment.description || '',
+        type: equipment.type || '',
+        protocol: equipment.protocol || 'modbus',
+        address: equipment.address || ''
+      });
+      setError(null);
+      setSuccessMessage(null);
+    }
+  }, [equipment]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+
+    if (!formData.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipment.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          description: formData.description.trim(),
+          type: formData.type.trim(),
+          protocol: formData.protocol,
+          address: formData.address.trim()
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to update equipment');
+      }
+
+      const updatedEquipment = await response.json();
+      setSuccessMessage(`Equipment "${updatedEquipment.name}" updated successfully!`);
+
+      // Notify parent and close after a brief delay
+      setTimeout(() => {
+        onSuccess(updatedEquipment);
+        onClose();
+        setSuccessMessage(null);
+      }, 1500);
+
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isOpen || !equipment) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          onClick={onClose}
+        ></div>
+
+        {/* Modal */}
+        <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Edit Equipment
+          </h3>
+
+          {/* Success Message */}
+          {successMessage && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center">
+                <svg className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-green-800 text-sm">{successMessage}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center">
+                <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-red-800 text-sm">{error}</span>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Name */}
+            <div>
+              <label htmlFor="edit-name" className="block text-sm font-medium text-gray-700 mb-1">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="edit-name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g., Temperature Sensor 001"
+                required
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                id="edit-description"
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Optional description"
+              />
+            </div>
+
+            {/* Type */}
+            <div>
+              <label htmlFor="edit-type" className="block text-sm font-medium text-gray-700 mb-1">
+                Type
+              </label>
+              <input
+                type="text"
+                id="edit-type"
+                name="type"
+                value={formData.type}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g., Temperature Sensor, Relay, Controller"
+              />
+            </div>
+
+            {/* Protocol */}
+            <div>
+              <label htmlFor="edit-protocol" className="block text-sm font-medium text-gray-700 mb-1">
+                Protocol
+              </label>
+              <select
+                id="edit-protocol"
+                name="protocol"
+                value={formData.protocol}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="modbus">Modbus</option>
+                <option value="mqtt">MQTT</option>
+                <option value="zigbee">Zigbee</option>
+                <option value="zwave">Z-Wave</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            {/* Connection Address */}
+            <div>
+              <label htmlFor="edit-address" className="block text-sm font-medium text-gray-700 mb-1">
+                Connection Address
+              </label>
+              <input
+                type="text"
+                id="edit-address"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                placeholder="e.g., 192.168.1.100:502 or /dev/ttyUSB0"
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Equipment() {
   const { token } = useAuth();
   const [equipment, setEquipment] = useState([]);
@@ -654,6 +909,7 @@ export default function Equipment() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
 
   useEffect(() => {
@@ -735,6 +991,15 @@ export default function Equipment() {
   const handleViewEquipment = (eq) => {
     setSelectedEquipment(eq);
     setShowDetailModal(true);
+  };
+
+  const handleEditEquipment = (eq) => {
+    setSelectedEquipment(eq);
+    setShowEditModal(true);
+  };
+
+  const handleEditSuccess = () => {
+    fetchData();
   };
 
   // Filter equipment based on search and status
@@ -938,7 +1203,10 @@ export default function Equipment() {
                       View
                     </button>
                     <button
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditEquipment(eq);
+                      }}
                       className="text-gray-600 hover:text-gray-900"
                     >
                       Edit
@@ -976,6 +1244,18 @@ export default function Equipment() {
         equipment={selectedEquipment}
         token={token}
         onUpdate={fetchData}
+      />
+
+      {/* Edit Equipment Modal */}
+      <EditEquipmentModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setSelectedEquipment(null);
+        }}
+        equipment={selectedEquipment}
+        onSuccess={handleEditSuccess}
+        token={token}
       />
     </div>
   );
