@@ -20,6 +20,72 @@ router.get('/setup-status', (req, res) => {
   });
 });
 
+// GET /api/auth/setup/network - Get current network configuration
+router.get('/setup/network', (req, res) => {
+  // Return current network settings or defaults
+  const networkSetting = db.prepare(
+    "SELECT value FROM system_settings WHERE key = 'network'"
+  ).get();
+
+  if (networkSetting) {
+    try {
+      const network = JSON.parse(networkSetting.value);
+      return res.json(network);
+    } catch {
+      // Fall through to defaults
+    }
+  }
+
+  // Return defaults
+  res.json({
+    ipAddress: '',
+    gateway: '',
+    dns: '',
+    dhcp: true
+  });
+});
+
+// POST /api/auth/setup/network - Save network configuration during setup
+router.post('/setup/network', (req, res) => {
+  const { ipAddress, gateway, dns, dhcp } = req.body;
+
+  // Validate IP address format if provided (and not using DHCP)
+  const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+
+  if (!dhcp) {
+    if (ipAddress && !ipRegex.test(ipAddress)) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Invalid IP address format' });
+    }
+    if (gateway && !ipRegex.test(gateway)) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Invalid gateway format' });
+    }
+    if (dns && !ipRegex.test(dns)) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Invalid DNS format' });
+    }
+  }
+
+  const networkConfig = {
+    ipAddress: ipAddress || '',
+    gateway: gateway || '',
+    dns: dns || '',
+    dhcp: dhcp !== false
+  };
+
+  try {
+    db.prepare(
+      'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+    ).run('network', JSON.stringify(networkConfig));
+
+    res.json({
+      message: 'Network configuration saved',
+      network: networkConfig
+    });
+  } catch (error) {
+    console.error('Network config error:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to save network configuration' });
+  }
+});
+
 // POST /api/auth/setup - Initial admin account setup
 router.post('/setup', (req, res) => {
   const { email, password, name } = req.body;
