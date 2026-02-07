@@ -14,5 +14,11 @@ if (!user) {
   db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(hash, 'admin@sensehub.local');
   console.log('Admin password reset to admin123');
 }
+
+// Also reset operator and viewer passwords
+db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(hash, 'operator@sensehub.local');
+db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(hash, 'viewer@sensehub.local');
+console.log('Operator and Viewer passwords reset to admin123');
+
 console.log('Users:', db.prepare('SELECT id, email, role FROM users').all());
 db.close();
