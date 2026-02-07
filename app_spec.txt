@@ -1,0 +1,613 @@
+<project_specification>
+  <project_name>SenseHub</project_name>
+
+  <overview>
+    SenseHub is a Dockerized edge computing platform designed for Raspberry Pi 5 deployment. It serves as the local "brain" for industrial IoT operations, managing field equipment (sensors, relays, controllers, nodes), running automation programs, and syncing with a centralized Cloud platform. The system operates fully offline-first, ensuring complete autonomy even without cloud connectivity, while supporting bi-directional sync when connected.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>React</framework>
+      <styling>Tailwind CSS</styling>
+      <state_management>React Context + useReducer</state_management>
+      <build_tool>Vite</build_tool>
+    </frontend>
+    <backend>
+      <runtime>Node.js</runtime>
+      <framework>Express.js</framework>
+      <database>SQLite</database>
+      <orm>Better-sqlite3 or Knex.js</orm>
+    </backend>
+    <communication>
+      <api>REST API</api>
+      <realtime>WebSocket for live equipment status</realtime>
+      <protocols>Modbus, MQTT, Zigbee, Z-Wave support via adapters</protocols>
+    </communication>
+    <deployment>
+      <containerization>Docker</containerization>
+      <target_platform>Raspberry Pi 5</target_platform>
+    </deployment>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      - Docker and Docker Compose installed
+      - Node.js 18+ (for local development)
+      - Raspberry Pi 5 with Raspberry Pi OS (for deployment)
+      - Network connectivity for equipment discovery
+    </environment_setup>
+  </prerequisites>
+
+  <feature_count>158</feature_count>
+
+  <security_and_access_control>
+    <user_roles>
+      <role name="admin">
+        <permissions>
+          - Full access to all features
+          - Manage users (create, edit, delete, assign roles)
+          - System settings (network, timezone, storage, backup/restore)
+          - Factory reset capability
+          - Firmware/update management
+          - Create, edit, delete automation programs
+          - Full equipment management (add, remove, calibrate, configure)
+          - Zone management
+          - Cloud connection configuration
+          - View all dashboards and logs
+        </permissions>
+        <protected_routes>
+          - /settings/system (admin only)
+          - /settings/users (admin only)
+          - /settings/cloud (admin only)
+          - /settings/backup (admin only)
+        </protected_routes>
+      </role>
+      <role name="operator">
+        <permissions>
+          - Control equipment (on/off, adjust setpoints)
+          - Create and edit automation programs
+          - View all dashboards and monitoring data
+          - Acknowledge alerts
+          - View equipment history
+          - Manage zones (create, edit, assign equipment)
+          - Cannot manage users
+          - Cannot access system settings
+          - Cannot perform factory reset
+        </permissions>
+        <protected_routes>
+          - /settings/system (blocked)
+          - /settings/users (blocked)
+          - /settings/backup (blocked)
+        </protected_routes>
+      </role>
+      <role name="viewer">
+        <permissions>
+          - View-only access to dashboards
+          - View equipment status and readings
+          - View automation programs (cannot edit)
+          - View alerts (cannot acknowledge)
+          - View zones and organization
+          - Cannot control equipment
+          - Cannot create or edit automations
+          - Cannot modify any settings
+        </permissions>
+        <protected_routes>
+          - All /settings/* routes (blocked)
+          - All POST/PUT/DELETE API endpoints (blocked)
+        </protected_routes>
+      </role>
+    </user_roles>
+    <authentication>
+      <method>email/password (local authentication)</method>
+      <session_timeout>8 hours of inactivity</session_timeout>
+      <password_requirements>Minimum 8 characters</password_requirements>
+      <offline_auth>Full authentication works without Cloud connection</offline_auth>
+    </authentication>
+    <sensitive_operations>
+      - Factory reset requires password confirmation
+      - Deleting automation programs requires confirmation
+      - Removing equipment requires confirmation
+      - User deletion requires password confirmation
+    </sensitive_operations>
+  </security_and_access_control>
+
+  <core_features>
+    <setup_wizard>
+      - Welcome screen with system overview
+      - Network configuration (IP, gateway, DNS)
+      - Create initial admin account
+      - Cloud connection setup (optional, can skip)
+      - Timezone and locale selection
+      - Initial equipment scan prompt
+      - Wizard completion confirmation
+      - Skip to dashboard option
+    </setup_wizard>
+
+    <user_management>
+      - User login with email/password
+      - User logout
+      - Session persistence across browser refresh
+      - Role-based access control (admin, operator, viewer)
+      - Admin can create new users
+      - Admin can edit user details and roles
+      - Admin can delete users
+      - Admin can reset user passwords
+      - User profile view
+      - User can change own password
+      - Local users (offline-only)
+      - Cloud-synced users (when connected)
+      - Last login tracking
+      - Active session management
+      - Automatic session timeout
+    </user_management>
+
+    <equipment_management>
+      - Equipment discovery scan (multi-protocol)
+      - Auto-detect protocol during scan (Modbus, MQTT, Zigbee, Z-Wave)
+      - Manual protocol override
+      - Manual equipment addition
+      - Equipment list view with status indicators
+      - Equipment detail view
+      - Edit equipment name and description
+      - Edit equipment type/category (user-defined)
+      - Assign equipment to zones (multi-zone support)
+      - Remove equipment from zones
+      - View equipment history (readings over time)
+      - Equipment calibration interface
+      - Disable/enable equipment
+      - Delete equipment
+      - Equipment status indicators (online, offline, error, warning)
+      - Real-time status updates via WebSocket
+      - Equipment search and filter
+      - Sort equipment by name, type, status, zone
+      - Bulk equipment operations
+      - Equipment import/export
+      - Protocol configuration per equipment
+      - Connection testing for equipment
+      - Last communication timestamp
+      - Equipment error logs
+    </equipment_management>
+
+    <zones_organization>
+      - Create new zone
+      - Edit zone name and description
+      - Delete zone
+      - Zone list view
+      - Zone detail view with assigned equipment
+      - Assign equipment to zone
+      - Remove equipment from zone
+      - Equipment can belong to multiple zones
+      - Zone-based dashboard view
+      - Zone hierarchy (optional parent-child)
+      - Zone search
+      - Zone equipment count display
+    </zones_organization>
+
+    <automation_builder>
+      - Visual no-code automation builder
+      - Create new automation program
+      - Edit existing automation
+      - Delete automation
+      - Duplicate automation
+      - Automation list view
+      - Trigger types: schedule/timer
+      - Trigger types: sensor threshold
+      - Trigger types: manual button
+      - Trigger types: equipment events
+      - Trigger types: time-of-day
+      - Trigger types: Cloud command (when connected)
+      - Condition builder with AND logic
+      - Condition builder with OR logic
+      - Nested condition groups
+      - Action: control equipment (on/off/set value)
+      - Action: send alert
+      - Action: log event
+      - Action: chain to other automation
+      - Action: sync to Cloud
+      - Pre-built automation templates
+      - Customize templates
+      - Automation testing/simulation mode
+      - Enable/disable automation
+      - Automation run history
+      - Automation error handling
+      - Schedule with cron-like interface
+      - Recurring schedules (daily, weekly, custom)
+      - One-time scheduled actions
+      - Automation priority/ordering
+      - Automation naming and description
+      - Automation grouping by category
+    </automation_builder>
+
+    <dashboard_monitoring>
+      - Main overview dashboard
+      - Zone-specific dashboard view
+      - Equipment detail dashboard
+      - Real-time sensor readings display
+      - Real-time equipment status display
+      - Active automations panel
+      - Recent alerts panel
+      - Direct equipment control (on/off toggle)
+      - Adjust equipment setpoints
+      - Historical data charts
+      - Configurable time range (hours, days, weeks)
+      - 30-day local data retention
+      - Data export to CSV
+      - Dashboard refresh controls
+      - Widget-based layout
+      - Customizable dashboard (admin/operator)
+      - System health overview
+      - Connection status to Cloud
+      - Equipment summary statistics
+      - Zone summary statistics
+      - Quick actions panel
+    </dashboard_monitoring>
+
+    <alerts_notifications>
+      - Alert creation based on conditions
+      - Alert severity levels (info, warning, critical)
+      - On-screen alert display
+      - Alert sound notification option
+      - Alert acknowledgment (operator/admin)
+      - Alert history log
+      - Alert filtering by severity, equipment, zone
+      - Unacknowledged alert count badge
+      - Alert auto-clear conditions
+      - Alert sync to Cloud when connected
+    </alerts_notifications>
+
+    <cloud_sync>
+      - Cloud connection status indicator
+      - Configure Cloud connection (URL, credentials)
+      - Test Cloud connection
+      - Bi-directional sync of equipment
+      - Bi-directional sync of zones
+      - Bi-directional sync of automations
+      - Bi-directional sync of sensor data
+      - Bi-directional sync of alerts
+      - Conflict resolution: local wins
+      - Cloud notified of divergence
+      - Suggested programs from Cloud (approval required)
+      - Offline queue for pending syncs
+      - Sync status and history
+      - Manual sync trigger
+      - User account sync from Cloud
+    </cloud_sync>
+
+    <system_settings>
+      - Timezone configuration
+      - Locale/language settings
+      - Storage management (view usage)
+      - Data retention settings
+      - Firmware/version information
+      - Factory reset (with confirmation)
+      - Backup configuration
+      - Restore from backup
+      - Network settings view/edit
+      - System logs view
+    </system_settings>
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <users>
+        - id (primary key), email (unique), password_hash, name
+        - role (admin/operator/viewer), is_cloud_synced
+        - last_login, created_at, updated_at
+      </users>
+      <sessions>
+        - id, user_id (foreign key), token, expires_at, created_at
+      </sessions>
+      <equipment>
+        - id, name, description, type, protocol
+        - address/connection_string, status, enabled
+        - last_reading, last_communication, error_log
+        - created_at, updated_at
+      </equipment>
+      <zones>
+        - id, name, description, parent_id (nullable, self-reference)
+        - created_at, updated_at
+      </zones>
+      <equipment_zones>
+        - id, equipment_id (foreign key), zone_id (foreign key)
+        - created_at
+      </equipment_zones>
+      <readings>
+        - id, equipment_id (foreign key), value, unit
+        - timestamp, created_at
+      </readings>
+      <automations>
+        - id, name, description, enabled, priority
+        - trigger_config (JSON), conditions (JSON), actions (JSON)
+        - last_run, run_count, created_at, updated_at
+      </automations>
+      <automation_logs>
+        - id, automation_id (foreign key), status, message
+        - triggered_at, completed_at
+      </automation_logs>
+      <alerts>
+        - id, equipment_id (nullable), zone_id (nullable)
+        - severity, message, acknowledged, acknowledged_by
+        - created_at, acknowledged_at
+      </alerts>
+      <system_settings>
+        - key (primary key), value (JSON), updated_at
+      </system_settings>
+      <sync_queue>
+        - id, entity_type, entity_id, action, payload (JSON)
+        - status, retry_count, created_at, synced_at
+      </sync_queue>
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <auth>
+      - POST /api/auth/login
+      - POST /api/auth/logout
+      - GET /api/auth/session
+      - POST /api/auth/change-password
+    </auth>
+    <users>
+      - GET /api/users
+      - POST /api/users
+      - GET /api/users/:id
+      - PUT /api/users/:id
+      - DELETE /api/users/:id
+    </users>
+    <equipment>
+      - GET /api/equipment
+      - POST /api/equipment
+      - GET /api/equipment/:id
+      - PUT /api/equipment/:id
+      - DELETE /api/equipment/:id
+      - POST /api/equipment/scan
+      - POST /api/equipment/:id/control
+      - POST /api/equipment/:id/calibrate
+      - GET /api/equipment/:id/history
+    </equipment>
+    <zones>
+      - GET /api/zones
+      - POST /api/zones
+      - GET /api/zones/:id
+      - PUT /api/zones/:id
+      - DELETE /api/zones/:id
+      - POST /api/zones/:id/equipment
+      - DELETE /api/zones/:id/equipment/:equipmentId
+    </zones>
+    <automations>
+      - GET /api/automations
+      - POST /api/automations
+      - GET /api/automations/:id
+      - PUT /api/automations/:id
+      - DELETE /api/automations/:id
+      - POST /api/automations/:id/test
+      - POST /api/automations/:id/toggle
+      - GET /api/automations/templates
+    </automations>
+    <alerts>
+      - GET /api/alerts
+      - POST /api/alerts/:id/acknowledge
+      - GET /api/alerts/unacknowledged/count
+    </alerts>
+    <dashboard>
+      - GET /api/dashboard/overview
+      - GET /api/dashboard/zone/:id
+      - GET /api/dashboard/equipment/:id
+    </dashboard>
+    <cloud>
+      - GET /api/cloud/status
+      - POST /api/cloud/connect
+      - POST /api/cloud/disconnect
+      - POST /api/cloud/sync
+      - GET /api/cloud/pending
+    </cloud>
+    <settings>
+      - GET /api/settings
+      - PUT /api/settings
+      - POST /api/settings/backup
+      - POST /api/settings/restore
+      - POST /api/settings/factory-reset
+    </settings>
+    <system>
+      - GET /api/health
+      - GET /api/system/info
+      - GET /api/system/logs
+    </system>
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      - Responsive sidebar navigation (collapsible on mobile)
+      - Top header with user info, alerts badge, Cloud status
+      - Main content area with breadcrumbs
+      - Footer with system status indicators
+    </main_structure>
+    <navigation>
+      - Dashboard (home)
+      - Equipment (list, scan, add)
+      - Zones (list, manage)
+      - Automations (list, builder)
+      - Alerts (list, history)
+      - Settings (users, system, cloud, backup)
+    </navigation>
+    <key_screens>
+      - Setup Wizard (multi-step form)
+      - Login page
+      - Main Dashboard (overview with widgets)
+      - Equipment List (table with filters)
+      - Equipment Detail (tabs: info, history, controls)
+      - Zone List (cards or tree view)
+      - Zone Detail (equipment grid)
+      - Automation List (table with status)
+      - Automation Builder (visual canvas)
+      - Alerts Panel (filterable list)
+      - Settings pages (tabbed interface)
+    </key_screens>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      - Primary: Industrial blue (#2563EB)
+      - Secondary: Slate gray (#64748B)
+      - Success: Green (#22C55E)
+      - Warning: Amber (#F59E0B)
+      - Error: Red (#EF4444)
+      - Background: White/Light gray (#F8FAFC)
+      - Dark mode support
+    </color_palette>
+    <typography>
+      - Font: Inter or system font stack
+      - Headings: Bold, clear hierarchy
+      - Body: Regular weight, readable
+      - Monospace for technical values
+    </typography>
+    <components>
+      - Cards for equipment and zones
+      - Tables for lists with sorting/filtering
+      - Modal dialogs for forms and confirmations
+      - Toast notifications for feedback
+      - Status badges with color coding
+      - Charts for historical data (line, bar)
+    </components>
+  </design_system>
+
+  <implementation_steps>
+    <step number="1">
+      <title>Foundation & Infrastructure</title>
+      <tasks>
+        - Set up Docker configuration
+        - Initialize Node.js/Express backend
+        - Configure SQLite database with schema
+        - Set up React frontend with Vite
+        - Implement health check endpoint
+        - Create basic project structure
+      </tasks>
+    </step>
+    <step number="2">
+      <title>Authentication & User Management</title>
+      <tasks>
+        - Implement user authentication (login/logout)
+        - Set up session management
+        - Create role-based access control middleware
+        - Build user management CRUD (admin only)
+        - Implement protected routes
+      </tasks>
+    </step>
+    <step number="3">
+      <title>Setup Wizard</title>
+      <tasks>
+        - Build multi-step wizard component
+        - Implement network configuration
+        - Create admin account setup
+        - Add Cloud connection (optional)
+        - Timezone/locale selection
+        - First-run detection and routing
+      </tasks>
+    </step>
+    <step number="4">
+      <title>Equipment Management</title>
+      <tasks>
+        - Equipment CRUD operations
+        - Equipment discovery/scan interface
+        - Protocol adapters (Modbus, MQTT, Zigbee, Z-Wave)
+        - Real-time status via WebSocket
+        - Equipment history and readings
+        - Calibration interface
+      </tasks>
+    </step>
+    <step number="5">
+      <title>Zones & Organization</title>
+      <tasks>
+        - Zone CRUD operations
+        - Equipment-zone assignment (many-to-many)
+        - Zone hierarchy (optional)
+        - Zone-based views
+      </tasks>
+    </step>
+    <step number="6">
+      <title>Automation Builder</title>
+      <tasks>
+        - Visual automation builder UI
+        - Trigger configuration (schedule, threshold, events)
+        - Condition builder (AND/OR logic)
+        - Action configuration
+        - Automation testing mode
+        - Template system
+      </tasks>
+    </step>
+    <step number="7">
+      <title>Dashboard & Monitoring</title>
+      <tasks>
+        - Main overview dashboard
+        - Zone-specific dashboards
+        - Equipment detail views
+        - Real-time data display
+        - Historical charts
+        - Direct control interface
+      </tasks>
+    </step>
+    <step number="8">
+      <title>Alerts & Notifications</title>
+      <tasks>
+        - Alert creation and management
+        - Severity levels
+        - Acknowledgment workflow
+        - Alert history
+        - Sound notifications
+      </tasks>
+    </step>
+    <step number="9">
+      <title>Cloud Sync</title>
+      <tasks>
+        - Cloud connection management
+        - Bi-directional sync engine
+        - Conflict resolution (local wins)
+        - Offline queue
+        - Suggested programs approval
+      </tasks>
+    </step>
+    <step number="10">
+      <title>System Settings & Polish</title>
+      <tasks>
+        - System settings interface
+        - Backup/restore functionality
+        - Factory reset
+        - Responsive design refinement
+        - Dark mode
+        - Final testing and optimization
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <functionality>
+      - All CRUD operations work for users, equipment, zones, automations, alerts
+      - Equipment discovery successfully detects devices on supported protocols
+      - Automation programs execute reliably based on triggers and conditions
+      - Real-time status updates display within 2 seconds
+      - System operates fully offline without Cloud connectivity
+      - Data syncs correctly when Cloud connection is restored
+    </functionality>
+    <user_experience>
+      - Setup wizard guides new users through initial configuration
+      - Dashboard provides clear overview of system status
+      - Equipment can be controlled with single click/tap
+      - Automation builder is intuitive without coding knowledge
+      - Role-based access prevents unauthorized actions
+      - Mobile-responsive for on-site use
+    </user_experience>
+    <technical_quality>
+      - Dockerized deployment works on Raspberry Pi 5
+      - SQLite database persists data reliably
+      - API response times under 500ms for standard operations
+      - WebSocket connections stable for real-time updates
+      - No memory leaks during extended operation
+    </technical_quality>
+    <design_polish>
+      - Consistent visual design across all screens
+      - Clear status indicators with appropriate colors
+      - Smooth transitions and loading states
+      - Accessible to users with disabilities (WCAG 2.1 AA)
+      - Dark mode available
+    </design_polish>
+  </success_criteria>
+</project_specification>
