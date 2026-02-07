@@ -38,7 +38,7 @@ router.post('/login', (req, res) => {
   ).run(user.id, token, expiresAt);
 
   // Update last login
-  db.prepare('UPDATE users SET last_login = datetime("now") WHERE id = ?').run(user.id);
+  db.prepare("UPDATE users SET last_login = datetime('now') WHERE id = ?").run(user.id);
 
   res.json({
     token,
@@ -78,7 +78,7 @@ router.get('/session', (req, res) => {
     jwt.verify(token, JWT_SECRET);
 
     const session = db.prepare(
-      'SELECT s.*, u.id as user_id, u.email, u.name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime("now")'
+      "SELECT s.*, u.id as user_id, u.email, u.name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now')"
     ).get(token);
 
     if (!session) {
@@ -132,7 +132,7 @@ router.post('/change-password', (req, res) => {
   }
 
   const newHash = bcrypt.hashSync(newPassword, 10);
-  db.prepare('UPDATE users SET password_hash = ?, updated_at = datetime("now") WHERE id = ?')
+  db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
     .run(newHash, session.user_id);
 
   res.json({ message: 'Password changed successfully' });

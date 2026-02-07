@@ -31,8 +31,8 @@ router.post('/connect', requireRole('admin'), (req, res) => {
 
   db.prepare(`
     INSERT INTO system_settings (key, value, updated_at)
-    VALUES ('cloud_config', ?, datetime("now"))
-    ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime("now")
+    VALUES ('cloud_config', ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')
   `).run(config, config);
 
   res.json({ message: 'Cloud connection configured' });
@@ -52,8 +52,8 @@ router.post('/sync', requireRole('admin', 'operator'), (req, res) => {
 
   db.prepare(`
     INSERT INTO system_settings (key, value, updated_at)
-    VALUES ('last_cloud_sync', ?, datetime("now"))
-    ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime("now")
+    VALUES ('last_cloud_sync', ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')
   `).run(JSON.stringify({ timestamp: now }), JSON.stringify({ timestamp: now }));
 
   res.json({ message: 'Sync triggered', timestamp: now });

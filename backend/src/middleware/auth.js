@@ -17,7 +17,7 @@ const authMiddleware = (req, res, next) => {
 
     // Check if session exists and is not expired
     const session = db.prepare(
-      'SELECT s.*, u.id as user_id, u.email, u.name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime("now")'
+      "SELECT s.*, u.id as user_id, u.email, u.name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now')"
     ).get(token);
 
     if (!session) {

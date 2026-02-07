@@ -69,7 +69,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   }
 
   db.prepare(
-    'UPDATE zones SET name = ?, description = ?, parent_id = ?, updated_at = datetime("now") WHERE id = ?'
+    "UPDATE zones SET name = ?, description = ?, parent_id = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(
     name ?? zone.name,
     description ?? zone.description,

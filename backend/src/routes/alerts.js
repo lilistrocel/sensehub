@@ -63,7 +63,7 @@ router.post('/:id/acknowledge', requireRole('admin', 'operator'), (req, res) => 
   }
 
   db.prepare(
-    'UPDATE alerts SET acknowledged = 1, acknowledged_by = ?, acknowledged_at = datetime("now") WHERE id = ?'
+    "UPDATE alerts SET acknowledged = 1, acknowledged_by = ?, acknowledged_at = datetime('now') WHERE id = ?"
   ).run(req.user.id, alertId);
 
   const updated = db.prepare('SELECT * FROM alerts WHERE id = ?').get(alertId);

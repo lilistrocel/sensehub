@@ -105,7 +105,7 @@ router.put('/:id', requireRole('admin'), (req, res) => {
     return res.status(400).json({ error: 'Bad Request', message: 'No valid fields to update' });
   }
 
-  updates.push('updated_at = datetime("now")');
+  updates.push("updated_at = datetime('now')");
   params.push(userId);
 
   try {

@@ -27,8 +27,8 @@ router.put('/', requireRole('admin'), (req, res) => {
 
   const stmt = db.prepare(`
     INSERT INTO system_settings (key, value, updated_at)
-    VALUES (?, ?, datetime("now"))
-    ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime("now")
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')
   `);
 
   for (const [key, value] of Object.entries(updates)) {

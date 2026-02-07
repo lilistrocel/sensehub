@@ -85,7 +85,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   }
 
   db.prepare(
-    'UPDATE automations SET name = ?, description = ?, trigger_config = ?, conditions = ?, actions = ?, priority = ?, enabled = ?, updated_at = datetime("now") WHERE id = ?'
+    "UPDATE automations SET name = ?, description = ?, trigger_config = ?, conditions = ?, actions = ?, priority = ?, enabled = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(
     name ?? automation.name,
     description ?? automation.description,
@@ -141,7 +141,7 @@ router.post('/:id/toggle', requireRole('admin', 'operator'), (req, res) => {
   }
 
   const newState = automation.enabled ? 0 : 1;
-  db.prepare('UPDATE automations SET enabled = ?, updated_at = datetime("now") WHERE id = ?')
+  db.prepare("UPDATE automations SET enabled = ?, updated_at = datetime('now') WHERE id = ?")
     .run(newState, req.params.id);
 
   res.json({ enabled: newState === 1 });
