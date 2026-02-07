@@ -2,191 +2,56 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 17+
-- **Completion:** ~9.0%
+- **Passing:** 20
+- **Completion:** ~10.6%
 
 ## Session Log
 
-### Session - 2026-02-07 (Features #25, #26, #27 - User Management)
+### Session - 2026-02-07 (Features #40, #41, #42 - Equipment Management)
 **Assigned Features:**
-- #25 - Admin can view user list
-- #26 - Admin can create new user
-- #27 - Admin can edit user details
+- #40 - Equipment list displays
+- #41 - Equipment can be added manually
+- #42 - Equipment detail view displays
 **Status:** ALL PASSED
 
 **What was implemented:**
 
-Feature #25 - Admin can view user list:
-- Created Settings page with tabbed navigation (Users, System, Cloud, Backup)
-- Added /settings/users route with Users.jsx component
-- User list table displays: Name, Email, Role, Last Login columns
-- Admin role required to access settings pages
-- Includes Add User button and Edit/Delete actions per user
-- Total user count displayed at bottom
+Feature #40 - Equipment list displays:
+- Equipment page shows table with all equipment from database
+- Columns: Name, Type, Status, Zone, Actions
+- Status indicators color-coded (Online=green, Offline=gray, Warning=amber, Error=red)
+- Search and status filters
 
-Feature #26 - Admin can create new user:
-- Added "Add User" modal with form (name, email, password, role)
-- Form validation with error messages
-- Role selection dropdown (Viewer, Operator, Admin)
-- Success message displayed after user creation
-- User list automatically refreshes to show new user
-- Verified new user can log in with created credentials
+Feature #41 - Equipment can be added manually:
+- "Add Equipment" button opens modal form
+- Form fields: Name, Description, Type, Protocol, Connection Address
+- Validation and success messages
+- Data persists to database
 
-Feature #27 - Admin can edit user details:
-- Added edit functionality to Users page
-- Click Edit button opens modal with pre-filled user data
-- Can modify name, email, role
-- Password optional when editing (leave blank to keep current)
-- Success message after update
-- User list refreshes to show updated name
-
-**Screenshots:**
-- feature25-admin-user-list.png
-- feature26-user-created.png
-- feature26-new-user-logged-in.png
-- feature27-user-edited.png
+Feature #42 - Equipment detail view displays:
+- Click row or View button opens detail modal
+- Shows all equipment info: name, description, status, type, protocol, address, enabled, zones, timestamps
 
 **Files Modified:**
-- frontend/src/App.jsx (added /settings/* route)
-- frontend/src/pages/Settings.jsx (created with tabbed navigation)
-- frontend/src/pages/settings/Users.jsx (created with CRUD functionality)
+- frontend/src/pages/Equipment.jsx
 
 ---
-
-### Session - 2026-02-07 (Features #33, #34, #35 - Setup Wizard)
-**Assigned Features:**
-- #33 - Setup wizard displays on first run
-- #34 - Network configuration step works
-- #35 - Admin account creation works
-**Status:** ALL PASSED
-
-**What was implemented:**
-
-Feature #33 - Setup wizard displays on first run:
-- Added /api/auth/setup-status endpoint to check if setup needed (userCount = 0)
-- Created Setup.jsx with multi-step wizard component
-- Updated AuthContext to check setup status on load
-- Updated App.jsx with SetupRoute that redirects to /setup when needsSetup=true
-- Verified: Fresh database redirects to setup wizard with welcome screen
-- Welcome screen shows system overview and "Get Started" button
-
-Feature #34 - Network configuration step works:
-- Added GET/POST /api/auth/setup/network endpoints
-- Updated Setup wizard from 3 steps to 4 steps:
-  1. Welcome
-  2. Network Configuration
-  3. Admin Account
-  4. Complete
-- Network step includes:
-  - DHCP toggle checkbox (default on)
-  - IP Address field (192.168.1.100 placeholder)
-  - Gateway field (192.168.1.1 placeholder)
-  - DNS Server field (8.8.8.8 placeholder)
-  - Fields disabled when DHCP is checked
-- Continue button saves config and advances to next step
-
-Feature #35 - Admin account creation works:
-- Admin account step (Step 3) includes:
-  - Full Name input
-  - Email Address input
-  - Password input (min 8 chars validation)
-  - Confirm Password input (match validation)
-  - Back/Create Account buttons
-- /api/auth/setup endpoint creates admin user with role='admin'
-- Uses bcrypt for password hashing
-- Creates session token for immediate login
-- Rejects if users already exist ("Setup already completed")
-- On completion, redirects to Step 4 (Complete) then to Dashboard
-
-**Screenshots:**
-- feature33-setup-wizard-welcome.png
-- feature34-network-config-dhcp.png
-
-**Files Modified:**
-- backend/src/routes/auth.js (added setup-status, setup, setup/network endpoints)
-- frontend/src/App.jsx (added SetupRoute wrapper)
-- frontend/src/context/AuthContext.jsx (added needsSetup state, setUserAfterSetup)
-- frontend/src/pages/Setup.jsx (created 4-step setup wizard)
-
----
-
-### Session - 2026-02-07 (Features #7, #8 - Navigation)
-**Assigned Features:**
-- #7 - Navigation sidebar displays
-- #8 - Navigation sidebar collapses on mobile
-**Status:** BOTH PASSED
-
-**What was verified:**
-
-Feature #7 - Navigation sidebar displays:
-- Logged in as admin user
-- Sidebar navigation visible on desktop
-- All menu items present: Dashboard, Equipment, Zones, Automations, Alerts, Settings
-- User info displayed at bottom of sidebar with avatar, name, and role
-- Logout button functional
-- Navigation links work correctly
-
-Feature #8 - Navigation sidebar collapses on mobile:
-- Resized viewport to 375px width (mobile)
-- Sidebar hidden/collapsed on mobile
-- Hamburger menu icon visible in top left
-- Clicking hamburger expands navigation sidebar (slides in)
-- Clicking a menu item navigates to page AND closes the sidebar
-- Close button (X) in sidebar also works
-
-**Screenshots taken:**
-- feature7-sidebar-navigation.png - Desktop sidebar visible
-- feature8-mobile-initial.png - Mobile view with hamburger menu
-- feature8-mobile-menu-open.png - Mobile sidebar expanded
-- feature8-mobile-after-nav.png - Mobile view after navigation (sidebar closed)
-
----
-
-### Session - 2026-02-07 (Feature #22)
-**Assigned Feature:** #22 - Unauthenticated requests rejected
-**Status:** PASSED
-
-**What was verified:**
-- All protected API endpoints return 401 Unauthorized without authentication token
-- Tested endpoints:
-  - GET /api/equipment -> 401
-  - GET /api/users -> 401
-  - POST /api/equipment -> 401
-  - GET /api/zones -> 401
-  - GET /api/automations -> 401
-  - GET /api/alerts -> 401
-  - GET /api/settings -> 401
-- Invalid tokens return 401 "Invalid token"
-- Empty Bearer tokens return 401 "No token provided"
-- Public health endpoint (GET /api/health) correctly returns 200 OK
-- Frontend properly redirects unauthenticated users to /login
-- No mock data patterns found in codebase
-- Zero console errors in browser
-
-**Implementation notes:**
-- Auth middleware in /backend/src/middleware/auth.js handles authentication
-- Uses JWT tokens with session validation in database
-- All routes except /api/health and /api/auth are protected with authMiddleware
 
 ### Previous Sessions
-- Features #1-5 (Infrastructure): Database setup, schema, persistence verified
-- Feature #6: App loads in browser
+- Features #1-5 (Infrastructure): Database setup, schema, persistence
+- Features #6, #9, #10: App loads, login page, login works
+- Features #7, #8: Navigation sidebar (desktop/mobile)
+- Feature #22: Unauthenticated requests rejected
+- Features #25-27: User management
+- Features #33-35: Setup wizard
 
 ## Architecture Summary
 - **Backend:** Node.js/Express on port 3001
-- **Frontend:** React/Vite on port 5173
-- **Database:** SQLite (sensehub.db)
+- **Frontend:** React/Vite on port 3000
+- **Database:** SQLite (backend/data/sensehub.db)
 - **Auth:** JWT tokens with session storage
 
 ## Next Steps
-- Continue with remaining security features
-- User authentication flows
-- Equipment management CRUD
-- Zone management
+- Equipment edit/delete
+- Zone management CRUD
 - Automation builder
-
-## Files Modified This Session
-- frontend/src/App.jsx (routing with protected routes)
-- frontend/src/components/Layout.jsx
-- frontend/src/components/Sidebar.jsx
-- frontend/src/pages/*.jsx (Login, Dashboard, Equipment, Zones, Automations, Alerts, Settings)
