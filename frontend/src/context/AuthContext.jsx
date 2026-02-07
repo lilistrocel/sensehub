@@ -8,14 +8,39 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(null);
 
   useEffect(() => {
-    if (token) {
-      checkSession();
-    } else {
+    checkSetupAndSession();
+  }, []);
+
+  const checkSetupAndSession = async () => {
+    try {
+      // First check if setup is needed
+      const setupResponse = await fetch(`${API_BASE}/auth/setup-status`);
+      if (setupResponse.ok) {
+        const setupData = await setupResponse.json();
+        setNeedsSetup(setupData.needsSetup);
+
+        // If setup is needed, no need to check session
+        if (setupData.needsSetup) {
+          setLoading(false);
+          return;
+        }
+      }
+
+      // If we have a token, verify the session
+      if (token) {
+        await checkSession();
+      } else {
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Setup/session check failed:', error);
+      setNeedsSetup(false);
       setLoading(false);
     }
-  }, []);
+  };
 
   const checkSession = async () => {
     try {
@@ -81,13 +106,22 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Function to update user after setup completion
+  const setUserAfterSetup = (newToken, newUser) => {
+    setToken(newToken);
+    setUser(newUser);
+    setNeedsSetup(false);
+  };
+
   const value = {
     user,
     token,
     loading,
     login,
     logout,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
+    needsSetup,
+    setUserAfterSetup
   };
 
   return (
