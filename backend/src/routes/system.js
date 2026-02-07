@@ -29,6 +29,33 @@ router.get('/info', (req, res) => {
   res.json(info);
 });
 
+// GET /api/system/schema - Get database schema information
+router.get('/schema', (req, res) => {
+  try {
+    // Get all tables
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all();
+
+    const schema = {};
+    for (const table of tables) {
+      const columns = db.prepare(`PRAGMA table_info(${table.name})`).all();
+      schema[table.name] = columns.map(col => ({
+        name: col.name,
+        type: col.type,
+        notnull: col.notnull === 1,
+        pk: col.pk === 1
+      }));
+    }
+
+    res.json({
+      tables: tables.map(t => t.name),
+      tableCount: tables.length,
+      schema
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/system/logs - Get system logs
 router.get('/logs', requireRole('admin'), (req, res) => {
   const { level, limit } = req.query;
