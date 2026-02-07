@@ -41,14 +41,19 @@ function StatusBadge({ status, large = false }) {
 }
 
 // Equipment Detail Modal
-function EquipmentDetailModal({ isOpen, onClose, equipment, token }) {
+function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate }) {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState(null);
   const [error, setError] = useState(null);
+  const [allZones, setAllZones] = useState([]);
+  const [selectedZone, setSelectedZone] = useState('');
+  const [assigningZone, setAssigningZone] = useState(false);
+  const [zoneMessage, setZoneMessage] = useState(null);
 
   useEffect(() => {
     if (isOpen && equipment) {
       fetchDetails();
+      fetchAllZones();
     }
   }, [isOpen, equipment]);
 
@@ -78,6 +83,102 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token }) {
       setLoading(false);
     }
   };
+
+  const fetchAllZones = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/zones`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAllZones(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch zones:', err);
+    }
+  };
+
+  const handleAssignZone = async () => {
+    if (!selectedZone || !equipment) return;
+
+    setAssigningZone(true);
+    setZoneMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/zones/${selectedZone}/equipment`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ equipment_id: equipment.id })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to assign zone');
+      }
+
+      setZoneMessage({ type: 'success', text: 'Zone assigned successfully!' });
+      setSelectedZone('');
+
+      // Refresh equipment details to show new zone
+      await fetchDetails();
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+
+      // Clear success message after delay
+      setTimeout(() => setZoneMessage(null), 3000);
+    } catch (err) {
+      setZoneMessage({ type: 'error', text: err.message });
+    } finally {
+      setAssigningZone(false);
+    }
+  };
+
+  const handleRemoveZone = async (zoneId) => {
+    if (!equipment) return;
+
+    setZoneMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/zones/${zoneId}/equipment/${equipment.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to remove zone');
+      }
+
+      setZoneMessage({ type: 'success', text: 'Zone removed successfully!' });
+
+      // Refresh equipment details
+      await fetchDetails();
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+
+      // Clear success message after delay
+      setTimeout(() => setZoneMessage(null), 3000);
+    } catch (err) {
+      setZoneMessage({ type: 'error', text: err.message });
+    }
+  };
+
+  // Get zones that are not already assigned
+  const availableZones = allZones.filter(
+    zone => !details?.zones?.some(z => z.id === zone.id)
+  );
 
   if (!isOpen) return null;
 
@@ -173,22 +274,83 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token }) {
                 </span>
               </div>
 
-              {/* Zones */}
-              {eq?.zones && eq.zones.length > 0 && (
-                <div className="py-3 border-b border-gray-100">
-                  <span className="text-sm font-medium text-gray-500 block mb-2">Zones</span>
-                  <div className="flex flex-wrap gap-2">
+              {/* Zone Assignment Section */}
+              <div className="py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500 block mb-2">Zone Assignment</span>
+
+                {/* Zone Message */}
+                {zoneMessage && (
+                  <div className={`mb-3 p-2 rounded text-sm ${
+                    zoneMessage.type === 'success'
+                      ? 'bg-green-50 text-green-800 border border-green-200'
+                      : 'bg-red-50 text-red-800 border border-red-200'
+                  }`}>
+                    {zoneMessage.text}
+                  </div>
+                )}
+
+                {/* Current Zones */}
+                {eq?.zones && eq.zones.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 mb-3">
                     {eq.zones.map((zone, idx) => (
                       <span
                         key={zone.id || idx}
                         className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800"
                       >
                         {zone.name}
+                        <button
+                          onClick={() => handleRemoveZone(zone.id)}
+                          className="ml-1.5 text-blue-600 hover:text-blue-900 focus:outline-none"
+                          title="Remove from zone"
+                        >
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
                       </span>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-sm text-gray-400 mb-3">No zones assigned</p>
+                )}
+
+                {/* Add Zone Section */}
+                {availableZones.length > 0 ? (
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedZone}
+                      onChange={(e) => setSelectedZone(e.target.value)}
+                      className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value="">Select a zone...</option>
+                      {availableZones.map(zone => (
+                        <option key={zone.id} value={zone.id}>{zone.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAssignZone}
+                      disabled={!selectedZone || assigningZone}
+                      className="px-3 py-1.5 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    >
+                      {assigningZone ? (
+                        <>
+                          <svg className="animate-spin -ml-0.5 mr-1.5 h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Assigning...
+                        </>
+                      ) : (
+                        'Assign'
+                      )}
+                    </button>
+                  </div>
+                ) : allZones.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">No zones available. Create zones first.</p>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">All zones already assigned.</p>
+                )}
+              </div>
 
               {/* Last Communication */}
               {eq?.last_communication && (
@@ -813,6 +975,7 @@ export default function Equipment() {
         }}
         equipment={selectedEquipment}
         token={token}
+        onUpdate={fetchData}
       />
     </div>
   );

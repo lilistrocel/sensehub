@@ -104,6 +104,63 @@ router.post('/setup/network', (req, res) => {
   }
 });
 
+// GET /api/auth/setup/timezone - Get current timezone configuration
+router.get('/setup/timezone', (req, res) => {
+  const timezoneSetting = db.prepare(
+    "SELECT value FROM system_settings WHERE key = 'timezone'"
+  ).get();
+
+  if (timezoneSetting) {
+    try {
+      const timezone = JSON.parse(timezoneSetting.value);
+      return res.json(timezone);
+    } catch {
+      // Fall through to defaults
+    }
+  }
+
+  // Return defaults (try to detect system timezone)
+  res.json({
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  });
+});
+
+// POST /api/auth/setup/timezone - Save timezone configuration during setup
+router.post('/setup/timezone', (req, res) => {
+  const { timezone } = req.body;
+
+  if (!timezone) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Timezone is required' });
+  }
+
+  // Validate timezone by trying to use it
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+  } catch (e) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Invalid timezone' });
+  }
+
+  const timezoneConfig = {
+    timezone: timezone,
+    updatedAt: new Date().toISOString()
+  };
+
+  try {
+    const stmt = db.prepare(
+      "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))"
+    );
+    stmt.run('timezone', JSON.stringify(timezoneConfig));
+
+    res.json({
+      message: 'Timezone configuration saved',
+      timezone: timezoneConfig
+    });
+  } catch (error) {
+    console.error('Timezone config error:', error.message);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to save timezone configuration' });
+  }
+});
+
 // POST /api/auth/setup - Initial admin account setup
 router.post('/setup', (req, res) => {
   const { email, password, name } = req.body;

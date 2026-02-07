@@ -11,6 +11,9 @@ export default function Zones() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newZone, setNewZone] = useState({ name: '', description: '' });
   const [saving, setSaving] = useState(false);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const [zoneDetail, setZoneDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   useEffect(() => {
     fetchZones();
@@ -37,6 +40,38 @@ export default function Zones() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchZoneDetail = async (zoneId) => {
+    try {
+      setLoadingDetail(true);
+      const response = await fetch(`${API_BASE}/zones/${zoneId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch zone details');
+      }
+
+      const data = await response.json();
+      setZoneDetail(data);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  const handleZoneClick = (zone) => {
+    setSelectedZone(zone);
+    fetchZoneDetail(zone.id);
+  };
+
+  const closeDetailModal = () => {
+    setSelectedZone(null);
+    setZoneDetail(null);
   };
 
   const handleAddZone = async (e) => {
@@ -125,7 +160,8 @@ export default function Zones() {
           {zones.map((zone) => (
             <div
               key={zone.id}
-              className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+              onClick={() => handleZoneClick(zone)}
+              className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow cursor-pointer"
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">

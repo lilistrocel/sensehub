@@ -14,6 +14,8 @@ function Setup() {
     ipAddress: '',
     gateway: '',
     dns: '',
+    // Timezone config
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     // Admin account
     name: '',
     email: '',
@@ -27,26 +29,39 @@ function Setup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Load existing network config if any
+  // Load existing network and timezone config if any
   useEffect(() => {
-    const loadNetworkConfig = async () => {
+    const loadConfigs = async () => {
       try {
-        const response = await fetch(`${API_BASE}/auth/setup/network`);
-        if (response.ok) {
-          const data = await response.json();
+        // Load network config
+        const networkResponse = await fetch(`${API_BASE}/auth/setup/network`);
+        if (networkResponse.ok) {
+          const networkData = await networkResponse.json();
           setFormData(prev => ({
             ...prev,
-            dhcp: data.dhcp !== false,
-            ipAddress: data.ipAddress || '',
-            gateway: data.gateway || '',
-            dns: data.dns || ''
+            dhcp: networkData.dhcp !== false,
+            ipAddress: networkData.ipAddress || '',
+            gateway: networkData.gateway || '',
+            dns: networkData.dns || ''
           }));
         }
+
+        // Load timezone config
+        const timezoneResponse = await fetch(`${API_BASE}/auth/setup/timezone`);
+        if (timezoneResponse.ok) {
+          const timezoneData = await timezoneResponse.json();
+          if (timezoneData.timezone) {
+            setFormData(prev => ({
+              ...prev,
+              timezone: timezoneData.timezone
+            }));
+          }
+        }
       } catch (err) {
-        console.error('Failed to load network config:', err);
+        console.error('Failed to load config:', err);
       }
     };
-    loadNetworkConfig();
+    loadConfigs();
   }, []);
 
   const handleChange = (e) => {
@@ -119,7 +134,44 @@ function Setup() {
   const handleNetworkNext = async () => {
     const saved = await saveNetworkConfig();
     if (saved) {
-      setStep(3);
+      setStep(3); // Go to timezone step
+    }
+  };
+
+  const saveTimezoneConfig = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/setup/timezone`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          timezone: formData.timezone
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to save timezone configuration');
+      }
+
+      return true;
+    } catch (err) {
+      setError(err.message || 'An error occurred saving timezone configuration');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTimezoneNext = async () => {
+    const saved = await saveTimezoneConfig();
+    if (saved) {
+      setStep(4); // Go to admin account step
     }
   };
 
@@ -192,7 +244,7 @@ function Setup() {
       setUserAfterSetup(data.token, data.user);
 
       // Move to Cloud connection step
-      setStep(4);
+      setStep(5);
     } catch (err) {
       setError(err.message || 'An error occurred during setup');
     } finally {
@@ -202,7 +254,7 @@ function Setup() {
 
   const handleCloudSkip = () => {
     // Skip cloud configuration and go to complete step
-    setStep(5);
+    setStep(6);
   };
 
   const handleCloudConnect = async () => {
@@ -230,7 +282,7 @@ function Setup() {
       }
 
       // Move to completion step
-      setStep(5);
+      setStep(6);
     } catch (err) {
       setError(err.message || 'An error occurred connecting to cloud');
     } finally {
@@ -242,7 +294,7 @@ function Setup() {
     navigate('/');
   };
 
-  const stepLabels = ['Welcome', 'Network', 'Admin Account', 'Cloud', 'Complete'];
+  const stepLabels = ['Welcome', 'Network', 'Timezone', 'Admin Account', 'Cloud', 'Complete'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center p-4">
@@ -250,10 +302,10 @@ function Setup() {
         {/* Progress indicator */}
         <div className="bg-gray-100 px-8 py-4">
           <div className="flex items-center justify-between">
-            {[1, 2, 3, 4, 5].map((num) => (
+            {[1, 2, 3, 4, 5, 6].map((num) => (
               <div key={num} className="flex items-center">
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
+                  className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-semibold text-sm ${
                     step >= num
                       ? 'bg-primary-600 text-white'
                       : 'bg-gray-300 text-gray-600'
@@ -261,9 +313,9 @@ function Setup() {
                 >
                   {num}
                 </div>
-                {num < 5 && (
+                {num < 6 && (
                   <div
-                    className={`w-16 sm:w-20 h-1 mx-1 ${
+                    className={`w-8 sm:w-12 md:w-16 h-1 mx-0.5 sm:mx-1 ${
                       step > num ? 'bg-primary-600' : 'bg-gray-300'
                     }`}
                   />
@@ -449,8 +501,145 @@ function Setup() {
             </div>
           )}
 
-          {/* Step 3: Create Admin Account */}
+          {/* Step 3: Timezone Configuration */}
           {step === 3 && (
+            <div>
+              <div className="flex items-center mb-2">
+                <svg className="w-8 h-8 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Timezone Configuration
+                </h2>
+              </div>
+              <p className="text-gray-600 mb-6">
+                Select your timezone for accurate time display and scheduling.
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Timezone
+                  </label>
+                  <select
+                    name="timezone"
+                    value={formData.timezone}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                  >
+                    <optgroup label="Americas">
+                      <option value="America/New_York">America/New_York (Eastern)</option>
+                      <option value="America/Chicago">America/Chicago (Central)</option>
+                      <option value="America/Denver">America/Denver (Mountain)</option>
+                      <option value="America/Los_Angeles">America/Los_Angeles (Pacific)</option>
+                      <option value="America/Anchorage">America/Anchorage (Alaska)</option>
+                      <option value="Pacific/Honolulu">Pacific/Honolulu (Hawaii)</option>
+                      <option value="America/Toronto">America/Toronto</option>
+                      <option value="America/Vancouver">America/Vancouver</option>
+                      <option value="America/Mexico_City">America/Mexico_City</option>
+                      <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+                      <option value="America/Buenos_Aires">America/Buenos_Aires</option>
+                    </optgroup>
+                    <optgroup label="Europe">
+                      <option value="Europe/London">Europe/London</option>
+                      <option value="Europe/Paris">Europe/Paris</option>
+                      <option value="Europe/Berlin">Europe/Berlin</option>
+                      <option value="Europe/Madrid">Europe/Madrid</option>
+                      <option value="Europe/Rome">Europe/Rome</option>
+                      <option value="Europe/Amsterdam">Europe/Amsterdam</option>
+                      <option value="Europe/Brussels">Europe/Brussels</option>
+                      <option value="Europe/Zurich">Europe/Zurich</option>
+                      <option value="Europe/Moscow">Europe/Moscow</option>
+                      <option value="Europe/Istanbul">Europe/Istanbul</option>
+                    </optgroup>
+                    <optgroup label="Asia">
+                      <option value="Asia/Dubai">Asia/Dubai</option>
+                      <option value="Asia/Kolkata">Asia/Kolkata (India)</option>
+                      <option value="Asia/Singapore">Asia/Singapore</option>
+                      <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
+                      <option value="Asia/Shanghai">Asia/Shanghai (China)</option>
+                      <option value="Asia/Tokyo">Asia/Tokyo</option>
+                      <option value="Asia/Seoul">Asia/Seoul</option>
+                      <option value="Asia/Bangkok">Asia/Bangkok</option>
+                      <option value="Asia/Jakarta">Asia/Jakarta</option>
+                    </optgroup>
+                    <optgroup label="Pacific / Oceania">
+                      <option value="Australia/Sydney">Australia/Sydney</option>
+                      <option value="Australia/Melbourne">Australia/Melbourne</option>
+                      <option value="Australia/Perth">Australia/Perth</option>
+                      <option value="Pacific/Auckland">Pacific/Auckland (New Zealand)</option>
+                    </optgroup>
+                    <optgroup label="Africa / Middle East">
+                      <option value="Africa/Johannesburg">Africa/Johannesburg</option>
+                      <option value="Africa/Cairo">Africa/Cairo</option>
+                      <option value="Africa/Lagos">Africa/Lagos</option>
+                      <option value="Asia/Jerusalem">Asia/Jerusalem</option>
+                    </optgroup>
+                    <optgroup label="Other">
+                      <option value="UTC">UTC (Coordinated Universal Time)</option>
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                  <div className="flex items-start">
+                    <svg className="w-5 h-5 text-blue-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="text-sm text-blue-700">
+                      <p className="font-medium">Current selection: {formData.timezone}</p>
+                      <p className="mt-1">
+                        Local time: {new Date().toLocaleString('en-US', {
+                          timeZone: formData.timezone,
+                          weekday: 'short',
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                          timeZoneName: 'short'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setStep(2)}
+                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTimezoneNext}
+                    disabled={loading}
+                    className="px-6 py-2 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {loading && (
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    {loading ? 'Saving...' : 'Continue'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Create Admin Account */}
+          {step === 4 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Create Admin Account
@@ -529,7 +718,7 @@ function Setup() {
                 <div className="flex justify-between pt-4">
                   <button
                     type="button"
-                    onClick={() => setStep(2)}
+                    onClick={() => setStep(3)}
                     className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     Back
@@ -552,8 +741,8 @@ function Setup() {
             </div>
           )}
 
-          {/* Step 4: Cloud Connection (Optional) */}
-          {step === 4 && (
+          {/* Step 5: Cloud Connection (Optional) */}
+          {step === 5 && (
             <div>
               <div className="flex items-center mb-2">
                 <svg className="w-8 h-8 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -642,8 +831,8 @@ function Setup() {
             </div>
           )}
 
-          {/* Step 5: Complete */}
-          {step === 5 && (
+          {/* Step 6: Complete */}
+          {step === 6 && (
             <div className="text-center">
               <div className="mb-6">
                 <div className="w-24 h-24 bg-green-100 rounded-full mx-auto flex items-center justify-center">
