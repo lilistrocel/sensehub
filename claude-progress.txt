@@ -2,10 +2,54 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 45
-- **Completion:** ~23.8%
+- **Passing:** 48
+- **Completion:** ~25.4%
 
 ## Session Log
+
+### Session - 2026-02-07 (Features #20, #21, #23 - Security Features)
+**Assigned Features:**
+- #20 - Viewer cannot control equipment via UI
+- #21 - API rejects viewer POST requests
+- #23 - Factory reset requires password confirmation
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #20 - Viewer cannot control equipment via UI:
+- Added Equipment Control section to equipment detail modal
+- Control buttons (Turn On/Turn Off) shown only for admin/operator roles
+- Viewers see "Equipment control requires operator or admin permissions" message
+- Role check: `canControl = user?.role === 'admin' || user?.role === 'operator'`
+- Backend API already blocks viewers via requireRole middleware (403 Forbidden)
+
+Feature #21 - API rejects viewer POST requests:
+- Verified POST /api/equipment returns 403 for viewer token
+- Verified PUT /api/equipment/1 returns 403 for viewer token
+- Verified DELETE /api/equipment/1 returns 403 for viewer token
+- Verified POST /api/zones, /api/automations, /api/users all return 403
+- GET requests still work for viewer (read-only access allowed)
+- Backend uses requireRole('admin', 'operator') middleware consistently
+
+Feature #23 - Factory reset requires password confirmation:
+- Implemented full Backup & Restore settings page
+- Factory Reset button opens password confirmation dialog
+- Password is verified against current admin user's hash
+- Wrong password shows "Invalid password" error and blocks operation
+- Correct password shows "Factory Reset Initiated" success message
+- Cancel button allows user to abort operation
+
+**Files Modified:**
+- frontend/src/pages/Equipment.jsx (control buttons with role check)
+- frontend/src/pages/Settings.jsx (BackupSettings component)
+
+**Verification:**
+- Browser automation tests passed for all features
+- Zero console errors
+- API calls return correct status codes
+- No mock data patterns in codebase
+
+---
 
 ### Session - 2026-02-07 (Feature #24 - User Deletion Confirmation)
 **Assigned Feature:** #24 - User deletion requires confirmation
