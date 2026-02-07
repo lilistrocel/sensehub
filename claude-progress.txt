@@ -2,10 +2,55 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 32
-- **Completion:** ~16.9%
+- **Passing:** 35
+- **Completion:** ~18.5%
 
 ## Session Log
+
+### Session - 2026-02-07 (Features #70, #71, #72 - Automation Management)
+**Assigned Features:**
+- #70 - Automation list displays
+- #71 - Automation can be created
+- #72 - Automation builder opens
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #70 - Automation list displays:
+- Navigated to /automations page
+- Table with columns: Name, Status (Enabled/Disabled), Last Run
+- Search by name/description functionality
+- Filter by status (All, Enabled, Disabled)
+- Empty state with "New Automation" button
+- Shows automation count "Showing X of Y automations"
+
+Feature #71 - Automation can be created:
+- "New Automation" button opens creation modal
+- Form fields: Name, Description, Priority, Enabled checkbox
+- Successfully created "Test Automation 71" automation
+- Data persisted in SQLite database (verified with query)
+- Success message displayed
+- New automation appears in list immediately
+
+Feature #72 - Automation builder opens:
+- Visual automation builder interface loads for both create and edit
+- Three tabbed sections:
+  1. Trigger section - Manual, Schedule, Threshold, Event types
+  2. Conditions section - Field, Operator, Value inputs with Add button
+  3. Actions section - Type (Alert/Control/Log), Severity, Message inputs
+- Edit mode pre-populates with existing automation data
+- Cancel and Save/Create buttons functional
+
+**Files Modified:**
+- frontend/src/pages/Automations.jsx (complete rewrite from placeholder)
+
+**Verification:**
+- Browser automation tests passed
+- Database persistence confirmed
+- Zero console errors
+- No mock data patterns found
+
+---
 
 ### Session - 2026-02-07 (Features #47, #48, #43 - Equipment/Zone Features)
 **Assigned Features:**
@@ -217,5 +262,6 @@ Feature #42 - Equipment detail view displays:
 ## Next Steps
 - Equipment delete functionality
 - Zone edit/delete functionality
-- Automation builder
+- Automation enable/disable/delete functionality
 - Alert management
+- Dashboard widgets
