@@ -7,6 +7,27 @@
 
 ## Session Log
 
+### Session - 2026-02-07 (Feature #11 - Invalid Login Rejection)
+**Assigned Feature:** #11 - User cannot log in with invalid credentials
+**Status:** PASSED ✅
+
+**Verification Completed:**
+- Navigated to /login page
+- Entered valid email (admin@sensehub.local) with incorrect password
+- Clicked Sign In button - error message "Invalid email or password" displayed
+- Verified user remains on login page (URL unchanged)
+- Verified no session created in database or localStorage
+- Tested with non-existent email - same secure error message shown
+- Zero console errors
+- No mock data patterns found in codebase
+- Real database queries verified in auth.js (lines 182-192)
+
+**Security Notes:**
+- Login error message is generic ("Invalid email or password") for both cases
+- This prevents user enumeration attacks (can't tell if email exists)
+
+---
+
 ### Session - 2026-02-07 (Feature #16 - Password Validation)
 **Assigned Feature:** #16 - Password minimum length enforced
 **Status:** PASSED ✅
