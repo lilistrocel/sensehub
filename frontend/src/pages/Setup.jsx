@@ -844,9 +844,45 @@ function Setup() {
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
                 Setup Complete!
               </h2>
-              <p className="text-gray-600 mb-8 max-w-md mx-auto">
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
                 Your SenseHub system is ready to use. You're now logged in as the administrator.
               </p>
+
+              {/* Configuration Summary */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6 text-left">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+                  <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Configuration Summary
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Network:</span>
+                    <span className="ml-2 text-gray-900 font-medium">
+                      {formData.dhcp ? 'DHCP (Automatic)' : formData.ipAddress || 'Static IP'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Timezone:</span>
+                    <span className="ml-2 text-gray-900 font-medium">{formData.timezone}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Admin:</span>
+                    <span className="ml-2 text-gray-900 font-medium">{formData.name}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Email:</span>
+                    <span className="ml-2 text-gray-900 font-medium">{formData.email}</span>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="text-gray-500">Cloud:</span>
+                    <span className="ml-2 text-gray-900 font-medium">
+                      {formData.cloudUrl ? 'Connected' : 'Not configured (offline mode)'}
+                    </span>
+                  </div>
+                </div>
+              </div>
 
               <div className="bg-gray-50 rounded-xl p-6 mb-8 text-left">
                 <h3 className="font-semibold text-gray-900 mb-4">Next Steps</h3>
