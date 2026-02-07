@@ -2,10 +2,42 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 7 (including #22)
-- **Completion:** ~3.7%
+- **Passing:** 11
+- **Completion:** ~5.8%
 
 ## Session Log
+
+### Session - 2026-02-07 (Features #7, #8 - Navigation)
+**Assigned Features:**
+- #7 - Navigation sidebar displays
+- #8 - Navigation sidebar collapses on mobile
+**Status:** BOTH PASSED
+
+**What was verified:**
+
+Feature #7 - Navigation sidebar displays:
+- Logged in as admin user
+- Sidebar navigation visible on desktop
+- All menu items present: Dashboard, Equipment, Zones, Automations, Alerts, Settings
+- User info displayed at bottom of sidebar with avatar, name, and role
+- Logout button functional
+- Navigation links work correctly
+
+Feature #8 - Navigation sidebar collapses on mobile:
+- Resized viewport to 375px width (mobile)
+- Sidebar hidden/collapsed on mobile
+- Hamburger menu icon visible in top left
+- Clicking hamburger expands navigation sidebar (slides in)
+- Clicking a menu item navigates to page AND closes the sidebar
+- Close button (X) in sidebar also works
+
+**Screenshots taken:**
+- feature7-sidebar-navigation.png - Desktop sidebar visible
+- feature8-mobile-initial.png - Mobile view with hamburger menu
+- feature8-mobile-menu-open.png - Mobile sidebar expanded
+- feature8-mobile-after-nav.png - Mobile view after navigation (sidebar closed)
+
+---
 
 ### Session - 2026-02-07 (Feature #22)
 **Assigned Feature:** #22 - Unauthenticated requests rejected
