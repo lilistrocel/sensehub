@@ -2,10 +2,54 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 30
-- **Completion:** ~15.9%
+- **Passing:** 32
+- **Completion:** ~16.9%
 
 ## Session Log
+
+### Session - 2026-02-07 (Features #47, #48, #43 - Equipment/Zone Features)
+**Assigned Features:**
+- #47 - Equipment can be assigned to zone
+- #48 - Equipment can belong to multiple zones
+- #43 - Equipment can be edited
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #47 - Equipment can be assigned to zone:
+- Added zone assignment UI to Equipment detail modal
+- Dropdown shows available zones (zones not already assigned)
+- "Assign" button adds equipment to selected zone
+- Success message displayed on assignment
+- Zone badges shown in equipment detail modal
+- Zones updated in equipment list table
+- Database: equipment_zones junction table properly used
+
+Feature #48 - Equipment can belong to multiple zones:
+- Already supported by Feature #47 implementation
+- Equipment can be assigned to multiple zones sequentially
+- Both zones show in equipment detail modal
+- Both zones show equipment count (verified "1 equipment" on each)
+- Database confirms multiple entries in equipment_zones table
+
+Feature #43 - Equipment can be edited:
+- Added EditEquipmentModal component
+- Modal pre-populates with current equipment values
+- Form fields: Name, Description, Type, Protocol, Address
+- Save updates equipment via PUT /api/equipment/:id
+- List refreshes automatically after successful edit
+- Verified: name change persists to database
+
+**Files Modified:**
+- frontend/src/pages/Equipment.jsx (zone assignment UI + edit modal)
+
+**Verification:**
+- Browser automation tests passed for all features
+- Database queries confirmed data persistence
+- Zero console errors
+- No mock data patterns in codebase
+
+---
 
 ### Session - 2026-02-07 (Features #36, #37, #38 - Setup Wizard)
 **Assigned Features:**
@@ -171,7 +215,7 @@ Feature #42 - Equipment detail view displays:
 - **Auth:** JWT tokens with session storage
 
 ## Next Steps
+- Equipment delete functionality
 - Zone edit/delete functionality
-- Equipment assignment to zones
 - Automation builder
 - Alert management
