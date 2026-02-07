@@ -2,10 +2,56 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 14+
-- **Completion:** ~7.4%
+- **Passing:** 17+
+- **Completion:** ~9.0%
 
 ## Session Log
+
+### Session - 2026-02-07 (Features #25, #26, #27 - User Management)
+**Assigned Features:**
+- #25 - Admin can view user list
+- #26 - Admin can create new user
+- #27 - Admin can edit user details
+**Status:** ALL PASSED
+
+**What was implemented:**
+
+Feature #25 - Admin can view user list:
+- Created Settings page with tabbed navigation (Users, System, Cloud, Backup)
+- Added /settings/users route with Users.jsx component
+- User list table displays: Name, Email, Role, Last Login columns
+- Admin role required to access settings pages
+- Includes Add User button and Edit/Delete actions per user
+- Total user count displayed at bottom
+
+Feature #26 - Admin can create new user:
+- Added "Add User" modal with form (name, email, password, role)
+- Form validation with error messages
+- Role selection dropdown (Viewer, Operator, Admin)
+- Success message displayed after user creation
+- User list automatically refreshes to show new user
+- Verified new user can log in with created credentials
+
+Feature #27 - Admin can edit user details:
+- Added edit functionality to Users page
+- Click Edit button opens modal with pre-filled user data
+- Can modify name, email, role
+- Password optional when editing (leave blank to keep current)
+- Success message after update
+- User list refreshes to show updated name
+
+**Screenshots:**
+- feature25-admin-user-list.png
+- feature26-user-created.png
+- feature26-new-user-logged-in.png
+- feature27-user-edited.png
+
+**Files Modified:**
+- frontend/src/App.jsx (added /settings/* route)
+- frontend/src/pages/Settings.jsx (created with tabbed navigation)
+- frontend/src/pages/settings/Users.jsx (created with CRUD functionality)
+
+---
 
 ### Session - 2026-02-07 (Features #33, #34, #35 - Setup Wizard)
 **Assigned Features:**
