@@ -1,0 +1,47 @@
+# SenseHub Development Progress
+
+## Session: 2026-02-07 19:45 - 19:57
+
+### Completed Features This Session:
+- **Feature #2**: Database schema applied correctly ✅
+  - Verified all 11 tables exist: users, sessions, equipment, zones, equipment_zones, readings, automations, automation_logs, alerts, system_settings, sync_queue
+  - All columns match app_spec.txt schema
+  - Foreign keys and indexes properly configured
+
+- **Feature #3**: Data persists across server restart ✅
+  - Fixed critical SQLite syntax bug: changed `datetime("now")` to `datetime('now')` across all route files
+  - Files fixed: auth.js, middleware/auth.js, alerts.js, equipment.js, cloud.js, zones.js, settings.js, automations.js, users.js
+  - Created test user, stopped server, restarted, verified data persisted
+  - No mock data patterns found in codebase
+
+- **Feature #5**: Backend API queries real database ✅
+  - Enabled verbose logging with NODE_ENV=development
+  - Verified SQL queries appear in logs (SELECT, INSERT, UPDATE)
+  - Tested login, equipment GET/POST endpoints
+  - Confirmed data exists in actual SQLite database file
+
+### Current Status:
+- **Passing**: 5/189 features (2.6%)
+- **In Progress**: 5 features (being worked on by other agents)
+
+### Technical Notes:
+- Backend runs on port 3001
+- Frontend expected on port 5173 (Vite dev server)
+- SQLite database at: backend/data/sensehub.db
+- Admin user: admin@sensehub.local / admin123
+
+### Issues Fixed:
+1. SQLite datetime syntax error - JavaScript strings with `datetime("now")` caused SQL parsing errors due to nested quotes. Fixed by using `datetime('now')` with outer double-quoted strings.
+
+### Next Steps:
+- Continue implementing Infrastructure features (#1, #4 if not already done)
+- Move on to Authentication features
+- Setup Wizard implementation
+- Equipment management CRUD
+
+### Git Commits:
+- b7ed874: feat: Verify Feature #1 - Database connection established
+- f6d0d28: Initial setup: SenseHub edge computing platform
+- 787afd3: feat: Verify Feature #2 - Database schema applied correctly
+- 1c75260: feat: Verify Feature #3 - Data persists across server restart
+- 45c8f0e: feat: Verify Feature #5 - Backend API queries real database
