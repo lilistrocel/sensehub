@@ -8,6 +8,16 @@ export default function Users() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'viewer'
+  });
+  const [formError, setFormError] = useState('');
+  const [formLoading, setFormLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     fetchUsers();
@@ -37,6 +47,69 @@ export default function Users() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormError('');
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    setFormLoading(true);
+
+    // Validation
+    if (!formData.name.trim()) {
+      setFormError('Name is required');
+      setFormLoading(false);
+      return;
+    }
+    if (!formData.email.trim()) {
+      setFormError('Email is required');
+      setFormLoading(false);
+      return;
+    }
+    if (!formData.password || formData.password.length < 8) {
+      setFormError('Password must be at least 8 characters');
+      setFormLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/users`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create user');
+      }
+
+      // Success - close modal and refresh list
+      setShowModal(false);
+      setFormData({ name: '', email: '', password: '', role: 'viewer' });
+      setSuccessMessage(`User "${data.name}" created successfully!`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+      fetchUsers();
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const openAddUserModal = () => {
+    setFormData({ name: '', email: '', password: '', role: 'viewer' });
+    setFormError('');
+    setShowModal(true);
   };
 
   const formatDate = (dateString) => {
@@ -91,12 +164,25 @@ export default function Users() {
 
   return (
     <div>
+      {/* Success Message */}
+      {successMessage && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex">
+            <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <p className="ml-3 text-sm text-green-700">{successMessage}</p>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
           <p className="text-sm text-gray-500">Manage system users and their roles</p>
         </div>
         <button
+          onClick={openAddUserModal}
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
         >
           <svg className="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -185,6 +271,140 @@ export default function Users() {
       <div className="mt-4 text-sm text-gray-500">
         Total: {users.length} user{users.length !== 1 ? 's' : ''}
       </div>
+
+      {/* Add User Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              aria-hidden="true"
+              onClick={() => setShowModal(false)}
+            ></div>
+
+            {/* Modal panel */}
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <form onSubmit={handleCreateUser}>
+                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                  <div className="sm:flex sm:items-start">
+                    <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-primary-100 sm:mx-0 sm:h-10 sm:w-10">
+                      <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                      </svg>
+                    </div>
+                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
+                      <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                        Add New User
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Create a new user account for the system.
+                      </p>
+
+                      {formError && (
+                        <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
+                          {formError}
+                        </div>
+                      )}
+
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                            Full Name
+                          </label>
+                          <input
+                            type="text"
+                            name="name"
+                            id="name"
+                            value={formData.name}
+                            onChange={handleInputChange}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                            placeholder="John Doe"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                            Email Address
+                          </label>
+                          <input
+                            type="email"
+                            name="email"
+                            id="email"
+                            value={formData.email}
+                            onChange={handleInputChange}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                            placeholder="user@example.com"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                            Password
+                          </label>
+                          <input
+                            type="password"
+                            name="password"
+                            id="password"
+                            value={formData.password}
+                            onChange={handleInputChange}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                            placeholder="Minimum 8 characters"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="role" className="block text-sm font-medium text-gray-700">
+                            Role
+                          </label>
+                          <select
+                            name="role"
+                            id="role"
+                            value={formData.role}
+                            onChange={handleInputChange}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                          >
+                            <option value="viewer">Viewer - View-only access</option>
+                            <option value="operator">Operator - Can control equipment and create automations</option>
+                            <option value="admin">Admin - Full system access</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                  <button
+                    type="submit"
+                    disabled={formLoading}
+                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {formLoading ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Creating...
+                      </>
+                    ) : (
+                      'Create User'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

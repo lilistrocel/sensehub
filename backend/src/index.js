@@ -92,3 +92,4 @@ server.listen(PORT, () => {
   console.log(`WebSocket: ws://localhost:${PORT}/ws`);
   console.log(`Database: ${db.isConnected() ? 'Connected' : 'Not connected'}`);
 });
+// trigger reload Sat Feb  7 08:13:02 PM UTC 2026

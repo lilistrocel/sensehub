@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -9,6 +9,12 @@ function Setup() {
   const { setUserAfterSetup } = useAuth();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
+    // Network config
+    dhcp: true,
+    ipAddress: '',
+    gateway: '',
+    dns: '',
+    // Admin account
     name: '',
     email: '',
     password: '',
@@ -17,15 +23,103 @@ function Setup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Load existing network config if any
+  useEffect(() => {
+    const loadNetworkConfig = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/auth/setup/network`);
+        if (response.ok) {
+          const data = await response.json();
+          setFormData(prev => ({
+            ...prev,
+            dhcp: data.dhcp !== false,
+            ipAddress: data.ipAddress || '',
+            gateway: data.gateway || '',
+            dns: data.dns || ''
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to load network config:', err);
+      }
+    };
+    loadNetworkConfig();
+  }, []);
+
   const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: type === 'checkbox' ? checked : value
     });
     setError('');
   };
 
-  const validateStep2 = () => {
+  const validateNetworkConfig = () => {
+    if (formData.dhcp) return true;
+
+    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+
+    if (formData.ipAddress && !ipRegex.test(formData.ipAddress)) {
+      setError('Please enter a valid IP address');
+      return false;
+    }
+
+    if (formData.gateway && !ipRegex.test(formData.gateway)) {
+      setError('Please enter a valid gateway address');
+      return false;
+    }
+
+    if (formData.dns && !ipRegex.test(formData.dns)) {
+      setError('Please enter a valid DNS address');
+      return false;
+    }
+
+    return true;
+  };
+
+  const saveNetworkConfig = async () => {
+    if (!validateNetworkConfig()) return false;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/setup/network`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          dhcp: formData.dhcp,
+          ipAddress: formData.ipAddress,
+          gateway: formData.gateway,
+          dns: formData.dns
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to save network configuration');
+      }
+
+      return true;
+    } catch (err) {
+      setError(err.message || 'An error occurred saving network configuration');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNetworkNext = async () => {
+    const saved = await saveNetworkConfig();
+    if (saved) {
+      setStep(3);
+    }
+  };
+
+  const validateAdminAccount = () => {
     const { name, email, password, confirmPassword } = formData;
 
     if (!name.trim()) {
@@ -65,7 +159,7 @@ function Setup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateStep2()) return;
+    if (!validateAdminAccount()) return;
 
     setLoading(true);
     setError('');
@@ -94,7 +188,7 @@ function Setup() {
       setUserAfterSetup(data.token, data.user);
 
       // Move to completion step
-      setStep(3);
+      setStep(4);
     } catch (err) {
       setError(err.message || 'An error occurred during setup');
     } finally {
@@ -106,13 +200,15 @@ function Setup() {
     navigate('/');
   };
 
+  const stepLabels = ['Welcome', 'Network', 'Admin Account', 'Complete'];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
         {/* Progress indicator */}
         <div className="bg-gray-100 px-8 py-4">
           <div className="flex items-center justify-between">
-            {[1, 2, 3].map((num) => (
+            {[1, 2, 3, 4].map((num) => (
               <div key={num} className="flex items-center">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
@@ -123,9 +219,9 @@ function Setup() {
                 >
                   {num}
                 </div>
-                {num < 3 && (
+                {num < 4 && (
                   <div
-                    className={`w-24 sm:w-32 h-1 mx-2 ${
+                    className={`w-16 sm:w-20 h-1 mx-1 ${
                       step > num ? 'bg-primary-600' : 'bg-gray-300'
                     }`}
                   />
@@ -133,10 +229,12 @@ function Setup() {
               </div>
             ))}
           </div>
-          <div className="flex justify-between mt-2 text-sm text-gray-600">
-            <span>Welcome</span>
-            <span>Admin Account</span>
-            <span>Complete</span>
+          <div className="flex justify-between mt-2 text-xs sm:text-sm text-gray-600">
+            {stepLabels.map((label, index) => (
+              <span key={label} className={step === index + 1 ? 'font-semibold text-primary-600' : ''}>
+                {label}
+              </span>
+            ))}
           </div>
         </div>
 
@@ -199,8 +297,118 @@ function Setup() {
             </div>
           )}
 
-          {/* Step 2: Create Admin Account */}
+          {/* Step 2: Network Configuration */}
           {step === 2 && (
+            <div>
+              <div className="flex items-center mb-2">
+                <svg className="w-8 h-8 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                </svg>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Network Configuration
+                </h2>
+              </div>
+              <p className="text-gray-600 mb-6">
+                Configure network settings for your SenseHub device.
+              </p>
+
+              <div className="space-y-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="dhcp"
+                    name="dhcp"
+                    checked={formData.dhcp}
+                    onChange={handleChange}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="dhcp" className="ml-2 block text-sm text-gray-900">
+                    Use DHCP (automatic IP configuration)
+                  </label>
+                </div>
+
+                <div className={`space-y-4 ${formData.dhcp ? 'opacity-50' : ''}`}>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      IP Address
+                    </label>
+                    <input
+                      type="text"
+                      name="ipAddress"
+                      value={formData.ipAddress}
+                      onChange={handleChange}
+                      disabled={formData.dhcp}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="192.168.1.100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Gateway
+                    </label>
+                    <input
+                      type="text"
+                      name="gateway"
+                      value={formData.gateway}
+                      onChange={handleChange}
+                      disabled={formData.dhcp}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="192.168.1.1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      DNS Server
+                    </label>
+                    <input
+                      type="text"
+                      name="dns"
+                      value={formData.dns}
+                      onChange={handleChange}
+                      disabled={formData.dhcp}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      placeholder="8.8.8.8"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNetworkNext}
+                    disabled={loading}
+                    className="px-6 py-2 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {loading && (
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    {loading ? 'Saving...' : 'Continue'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Create Admin Account */}
+          {step === 3 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Create Admin Account
@@ -279,7 +487,7 @@ function Setup() {
                 <div className="flex justify-between pt-4">
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep(2)}
                     className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     Back
@@ -302,8 +510,8 @@ function Setup() {
             </div>
           )}
 
-          {/* Step 3: Complete */}
-          {step === 3 && (
+          {/* Step 4: Complete */}
+          {step === 4 && (
             <div className="text-center">
               <div className="mb-6">
                 <div className="w-24 h-24 bg-green-100 rounded-full mx-auto flex items-center justify-center">

@@ -72,16 +72,34 @@ router.post('/setup/network', (req, res) => {
   };
 
   try {
-    db.prepare(
+    const stmt = db.prepare(
       'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
-    ).run('network', JSON.stringify(networkConfig));
+    );
+    stmt.run('network', JSON.stringify(networkConfig));
 
     res.json({
       message: 'Network configuration saved',
       network: networkConfig
     });
   } catch (error) {
-    console.error('Network config error:', error);
+    console.error('Network config error:', error.message);
+    // If database is locked, retry once
+    if (error.message && error.message.includes('SQLITE_BUSY')) {
+      try {
+        setTimeout(() => {
+          db.prepare(
+            'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+          ).run('network', JSON.stringify(networkConfig));
+          res.json({
+            message: 'Network configuration saved',
+            network: networkConfig
+          });
+        }, 100);
+        return;
+      } catch (retryError) {
+        console.error('Network config retry error:', retryError.message);
+      }
+    }
     return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to save network configuration' });
   }
 });
