@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 export default function Zones() {
   const { token, user } = useAuth();
@@ -14,6 +14,11 @@ export default function Zones() {
   const [selectedZone, setSelectedZone] = useState(null);
   const [zoneDetail, setZoneDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [showAssignEquipmentModal, setShowAssignEquipmentModal] = useState(false);
+  const [availableEquipment, setAvailableEquipment] = useState([]);
+  const [loadingEquipment, setLoadingEquipment] = useState(false);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState('');
+  const [assigningEquipment, setAssigningEquipment] = useState(false);
 
   useEffect(() => {
     fetchZones();
@@ -72,6 +77,102 @@ export default function Zones() {
   const closeDetailModal = () => {
     setSelectedZone(null);
     setZoneDetail(null);
+  };
+
+  const fetchAvailableEquipment = async () => {
+    try {
+      setLoadingEquipment(true);
+      const response = await fetch(`${API_BASE}/equipment`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch equipment');
+      }
+
+      const allEquipment = await response.json();
+
+      // Filter out equipment already in this zone
+      const assignedIds = new Set((zoneDetail?.equipment || []).map(e => e.id));
+      const available = allEquipment.filter(e => !assignedIds.has(e.id));
+
+      setAvailableEquipment(available);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoadingEquipment(false);
+    }
+  };
+
+  const openAssignEquipmentModal = () => {
+    setShowAssignEquipmentModal(true);
+    setSelectedEquipmentId('');
+    fetchAvailableEquipment();
+  };
+
+  const closeAssignEquipmentModal = () => {
+    setShowAssignEquipmentModal(false);
+    setSelectedEquipmentId('');
+  };
+
+  const handleAssignEquipment = async () => {
+    if (!selectedEquipmentId || !selectedZone) return;
+
+    try {
+      setAssigningEquipment(true);
+      const response = await fetch(`${API_BASE}/zones/${selectedZone.id}/equipment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ equipment_id: parseInt(selectedEquipmentId) })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to assign equipment');
+      }
+
+      // Refresh zone detail to show newly assigned equipment
+      await fetchZoneDetail(selectedZone.id);
+      closeAssignEquipmentModal();
+      // Refresh zones list to update equipment counts
+      fetchZones();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setAssigningEquipment(false);
+    }
+  };
+
+  const handleRemoveEquipment = async (equipmentId) => {
+    if (!selectedZone) return;
+
+    if (!confirm('Remove this equipment from the zone?')) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/zones/${selectedZone.id}/equipment/${equipmentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to remove equipment');
+      }
+
+      // Refresh zone detail
+      await fetchZoneDetail(selectedZone.id);
+      // Refresh zones list to update equipment counts
+      fetchZones();
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   const handleAddZone = async (e) => {
@@ -292,9 +393,22 @@ export default function Zones() {
 
                 {/* Assigned Equipment */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">
-                    Assigned Equipment ({zoneDetail.equipment?.length || 0})
-                  </h3>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-sm font-medium text-gray-500">
+                      Assigned Equipment ({zoneDetail.equipment?.length || 0})
+                    </h3>
+                    {canManageZones && (
+                      <button
+                        onClick={openAssignEquipmentModal}
+                        className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded flex items-center gap-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Assign Equipment
+                      </button>
+                    )}
+                  </div>
                   {zoneDetail.equipment && zoneDetail.equipment.length > 0 ? (
                     <div className="bg-white border border-gray-200 rounded-lg divide-y">
                       {zoneDetail.equipment.map((equip) => (
@@ -303,20 +417,41 @@ export default function Zones() {
                             <p className="font-medium text-gray-900">{equip.name}</p>
                             <p className="text-sm text-gray-500">{equip.type} • {equip.protocol}</p>
                           </div>
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            equip.status === 'online' ? 'bg-green-100 text-green-800' :
-                            equip.status === 'offline' ? 'bg-gray-100 text-gray-800' :
-                            equip.status === 'warning' ? 'bg-amber-100 text-amber-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {equip.status}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              equip.status === 'online' ? 'bg-green-100 text-green-800' :
+                              equip.status === 'offline' ? 'bg-gray-100 text-gray-800' :
+                              equip.status === 'warning' ? 'bg-amber-100 text-amber-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {equip.status}
+                            </span>
+                            {canManageZones && (
+                              <button
+                                onClick={() => handleRemoveEquipment(equip.id)}
+                                className="text-red-600 hover:text-red-800 p-1"
+                                title="Remove from zone"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
                   ) : (
                     <div className="bg-gray-50 rounded-lg p-4 text-center">
                       <p className="text-gray-500">No equipment assigned to this zone</p>
+                      {canManageZones && (
+                        <button
+                          onClick={openAssignEquipmentModal}
+                          className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          Assign equipment now
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -349,6 +484,68 @@ export default function Zones() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Equipment Modal */}
+      {showAssignEquipmentModal && selectedZone && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              Assign Equipment to {selectedZone.name}
+            </h2>
+
+            {loadingEquipment ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : availableEquipment.length === 0 ? (
+              <div className="py-4 text-center">
+                <p className="text-gray-500">No available equipment to assign.</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  All equipment is either already assigned to this zone or no equipment exists.
+                </p>
+              </div>
+            ) : (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Equipment
+                </label>
+                <select
+                  value={selectedEquipmentId}
+                  onChange={(e) => setSelectedEquipmentId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Select Equipment --</option>
+                  {availableEquipment.map((equip) => (
+                    <option key={equip.id} value={equip.id}>
+                      {equip.name} ({equip.type} - {equip.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeAssignEquipmentModal}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                disabled={assigningEquipment}
+              >
+                Cancel
+              </button>
+              {availableEquipment.length > 0 && (
+                <button
+                  onClick={handleAssignEquipment}
+                  disabled={assigningEquipment || !selectedEquipmentId}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                >
+                  {assigningEquipment ? 'Assigning...' : 'Assign'}
+                </button>
+              )}
             </div>
           </div>
         </div>

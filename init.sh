@@ -17,8 +17,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-FRONTEND_PORT=3000
-BACKEND_PORT=3001
+FRONTEND_PORT=5173
+BACKEND_PORT=3000
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Function to check if a command exists

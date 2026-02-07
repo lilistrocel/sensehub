@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);

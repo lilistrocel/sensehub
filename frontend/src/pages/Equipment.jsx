@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = '/api';
 
 // Status badge component with color coding
 function StatusBadge({ status, large = false }) {
