@@ -2,10 +2,58 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 35
-- **Completion:** ~18.5%
+- **Passing:** 38
+- **Completion:** ~20.1%
 
 ## Session Log
+
+### Session - 2026-02-07 (Features #64, #65, #68 - Zone Equipment Assignment)
+**Assigned Features:**
+- #64 - Equipment can be assigned to zone from zone view
+- #65 - Equipment can be removed from zone
+- #68 - Zone equipment count accurate
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #64 - Equipment can be assigned to zone from zone view:
+- Added "Assign Equipment" button to zone detail modal
+- Created equipment selection dropdown showing available equipment
+- Equipment is filtered to exclude those already in the zone
+- POST /api/zones/:id/equipment endpoint used for assignment
+- Zone equipment count updates immediately after assignment
+- Success feedback and modal closes after assignment
+
+Feature #65 - Equipment can be removed from zone:
+- Added "Remove from zone" button (red X) next to each equipment in zone
+- Confirmation dialog before removal
+- DELETE /api/zones/:id/equipment/:equipmentId endpoint used
+- Equipment removed from zone list, but still exists in system
+- Count updates immediately after removal
+
+Feature #68 - Zone equipment count accurate:
+- Zone cards show accurate equipment count badge
+- Zone detail modal shows matching count in header
+- Count updates in real-time when equipment added/removed
+- Verified counts match actual equipment list
+
+**Configuration Fixes:**
+- Fixed API_BASE in multiple frontend files to use relative paths (/api)
+- Fixed vite.config.js proxy to point to correct backend port (3000)
+- Updated AuthContext.jsx for consistent API configuration
+
+**Files Modified:**
+- frontend/src/pages/Zones.jsx (assign/remove equipment functionality)
+- frontend/src/context/AuthContext.jsx (API_BASE fix)
+- frontend/vite.config.js (proxy configuration fix)
+
+**Verification:**
+- Browser automation tests passed for all features
+- Zero console errors
+- No mock data patterns found
+- Data persists after page refresh
+
+---
 
 ### Session - 2026-02-07 (Features #70, #71, #72 - Automation Management)
 **Assigned Features:**
@@ -254,14 +302,14 @@ Feature #42 - Equipment detail view displays:
 - Features #33-35: Setup wizard
 
 ## Architecture Summary
-- **Backend:** Node.js/Express on port 3001
-- **Frontend:** React/Vite on port 3000
+- **Backend:** Node.js/Express on port 3000
+- **Frontend:** React/Vite on port 5173+ (proxies /api to backend)
 - **Database:** SQLite (backend/data/sensehub.db)
 - **Auth:** JWT tokens with session storage
 
 ## Next Steps
-- Equipment delete functionality
 - Zone edit/delete functionality
 - Automation enable/disable/delete functionality
 - Alert management
 - Dashboard widgets
+- Equipment discovery scan
