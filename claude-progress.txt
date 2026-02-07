@@ -2,10 +2,67 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 11
-- **Completion:** ~5.8%
+- **Passing:** 14+
+- **Completion:** ~7.4%
 
 ## Session Log
+
+### Session - 2026-02-07 (Features #33, #34, #35 - Setup Wizard)
+**Assigned Features:**
+- #33 - Setup wizard displays on first run
+- #34 - Network configuration step works
+- #35 - Admin account creation works
+**Status:** ALL PASSED
+
+**What was implemented:**
+
+Feature #33 - Setup wizard displays on first run:
+- Added /api/auth/setup-status endpoint to check if setup needed (userCount = 0)
+- Created Setup.jsx with multi-step wizard component
+- Updated AuthContext to check setup status on load
+- Updated App.jsx with SetupRoute that redirects to /setup when needsSetup=true
+- Verified: Fresh database redirects to setup wizard with welcome screen
+- Welcome screen shows system overview and "Get Started" button
+
+Feature #34 - Network configuration step works:
+- Added GET/POST /api/auth/setup/network endpoints
+- Updated Setup wizard from 3 steps to 4 steps:
+  1. Welcome
+  2. Network Configuration
+  3. Admin Account
+  4. Complete
+- Network step includes:
+  - DHCP toggle checkbox (default on)
+  - IP Address field (192.168.1.100 placeholder)
+  - Gateway field (192.168.1.1 placeholder)
+  - DNS Server field (8.8.8.8 placeholder)
+  - Fields disabled when DHCP is checked
+- Continue button saves config and advances to next step
+
+Feature #35 - Admin account creation works:
+- Admin account step (Step 3) includes:
+  - Full Name input
+  - Email Address input
+  - Password input (min 8 chars validation)
+  - Confirm Password input (match validation)
+  - Back/Create Account buttons
+- /api/auth/setup endpoint creates admin user with role='admin'
+- Uses bcrypt for password hashing
+- Creates session token for immediate login
+- Rejects if users already exist ("Setup already completed")
+- On completion, redirects to Step 4 (Complete) then to Dashboard
+
+**Screenshots:**
+- feature33-setup-wizard-welcome.png
+- feature34-network-config-dhcp.png
+
+**Files Modified:**
+- backend/src/routes/auth.js (added setup-status, setup, setup/network endpoints)
+- frontend/src/App.jsx (added SetupRoute wrapper)
+- frontend/src/context/AuthContext.jsx (added needsSetup state, setUserAfterSetup)
+- frontend/src/pages/Setup.jsx (created 4-step setup wizard)
+
+---
 
 ### Session - 2026-02-07 (Features #7, #8 - Navigation)
 **Assigned Features:**
