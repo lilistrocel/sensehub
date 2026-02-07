@@ -125,7 +125,6 @@ export default function Profile() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              minLength={8}
               required
             />
             <p className="mt-1 text-xs text-gray-500">Minimum 8 characters</p>
@@ -141,7 +140,6 @@ export default function Profile() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              minLength={8}
               required
             />
           </div>

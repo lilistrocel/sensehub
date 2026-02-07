@@ -191,10 +191,48 @@ function Setup() {
       localStorage.setItem('token', data.token);
       setUserAfterSetup(data.token, data.user);
 
-      // Move to completion step
+      // Move to Cloud connection step
       setStep(4);
     } catch (err) {
       setError(err.message || 'An error occurred during setup');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloudSkip = () => {
+    // Skip cloud configuration and go to complete step
+    setStep(5);
+  };
+
+  const handleCloudConnect = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE}/cloud/connect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          url: formData.cloudUrl,
+          apiKey: formData.cloudApiKey
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to connect to cloud');
+      }
+
+      // Move to completion step
+      setStep(5);
+    } catch (err) {
+      setError(err.message || 'An error occurred connecting to cloud');
     } finally {
       setLoading(false);
     }
@@ -514,8 +552,98 @@ function Setup() {
             </div>
           )}
 
-          {/* Step 4: Complete */}
+          {/* Step 4: Cloud Connection (Optional) */}
           {step === 4 && (
+            <div>
+              <div className="flex items-center mb-2">
+                <svg className="w-8 h-8 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                </svg>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Cloud Connection
+                </h2>
+              </div>
+              <p className="text-gray-600 mb-6">
+                Connect to SenseHub Cloud for remote monitoring, data backup, and cross-site management.
+                <span className="block mt-1 text-sm text-gray-500">This is optional - you can configure it later in Settings.</span>
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Cloud URL
+                  </label>
+                  <input
+                    type="url"
+                    name="cloudUrl"
+                    value={formData.cloudUrl}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="https://cloud.sensehub.io"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    API Key
+                  </label>
+                  <input
+                    type="password"
+                    name="cloudApiKey"
+                    value={formData.cloudApiKey}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Enter your cloud API key"
+                  />
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                  <div className="flex items-start">
+                    <svg className="w-5 h-5 text-blue-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="text-sm text-blue-700">
+                      <p className="font-medium">SenseHub works fully offline</p>
+                      <p className="mt-1">Cloud connection is optional. Your system will operate completely independently without it.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-4">
+                  <button
+                    type="button"
+                    onClick={handleCloudSkip}
+                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Skip for Now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloudConnect}
+                    disabled={loading || (!formData.cloudUrl || !formData.cloudApiKey)}
+                    className="px-6 py-2 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {loading && (
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    {loading ? 'Connecting...' : 'Connect to Cloud'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Complete */}
+          {step === 5 && (
             <div className="text-center">
               <div className="mb-6">
                 <div className="w-24 h-24 bg-green-100 rounded-full mx-auto flex items-center justify-center">

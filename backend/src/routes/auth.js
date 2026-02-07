@@ -73,7 +73,7 @@ router.post('/setup/network', (req, res) => {
 
   try {
     const stmt = db.prepare(
-      'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+      "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))"
     );
     stmt.run('network', JSON.stringify(networkConfig));
 
@@ -88,7 +88,7 @@ router.post('/setup/network', (req, res) => {
       try {
         setTimeout(() => {
           db.prepare(
-            'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+            "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))"
           ).run('network', JSON.stringify(networkConfig));
           res.json({
             message: 'Network configuration saved',
