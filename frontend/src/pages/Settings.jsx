@@ -2,9 +2,15 @@ import React from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Users from './settings/Users';
+import Profile from './settings/Profile';
 
 // Settings navigation tabs
 const settingsTabs = [
+  { name: 'Profile', path: 'profile', adminOnly: false, icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    </svg>
+  )},
   { name: 'Users', path: 'users', adminOnly: true, icon: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -68,21 +74,42 @@ export default function Settings() {
   // Filter tabs based on user role
   const visibleTabs = settingsTabs.filter(tab => !tab.adminOnly || isAdmin);
 
+  // Non-admin users can only access Profile settings
   if (!isAdmin) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex">
-            <svg className="h-5 w-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">Access Restricted</h3>
-              <p className="mt-1 text-sm text-yellow-700">
-                You need administrator privileges to access settings.
-              </p>
+
+        <div className="flex flex-col md:flex-row gap-6">
+          {/* Sidebar navigation */}
+          <nav className="w-full md:w-48 flex-shrink-0">
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              {visibleTabs.map((tab) => (
+                <NavLink
+                  key={tab.path}
+                  to={`/settings/${tab.path}`}
+                  className={({ isActive }) =>
+                    `flex items-center px-4 py-3 text-sm font-medium border-l-4 transition-colors ${
+                      isActive
+                        ? 'bg-primary-50 border-primary-600 text-primary-700'
+                        : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`
+                  }
+                >
+                  <span className="mr-3 text-gray-400">{tab.icon}</span>
+                  {tab.name}
+                </NavLink>
+              ))}
             </div>
+          </nav>
+
+          {/* Main content area */}
+          <div className="flex-1 min-w-0">
+            <Routes>
+              <Route index element={<Navigate to="profile" replace />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="*" element={<Navigate to="profile" replace />} />
+            </Routes>
           </div>
         </div>
       </div>
@@ -119,7 +146,8 @@ export default function Settings() {
         {/* Main content area */}
         <div className="flex-1 min-w-0">
           <Routes>
-            <Route index element={<Navigate to="users" replace />} />
+            <Route index element={<Navigate to="profile" replace />} />
+            <Route path="profile" element={<Profile />} />
             <Route path="users" element={<Users />} />
             <Route path="system" element={<SystemSettings />} />
             <Route path="cloud" element={<CloudSettings />} />

@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
+const API_BASE = 'http://localhost:3001/api';
+
 export default function Zones() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newZone, setNewZone] = useState({ name: '', description: '' });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchZones();
@@ -14,7 +19,7 @@ export default function Zones() {
   const fetchZones = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/zones', {
+      const response = await fetch(`${API_BASE}/zones`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -33,6 +38,38 @@ export default function Zones() {
       setLoading(false);
     }
   };
+
+  const handleAddZone = async (e) => {
+    e.preventDefault();
+    if (!newZone.name.trim()) return;
+
+    try {
+      setSaving(true);
+      const response = await fetch(`${API_BASE}/zones`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newZone)
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to create zone');
+      }
+
+      setNewZone({ name: '', description: '' });
+      setShowAddModal(false);
+      fetchZones();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canManageZones = user?.role === 'admin' || user?.role === 'operator';
 
   if (loading) {
     return (
@@ -66,6 +103,17 @@ export default function Zones() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Zones</h1>
+        {canManageZones && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Zone
+          </button>
+        )}
       </div>
 
       {zones.length === 0 ? (
@@ -97,6 +145,59 @@ export default function Zones() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Add Zone Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Add New Zone</h2>
+            <form onSubmit={handleAddZone}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Zone Name *
+                </label>
+                <input
+                  type="text"
+                  value={newZone.name}
+                  onChange={(e) => setNewZone({ ...newZone, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Production Floor"
+                  required
+                />
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={newZone.description}
+                  onChange={(e) => setNewZone({ ...newZone, description: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Optional description of this zone"
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !newZone.name.trim()}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                >
+                  {saving ? 'Creating...' : 'Create Zone'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

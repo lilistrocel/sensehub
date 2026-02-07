@@ -18,7 +18,11 @@ function Setup() {
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    // Cloud connection
+    cloudUrl: '',
+    cloudApiKey: '',
+    cloudEnabled: false
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -200,7 +204,7 @@ function Setup() {
     navigate('/');
   };
 
-  const stepLabels = ['Welcome', 'Network', 'Admin Account', 'Complete'];
+  const stepLabels = ['Welcome', 'Network', 'Admin Account', 'Cloud', 'Complete'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center p-4">
@@ -208,7 +212,7 @@ function Setup() {
         {/* Progress indicator */}
         <div className="bg-gray-100 px-8 py-4">
           <div className="flex items-center justify-between">
-            {[1, 2, 3, 4].map((num) => (
+            {[1, 2, 3, 4, 5].map((num) => (
               <div key={num} className="flex items-center">
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
@@ -219,7 +223,7 @@ function Setup() {
                 >
                   {num}
                 </div>
-                {num < 4 && (
+                {num < 5 && (
                   <div
                     className={`w-16 sm:w-20 h-1 mx-1 ${
                       step > num ? 'bg-primary-600' : 'bg-gray-300'
