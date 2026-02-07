@@ -1,0 +1,57 @@
+# SenseHub Development Progress
+
+## Current Status
+- **Total Features:** 189
+- **Passing:** 7 (including #22)
+- **Completion:** ~3.7%
+
+## Session Log
+
+### Session - 2026-02-07 (Feature #22)
+**Assigned Feature:** #22 - Unauthenticated requests rejected
+**Status:** PASSED
+
+**What was verified:**
+- All protected API endpoints return 401 Unauthorized without authentication token
+- Tested endpoints:
+  - GET /api/equipment -> 401
+  - GET /api/users -> 401
+  - POST /api/equipment -> 401
+  - GET /api/zones -> 401
+  - GET /api/automations -> 401
+  - GET /api/alerts -> 401
+  - GET /api/settings -> 401
+- Invalid tokens return 401 "Invalid token"
+- Empty Bearer tokens return 401 "No token provided"
+- Public health endpoint (GET /api/health) correctly returns 200 OK
+- Frontend properly redirects unauthenticated users to /login
+- No mock data patterns found in codebase
+- Zero console errors in browser
+
+**Implementation notes:**
+- Auth middleware in /backend/src/middleware/auth.js handles authentication
+- Uses JWT tokens with session validation in database
+- All routes except /api/health and /api/auth are protected with authMiddleware
+
+### Previous Sessions
+- Features #1-5 (Infrastructure): Database setup, schema, persistence verified
+- Feature #6: App loads in browser
+
+## Architecture Summary
+- **Backend:** Node.js/Express on port 3001
+- **Frontend:** React/Vite on port 5173
+- **Database:** SQLite (sensehub.db)
+- **Auth:** JWT tokens with session storage
+
+## Next Steps
+- Continue with remaining security features
+- User authentication flows
+- Equipment management CRUD
+- Zone management
+- Automation builder
+
+## Files Modified This Session
+- frontend/src/App.jsx (routing with protected routes)
+- frontend/src/components/Layout.jsx
+- frontend/src/components/Sidebar.jsx
+- frontend/src/pages/*.jsx (Login, Dashboard, Equipment, Zones, Automations, Alerts, Settings)
