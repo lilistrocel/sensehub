@@ -236,6 +236,123 @@ export default function Zones() {
           </div>
         </div>
       )}
+
+      {/* Zone Detail Modal */}
+      {selectedZone && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-xl font-bold text-gray-900">{selectedZone.name}</h2>
+              <button
+                onClick={closeDetailModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {loadingDetail ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : zoneDetail ? (
+              <div className="space-y-6">
+                {/* Zone Info */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">Zone Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Name</p>
+                      <p className="font-medium text-gray-900">{zoneDetail.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">ID</p>
+                      <p className="font-medium text-gray-900">{zoneDetail.id}</p>
+                    </div>
+                  </div>
+                  {zoneDetail.description && (
+                    <div className="mt-4">
+                      <p className="text-xs text-gray-500">Description</p>
+                      <p className="text-gray-700">{zoneDetail.description}</p>
+                    </div>
+                  )}
+                  <div className="mt-4 grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Created</p>
+                      <p className="text-gray-700">{new Date(zoneDetail.created_at).toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Updated</p>
+                      <p className="text-gray-700">{new Date(zoneDetail.updated_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Assigned Equipment */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">
+                    Assigned Equipment ({zoneDetail.equipment?.length || 0})
+                  </h3>
+                  {zoneDetail.equipment && zoneDetail.equipment.length > 0 ? (
+                    <div className="bg-white border border-gray-200 rounded-lg divide-y">
+                      {zoneDetail.equipment.map((equip) => (
+                        <div key={equip.id} className="p-3 flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900">{equip.name}</p>
+                            <p className="text-sm text-gray-500">{equip.type} • {equip.protocol}</p>
+                          </div>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            equip.status === 'online' ? 'bg-green-100 text-green-800' :
+                            equip.status === 'offline' ? 'bg-gray-100 text-gray-800' :
+                            equip.status === 'warning' ? 'bg-amber-100 text-amber-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {equip.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-4 text-center">
+                      <p className="text-gray-500">No equipment assigned to this zone</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Child Zones */}
+                {zoneDetail.children && zoneDetail.children.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 mb-2">
+                      Child Zones ({zoneDetail.children.length})
+                    </h3>
+                    <div className="bg-white border border-gray-200 rounded-lg divide-y">
+                      {zoneDetail.children.map((child) => (
+                        <div key={child.id} className="p-3">
+                          <p className="font-medium text-gray-900">{child.name}</p>
+                          {child.description && (
+                            <p className="text-sm text-gray-500">{child.description}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={closeDetailModal}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
