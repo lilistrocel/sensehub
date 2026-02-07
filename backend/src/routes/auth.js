@@ -9,6 +9,84 @@ const router = express.Router();
 
 const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT) || 8 * 60 * 60 * 1000; // 8 hours
 
+// GET /api/auth/setup-status - Check if setup is needed (no users exist)
+router.get('/setup-status', (req, res) => {
+  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
+  const needsSetup = userCount.count === 0;
+
+  res.json({
+    needsSetup,
+    userCount: userCount.count
+  });
+});
+
+// POST /api/auth/setup - Initial admin account setup
+router.post('/setup', (req, res) => {
+  const { email, password, name } = req.body;
+
+  // Check if setup is already complete
+  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
+  if (userCount.count > 0) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Setup already completed. Users already exist.' });
+  }
+
+  // Validate input
+  if (!email || !password || !name) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Email, password, and name are required' });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Password must be at least 8 characters' });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Invalid email format' });
+  }
+
+  // Create admin user
+  const passwordHash = bcrypt.hashSync(password, 10);
+
+  try {
+    const result = db.prepare(
+      'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)'
+    ).run(email, passwordHash, name, 'admin');
+
+    const userId = result.lastInsertRowid;
+
+    // Create session for immediate login
+    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '8h' });
+    const expiresAt = new Date(Date.now() + SESSION_TIMEOUT).toISOString();
+
+    db.prepare(
+      'INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)'
+    ).run(userId, token, expiresAt);
+
+    // Mark initial setup as complete in system settings
+    db.prepare(
+      'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+    ).run('setup_completed', JSON.stringify(true));
+
+    res.status(201).json({
+      message: 'Setup completed successfully',
+      token,
+      user: {
+        id: userId,
+        email,
+        name,
+        role: 'admin'
+      },
+      expiresAt
+    });
+  } catch (error) {
+    if (error.message.includes('UNIQUE constraint failed')) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Email already exists' });
+    }
+    console.error('Setup error:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create admin account' });
+  }
+});
+
 // POST /api/auth/login
 router.post('/login', (req, res) => {
   const { email, password } = req.body;
