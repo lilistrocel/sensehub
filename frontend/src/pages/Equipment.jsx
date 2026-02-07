@@ -1356,6 +1356,7 @@ export default function Equipment() {
         equipment={selectedEquipment}
         token={token}
         onUpdate={fetchData}
+        user={user}
       />
 
       {/* Edit Equipment Modal */}
