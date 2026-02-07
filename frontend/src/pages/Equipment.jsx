@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 const API_BASE = 'http://localhost:3001/api';
 
 // Status badge component with color coding
-function StatusBadge({ status }) {
+function StatusBadge({ status, large = false }) {
   const statusStyles = {
     online: 'bg-green-100 text-green-800 border-green-200',
     offline: 'bg-gray-100 text-gray-800 border-gray-200',
@@ -23,10 +23,12 @@ function StatusBadge({ status }) {
 
   const style = statusStyles[status] || statusStyles.offline;
   const label = statusLabels[status] || status || 'Unknown';
+  const sizeClass = large ? 'px-3 py-1 text-sm' : 'px-2.5 py-0.5 text-xs';
+  const dotSize = large ? 'w-2 h-2' : 'w-1.5 h-1.5';
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${style}`}>
-      <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+    <span className={`inline-flex items-center rounded-full font-medium border ${style} ${sizeClass}`}>
+      <span className={`${dotSize} rounded-full mr-1.5 ${
         status === 'online' ? 'bg-green-500' :
         status === 'error' ? 'bg-red-500' :
         status === 'warning' ? 'bg-amber-500' :
@@ -35,6 +37,199 @@ function StatusBadge({ status }) {
       }`}></span>
       {label}
     </span>
+  );
+}
+
+// Equipment Detail Modal
+function EquipmentDetailModal({ isOpen, onClose, equipment, token }) {
+  const [loading, setLoading] = useState(false);
+  const [details, setDetails] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (isOpen && equipment) {
+      fetchDetails();
+    }
+  }, [isOpen, equipment]);
+
+  const fetchDetails = async () => {
+    if (!equipment) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipment.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch equipment details');
+      }
+
+      const data = await response.json();
+      setDetails(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const eq = details || equipment;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          onClick={onClose}
+        ></div>
+
+        {/* Modal */}
+        <div className="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          {/* Header */}
+          <div className="flex items-start mb-6">
+            <div className="flex-shrink-0 h-12 w-12 bg-primary-100 rounded-lg flex items-center justify-center mr-4">
+              <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 truncate">
+                {eq?.name || 'Equipment Details'}
+              </h3>
+              {eq?.description && (
+                <p className="text-sm text-gray-500 mt-1">{eq.description}</p>
+              )}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+              <span className="ml-3 text-gray-500">Loading details...</span>
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center">
+                <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-red-800 text-sm">{error}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Status */}
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Status</span>
+                <StatusBadge status={eq?.status} large />
+              </div>
+
+              {/* Type/Category */}
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Type / Category</span>
+                <span className="text-sm text-gray-900">{eq?.type || '-'}</span>
+              </div>
+
+              {/* Protocol */}
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Protocol</span>
+                <span className="text-sm text-gray-900 uppercase font-mono bg-gray-100 px-2 py-0.5 rounded">
+                  {eq?.protocol || '-'}
+                </span>
+              </div>
+
+              {/* Connection Address */}
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Connection Address</span>
+                <span className="text-sm text-gray-900 font-mono">
+                  {eq?.address || '-'}
+                </span>
+              </div>
+
+              {/* Enabled */}
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Enabled</span>
+                <span className={`text-sm font-medium ${eq?.enabled ? 'text-green-600' : 'text-gray-400'}`}>
+                  {eq?.enabled ? 'Yes' : 'No'}
+                </span>
+              </div>
+
+              {/* Zones */}
+              {eq?.zones && eq.zones.length > 0 && (
+                <div className="py-3 border-b border-gray-100">
+                  <span className="text-sm font-medium text-gray-500 block mb-2">Zones</span>
+                  <div className="flex flex-wrap gap-2">
+                    {eq.zones.map((zone, idx) => (
+                      <span
+                        key={zone.id || idx}
+                        className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                      >
+                        {zone.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Last Communication */}
+              {eq?.last_communication && (
+                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                  <span className="text-sm font-medium text-gray-500">Last Communication</span>
+                  <span className="text-sm text-gray-900">
+                    {new Date(eq.last_communication).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {/* Last Reading */}
+              {eq?.last_reading && (
+                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                  <span className="text-sm font-medium text-gray-500">Last Reading</span>
+                  <span className="text-sm text-gray-900 font-mono">{eq.last_reading}</span>
+                </div>
+              )}
+
+              {/* Created At */}
+              <div className="flex items-center justify-between py-3">
+                <span className="text-sm font-medium text-gray-500">Created</span>
+                <span className="text-sm text-gray-900">
+                  {eq?.created_at ? new Date(eq.created_at).toLocaleString() : '-'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Close Button */}
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -296,6 +491,8 @@ export default function Equipment() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedEquipment, setSelectedEquipment] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -371,6 +568,11 @@ export default function Equipment() {
   const handleAddSuccess = (newEquipment) => {
     // Refresh the equipment list
     fetchData();
+  };
+
+  const handleViewEquipment = (eq) => {
+    setSelectedEquipment(eq);
+    setShowDetailModal(true);
   };
 
   // Filter equipment based on search and status
@@ -518,7 +720,11 @@ export default function Equipment() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredEquipment.map((eq) => (
-                <tr key={eq.id} className="hover:bg-gray-50 transition-colors">
+                <tr
+                  key={eq.id}
+                  className="hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={() => handleViewEquipment(eq)}
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -560,10 +766,19 @@ export default function Equipment() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-primary-600 hover:text-primary-900 mr-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewEquipment(eq);
+                      }}
+                      className="text-primary-600 hover:text-primary-900 mr-3"
+                    >
                       View
                     </button>
-                    <button className="text-gray-600 hover:text-gray-900">
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-gray-600 hover:text-gray-900"
+                    >
                       Edit
                     </button>
                   </td>
@@ -586,6 +801,17 @@ export default function Equipment() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSuccess={handleAddSuccess}
+        token={token}
+      />
+
+      {/* Equipment Detail Modal */}
+      <EquipmentDetailModal
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setSelectedEquipment(null);
+        }}
+        equipment={selectedEquipment}
         token={token}
       />
     </div>

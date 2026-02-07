@@ -9,6 +9,7 @@ export default function Users() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -106,10 +107,93 @@ export default function Users() {
     }
   };
 
+  const handleEditUser = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    setFormLoading(true);
+
+    // Validation
+    if (!formData.name.trim()) {
+      setFormError('Name is required');
+      setFormLoading(false);
+      return;
+    }
+    if (!formData.email.trim()) {
+      setFormError('Email is required');
+      setFormLoading(false);
+      return;
+    }
+    // Password is optional when editing
+    if (formData.password && formData.password.length < 8) {
+      setFormError('Password must be at least 8 characters');
+      setFormLoading(false);
+      return;
+    }
+
+    try {
+      const payload = {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role
+      };
+      // Only include password if it was changed
+      if (formData.password) {
+        payload.password = formData.password;
+      }
+
+      const response = await fetch(`${API_BASE}/users/${editingUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update user');
+      }
+
+      // Success - close modal and refresh list
+      setShowModal(false);
+      setEditingUser(null);
+      setFormData({ name: '', email: '', password: '', role: 'viewer' });
+      setSuccessMessage(`User "${formData.name}" updated successfully!`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+      fetchUsers();
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
   const openAddUserModal = () => {
+    setEditingUser(null);
     setFormData({ name: '', email: '', password: '', role: 'viewer' });
     setFormError('');
     setShowModal(true);
+  };
+
+  const openEditUserModal = (userToEdit) => {
+    setEditingUser(userToEdit);
+    setFormData({
+      name: userToEdit.name,
+      email: userToEdit.email,
+      password: '',
+      role: userToEdit.role
+    });
+    setFormError('');
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingUser(null);
+    setFormData({ name: '', email: '', password: '', role: 'viewer' });
+    setFormError('');
   };
 
   const formatDate = (dateString) => {
@@ -252,7 +336,10 @@ export default function Users() {
                     {formatDate(u.last_login)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-primary-600 hover:text-primary-900 mr-3">
+                    <button
+                      onClick={() => openEditUserModal(u)}
+                      className="text-primary-600 hover:text-primary-900 mr-3"
+                    >
                       Edit
                     </button>
                     {u.id !== user?.id && (
@@ -272,7 +359,7 @@ export default function Users() {
         Total: {users.length} user{users.length !== 1 ? 's' : ''}
       </div>
 
-      {/* Add User Modal */}
+      {/* Add/Edit User Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -280,26 +367,32 @@ export default function Users() {
             <div
               className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
               aria-hidden="true"
-              onClick={() => setShowModal(false)}
+              onClick={closeModal}
             ></div>
 
             {/* Modal panel */}
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <form onSubmit={handleCreateUser}>
+              <form onSubmit={editingUser ? handleEditUser : handleCreateUser}>
                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                   <div className="sm:flex sm:items-start">
                     <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-primary-100 sm:mx-0 sm:h-10 sm:w-10">
                       <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                        {editingUser ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                        )}
                       </svg>
                     </div>
                     <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
                       <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                        Add New User
+                        {editingUser ? 'Edit User' : 'Add New User'}
                       </h3>
                       <p className="mt-1 text-sm text-gray-500">
-                        Create a new user account for the system.
+                        {editingUser
+                          ? 'Update user account information.'
+                          : 'Create a new user account for the system.'}
                       </p>
 
                       {formError && (
@@ -341,7 +434,7 @@ export default function Users() {
 
                         <div>
                           <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                            Password
+                            Password {editingUser && <span className="text-gray-400 font-normal">(leave blank to keep current)</span>}
                           </label>
                           <input
                             type="password"
@@ -350,7 +443,7 @@ export default function Users() {
                             value={formData.password}
                             onChange={handleInputChange}
                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                            placeholder="Minimum 8 characters"
+                            placeholder={editingUser ? "Leave blank to keep current password" : "Minimum 8 characters"}
                           />
                         </div>
 
@@ -386,15 +479,15 @@ export default function Users() {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Creating...
+                        {editingUser ? 'Saving...' : 'Creating...'}
                       </>
                     ) : (
-                      'Create User'
+                      editingUser ? 'Save Changes' : 'Create User'
                     )}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowModal(false)}
+                    onClick={closeModal}
                     className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   >
                     Cancel
