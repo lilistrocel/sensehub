@@ -41,7 +41,7 @@ function StatusBadge({ status, large = false }) {
 }
 
 // Equipment Detail Modal
-function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate }) {
+function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, user }) {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState(null);
   const [error, setError] = useState(null);
@@ -49,6 +49,11 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate }) {
   const [selectedZone, setSelectedZone] = useState('');
   const [assigningZone, setAssigningZone] = useState(false);
   const [zoneMessage, setZoneMessage] = useState(null);
+  const [controlLoading, setControlLoading] = useState(false);
+  const [controlMessage, setControlMessage] = useState(null);
+
+  // Check if user can control equipment (admin or operator only)
+  const canControl = user?.role === 'admin' || user?.role === 'operator';
 
   useEffect(() => {
     if (isOpen && equipment) {
@@ -172,6 +177,45 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate }) {
       setTimeout(() => setZoneMessage(null), 3000);
     } catch (err) {
       setZoneMessage({ type: 'error', text: err.message });
+    }
+  };
+
+  // Handle equipment control (on/off toggle)
+  const handleControl = async (action) => {
+    if (!equipment || !canControl) return;
+
+    setControlLoading(true);
+    setControlMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipment.id}/control`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to control equipment');
+      }
+
+      setControlMessage({ type: 'success', text: `Equipment turned ${action}!` });
+
+      // Refresh equipment details
+      await fetchDetails();
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+
+      // Clear success message after delay
+      setTimeout(() => setControlMessage(null), 3000);
+    } catch (err) {
+      setControlMessage({ type: 'error', text: err.message });
+    } finally {
+      setControlLoading(false);
     }
   };
 
@@ -371,11 +415,79 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate }) {
               )}
 
               {/* Created At */}
-              <div className="flex items-center justify-between py-3">
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
                 <span className="text-sm font-medium text-gray-500">Created</span>
                 <span className="text-sm text-gray-900">
                   {eq?.created_at ? new Date(eq.created_at).toLocaleString() : '-'}
                 </span>
+              </div>
+
+              {/* Equipment Control Section */}
+              <div className="py-3">
+                <span className="text-sm font-medium text-gray-500 block mb-3">Equipment Control</span>
+
+                {/* Control Message */}
+                {controlMessage && (
+                  <div className={`mb-3 p-2 rounded text-sm ${
+                    controlMessage.type === 'success'
+                      ? 'bg-green-50 text-green-800 border border-green-200'
+                      : 'bg-red-50 text-red-800 border border-red-200'
+                  }`}>
+                    {controlMessage.text}
+                  </div>
+                )}
+
+                {canControl ? (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleControl('on')}
+                      disabled={controlLoading}
+                      className="flex-1 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                    >
+                      {controlLoading ? (
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          Turn On
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleControl('off')}
+                      disabled={controlLoading}
+                      className="flex-1 px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                    >
+                      {controlLoading ? (
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                          </svg>
+                          Turn Off
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-center text-gray-500">
+                      <svg className="h-5 w-5 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      <span className="text-sm">Equipment control requires operator or admin permissions</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -900,7 +1012,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 }
 
 export default function Equipment() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [equipment, setEquipment] = useState([]);
   const [zones, setZones] = useState({});
   const [loading, setLoading] = useState(true);
