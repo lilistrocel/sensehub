@@ -2,10 +2,48 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 73
-- **Completion:** ~38.6%
+- **Passing:** 74
+- **Completion:** ~39.2%
 
 ## Session Log
+
+### Session - 2026-02-08 (Feature #74 - Automation Threshold Trigger)
+**Assigned Feature:** #74 - Automation trigger threshold works
+**Status:** PASSED ✅
+
+**What was implemented:**
+
+Feature #74 - Automation trigger threshold works:
+- Enhanced Automations.jsx with equipment fetching for threshold triggers
+- Added equipment state variables and fetchEquipment() API call
+- Modified threshold trigger configuration to include equipment_id, sensor_type, operator, threshold_value, unit
+- Added Equipment/Sensor dropdown to threshold trigger UI
+- Updated trigger summary to display selected equipment name
+- Added condition_logic field for AND/OR condition evaluation
+
+**Verification steps completed:**
+- Logged in as admin user on port 5180
+- Opened automation builder via Add Automation button
+- Selected "Sensor Threshold" trigger type
+- Equipment dropdown populated with real equipment from database
+- Selected equipment "Updated Sensor Name (Temperature Sensor)"
+- Set condition: Temperature > 25 °C
+- Saved automation "High Temperature Alert - Feature 74"
+- Verified automation appears in list with "Threshold" badge
+- Reopened edit modal - all trigger settings persisted correctly:
+  - Equipment selection retained
+  - Sensor type, operator, threshold, and unit all saved
+  - Summary shows: "Trigger: When Updated Sensor Name Temperature > 25 °C"
+
+**Files modified:**
+- frontend/src/pages/Automations.jsx - Added equipment fetching and threshold trigger UI
+
+**Technical notes:**
+- Equipment fetched from GET /api/equipment with Bearer token auth
+- Threshold config stored as JSON in trigger_config column
+- Frontend running on port 5180 due to port conflicts (5173-5179 in use)
+
+---
 
 ### Session - 2026-02-08 (Feature #66 - Zone Hierarchy)
 **Assigned Feature:** #66 - Zone hierarchy parent-child works

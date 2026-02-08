@@ -201,6 +201,17 @@ const initSchema = () => {
     console.log('Calibration columns already exist or migration skipped');
   }
 
+  // Add condition_logic column to automations table if it doesn't exist
+  try {
+    const automationColumns = db.pragma("table_info(automations)").map(col => col.name);
+    if (!automationColumns.includes('condition_logic')) {
+      db.exec("ALTER TABLE automations ADD COLUMN condition_logic TEXT DEFAULT 'AND'");
+      console.log('Added condition_logic column to automations table');
+    }
+  } catch (err) {
+    console.log('condition_logic column already exists or migration skipped');
+  }
+
   console.log('Database schema initialized');
   return true;
 };

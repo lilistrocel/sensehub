@@ -9,7 +9,7 @@ export default function Zones() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newZone, setNewZone] = useState({ name: '', description: '' });
+  const [newZone, setNewZone] = useState({ name: '', description: '', parent_id: '' });
   const [saving, setSaving] = useState(false);
   const [selectedZone, setSelectedZone] = useState(null);
   const [zoneDetail, setZoneDetail] = useState(null);
@@ -20,7 +20,7 @@ export default function Zones() {
   const [selectedEquipmentId, setSelectedEquipmentId] = useState('');
   const [assigningEquipment, setAssigningEquipment] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editZone, setEditZone] = useState({ name: '', description: '' });
+  const [editZone, setEditZone] = useState({ name: '', description: '', parent_id: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [editSuccess, setEditSuccess] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -194,7 +194,11 @@ export default function Zones() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(newZone)
+        body: JSON.stringify({
+          name: newZone.name.trim(),
+          description: newZone.description.trim(),
+          parent_id: newZone.parent_id ? parseInt(newZone.parent_id) : null
+        })
       });
 
       if (!response.ok) {
@@ -202,7 +206,7 @@ export default function Zones() {
         throw new Error(err.message || 'Failed to create zone');
       }
 
-      setNewZone({ name: '', description: '' });
+      setNewZone({ name: '', description: '', parent_id: '' });
       setShowAddModal(false);
       fetchZones();
     } catch (err) {
@@ -228,7 +232,8 @@ export default function Zones() {
     if (zoneDetail) {
       setEditZone({
         name: zoneDetail.name || '',
-        description: zoneDetail.description || ''
+        description: zoneDetail.description || '',
+        parent_id: zoneDetail.parent_id || ''
       });
       setShowEditModal(true);
       setEditSuccess(false);
@@ -237,7 +242,7 @@ export default function Zones() {
 
   const closeEditModal = () => {
     setShowEditModal(false);
-    setEditZone({ name: '', description: '' });
+    setEditZone({ name: '', description: '', parent_id: '' });
     setEditSuccess(false);
   };
 
@@ -255,7 +260,8 @@ export default function Zones() {
         },
         body: JSON.stringify({
           name: editZone.name.trim(),
-          description: editZone.description.trim()
+          description: editZone.description.trim(),
+          parent_id: editZone.parent_id ? parseInt(editZone.parent_id) : null
         })
       });
 
@@ -266,8 +272,8 @@ export default function Zones() {
 
       // Update the selected zone and zone detail
       const updatedZone = await response.json();
-      setSelectedZone({ ...selectedZone, name: updatedZone.name, description: updatedZone.description });
-      setZoneDetail({ ...zoneDetail, name: updatedZone.name, description: updatedZone.description, updated_at: updatedZone.updated_at });
+      setSelectedZone({ ...selectedZone, name: updatedZone.name, description: updatedZone.description, parent_id: updatedZone.parent_id });
+      setZoneDetail({ ...zoneDetail, name: updatedZone.name, description: updatedZone.description, parent_id: updatedZone.parent_id, updated_at: updatedZone.updated_at });
 
       // Refresh zones list
       fetchZones();
@@ -454,7 +460,7 @@ export default function Zones() {
                   required
                 />
               </div>
-              <div className="mb-6">
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Description
                 </label>
@@ -465,6 +471,26 @@ export default function Zones() {
                   placeholder="Optional description of this zone"
                   rows={3}
                 />
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Parent Zone
+                </label>
+                <select
+                  value={newZone.parent_id}
+                  onChange={(e) => setNewZone({ ...newZone, parent_id: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">None (Top Level)</option>
+                  {zones.map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Optional: Select a parent zone to create a hierarchy
+                </p>
               </div>
               <div className="flex justify-end gap-3">
                 <button
@@ -553,6 +579,14 @@ export default function Zones() {
                     <div className="mt-4">
                       <p className="text-xs text-gray-500">Description</p>
                       <p className="text-gray-700">{zoneDetail.description}</p>
+                    </div>
+                  )}
+                  {zoneDetail.parent_id && (
+                    <div className="mt-4">
+                      <p className="text-xs text-gray-500">Parent Zone</p>
+                      <p className="text-gray-700 font-medium">
+                        {zones.find(z => z.id === zoneDetail.parent_id)?.name || `Zone #${zoneDetail.parent_id}`}
+                      </p>
                     </div>
                   )}
                   <div className="mt-4 grid grid-cols-2 gap-4">
@@ -757,7 +791,7 @@ export default function Zones() {
                     required
                   />
                 </div>
-                <div className="mb-6">
+                <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Description
                   </label>
@@ -768,6 +802,26 @@ export default function Zones() {
                     placeholder="Optional description of this zone"
                     rows={3}
                   />
+                </div>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Parent Zone
+                  </label>
+                  <select
+                    value={editZone.parent_id || ''}
+                    onChange={(e) => setEditZone({ ...editZone, parent_id: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">None (Top Level)</option>
+                    {zones.filter(z => z.id !== selectedZone.id).map((zone) => (
+                      <option key={zone.id} value={zone.id}>
+                        {zone.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Optional: Select a parent zone to create a hierarchy
+                  </p>
                 </div>
                 <div className="flex justify-end gap-3">
                   <button

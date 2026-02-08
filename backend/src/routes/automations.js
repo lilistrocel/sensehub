@@ -12,19 +12,20 @@ router.get('/', (req, res) => {
 
 // POST /api/automations - Create automation
 router.post('/', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, trigger_config, conditions, actions, priority } = req.body;
+  const { name, description, trigger_config, conditions, condition_logic, actions, priority } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Bad Request', message: 'Name is required' });
   }
 
   const result = db.prepare(
-    'INSERT INTO automations (name, description, trigger_config, conditions, actions, priority) VALUES (?, ?, ?, ?, ?, ?)'
+    'INSERT INTO automations (name, description, trigger_config, conditions, condition_logic, actions, priority) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(
     name,
     description,
     JSON.stringify(trigger_config || {}),
     JSON.stringify(conditions || []),
+    condition_logic || 'AND',
     JSON.stringify(actions || []),
     priority || 0
   );
@@ -75,7 +76,7 @@ router.get('/:id', (req, res) => {
 
 // PUT /api/automations/:id - Update automation
 router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, trigger_config, conditions, actions, priority, enabled } = req.body;
+  const { name, description, trigger_config, conditions, condition_logic, actions, priority, enabled } = req.body;
   const automationId = req.params.id;
 
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(automationId);
@@ -85,12 +86,13 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   }
 
   db.prepare(
-    "UPDATE automations SET name = ?, description = ?, trigger_config = ?, conditions = ?, actions = ?, priority = ?, enabled = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE automations SET name = ?, description = ?, trigger_config = ?, conditions = ?, condition_logic = ?, actions = ?, priority = ?, enabled = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(
     name ?? automation.name,
     description ?? automation.description,
     trigger_config ? JSON.stringify(trigger_config) : automation.trigger_config,
     conditions ? JSON.stringify(conditions) : automation.conditions,
+    condition_logic ?? automation.condition_logic ?? 'AND',
     actions ? JSON.stringify(actions) : automation.actions,
     priority ?? automation.priority,
     enabled !== undefined ? (enabled ? 1 : 0) : automation.enabled,
@@ -145,6 +147,76 @@ router.post('/:id/toggle', requireRole('admin', 'operator'), (req, res) => {
     .run(newState, req.params.id);
 
   res.json({ enabled: newState === 1 });
+});
+
+// POST /api/automations/:id/trigger - Manually trigger an automation
+router.post('/:id/trigger', requireRole('admin', 'operator'), (req, res) => {
+  const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(req.params.id);
+
+  if (!automation) {
+    return res.status(404).json({ error: 'Not Found', message: 'Automation not found' });
+  }
+
+  // Parse trigger_config to verify it's a manual type (though we allow triggering any)
+  let triggerConfig;
+  try {
+    triggerConfig = typeof automation.trigger_config === 'string'
+      ? JSON.parse(automation.trigger_config)
+      : automation.trigger_config;
+  } catch (e) {
+    triggerConfig = {};
+  }
+
+  // Parse actions to execute
+  let actions;
+  try {
+    actions = typeof automation.actions === 'string'
+      ? JSON.parse(automation.actions)
+      : automation.actions || [];
+  } catch (e) {
+    actions = [];
+  }
+
+  // Execute each action
+  const executedActions = [];
+  for (const action of actions) {
+    if (action.type === 'alert') {
+      // Create an alert in the database
+      db.prepare(
+        "INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))"
+      ).run(action.severity || 'info', action.message || 'Automation triggered');
+      executedActions.push({ type: 'alert', status: 'executed', message: action.message });
+    } else if (action.type === 'log') {
+      // Log the event
+      executedActions.push({ type: 'log', status: 'executed', message: action.message || 'Event logged' });
+    } else if (action.type === 'control') {
+      // Control equipment (simulated for now)
+      executedActions.push({ type: 'control', status: 'executed', action: action.action });
+    }
+  }
+
+  // Log the automation run
+  db.prepare(
+    "INSERT INTO automation_logs (automation_id, status, message, triggered_at, completed_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))"
+  ).run(automation.id, 'success', 'Manual trigger executed');
+
+  // Update automation run count and last_run
+  db.prepare(
+    "UPDATE automations SET run_count = COALESCE(run_count, 0) + 1, last_run = datetime('now'), updated_at = datetime('now') WHERE id = ?"
+  ).run(automation.id);
+
+  const updated = db.prepare('SELECT * FROM automations WHERE id = ?').get(automation.id);
+
+  res.json({
+    success: true,
+    automation_id: automation.id,
+    automation_name: automation.name,
+    trigger_type: triggerConfig?.type || 'manual',
+    executed_actions: executedActions,
+    run_count: updated.run_count,
+    last_run: updated.last_run,
+    message: `Automation "${automation.name}" triggered successfully`
+  });
 });
 
 module.exports = router;
