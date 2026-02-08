@@ -2,10 +2,41 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 62
+- **Passing:** 63
 - **Completion:** ~33%
 
 ## Session Log
+
+### Session - 2026-02-08 (Feature #58 - Equipment Error Logs)
+**Assigned Feature:** #58 - Equipment error logs accessible
+**Status:** PASSED ✅
+
+**What was implemented:**
+
+Feature #58 - Equipment error logs accessible:
+- Added `equipment_errors` table to database schema with fields: id, equipment_id, error_type, message, details, resolved, resolved_at, created_at
+- Created GET /api/equipment/:id/errors endpoint for retrieving error history
+- Created POST /api/equipment/:id/errors endpoint for logging new errors
+- Created PUT /api/equipment/:id/errors/:errorId/resolve endpoint for marking errors as resolved
+- Added "Error Logs" tab to equipment detail modal in frontend
+- Implemented error log display with:
+  - Summary stats (Active/Resolved counts)
+  - Error entries showing type badge, message, details, timestamp
+  - "Show resolved" toggle to filter resolved errors
+  - Resolve button for admin/operator to mark errors resolved
+  - Color-coded error type badges (connection, timeout, protocol, validation, hardware, other)
+  - Resolved timestamp display for resolved errors
+
+**Verification:**
+- Browser automation tests passed
+- Screenshots captured showing:
+  - Error Logs tab with 3 active errors
+  - Resolved error with "Resolved" badge and timestamp
+- Zero console errors
+- No mock data patterns in codebase
+- Real data from database (created test errors via API)
+
+---
 
 ### Session - 2026-02-08 (Features #49, #50, #51 - Equipment Status/Search/Filter)
 **Assigned Features:**
