@@ -2,10 +2,52 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 83
-- **Completion:** ~43.9%
+- **Passing:** 95
+- **Completion:** ~50.3%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #95, #96 - Dashboard Cloud Status & Quick Actions)
+**Assigned Features:**
+- #95 - Cloud connection status displayed
+- #96 - Quick actions panel works
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #95 - Cloud connection status displayed:
+- Made cloud status indicator dynamic (was previously static "Offline Mode")
+- Fetches cloud status from GET /api/cloud/status endpoint on mount
+- Auto-refreshes cloud status every 30 seconds
+- Three status states with appropriate colors:
+  - Not Configured (gray dot) - when cloud.configured=false
+  - Offline Mode (yellow dot) - when configured but not connected
+  - Connected (green dot) - when connected, shows pending sync count
+- Title/tooltip shows detailed status including last sync time
+- Located in top header bar (Layout.jsx)
+
+Feature #96 - Quick actions panel works:
+- Added "Quick Actions" panel to dashboard below statistics cards
+- Four action buttons with icons and colors:
+  - Add Equipment (blue) - navigates to /equipment
+  - Create Zone (green) - navigates to /zones
+  - New Automation (purple) - navigates to /automations
+  - View Alerts (amber) - navigates to /alerts
+- Actions pass openAddModal:true state for add actions
+- Panel only visible to admin/operator users (canControl check)
+- Responsive 2-column (mobile) to 4-column (desktop) grid
+
+**Files Modified:**
+- frontend/src/components/Layout.jsx (dynamic cloud status)
+- frontend/src/pages/Dashboard.jsx (Quick Actions panel)
+
+**Verification:**
+- Browser automation tests passed for all features
+- Zero console errors
+- No mock data patterns found in codebase
+- Screenshots captured at each verification step
+
+---
 
 ### Session - 2026-02-08 (Features #86, #87, #88 - Dashboard Features)
 **Assigned Features:**
