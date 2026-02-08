@@ -126,6 +126,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/equipment/:id"
+        element={
+          <ProtectedRoute>
+            <Equipment />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/zones"
         element={
           <ProtectedRoute>

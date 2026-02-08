@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { getUserFriendlyError } from '../utils/errorHandler';
@@ -1875,6 +1876,8 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 export default function Equipment() {
   const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
+  const { id: urlEquipmentId } = useParams();
+  const navigate = useNavigate();
   const [equipment, setEquipment] = useState([]);
   const [zones, setZones] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1902,6 +1905,17 @@ export default function Equipment() {
   useEffect(() => {
     fetchData();
   }, [token]);
+
+  // Handle deep linking - open equipment detail when URL contains equipment ID
+  useEffect(() => {
+    if (urlEquipmentId && equipment.length > 0 && !loading) {
+      const eq = equipment.find(e => e.id === parseInt(urlEquipmentId, 10));
+      if (eq) {
+        setSelectedEquipment(eq);
+        setShowDetailModal(true);
+      }
+    }
+  }, [urlEquipmentId, equipment, loading]);
 
   // Subscribe to real-time equipment updates via WebSocket
   useEffect(() => {
