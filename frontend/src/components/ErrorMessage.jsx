@@ -19,7 +19,12 @@ function ErrorMessage({
   if (!message) return null;
 
   return (
-    <div className={`p-4 bg-red-50 border border-red-200 rounded-lg ${className}`}>
+    <div
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+      className={`p-4 bg-red-50 border border-red-200 rounded-lg ${className}`}
+    >
       <div className="flex items-start">
         {/* Error Icon */}
         <div className="flex-shrink-0">

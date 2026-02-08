@@ -348,7 +348,7 @@ export default function Zones() {
     return (
       <div>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Zones</h1>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-600">{error}</p>
           <button
             onClick={fetchZones}

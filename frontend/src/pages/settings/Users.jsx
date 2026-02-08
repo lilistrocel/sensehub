@@ -354,9 +354,9 @@ export default function Users() {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 rounded-lg p-4">
         <div className="flex">
-          <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div className="ml-3">
@@ -372,9 +372,9 @@ export default function Users() {
     <div>
       {/* Success Message */}
       {successMessage && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4">
+        <div role="status" aria-live="polite" className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4">
           <div className="flex">
-            <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             <p className="ml-3 text-sm text-green-700">{successMessage}</p>
@@ -529,7 +529,7 @@ export default function Users() {
                       </p>
 
                       {formError && (
-                        <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
+                        <div role="alert" aria-live="assertive" className="mt-3 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
                           {formError}
                         </div>
                       )}
@@ -731,7 +731,7 @@ export default function Users() {
                     </div>
 
                     {resetPasswordError && (
-                      <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
+                      <div role="alert" aria-live="assertive" className="mt-3 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
                         {resetPasswordError}
                       </div>
                     )}

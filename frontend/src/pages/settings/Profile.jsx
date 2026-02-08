@@ -179,13 +179,13 @@ export default function Profile() {
         <h3 className="text-md font-medium text-gray-900 mb-4">Change Password</h3>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+          <div role="alert" aria-live="assertive" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
         {success && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+          <div role="status" aria-live="polite" className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
             <p className="text-sm text-green-700">{success}</p>
           </div>
         )}
@@ -262,13 +262,13 @@ export default function Profile() {
         ) : (
           <>
             {prefsError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+              <div role="alert" aria-live="assertive" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                 <p className="text-sm text-red-700">{prefsError}</p>
               </div>
             )}
 
             {prefsSuccess && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+              <div role="status" aria-live="polite" className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
                 <p className="text-sm text-green-700">{prefsSuccess}</p>
               </div>
             )}
