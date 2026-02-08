@@ -12,6 +12,7 @@ import Zones from './pages/Zones';
 import Automations from './pages/Automations';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
+import NotFound from './pages/NotFound';
 
 // Loading spinner component
 function LoadingSpinner() {
@@ -153,8 +154,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/* Catch all - redirect to dashboard */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Catch all - show 404 page */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
