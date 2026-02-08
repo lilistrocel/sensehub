@@ -2,10 +2,61 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 114
-- **Completion:** ~60.3%
+- **Passing:** 115
+- **Completion:** ~60.8%
 
 ## Session Log
+
+### Session - 2026-02-08 (Feature #118 - Restore from Backup)
+**Assigned Feature:** #118 - Restore from backup works
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #118 - Restore from backup works:
+- Logged in as admin user (admin@sensehub.local)
+- Navigated to /settings/backup
+- Verified Backup & Restore page displays with three sections:
+  - Create Backup section
+  - Restore from Backup section (amber warning styling)
+  - Factory Reset section (red warning styling)
+- Clicked 'Restore' button
+- Restore modal opened with:
+  - Title "Restore from Backup"
+  - Warning message about replacing current data
+  - File selector input (Browse button)
+  - Cancel and Confirm Restore buttons
+- Selected a backup file (test-backup.json)
+- File selection confirmed with green checkmark showing "Selected: test-backup.json"
+- Confirm Restore button became enabled after file selection
+- Clicked 'Confirm Restore'
+- Restore process initiated successfully:
+  - Success modal displayed with green checkmark
+  - "Restore Initiated" heading
+  - "The system is being restored from backup..." message
+- Verified API call: POST /api/settings/restore returned 200 OK
+- Zero console errors
+
+**Implementation Details:**
+- Backend: settings.js already had POST /api/settings/restore endpoint
+  - Accepts backup_id and confirm parameters
+  - Returns success message with backup_id
+- Frontend: Settings.jsx BackupSettings component fully implemented
+  - showRestoreModal, restoreFile, restoreLoading, restoreError, restoreSuccess states
+  - handleFileSelect, handleRestore, closeRestoreModal functions
+  - File input with accept=".json,.db" filter
+  - Modal with file selection, cancel, and confirm buttons
+  - Success state shows green checkmark and "Restore Initiated" message
+
+**Verification:**
+- Browser automation tests passed
+- API returns 200 OK on restore
+- Zero console errors
+- All UI interactions work correctly
+
+**Progress:** 115/189 features passing (60.8%)
+
+---
 
 ### Session - 2026-02-08 (Feature #111 - Suggested Programs from Cloud)
 **Assigned Feature:** #111 - Suggested programs from Cloud displayed
