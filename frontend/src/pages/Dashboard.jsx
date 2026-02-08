@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 
@@ -193,6 +194,7 @@ function ReadingsChart({ readings }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
   const [zones, setZones] = useState([]);
@@ -208,9 +210,76 @@ export default function Dashboard() {
   const [equipmentList, setEquipmentList] = useState([]); // For equipment controls
   const [controlLoading, setControlLoading] = useState({}); // Track loading state per equipment
   const [controlMessage, setControlMessage] = useState(null); // Control feedback message
+  const [isRefreshing, setIsRefreshing] = useState(false); // Track manual refresh state
+  const [lastRefreshTime, setLastRefreshTime] = useState(null); // Track last refresh time
 
   // Check if user can control equipment (admin or operator only)
   const canControl = user?.role === 'admin' || user?.role === 'operator';
+
+  // Quick actions configuration
+  const quickActions = [
+    {
+      id: 'add-equipment',
+      label: 'Add Equipment',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+      ),
+      path: '/equipment',
+      action: 'add',
+      color: 'bg-blue-500 hover:bg-blue-600',
+      description: 'Add new equipment'
+    },
+    {
+      id: 'create-zone',
+      label: 'Create Zone',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ),
+      path: '/zones',
+      action: 'add',
+      color: 'bg-green-500 hover:bg-green-600',
+      description: 'Create new zone'
+    },
+    {
+      id: 'new-automation',
+      label: 'New Automation',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      ),
+      path: '/automations',
+      action: 'add',
+      color: 'bg-purple-500 hover:bg-purple-600',
+      description: 'Create automation rule'
+    },
+    {
+      id: 'view-alerts',
+      label: 'View Alerts',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+      ),
+      path: '/alerts',
+      color: 'bg-amber-500 hover:bg-amber-600',
+      description: 'View all alerts'
+    }
+  ];
+
+  const handleQuickAction = (action) => {
+    if (action.action === 'add') {
+      // Navigate with state to trigger add modal
+      navigate(action.path, { state: { openAddModal: true } });
+    } else {
+      navigate(action.path);
+    }
+  };
 
   // Time range options
   const timeRangeOptions = [
@@ -374,6 +443,43 @@ export default function Dashboard() {
     setSelectedZoneId(e.target.value);
   };
 
+  // Manual refresh function
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (selectedZoneId) {
+        const response = await fetch(`${API_BASE}/dashboard/zone/${selectedZoneId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Failed to fetch zone dashboard');
+        const data = await response.json();
+        setZoneData(data);
+        setOverview(null);
+      } else {
+        const response = await fetch(`${API_BASE}/dashboard/overview?hours=${timeRange}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Failed to fetch dashboard');
+        const data = await response.json();
+        setOverview(data);
+        setZoneData(null);
+        if (data.latestReadings) {
+          setSensorReadings(data.latestReadings);
+          setLastReadingUpdate(new Date());
+        }
+        if (data.equipmentList) {
+          setEquipmentList(data.equipmentList);
+        }
+      }
+      setLastRefreshTime(new Date());
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // Calculate stats based on selected view
   const getStats = () => {
     if (zoneData) {
@@ -453,6 +559,33 @@ export default function Dashboard() {
               ))}
             </select>
           </div>
+
+          {/* Refresh Button */}
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing || loading}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              isRefreshing || loading
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+            title={lastRefreshTime ? `Last refreshed: ${lastRefreshTime.toLocaleTimeString()}` : 'Click to refresh data'}
+          >
+            <svg
+              className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
       </div>
 
@@ -667,6 +800,111 @@ export default function Dashboard() {
               <div className="p-6">
                 {/* Simple SVG-based line chart */}
                 <ReadingsChart readings={overview.chartReadings} />
+              </div>
+            </div>
+          )}
+
+          {/* Equipment Control Widget */}
+          {!selectedZoneId && equipmentList && equipmentList.length > 0 && (
+            <div className="bg-white rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Equipment Control</h2>
+                <span className="text-sm text-gray-500">
+                  {equipmentList.filter(e => e.status === 'online').length} / {equipmentList.length} online
+                </span>
+              </div>
+
+              {/* Control Message */}
+              {controlMessage && (
+                <div className={`mx-6 mt-4 p-3 rounded-lg text-sm ${
+                  controlMessage.type === 'success'
+                    ? 'bg-green-50 text-green-800 border border-green-200'
+                    : 'bg-red-50 text-red-800 border border-red-200'
+                }`}>
+                  {controlMessage.text}
+                </div>
+              )}
+
+              <div className="divide-y divide-gray-200">
+                {equipmentList.map((equipment) => (
+                  <div key={equipment.id} className="px-6 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {/* Status indicator */}
+                      <span className={`w-3 h-3 rounded-full ${
+                        equipment.status === 'online' ? 'bg-green-500' :
+                        equipment.status === 'offline' ? 'bg-gray-400' :
+                        equipment.status === 'warning' ? 'bg-amber-500' :
+                        equipment.status === 'error' ? 'bg-red-500' :
+                        'bg-gray-400'
+                      }`}></span>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{equipment.name}</p>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          {equipment.type && <span>{equipment.type}</span>}
+                          <span className={`px-1.5 py-0.5 rounded ${
+                            equipment.status === 'online' ? 'bg-green-100 text-green-700' :
+                            equipment.status === 'offline' ? 'bg-gray-100 text-gray-600' :
+                            equipment.status === 'warning' ? 'bg-amber-100 text-amber-700' :
+                            equipment.status === 'error' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {equipment.status || 'unknown'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {canControl ? (
+                        <>
+                          <button
+                            onClick={() => handleEquipmentControl(equipment.id, 'on')}
+                            disabled={controlLoading[equipment.id] || equipment.status === 'online'}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+                              equipment.status === 'online'
+                                ? 'bg-green-100 text-green-700 cursor-default'
+                                : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'
+                            }`}
+                          >
+                            {controlLoading[equipment.id] ? (
+                              <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            ) : (
+                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                            )}
+                            On
+                          </button>
+                          <button
+                            onClick={() => handleEquipmentControl(equipment.id, 'off')}
+                            disabled={controlLoading[equipment.id] || equipment.status === 'offline'}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+                              equipment.status === 'offline'
+                                ? 'bg-gray-100 text-gray-500 cursor-default'
+                                : 'bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50'
+                            }`}
+                          >
+                            {controlLoading[equipment.id] ? (
+                              <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            ) : (
+                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                              </svg>
+                            )}
+                            Off
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">View only</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
