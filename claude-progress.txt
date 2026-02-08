@@ -2,10 +2,66 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 100
-- **Completion:** ~52.9%
+- **Passing:** 103
+- **Completion:** ~54.5%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #103, #104 - Alert History & Sound Notifications)
+**Assigned Features:**
+- #103 - Alert history retained
+- #104 - Alert sound notification option
+**Status:** ALL PASSED ✅
+
+**What was verified:**
+
+Feature #103 - Alert history retained:
+- Logged in as admin user (admin@sensehub.local)
+- Navigated to /alerts page
+- Alert list displays 19 alerts in scrollable table
+- Historical alerts from multiple dates visible:
+  - Feb 8, 7, 6, 5, 4, 3, 2, 1 (2026)
+  - Jan 31, 29, 27, 25, 24 (2026)
+- Alerts spanning 2+ weeks all preserved and viewable
+- Stats cards show: Total 19, Critical 5, Warning 7, Unacknowledged 17
+- Filters by severity, status, and equipment work correctly
+- Search functionality operational
+- "Showing 19 of 19 alerts" displayed at bottom
+- Zero console errors
+
+Feature #104 - Alert sound notification option:
+- Navigated to Settings > Profile > Notification Settings section
+- Sound notification toggle found ("Enable Sound Alerts")
+- Description: "Play an audio notification when new alerts arrive"
+- Enabled the toggle - additional controls appeared:
+  - Alert Volume slider (0-100%, default 50%)
+  - Test Sound button (plays 800Hz test tone)
+- Clicked Save Preferences - success message displayed
+- API verified: GET /api/users/me/preferences returns sound_alerts_enabled: true
+- Settings persist across page reload and re-login
+- AlertSoundContext.jsx handles WebSocket 'new_alert' events
+- Different sound patterns for different severities (critical/warning/info)
+
+**Implementation Notes:**
+- AlertSoundContext.jsx provides Web Audio API sound generation
+- Profile.jsx has complete UI for notification preferences
+- Backend stores preferences in user_preferences table
+- WebSocket integration triggers sounds on new_alert events
+- Volume adjustable, test sound button for preview
+
+**Additional Enhancement:**
+- Added unacknowledged alerts badge to header in Layout.jsx
+- Shows count with red badge, auto-refreshes every 10 seconds
+- Click navigates to alerts page
+
+**Verification:**
+- Browser automation tests passed for all features
+- API endpoints working correctly
+- Settings persist in database
+- Zero console errors
+- No mock data patterns in codebase
+
+---
 
 ### Session - 2026-02-08 (Features #97, #98, #99 - Alert Features)
 **Assigned Features:**
