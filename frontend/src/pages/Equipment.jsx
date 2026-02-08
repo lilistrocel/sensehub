@@ -270,6 +270,56 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
     }
   };
 
+  // Handle calibration save (admin only)
+  const handleCalibrateSave = async () => {
+    if (!equipment || user?.role !== 'admin') return;
+
+    setCalibrationLoading(true);
+    setCalibrationMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipment.id}/calibrate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          offset: parseFloat(calibrationOffset) || 0,
+          scale: parseFloat(calibrationScale) || 1
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to save calibration');
+      }
+
+      const result = await response.json();
+      setCalibrationMessage({ type: 'success', text: 'Calibration saved successfully!' });
+
+      // Update local values from response
+      setCalibrationOffset(String(result.offset));
+      setCalibrationScale(String(result.scale));
+
+      // Refresh equipment details
+      await fetchDetails();
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+
+      // Close calibration form after success
+      setTimeout(() => {
+        setCalibrationMessage(null);
+        setShowCalibration(false);
+      }, 2000);
+    } catch (err) {
+      setCalibrationMessage({ type: 'error', text: err.message });
+    } finally {
+      setCalibrationLoading(false);
+    }
+  };
+
   // Get zones that are not already assigned
   const availableZones = allZones.filter(
     zone => !details?.zones?.some(z => z.id === zone.id)
@@ -1094,6 +1144,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 
 export default function Equipment() {
   const { token, user } = useAuth();
+  const { subscribe, connected } = useWebSocket();
   const [equipment, setEquipment] = useState([]);
   const [zones, setZones] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1112,10 +1163,69 @@ export default function Equipment() {
   const [sortDirection, setSortDirection] = useState('asc');
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(null);
 
   useEffect(() => {
     fetchData();
   }, [token]);
+
+  // Subscribe to real-time equipment updates via WebSocket
+  useEffect(() => {
+    // Handle equipment updates (status changes, edits)
+    const unsubUpdate = subscribe('equipment_updated', (data) => {
+      console.log('Equipment updated via WebSocket:', data);
+      setEquipment(prev => prev.map(eq =>
+        eq.id === data.id ? { ...eq, ...data } : eq
+      ));
+      setLastUpdate(new Date().toISOString());
+    });
+
+    // Handle new equipment created
+    const unsubCreate = subscribe('equipment_created', (data) => {
+      console.log('Equipment created via WebSocket:', data);
+      setEquipment(prev => [...prev, { ...data, zones: [] }]);
+      setLastUpdate(new Date().toISOString());
+    });
+
+    // Handle equipment deleted
+    const unsubDelete = subscribe('equipment_deleted', (data) => {
+      console.log('Equipment deleted via WebSocket:', data);
+      setEquipment(prev => prev.filter(eq => eq.id !== data.id));
+      setLastUpdate(new Date().toISOString());
+    });
+
+    // Handle equipment control events (on/off)
+    const unsubControl = subscribe('equipment_control', (data) => {
+      console.log('Equipment control via WebSocket:', data);
+      // Update status based on control action
+      setEquipment(prev => prev.map(eq => {
+        if (eq.id === data.id) {
+          const newStatus = data.action === 'on' ? 'online' :
+                           data.action === 'off' ? 'offline' : eq.status;
+          return { ...eq, status: newStatus };
+        }
+        return eq;
+      }));
+      setLastUpdate(new Date().toISOString());
+    });
+
+    // Handle equipment status updates (from simulated sensors/devices)
+    const unsubStatus = subscribe('equipment_status', (data) => {
+      console.log('Equipment status via WebSocket:', data);
+      setEquipment(prev => prev.map(eq =>
+        eq.id === data.id ? { ...eq, status: data.status, last_reading: data.last_reading } : eq
+      ));
+      setLastUpdate(new Date().toISOString());
+    });
+
+    return () => {
+      unsubUpdate();
+      unsubCreate();
+      unsubDelete();
+      unsubControl();
+      unsubStatus();
+    };
+  }, [subscribe]);
 
   const fetchData = async () => {
     try {
@@ -1661,10 +1771,28 @@ export default function Equipment() {
         )}
       </div>
 
-      {/* Equipment count */}
+      {/* Equipment count and connection status */}
       {equipment.length > 0 && (
-        <div className="mt-4 text-sm text-gray-500">
-          Showing {filteredEquipment.length} of {equipment.length} equipment
+        <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
+          <span>Showing {filteredEquipment.length} of {equipment.length} equipment</span>
+          <span className="flex items-center gap-2">
+            {connected ? (
+              <>
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span className="text-green-600">Live updates active</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                <span className="text-gray-400">Live updates disconnected</span>
+              </>
+            )}
+            {lastUpdate && (
+              <span className="text-gray-400 ml-2">
+                Last update: {new Date(lastUpdate).toLocaleTimeString()}
+              </span>
+            )}
+          </span>
         </div>
       )}
 
