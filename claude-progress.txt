@@ -2,10 +2,84 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 119
-- **Completion:** ~63.0%
+- **Passing:** 121
+- **Completion:** ~64.0%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #121, #122, #123 - Form Validation)
+**Assigned Features:**
+- #121 - Required fields enforced on user creation
+- #122 - Email format validated
+- #123 - Equipment name required
+**Status:** ALL PASSED ✅
+
+**What was verified:**
+
+Feature #121 - Required fields enforced on user creation:
+- Logged in as admin user (admin@sensehub.local)
+- Navigated to /settings/users page
+- Clicked "Add User" button to open modal
+- Left name field empty, clicked "Create User"
+- Error message "Name is required" displayed
+- Filled name, left email empty, clicked "Create User"
+- Error message "Email is required" displayed
+- Filled email, left password empty, clicked "Create User"
+- Error message "Password must be at least 8 characters" displayed
+- Screenshot captured: feature121-name-required-error.png, feature121-email-required-error.png, feature121-password-required-error.png
+
+Code validation (Users.jsx lines 73-94):
+```javascript
+if (!formData.name.trim()) {
+  setFormError('Name is required');
+  return;
+}
+if (!formData.email.trim()) {
+  setFormError('Email is required');
+  return;
+}
+if (!formData.password || formData.password.length < 8) {
+  setFormError('Password must be at least 8 characters');
+  return;
+}
+```
+
+Feature #122 - Email format validated:
+- In user creation form, entered invalid email "test@test" (missing TLD)
+- Clicked "Create User" button
+- Error message "Invalid email format" displayed
+- Screenshot captured: feature122-invalid-email-format-error.png
+
+Code validation (Users.jsx lines 84-89):
+```javascript
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+if (!emailRegex.test(formData.email)) {
+  setFormError('Invalid email format');
+  return;
+}
+```
+
+Feature #123 - Equipment name required:
+- Navigated to /equipment page
+- Clicked "Add Equipment" button to open modal
+- Left name field empty
+- Clicked "Add Equipment" button
+- HTML5 required validation blocked submission (field focused)
+- JavaScript backup validation also present (lines 1312-1315)
+- Screenshot captured: feature123-name-required-browser-validation.png
+
+**Implementation Notes:**
+- All features already had proper validation implemented in the codebase
+- User form uses JavaScript validation with setFormError
+- Equipment form uses HTML5 required + JavaScript backup validation
+- No code changes needed - validation working as expected
+
+**Verification:**
+- Browser automation tests passed for all features
+- Zero console errors
+- No mock data patterns in codebase
+
+---
 
 ### Session - 2026-02-08 (Features #124, #125 - Form Validation)
 **Assigned Features:**
