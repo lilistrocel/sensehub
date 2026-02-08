@@ -46,6 +46,8 @@ function SystemSettings() {
   const [timezone, setTimezone] = useState('UTC');
   const [locale, setLocale] = useState('en-US');
   const [dataRetention, setDataRetention] = useState(30);
+  const [storageInfo, setStorageInfo] = useState(null);
+  const [storageLoading, setStorageLoading] = useState(true);
 
   // Common timezones grouped by region
   const timezones = [
@@ -148,8 +150,34 @@ function SystemSettings() {
     }
   };
 
+  const fetchStorage = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/settings/storage`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch storage info');
+      const data = await response.json();
+      setStorageInfo(data);
+    } catch (err) {
+      console.error('Error fetching storage:', err);
+    } finally {
+      setStorageLoading(false);
+    }
+  };
+
+  // Helper function to format bytes
+  const formatBytes = (bytes, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
+
   React.useEffect(() => {
     fetchSettings();
+    fetchStorage();
   }, [token]);
 
   const handleSave = async () => {
@@ -345,6 +373,124 @@ function SystemSettings() {
             Data older than this will be automatically purged to save storage space.
           </p>
         </div>
+      </div>
+
+      {/* Storage Usage Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900 flex items-center">
+            <svg className="h-5 w-5 mr-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            Storage Usage
+          </h3>
+          <button
+            onClick={fetchStorage}
+            disabled={storageLoading}
+            className="text-gray-400 hover:text-gray-600"
+            title="Refresh storage info"
+          >
+            <svg className={`h-5 w-5 ${storageLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          View system storage usage and database statistics.
+        </p>
+
+        {storageLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <svg className="animate-spin h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : storageInfo ? (
+          <div className="space-y-6">
+            {/* Disk Usage Overview */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">Disk Usage</span>
+                <span className="text-sm text-gray-500">
+                  {formatBytes(storageInfo.disk.used)} / {formatBytes(storageInfo.disk.total)}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                <div
+                  className={`h-4 rounded-full transition-all ${
+                    storageInfo.disk.percentUsed > 90 ? 'bg-red-500' :
+                    storageInfo.disk.percentUsed > 70 ? 'bg-amber-500' : 'bg-green-500'
+                  }`}
+                  style={{ width: `${storageInfo.disk.percentUsed}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between mt-1 text-xs text-gray-500">
+                <span>{storageInfo.disk.percentUsed}% used</span>
+                <span>{formatBytes(storageInfo.disk.available)} available</span>
+              </div>
+            </div>
+
+            {/* Storage Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center mb-2">
+                  <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-700">Database</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{formatBytes(storageInfo.database.size)}</p>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center mb-2">
+                  <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-700">Data Directory</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{formatBytes(storageInfo.dataDirectory.size)}</p>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center mb-2">
+                  <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="text-sm font-medium text-gray-700">Logs</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{formatBytes(storageInfo.logsDirectory.size)}</p>
+              </div>
+            </div>
+
+            {/* Database Table Statistics */}
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Database Records</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {storageInfo.tableStats && Object.entries(storageInfo.tableStats).map(([table, count]) => (
+                  <div key={table} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <p className="text-xs text-gray-500 capitalize">{table.replace('_', ' ')}</p>
+                    <p className="text-lg font-semibold text-gray-900">{count.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Last Updated */}
+            <p className="text-xs text-gray-400 text-right">
+              Last updated: {new Date(storageInfo.timestamp).toLocaleString()}
+            </p>
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            <p className="mt-2 text-gray-500">Unable to load storage information</p>
+          </div>
+        )}
       </div>
 
       {/* Save Button */}

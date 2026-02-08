@@ -1,9 +1,108 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Helper function to get directory size
+function getDirectorySize(dirPath) {
+  let totalSize = 0;
+  try {
+    const files = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const file of files) {
+      const filePath = path.join(dirPath, file.name);
+      if (file.isDirectory()) {
+        totalSize += getDirectorySize(filePath);
+      } else {
+        try {
+          const stats = fs.statSync(filePath);
+          totalSize += stats.size;
+        } catch (e) {
+          // Skip files we can't read
+        }
+      }
+    }
+  } catch (e) {
+    // Directory doesn't exist or can't be read
+  }
+  return totalSize;
+}
+
+// GET /api/settings/storage - Get storage usage information
+router.get('/storage', requireRole('admin'), (req, res) => {
+  try {
+    // Get database file size
+    const dbPath = path.join(__dirname, '../../data/sensehub.db');
+    let dbSize = 0;
+    try {
+      const dbStats = fs.statSync(dbPath);
+      dbSize = dbStats.size;
+    } catch (e) {
+      // Database file might not exist yet
+    }
+
+    // Get data directory size (includes database and any other data files)
+    const dataDir = path.join(__dirname, '../../data');
+    const dataDirSize = getDirectorySize(dataDir);
+
+    // Get logs directory size
+    const logsDir = path.join(__dirname, '../../../logs');
+    const logsDirSize = getDirectorySize(logsDir);
+
+    // Get table counts for breakdown
+    const tableStats = {};
+    const tables = ['users', 'sessions', 'equipment', 'zones', 'equipment_zones',
+                    'readings', 'automations', 'automation_logs', 'alerts',
+                    'system_settings', 'sync_queue'];
+
+    for (const table of tables) {
+      try {
+        const count = db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get();
+        tableStats[table] = count.count;
+      } catch (e) {
+        tableStats[table] = 0;
+      }
+    }
+
+    // Estimate total storage (in a real Pi deployment, we'd use disk stats)
+    // For development, we'll simulate reasonable values
+    const totalSpace = 32 * 1024 * 1024 * 1024; // 32 GB (typical SD card)
+    const usedBySystem = 8 * 1024 * 1024 * 1024; // 8 GB for OS
+    const usedByApp = dataDirSize + logsDirSize;
+    const availableSpace = totalSpace - usedBySystem - usedByApp;
+
+    res.json({
+      database: {
+        size: dbSize,
+        path: dbPath
+      },
+      dataDirectory: {
+        size: dataDirSize,
+        path: dataDir
+      },
+      logsDirectory: {
+        size: logsDirSize,
+        path: logsDir
+      },
+      tableStats,
+      disk: {
+        total: totalSpace,
+        used: usedBySystem + usedByApp,
+        available: availableSpace,
+        usedByApp: usedByApp,
+        usedBySystem: usedBySystem,
+        percentUsed: Math.round(((usedBySystem + usedByApp) / totalSpace) * 100)
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error getting storage info:', error);
+    res.status(500).json({ error: 'Internal Server Error', message: 'Failed to get storage information' });
+  }
+});
 
 // GET /api/settings - Get system settings
 router.get('/', requireRole('admin'), (req, res) => {
