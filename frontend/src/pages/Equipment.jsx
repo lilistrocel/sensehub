@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { getUserFriendlyError } from '../utils/errorHandler';
+import ErrorMessage from '../components/ErrorMessage';
 
 const API_BASE = '/api';
 
@@ -1298,6 +1300,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [retryFn, setRetryFn] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -1305,12 +1308,13 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setRetryFn(null);
 
     if (!formData.name.trim()) {
-      setError('Name is required');
+      setError({ message: 'Name is required', canRetry: false });
       return;
     }
 
@@ -1357,7 +1361,12 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
       }, 1500);
 
     } catch (err) {
-      setError(err.message);
+      const friendlyError = getUserFriendlyError(err, 'saving equipment');
+      setError(friendlyError);
+      // Store retry function if error is retryable
+      if (friendlyError.canRetry) {
+        setRetryFn(() => () => handleSubmit());
+      }
     } finally {
       setSaving(false);
     }
@@ -1402,16 +1411,15 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
             </div>
           )}
 
-          {/* Error Message */}
+          {/* Error Message with retry option */}
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center">
-                <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-red-800 text-sm">{error}</span>
-              </div>
-            </div>
+            <ErrorMessage
+              message={typeof error === 'string' ? error : error.message}
+              canRetry={error.canRetry}
+              onRetry={retryFn}
+              isNetworkError={error.isNetworkError}
+              className="mb-4"
+            />
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -1547,6 +1555,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
+  const [retryFn, setRetryFn] = useState(null);
 
   // Initialize form data when equipment changes
   useEffect(() => {
@@ -1560,6 +1569,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
       });
       setError(null);
       setSuccessMessage(null);
+      setRetryFn(null);
     }
   }, [equipment]);
 
@@ -1569,12 +1579,13 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setRetryFn(null);
 
     if (!formData.name.trim()) {
-      setError('Name is required');
+      setError({ message: 'Name is required', canRetry: false });
       return;
     }
 
@@ -1612,7 +1623,12 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
       }, 1500);
 
     } catch (err) {
-      setError(err.message);
+      const friendlyError = getUserFriendlyError(err, 'updating equipment');
+      setError(friendlyError);
+      // Store retry function if error is retryable
+      if (friendlyError.canRetry) {
+        setRetryFn(() => () => handleSubmit());
+      }
     } finally {
       setSaving(false);
     }
@@ -1657,16 +1673,15 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
             </div>
           )}
 
-          {/* Error Message */}
+          {/* Error Message with retry option */}
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center">
-                <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-red-800 text-sm">{error}</span>
-              </div>
-            </div>
+            <ErrorMessage
+              message={typeof error === 'string' ? error : error.message}
+              canRetry={error.canRetry}
+              onRetry={retryFn}
+              isNetworkError={error.isNetworkError}
+              className="mb-4"
+            />
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
