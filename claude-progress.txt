@@ -7,6 +7,44 @@
 
 ## Session Log
 
+### Session - 2026-02-08 (Feature #30 - Admin Password Reset)
+**Assigned Feature:** #30 - Admin can reset user password
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #30 - Admin can reset user password:
+- Logged in as admin user (admin@sensehub.local)
+- Navigated to /settings/users
+- User list displayed with "Reset Password" button for each non-admin user
+- Clicked "Reset Password" for Operator User (operator@sensehub.local)
+- Reset Password modal opened showing:
+  - User name and email
+  - New Password input field (min 8 characters)
+  - Reset Password and Cancel buttons
+- Entered new password 'newpassword123'
+- Clicked Reset Password button
+- Success message: "Password for 'Operator User' has been reset successfully!"
+- Logged out as admin
+- Logged in as operator@sensehub.local with new password 'newpassword123'
+- Login succeeded - Dashboard displayed with "Operator User" shown
+
+**Implementation Details (already existed):**
+- Frontend: Users.jsx lines 249-305 - Reset password modal with validation
+- Frontend: Users.jsx lines 456-459 - Reset Password button per user row
+- Frontend: Users.jsx lines 688-780 - Reset Password modal component
+- Backend: users.js lines 96-102 - PUT /api/users/:id handles password updates
+- Password validation: minimum 8 characters (both frontend and backend)
+- Password hashed with bcrypt before storing
+
+**Verification:**
+- Browser automation tests passed
+- Database updated_at timestamp confirmed password change
+- Zero console errors
+- No mock data patterns in codebase
+
+---
+
 ### Session - 2026-02-08 (Feature #29 - Admin can delete user)
 **Assigned Feature:** #29 - Admin can delete user
 **Status:** PASSED ✅
