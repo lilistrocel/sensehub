@@ -58,6 +58,10 @@ function CloudSettings() {
   const [connectError, setConnectError] = useState(null);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
+  const [suggestedPrograms, setSuggestedPrograms] = useState([]);
+  const [suggestedLoading, setSuggestedLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [programMessage, setProgramMessage] = useState(null);
 
   const fetchCloudStatus = async () => {
     try {
@@ -75,9 +79,69 @@ function CloudSettings() {
     }
   };
 
+  const fetchSuggestedPrograms = async () => {
+    setSuggestedLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/cloud/suggested-programs?status=pending`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch suggested programs');
+      const data = await response.json();
+      setSuggestedPrograms(data);
+    } catch (err) {
+      console.error('Error fetching suggested programs:', err);
+    } finally {
+      setSuggestedLoading(false);
+    }
+  };
+
+  const handleApproveProgram = async (programId) => {
+    setActionLoading(programId);
+    setProgramMessage(null);
+    try {
+      const response = await fetch(`${API_BASE}/cloud/suggested-programs/${programId}/approve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to approve program');
+      }
+      const data = await response.json();
+      setProgramMessage({ type: 'success', text: `Program approved! Automation #${data.automationId} created.` });
+      fetchSuggestedPrograms();
+    } catch (err) {
+      setProgramMessage({ type: 'error', text: err.message });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRejectProgram = async (programId) => {
+    setActionLoading(programId);
+    setProgramMessage(null);
+    try {
+      const response = await fetch(`${API_BASE}/cloud/suggested-programs/${programId}/reject`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to reject program');
+      }
+      setProgramMessage({ type: 'success', text: 'Program rejected.' });
+      fetchSuggestedPrograms();
+    } catch (err) {
+      setProgramMessage({ type: 'error', text: err.message });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   // Initial fetch and refresh every 30 seconds
   React.useEffect(() => {
     fetchCloudStatus();
+    fetchSuggestedPrograms();
     const interval = setInterval(fetchCloudStatus, 30000);
     return () => clearInterval(interval);
   }, [token]);

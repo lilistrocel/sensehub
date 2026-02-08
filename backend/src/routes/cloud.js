@@ -68,4 +68,113 @@ router.get('/pending', (req, res) => {
   res.json(pending);
 });
 
+// GET /api/cloud/suggested-programs - Get suggested programs from Cloud
+router.get('/suggested-programs', (req, res) => {
+  const { status } = req.query;
+
+  let query = 'SELECT * FROM cloud_suggested_programs';
+  let params = [];
+
+  if (status) {
+    query += ' WHERE status = ?';
+    params.push(status);
+  }
+
+  query += ' ORDER BY created_at DESC';
+
+  const programs = db.prepare(query).all(...params);
+
+  // Parse JSON fields
+  const parsed = programs.map(p => ({
+    ...p,
+    trigger_config: p.trigger_config ? JSON.parse(p.trigger_config) : null,
+    conditions: p.conditions ? JSON.parse(p.conditions) : [],
+    actions: p.actions ? JSON.parse(p.actions) : []
+  }));
+
+  res.json(parsed);
+});
+
+// POST /api/cloud/suggested-programs/:id/approve - Approve a suggested program
+router.post('/suggested-programs/:id/approve', requireRole('admin', 'operator'), (req, res) => {
+  const { id } = req.params;
+
+  const program = db.prepare('SELECT * FROM cloud_suggested_programs WHERE id = ?').get(id);
+  if (!program) {
+    return res.status(404).json({ error: 'Not Found', message: 'Suggested program not found' });
+  }
+
+  if (program.status !== 'pending') {
+    return res.status(400).json({ error: 'Bad Request', message: 'Program has already been reviewed' });
+  }
+
+  // Create the automation from the suggested program
+  const result = db.prepare(`
+    INSERT INTO automations (name, description, trigger_config, conditions, actions, enabled, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+  `).run(
+    program.name,
+    program.description,
+    program.trigger_config,
+    program.conditions,
+    program.actions
+  );
+
+  // Update the suggested program status
+  db.prepare(`
+    UPDATE cloud_suggested_programs
+    SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now')
+    WHERE id = ?
+  `).run(req.user.id, id);
+
+  res.json({
+    message: 'Program approved and automation created',
+    automationId: result.lastInsertRowid
+  });
+});
+
+// POST /api/cloud/suggested-programs/:id/reject - Reject a suggested program
+router.post('/suggested-programs/:id/reject', requireRole('admin', 'operator'), (req, res) => {
+  const { id } = req.params;
+
+  const program = db.prepare('SELECT * FROM cloud_suggested_programs WHERE id = ?').get(id);
+  if (!program) {
+    return res.status(404).json({ error: 'Not Found', message: 'Suggested program not found' });
+  }
+
+  if (program.status !== 'pending') {
+    return res.status(400).json({ error: 'Bad Request', message: 'Program has already been reviewed' });
+  }
+
+  // Update the suggested program status
+  db.prepare(`
+    UPDATE cloud_suggested_programs
+    SET status = 'rejected', reviewed_by = ?, reviewed_at = datetime('now')
+    WHERE id = ?
+  `).run(req.user.id, id);
+
+  res.json({ message: 'Program rejected' });
+});
+
+// Helper endpoint to simulate receiving suggested programs from Cloud (for testing)
+router.post('/suggested-programs/simulate', requireRole('admin'), (req, res) => {
+  const { name, description, trigger_config, conditions, actions } = req.body;
+
+  const cloudId = `cloud_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  db.prepare(`
+    INSERT INTO cloud_suggested_programs (cloud_id, name, description, trigger_config, conditions, actions, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending', datetime('now'))
+  `).run(
+    cloudId,
+    name || 'Sample Cloud Automation',
+    description || 'Automation suggested by Cloud platform',
+    JSON.stringify(trigger_config || { type: 'schedule', schedule: 'daily', time: '09:00' }),
+    JSON.stringify(conditions || []),
+    JSON.stringify(actions || [{ type: 'send_alert', severity: 'info', message: 'Cloud scheduled check' }])
+  );
+
+  res.json({ message: 'Simulated suggested program created', cloudId });
+});
+
 module.exports = router;

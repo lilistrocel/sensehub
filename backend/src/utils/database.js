@@ -189,6 +189,22 @@ const initSchema = () => {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    -- Cloud suggested programs table
+    CREATE TABLE IF NOT EXISTS cloud_suggested_programs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cloud_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      trigger_config TEXT,
+      conditions TEXT,
+      actions TEXT,
+      status TEXT CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
+      reviewed_by INTEGER,
+      reviewed_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
@@ -199,6 +215,7 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_equipment_errors_equipment ON equipment_errors(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_equipment_errors_created ON equipment_errors(created_at);
     CREATE INDEX IF NOT EXISTS idx_user_preferences_user ON user_preferences(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cloud_suggested_programs_status ON cloud_suggested_programs(status);
   `);
 
   // Add calibration columns to existing equipment table if they don't exist
