@@ -2,10 +2,47 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 156
-- **Completion:** ~82.5%
+- **Passing:** 160
+- **Completion:** ~84.7%
 
 ## Session Log
+
+### Session - 2026-02-08 (Feature #157 - WebSocket Stability)
+**Assigned Feature:** #157 - WebSocket connection stable
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #157 - WebSocket connection stable:
+- Logged in as admin user (admin@sensehub.local)
+- Navigated to dashboard
+- WebSocket connected successfully with "Live" indicator showing
+- Waited 35+ seconds (exceeds 30-second heartbeat interval)
+- Verified no disconnection/reconnection messages during wait
+- Tested real-time updates by toggling equipment (Humidity Sensor B2 Off)
+- Confirmed status change reflected immediately via WebSocket
+- Zero console errors
+
+**Implementation (already committed in cbf2c05):**
+- Frontend WebSocketContext.jsx:
+  - 30-second heartbeat interval with ping/pong
+  - Pong timeout of 10 seconds
+  - Auto-reconnect after 2 missed pongs
+  - Connection status tracking
+- Backend index.js:
+  - WebSocket message handler for ping/pong
+  - Responds to ping with pong message
+
+**Files Verified:**
+- frontend/src/context/WebSocketContext.jsx
+- backend/src/index.js
+
+**Screenshots:**
+- feature157-websocket-connected.png (initial connection)
+- feature157-websocket-stable-35s.png (after 35 seconds)
+- feature157-realtime-update-working.png (equipment control update)
+
+---
 
 ### Session - 2026-02-08 (Features #154, #155, #156 - Performance)
 **Assigned Features:**
