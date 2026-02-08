@@ -2014,3 +2014,55 @@ Feature #142 - Color contrast meets WCAG standards:
 
 **Progress:** 142/189 features passing (75.1%)
 
+
+---
+
+### Session - 2026-02-08 (Features #161, #162, #163 - Data Integrity)
+**Assigned Features:**
+- #161 - Deleted equipment stays deleted
+- #162 - Equipment-zone assignment persists
+- #163 - User role changes persist
+**Status:** ALL PASSED ✅
+
+**What was verified:**
+
+Feature #161 - Deleted equipment stays deleted:
+- Logged in as admin, created equipment 'DELETE_TEST_123'
+- Deleted equipment and verified removal from list
+- Refreshed page - equipment did NOT reappear
+- Navigated away and back - equipment still deleted
+- Database query confirmed no record exists
+- Screenshot: feature161-deleted-equipment-stays-deleted.png
+
+Feature #162 - Equipment-zone assignment persists:
+- Assigned 'Door Sensor H1' to 'Test Zone Toast' zone
+- Refreshed page - zone assignment persisted
+- Verified in equipment detail modal - zone still assigned
+- Verified in zone detail modal - equipment listed
+- Database confirmed equipment_zones junction table entry
+- Screenshot: feature162-zone-assignment-persists.png
+
+Feature #163 - User role changes persist:
+- Changed 'Operator User' role from operator to viewer
+- Success message displayed, table updated immediately
+- Logged out and logged in as operator user
+- Viewer permissions applied (View only instead of controls, no Quick Actions)
+- Logged back in as admin
+- Role confirmed still set to viewer in Users table
+- Database confirmed role=viewer
+- Screenshot: feature163-user-role-persists.png
+
+**Files Created:**
+- feature161-deleted-equipment-stays-deleted.png
+- feature162-zone-assignment-persists.png
+- feature163-user-role-persists.png
+- reset-operator-password.js (utility script)
+
+**Verification:**
+- Browser automation tests passed for all features
+- Database persistence confirmed via sqlite3 queries
+- Zero console errors
+- No mock data patterns found in codebase
+
+**Progress:** 163/189 features passing (86.2%)
+
