@@ -54,12 +54,17 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     priority: 0,
     trigger_config: { type: 'manual' },
     conditions: [],
+    condition_logic: 'AND', // AND or OR logic for conditions
     actions: []
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [activeTab, setActiveTab] = useState('trigger');
+
+  // Equipment list for threshold triggers
+  const [equipment, setEquipment] = useState([]);
+  const [loadingEquipment, setLoadingEquipment] = useState(false);
 
   // Condition editing
   const [conditionField, setConditionField] = useState('');
@@ -70,6 +75,9 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   const [actionType, setActionType] = useState('alert');
   const [actionMessage, setActionMessage] = useState('');
   const [actionSeverity, setActionSeverity] = useState('info');
+  const [controlEquipmentId, setControlEquipmentId] = useState('');
+  const [controlAction, setControlAction] = useState('on');
+  const [controlValue, setControlValue] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -92,6 +100,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
           priority: automation.priority || 0,
           trigger_config: triggerConfig,
           conditions: conditions,
+          condition_logic: automation.condition_logic || 'AND',
           actions: actions
         });
       } else {
@@ -103,6 +112,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
           priority: 0,
           trigger_config: { type: 'manual' },
           conditions: [],
+          condition_logic: 'AND',
           actions: []
         });
       }
@@ -111,6 +121,33 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
       setSuccessMessage(null);
     }
   }, [isOpen, automation, isNew]);
+
+  // Fetch equipment list when modal opens
+  useEffect(() => {
+    if (isOpen && token) {
+      fetchEquipment();
+    }
+  }, [isOpen, token]);
+
+  const fetchEquipment = async () => {
+    try {
+      setLoadingEquipment(true);
+      const response = await fetch(`${API_BASE}/equipment`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setEquipment(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch equipment:', err);
+    } finally {
+      setLoadingEquipment(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -134,9 +171,11 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     } else if (newType === 'threshold') {
       newConfig = {
         type: 'threshold',
-        equipment_type: '',
+        equipment_id: '',
+        sensor_type: 'temperature',
         operator: 'gt',
-        threshold_value: ''
+        threshold_value: '',
+        unit: '°C'
       };
     }
 
@@ -190,10 +229,14 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
         message: actionMessage
       };
     } else if (actionType === 'control') {
+      if (!controlEquipmentId) return;
+      const selectedEq = equipment.find(eq => eq.id === parseInt(controlEquipmentId));
       newAction = {
         type: 'control',
-        action: 'on',
-        equipment_id: null
+        action: controlAction,
+        equipment_id: parseInt(controlEquipmentId),
+        equipment_name: selectedEq?.name || 'Unknown Equipment',
+        value: controlAction === 'set' ? controlValue : null
       };
     } else if (actionType === 'log') {
       newAction = {
@@ -210,6 +253,9 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     // Reset
     setActionMessage('');
     setActionSeverity('info');
+    setControlEquipmentId('');
+    setControlAction('on');
+    setControlValue('');
   };
 
   const removeAction = (index) => {
@@ -251,6 +297,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
           priority: parseInt(formData.priority) || 0,
           trigger_config: formData.trigger_config,
           conditions: formData.conditions,
+          condition_logic: formData.condition_logic,
           actions: formData.actions
         })
       });
@@ -592,15 +639,128 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                       <>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Equipment Type
+                            Equipment/Sensor
+                          </label>
+                          <select
+                            value={formData.trigger_config?.equipment_id || ''}
+                            onChange={(e) => handleTriggerConfigChange('equipment_id', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                          >
+                            <option value="">Select equipment...</option>
+                            {loadingEquipment ? (
+                              <option disabled>Loading equipment...</option>
+                            ) : (
+                              equipment.map(eq => (
+                                <option key={eq.id} value={eq.id}>
+                                  {eq.name} ({eq.type || 'Unknown Type'})
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Sensor Type
+                          </label>
+                          <select
+                            value={formData.trigger_config?.sensor_type || 'temperature'}
+                            onChange={(e) => handleTriggerConfigChange('sensor_type', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                          >
+                            <option value="temperature">Temperature</option>
+                            <option value="humidity">Humidity</option>
+                            <option value="pressure">Pressure</option>
+                            <option value="level">Level</option>
+                            <option value="flow">Flow Rate</option>
+                            <option value="voltage">Voltage</option>
+                            <option value="current">Current</option>
+                            <option value="power">Power</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Condition
+                          </label>
+                          <select
+                            value={formData.trigger_config?.operator || 'gt'}
+                            onChange={(e) => handleTriggerConfigChange('operator', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                          >
+                            <option value="gt">Greater than (&gt;)</option>
+                            <option value="gte">Greater than or equal (&gt;=)</option>
+                            <option value="lt">Less than (&lt;)</option>
+                            <option value="lte">Less than or equal (&lt;=)</option>
+                            <option value="eq">Equal to (=)</option>
+                            <option value="neq">Not equal to (≠)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Threshold Value
+                          </label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={formData.trigger_config?.threshold_value || ''}
+                            onChange={(e) => handleTriggerConfigChange('threshold_value', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            placeholder="e.g., 25"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Unit
                           </label>
                           <input
                             type="text"
-                            value={formData.trigger_config?.equipment_type || ''}
-                            onChange={(e) => handleTriggerConfigChange('equipment_type', e.target.value)}
+                            value={formData.trigger_config?.unit || ''}
+                            onChange={(e) => handleTriggerConfigChange('unit', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                            placeholder="e.g., temperature, humidity"
+                            placeholder="e.g., °C, %, PSI"
                           />
+                        </div>
+
+                        {/* Threshold Summary */}
+                        <div className="md:col-span-2 mt-2">
+                          <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
+                            <p className="text-sm text-amber-800">
+                              <span className="font-medium">Trigger: </span>
+                              {(() => {
+                                const tc = formData.trigger_config;
+                                const sensorType = tc?.sensor_type || 'temperature';
+                                const selectedEquipment = equipment.find(eq => eq.id === parseInt(tc?.equipment_id));
+                                const equipmentName = selectedEquipment?.name || 'Any equipment';
+                                const sensorLabels = {
+                                  temperature: 'Temperature',
+                                  humidity: 'Humidity',
+                                  pressure: 'Pressure',
+                                  level: 'Level',
+                                  flow: 'Flow Rate',
+                                  voltage: 'Voltage',
+                                  current: 'Current',
+                                  power: 'Power',
+                                  custom: 'Custom Sensor'
+                                };
+                                const operatorLabels = {
+                                  gt: '>',
+                                  gte: '≥',
+                                  lt: '<',
+                                  lte: '≤',
+                                  eq: '=',
+                                  neq: '≠'
+                                };
+                                const op = operatorLabels[tc?.operator || 'gt'];
+                                const value = tc?.threshold_value || '?';
+                                const unit = tc?.unit || '';
+                                return `When ${equipmentName} ${sensorLabels[sensorType]} ${op} ${value}${unit ? ' ' + unit : ''}`;
+                              })()}
+                            </p>
+                          </div>
                         </div>
                       </>
                     )}
@@ -614,24 +774,82 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   <h4 className="font-medium text-gray-900">Conditions</h4>
                   <p className="text-sm text-gray-500">Define conditions that must be met for actions to execute.</p>
 
+                  {/* Condition Logic Selector */}
+                  {formData.conditions.length >= 1 && (
+                    <div className="bg-white p-3 rounded border">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Condition Logic
+                      </label>
+                      <div className="flex items-center gap-4">
+                        <label className="inline-flex items-center">
+                          <input
+                            type="radio"
+                            name="condition_logic"
+                            value="AND"
+                            checked={formData.condition_logic === 'AND'}
+                            onChange={(e) => setFormData(prev => ({ ...prev, condition_logic: e.target.value }))}
+                            className="form-radio h-4 w-4 text-primary-600"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            <strong>AND</strong> - All conditions must be true
+                          </span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <input
+                            type="radio"
+                            name="condition_logic"
+                            value="OR"
+                            checked={formData.condition_logic === 'OR'}
+                            onChange={(e) => setFormData(prev => ({ ...prev, condition_logic: e.target.value }))}
+                            className="form-radio h-4 w-4 text-primary-600"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            <strong>OR</strong> - Any condition can be true
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Existing Conditions */}
                   {formData.conditions.length > 0 && (
                     <div className="space-y-2">
                       {formData.conditions.map((cond, idx) => (
-                        <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded border">
-                          <span className="text-sm font-medium">{cond.field}</span>
-                          <span className="text-xs text-gray-500">{cond.operator}</span>
-                          <span className="text-sm">{cond.value}</span>
-                          <button
-                            type="button"
-                            onClick={() => removeCondition(idx)}
-                            className="ml-auto text-red-500 hover:text-red-700"
-                          >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
+                        <React.Fragment key={idx}>
+                          {/* Show logic operator between conditions */}
+                          {idx > 0 && (
+                            <div className="flex justify-center">
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                formData.condition_logic === 'AND'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-purple-100 text-purple-800'
+                              }`}>
+                                {formData.condition_logic}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 bg-white p-2 rounded border">
+                            <span className="text-sm font-medium">{cond.field}</span>
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                              {cond.operator === 'eq' ? '=' :
+                               cond.operator === 'neq' ? '!=' :
+                               cond.operator === 'gt' ? '>' :
+                               cond.operator === 'gte' ? '>=' :
+                               cond.operator === 'lt' ? '<' :
+                               cond.operator === 'lte' ? '<=' : cond.operator}
+                            </span>
+                            <span className="text-sm">{cond.value}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeCondition(idx)}
+                              className="ml-auto text-red-500 hover:text-red-700"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </React.Fragment>
                       ))}
                     </div>
                   )}
@@ -702,7 +920,22 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                           }`}>
                             {action.type}
                           </span>
-                          <span className="text-sm">{action.message || action.action || '-'}</span>
+                          {action.type === 'control' ? (
+                            <span className="text-sm">
+                              <span className="font-medium">
+                                {action.action === 'on' ? 'Turn On' :
+                                 action.action === 'off' ? 'Turn Off' :
+                                 action.action === 'toggle' ? 'Toggle' :
+                                 action.action === 'set' ? `Set to ${action.value}` : action.action}
+                              </span>
+                              {' → '}
+                              <span className="text-gray-600">
+                                {action.equipment_name || `Equipment #${action.equipment_id}` || 'Unknown'}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-sm">{action.message || '-'}</span>
+                          )}
                           {action.severity && (
                             <span className="text-xs text-gray-500">({action.severity})</span>
                           )}
@@ -758,6 +991,54 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             placeholder="Alert message..."
                           />
                         </div>
+                      </>
+                    )}
+                    {actionType === 'control' && (
+                      <>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Equipment</label>
+                          <select
+                            value={controlEquipmentId}
+                            onChange={(e) => setControlEquipmentId(e.target.value)}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded min-w-[150px]"
+                          >
+                            <option value="">Select equipment...</option>
+                            {loadingEquipment ? (
+                              <option disabled>Loading...</option>
+                            ) : (
+                              equipment.map(eq => (
+                                <option key={eq.id} value={eq.id}>
+                                  {eq.name}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Action</label>
+                          <select
+                            value={controlAction}
+                            onChange={(e) => setControlAction(e.target.value)}
+                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                          >
+                            <option value="on">Turn On</option>
+                            <option value="off">Turn Off</option>
+                            <option value="toggle">Toggle</option>
+                            <option value="set">Set Value</option>
+                          </select>
+                        </div>
+                        {controlAction === 'set' && (
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Value</label>
+                            <input
+                              type="text"
+                              value={controlValue}
+                              onChange={(e) => setControlValue(e.target.value)}
+                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                              placeholder="e.g., 75"
+                            />
+                          </div>
+                        )}
                       </>
                     )}
                     {actionType === 'log' && (
@@ -1060,6 +1341,46 @@ export default function Automations() {
     fetchAutomations();
   };
 
+  const [triggerLoading, setTriggerLoading] = useState(null);
+  const [triggerResult, setTriggerResult] = useState(null);
+
+  const handleTriggerAutomation = async (automation, e) => {
+    if (e) e.stopPropagation();
+
+    try {
+      setTriggerLoading(automation.id);
+      setTriggerResult(null);
+
+      const response = await fetch(`${API_BASE}/automations/${automation.id}/trigger`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger automation');
+      }
+
+      const result = await response.json();
+      setTriggerResult({ id: automation.id, success: true, message: result.message });
+
+      // Refresh list to update run count and last_run
+      await fetchAutomations();
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setTriggerResult(null);
+      }, 3000);
+    } catch (err) {
+      console.error('Trigger error:', err);
+      setTriggerResult({ id: automation.id, success: false, message: err.message });
+    } finally {
+      setTriggerLoading(null);
+    }
+  };
+
   // Filter automations
   const filteredAutomations = automations.filter(auto => {
     const matchesSearch = !searchTerm ||
@@ -1246,6 +1567,46 @@ export default function Automations() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {canEdit && (
                         <>
+                          {/* Run/Trigger button for manual automations */}
+                          {triggerConfig?.type === 'manual' && (auto.enabled === 1 || auto.enabled === true) && (
+                            <button
+                              onClick={(e) => handleTriggerAutomation(auto, e)}
+                              disabled={triggerLoading === auto.id}
+                              className={`mr-3 inline-flex items-center px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                                triggerLoading === auto.id
+                                  ? 'bg-gray-100 text-gray-400 cursor-wait'
+                                  : triggerResult?.id === auto.id && triggerResult?.success
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-green-600 text-white hover:bg-green-700'
+                              }`}
+                              title="Run this automation now"
+                            >
+                              {triggerLoading === auto.id ? (
+                                <>
+                                  <svg className="animate-spin -ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Running...
+                                </>
+                              ) : triggerResult?.id === auto.id && triggerResult?.success ? (
+                                <>
+                                  <svg className="-ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Done
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="-ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Run
+                                </>
+                              )}
+                            </button>
+                          )}
                           <button
                             onClick={(e) => handleToggleEnabled(auto, e)}
                             className="text-gray-600 hover:text-gray-900 mr-3"
