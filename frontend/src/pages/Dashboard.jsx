@@ -564,7 +564,7 @@ export default function Dashboard() {
           <button
             onClick={handleRefresh}
             disabled={isRefreshing || loading}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
               isRefreshing || loading
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -601,7 +601,7 @@ export default function Dashboard() {
           </span>
           <button
             onClick={() => setSelectedZoneId('')}
-            className="ml-auto text-blue-600 hover:text-blue-800 text-sm underline"
+            className="ml-auto text-blue-600 hover:text-blue-800 text-sm underline focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
           >
             Clear filter
           </button>
@@ -657,7 +657,7 @@ export default function Dashboard() {
                     <button
                       key={action.id}
                       onClick={() => handleQuickAction(action)}
-                      className={`${action.color} text-white rounded-lg p-4 flex flex-col items-center gap-2 transition-transform transform hover:scale-105`}
+                      className={`${action.color} text-white rounded-lg p-4 flex flex-col items-center gap-2 transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
                       title={action.description}
                     >
                       {action.icon}
@@ -883,7 +883,7 @@ export default function Dashboard() {
                           <button
                             onClick={() => handleEquipmentControl(equipment.id, 'on')}
                             disabled={controlLoading[equipment.id] || equipment.status === 'online'}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
                               equipment.status === 'online'
                                 ? 'bg-green-100 text-green-700 cursor-default'
                                 : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'
@@ -904,7 +904,7 @@ export default function Dashboard() {
                           <button
                             onClick={() => handleEquipmentControl(equipment.id, 'off')}
                             disabled={controlLoading[equipment.id] || equipment.status === 'offline'}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 ${
                               equipment.status === 'offline'
                                 ? 'bg-gray-100 text-gray-500 cursor-default'
                                 : 'bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50'
@@ -1047,7 +1047,7 @@ export default function Dashboard() {
                   <h3 className="text-lg font-semibold text-gray-900">Alert Details</h3>
                   <button
                     onClick={() => setSelectedAlert(null)}
-                    className="text-gray-400 hover:text-gray-600"
+                    className="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1121,7 +1121,7 @@ export default function Dashboard() {
                 <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
                   <button
                     onClick={() => setSelectedAlert(null)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
                   >
                     Close
                   </button>

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 const API_BASE = '/api';
 
 export default function Zones() {
   const { token, user } = useAuth();
+  const { showError, showSuccess } = useToast();
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -70,7 +72,7 @@ export default function Zones() {
       const data = await response.json();
       setZoneDetail(data);
     } catch (err) {
-      alert(err.message);
+      showError(err.message, 'Failed to load zone details');
     } finally {
       setLoadingDetail(false);
     }
@@ -107,7 +109,7 @@ export default function Zones() {
 
       setAvailableEquipment(available);
     } catch (err) {
-      alert(err.message);
+      showError(err.message, 'Failed to load equipment');
     } finally {
       setLoadingEquipment(false);
     }
@@ -148,8 +150,9 @@ export default function Zones() {
       closeAssignEquipmentModal();
       // Refresh zones list to update equipment counts
       fetchZones();
+      showSuccess('Equipment assigned successfully');
     } catch (err) {
-      alert(err.message);
+      showError(err.message, 'Failed to assign equipment');
     } finally {
       setAssigningEquipment(false);
     }
@@ -177,8 +180,9 @@ export default function Zones() {
       await fetchZoneDetail(selectedZone.id);
       // Refresh zones list to update equipment counts
       fetchZones();
+      showSuccess('Equipment removed from zone');
     } catch (err) {
-      alert(err.message);
+      showError(err.message, 'Failed to remove equipment');
     }
   };
 
@@ -209,8 +213,9 @@ export default function Zones() {
       setNewZone({ name: '', description: '', parent_id: '' });
       setShowAddModal(false);
       fetchZones();
+      showSuccess('Zone created successfully');
     } catch (err) {
-      alert(err.message);
+      showError(err.message, 'Failed to create zone');
     } finally {
       setSaving(false);
     }
@@ -283,8 +288,9 @@ export default function Zones() {
       setTimeout(() => {
         closeEditModal();
       }, 1500);
+      showSuccess('Zone updated successfully');
     } catch (err) {
-      alert(err.message);
+      showError(err.message, 'Failed to update zone');
     } finally {
       setEditSaving(false);
     }
@@ -319,8 +325,9 @@ export default function Zones() {
       closeDeleteModal();
       closeDetailModal();
       fetchZones();
+      showSuccess('Zone deleted successfully');
     } catch (err) {
-      alert(err.message);
+      showError(err.message, 'Failed to delete zone');
     } finally {
       setDeleting(false);
     }

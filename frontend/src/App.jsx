@@ -3,7 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { AlertSoundProvider } from './context/AlertSoundContext';
+import { ToastProvider } from './context/ToastContext';
 import Layout from './components/Layout';
+import { ToastContainer } from './components/Toast';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
@@ -166,7 +168,10 @@ function App() {
       <AuthProvider>
         <WebSocketProvider>
           <AlertSoundProvider>
-            <AppRoutes />
+            <ToastProvider>
+              <AppRoutes />
+              <ToastContainer />
+            </ToastProvider>
           </AlertSoundProvider>
         </WebSocketProvider>
       </AuthProvider>

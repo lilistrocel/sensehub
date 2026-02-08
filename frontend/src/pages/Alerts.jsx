@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export default function Alerts() {
   const { token, user } = useAuth();
+  const { showError, showSuccess } = useToast();
   const [alerts, setAlerts] = useState([]);
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,8 +75,9 @@ export default function Alerts() {
 
       // Refresh alerts list
       fetchAlerts();
+      showSuccess('Alert acknowledged');
     } catch (err) {
-      alert(err.message);
+      showError(err.message, 'Failed to acknowledge alert');
     }
   };
 
