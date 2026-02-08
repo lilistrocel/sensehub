@@ -1700,3 +1700,58 @@ Feature #114 - Data retention settings configurable:
 
 **Progress:** 114/189 features passing (60.3%)
 
+
+---
+
+### Session - 2026-02-08 (Features #140, #141, #142 - Accessibility)
+**Assigned Features:**
+- #140 - Focus rings visible on interactive elements
+- #141 - Form labels properly associated  
+- #142 - Color contrast meets WCAG standards
+**Status:** ALL PASSED ✅
+
+**What was implemented/verified:**
+
+Feature #140 - Focus rings visible on interactive elements:
+- Added global focus-visible styles in index.css for all interactive elements
+- Updated Sidebar.jsx with focus ring styles on nav links and buttons
+- Updated Dashboard.jsx with focus rings on Quick Actions, Refresh, and control buttons
+- Verified with browser automation: all buttons, links, inputs, selects have visible focus rings
+- Screenshots captured: focus-ring-email, focus-ring-password, focus-ring-button, etc.
+
+Feature #141 - Form labels properly associated:
+- Verified Login form: email/password labels with htmlFor matching input id
+- Verified Equipment form: all 5 fields (name, description, type, protocol, address) properly labeled
+- Updated Zones.jsx: add/edit zone forms with proper label associations (htmlFor + id)
+- Updated Automations.jsx: trigger type labels with proper associations
+- Screenshots captured: equipment-form-labels, zone-form-labels
+
+Feature #142 - Color contrast meets WCAG standards:
+- Verified Login page contrast ratios:
+  - h1 (SenseHub): 4.94:1 - PASS
+  - h2 (Sign In): 17.74:1 - PASS
+  - Labels: 10.31:1 - PASS
+  - Button: 5.17:1 - PASS
+  - Subtitle: 4.55:1 - PASS
+- Verified Dashboard contrast ratios:
+  - h1 (Dashboard): 16.98:1 - PASS
+  - h3 (Equipment Online): 4.83:1 - PASS
+  - Nav links: 6.70:1 - PASS
+  - Footer text: 4.83:1 - PASS
+- All text meets WCAG 2.1 AA requirements (4.5:1 for normal, 3:1 for large)
+
+**Files Modified:**
+- frontend/src/index.css (global focus-visible styles)
+- frontend/src/components/Sidebar.jsx (focus ring styles)
+- frontend/src/pages/Dashboard.jsx (focus ring styles)
+- frontend/src/pages/Zones.jsx (label associations - already in prior commit)
+- frontend/src/pages/Automations.jsx (label associations - already in prior commit)
+
+**Verification:**
+- Browser automation tests passed for all features
+- JavaScript evaluation for contrast ratio calculations
+- Zero console errors
+- No mock data patterns in codebase
+
+**Progress:** 142/189 features passing (75.1%)
+
