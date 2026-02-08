@@ -64,6 +64,24 @@ function CloudSettings() {
   const [programMessage, setProgramMessage] = useState(null);
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [syncHistory, setSyncHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const fetchSyncHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/cloud/sync-history?limit=10`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch sync history');
+      const data = await response.json();
+      setSyncHistory(data);
+    } catch (err) {
+      console.error('Error fetching sync history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const fetchCloudStatus = async () => {
     try {
@@ -178,6 +196,7 @@ function CloudSettings() {
   React.useEffect(() => {
     fetchCloudStatus();
     fetchSuggestedPrograms();
+    fetchSyncHistory();
     const interval = setInterval(fetchCloudStatus, 30000);
     return () => clearInterval(interval);
   }, [token]);
