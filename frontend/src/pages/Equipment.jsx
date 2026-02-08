@@ -553,6 +553,125 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 </span>
               </div>
 
+              {/* Equipment Calibration Section */}
+              <div className="py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-500">Calibration</span>
+                  {user?.role === 'admin' && (
+                    <button
+                      onClick={() => setShowCalibration(!showCalibration)}
+                      className="text-sm text-primary-600 hover:text-primary-800 font-medium"
+                    >
+                      {showCalibration ? 'Hide' : 'Calibrate'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Current calibration values display */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded">
+                    <span className="text-gray-500">Offset:</span>
+                    <span className="font-mono text-gray-900">{eq?.calibration_offset ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded">
+                    <span className="text-gray-500">Scale:</span>
+                    <span className="font-mono text-gray-900">{eq?.calibration_scale ?? 1}</span>
+                  </div>
+                </div>
+
+                {/* Calibration form (admin only) */}
+                {showCalibration && user?.role === 'admin' && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center">
+                      <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Calibration Settings
+                    </h4>
+
+                    {/* Calibration Message */}
+                    {calibrationMessage && (
+                      <div className={`mb-3 p-2 rounded text-sm ${
+                        calibrationMessage.type === 'success'
+                          ? 'bg-green-50 text-green-800 border border-green-200'
+                          : 'bg-red-50 text-red-800 border border-red-200'
+                      }`}>
+                        {calibrationMessage.text}
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <div>
+                        <label htmlFor="calibration-offset" className="block text-xs font-medium text-blue-800 mb-1">
+                          Offset (added to raw value)
+                        </label>
+                        <input
+                          type="number"
+                          id="calibration-offset"
+                          value={calibrationOffset}
+                          onChange={(e) => setCalibrationOffset(e.target.value)}
+                          step="0.01"
+                          className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                          placeholder="0"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="calibration-scale" className="block text-xs font-medium text-blue-800 mb-1">
+                          Scale (multiplied by raw value)
+                        </label>
+                        <input
+                          type="number"
+                          id="calibration-scale"
+                          value={calibrationScale}
+                          onChange={(e) => setCalibrationScale(e.target.value)}
+                          step="0.01"
+                          className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                          placeholder="1"
+                        />
+                      </div>
+
+                      <p className="text-xs text-blue-700">
+                        Formula: <span className="font-mono bg-blue-100 px-1 py-0.5 rounded">calibrated = (raw × scale) + offset</span>
+                      </p>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => setShowCalibration(false)}
+                          className="flex-1 px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          disabled={calibrationLoading}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleCalibrateSave}
+                          disabled={calibrationLoading}
+                          className="flex-1 px-3 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                        >
+                          {calibrationLoading ? (
+                            <>
+                              <svg className="animate-spin -ml-0.5 mr-1.5 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Saving...
+                            </>
+                          ) : (
+                            'Save Calibration'
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Message for non-admin users */}
+                {user?.role !== 'admin' && (
+                  <p className="text-xs text-gray-400 mt-1 italic">Calibration settings require admin permissions</p>
+                )}
+              </div>
+
               {/* Equipment Control Section */}
               <div className="py-3">
                 <span className="text-sm font-medium text-gray-500 block mb-3">Equipment Control</span>
