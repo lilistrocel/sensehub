@@ -54,13 +54,44 @@ router.get('/overview', (req, res) => {
     LIMIT 5
   `).all();
 
+  // Latest sensor readings - get latest reading per equipment
+  const latestReadings = db.prepare(`
+    SELECT r.*, e.name as equipment_name, e.status as equipment_status
+    FROM readings r
+    INNER JOIN equipment e ON r.equipment_id = e.id
+    WHERE r.id IN (
+      SELECT MAX(id) FROM readings GROUP BY equipment_id
+    )
+    ORDER BY r.timestamp DESC
+    LIMIT 10
+  `).all();
+
+  // Active automations list with last run info
+  const activeAutomations = db.prepare(`
+    SELECT
+      a.id,
+      a.name,
+      a.description,
+      a.enabled,
+      a.last_run,
+      a.run_count,
+      a.trigger_config,
+      (SELECT status FROM automation_logs WHERE automation_id = a.id ORDER BY triggered_at DESC LIMIT 1) as last_status
+    FROM automations a
+    WHERE a.enabled = 1
+    ORDER BY a.last_run DESC NULLS LAST
+    LIMIT 10
+  `).all();
+
   res.json({
     equipment: equipmentStats,
     zones: { total: zoneCount.count },
     automations: automationStats,
     alerts: alertStats,
     recentAlerts,
-    recentAutomations
+    recentAutomations,
+    latestReadings,
+    activeAutomations
   });
 });
 

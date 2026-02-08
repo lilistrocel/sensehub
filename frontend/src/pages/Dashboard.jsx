@@ -1,16 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useWebSocket } from '../context/WebSocketContext';
 
 const API_BASE = '/api';
 
 export default function Dashboard() {
   const { token } = useAuth();
+  const { subscribe, connected } = useWebSocket();
   const [zones, setZones] = useState([]);
   const [selectedZoneId, setSelectedZoneId] = useState('');
   const [overview, setOverview] = useState(null);
   const [zoneData, setZoneData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sensorReadings, setSensorReadings] = useState([]);
+  const [lastReadingUpdate, setLastReadingUpdate] = useState(null);
+
+  // Subscribe to real-time sensor updates
+  useEffect(() => {
+    const unsubscribe = subscribe('sensor_reading', (data) => {
+      // Update the specific sensor reading in state
+      setSensorReadings(prev => {
+        const updated = prev.map(reading =>
+          reading.equipment_id === data.equipment_id
+            ? { ...reading, value: data.value, unit: data.unit, timestamp: data.timestamp }
+            : reading
+        );
+        // If it's a new equipment, add it
+        if (!prev.some(r => r.equipment_id === data.equipment_id)) {
+          updated.push(data);
+        }
+        return updated;
+      });
+      setLastReadingUpdate(new Date());
+    });
+
+    return () => unsubscribe();
+  }, [subscribe]);
 
   // Fetch zones for the dropdown
   useEffect(() => {
@@ -55,6 +81,11 @@ export default function Dashboard() {
           const data = await response.json();
           setOverview(data);
           setZoneData(null);
+          // Initialize sensor readings from overview data
+          if (data.latestReadings) {
+            setSensorReadings(data.latestReadings);
+            setLastReadingUpdate(new Date());
+          }
         }
       } catch (err) {
         setError(err.message);
@@ -272,6 +303,124 @@ export default function Dashboard() {
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sensor Readings Widget */}
+          {!selectedZoneId && sensorReadings && sensorReadings.length > 0 && (
+            <div className="bg-white rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Live Sensor Readings</h2>
+                <div className="flex items-center gap-2">
+                  {connected && (
+                    <span className="flex items-center gap-1 text-xs text-green-600">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                      Live
+                    </span>
+                  )}
+                  {lastReadingUpdate && (
+                    <span className="text-xs text-gray-400">
+                      Updated: {lastReadingUpdate.toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+                {sensorReadings.map((reading) => (
+                  <div
+                    key={reading.id || reading.equipment_id}
+                    className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">
+                        {reading.equipment_name || `Equipment #${reading.equipment_id}`}
+                      </span>
+                      <span className={`w-2 h-2 rounded-full ${
+                        reading.equipment_status === 'online' ? 'bg-green-500' :
+                        reading.equipment_status === 'warning' ? 'bg-amber-500' :
+                        reading.equipment_status === 'error' ? 'bg-red-500' :
+                        'bg-gray-400'
+                      }`}></span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-bold text-gray-900">
+                        {typeof reading.value === 'number' ? reading.value.toFixed(1) : reading.value}
+                      </span>
+                      <span className="text-lg text-gray-500">{reading.unit || ''}</span>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-2">
+                      {reading.timestamp
+                        ? new Date(reading.timestamp).toLocaleString()
+                        : 'No timestamp'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Active Automations Panel */}
+          {!selectedZoneId && overview && overview.activeAutomations && overview.activeAutomations.length > 0 && (
+            <div className="bg-white rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Active Automations</h2>
+                <span className="text-sm text-gray-500">
+                  {overview.activeAutomations.length} enabled
+                </span>
+              </div>
+              <div className="divide-y divide-gray-200">
+                {overview.activeAutomations.map((automation) => {
+                  // Parse trigger config to get trigger type
+                  let triggerType = 'Unknown';
+                  try {
+                    const config = typeof automation.trigger_config === 'string'
+                      ? JSON.parse(automation.trigger_config)
+                      : automation.trigger_config;
+                    triggerType = config?.type || 'Unknown';
+                  } catch (e) {
+                    // ignore parse errors
+                  }
+
+                  return (
+                    <div key={automation.id} className="px-6 py-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {/* Status indicator */}
+                        <span className={`w-3 h-3 rounded-full ${
+                          automation.last_status === 'success' ? 'bg-green-500' :
+                          automation.last_status === 'error' ? 'bg-red-500' :
+                          automation.last_status === 'running' ? 'bg-blue-500 animate-pulse' :
+                          'bg-gray-400'
+                        }`}></span>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{automation.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span className="px-1.5 py-0.5 bg-gray-100 rounded">
+                              {triggerType}
+                            </span>
+                            {automation.run_count > 0 && (
+                              <span>{automation.run_count} runs</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-500">
+                          {automation.last_run
+                            ? `Last run: ${new Date(automation.last_run).toLocaleString()}`
+                            : 'Never run'}
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          automation.enabled
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {automation.enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -216,6 +216,42 @@ router.post('/:id/test-connection', requireRole('admin', 'operator'), (req, res)
   res.json(testResult);
 });
 
+// POST /api/equipment/:id/readings - Submit a new sensor reading
+router.post('/:id/readings', requireRole('admin', 'operator'), (req, res) => {
+  const { value, unit } = req.body;
+  const equipmentId = req.params.id;
+
+  // Verify equipment exists
+  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+  if (!equipment) {
+    return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
+  }
+
+  if (value === undefined) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Value is required' });
+  }
+
+  const timestamp = new Date().toISOString();
+  const result = db.prepare(
+    'INSERT INTO readings (equipment_id, value, unit, timestamp) VALUES (?, ?, ?, ?)'
+  ).run(equipmentId, value, unit || '', timestamp);
+
+  const reading = {
+    id: result.lastInsertRowid,
+    equipment_id: parseInt(equipmentId),
+    equipment_name: equipment.name,
+    equipment_status: equipment.status,
+    value,
+    unit: unit || '',
+    timestamp
+  };
+
+  // Broadcast the new reading to all WebSocket clients
+  global.broadcast('sensor_reading', reading);
+
+  res.status(201).json(reading);
+});
+
 // GET /api/equipment/:id/history - Get equipment history
 router.get('/:id/history', (req, res) => {
   const { from, to, limit } = req.query;
