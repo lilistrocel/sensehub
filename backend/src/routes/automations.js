@@ -149,6 +149,47 @@ router.post('/:id/toggle', requireRole('admin', 'operator'), (req, res) => {
   res.json({ enabled: newState === 1 });
 });
 
+// POST /api/automations/:id/duplicate - Duplicate an automation
+router.post('/:id/duplicate', requireRole('admin', 'operator'), (req, res) => {
+  const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(req.params.id);
+
+  if (!automation) {
+    return res.status(404).json({ error: 'Not Found', message: 'Automation not found' });
+  }
+
+  // Create a new name with "Copy" suffix
+  let newName = `${automation.name} (Copy)`;
+
+  // Check if this name already exists, and increment the copy number if needed
+  let copyNumber = 1;
+  while (db.prepare('SELECT id FROM automations WHERE name = ?').get(newName)) {
+    copyNumber++;
+    newName = `${automation.name} (Copy ${copyNumber})`;
+  }
+
+  // Insert the duplicated automation
+  const result = db.prepare(
+    'INSERT INTO automations (name, description, trigger_config, conditions, condition_logic, actions, priority, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    newName,
+    automation.description,
+    automation.trigger_config,
+    automation.conditions,
+    automation.condition_logic || 'AND',
+    automation.actions,
+    automation.priority || 0,
+    0  // Start disabled for safety
+  );
+
+  const duplicated = db.prepare('SELECT * FROM automations WHERE id = ?').get(result.lastInsertRowid);
+
+  res.status(201).json({
+    success: true,
+    message: `Automation duplicated as "${newName}"`,
+    automation: duplicated
+  });
+});
+
 // POST /api/automations/:id/trigger - Manually trigger an automation
 router.post('/:id/trigger', requireRole('admin', 'operator'), (req, res) => {
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(req.params.id);
