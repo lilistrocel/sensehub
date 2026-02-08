@@ -1,10 +1,67 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
 
+const API_BASE = '/api';
+
 export default function Layout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  const [cloudStatus, setCloudStatus] = useState({
+    configured: false,
+    connected: false,
+    lastSync: null,
+    pendingItems: 0
+  });
+
+  // Fetch cloud status on mount and periodically
+  useEffect(() => {
+    const fetchCloudStatus = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/cloud/status`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCloudStatus(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch cloud status:', err);
+      }
+    };
+
+    fetchCloudStatus();
+    // Refresh cloud status every 30 seconds
+    const interval = setInterval(fetchCloudStatus, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  // Determine cloud status display
+  const getCloudStatusDisplay = () => {
+    if (!cloudStatus.configured) {
+      return {
+        color: 'bg-gray-400',
+        text: 'Not Configured',
+        title: 'Cloud: Not Configured'
+      };
+    }
+    if (cloudStatus.connected) {
+      return {
+        color: 'bg-green-500',
+        text: cloudStatus.pendingItems > 0
+          ? `Connected (${cloudStatus.pendingItems} pending)`
+          : 'Connected',
+        title: `Cloud: Connected${cloudStatus.lastSync ? ` - Last sync: ${new Date(cloudStatus.lastSync).toLocaleString()}` : ''}`
+      };
+    }
+    return {
+      color: 'bg-yellow-400',
+      text: 'Offline Mode',
+      title: 'Cloud: Disconnected'
+    };
+  };
+
+  const cloudDisplay = getCloudStatusDisplay();
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -26,9 +83,9 @@ export default function Layout({ children }) {
             {/* User info and status */}
             <div className="flex items-center space-x-4">
               {/* Cloud status indicator */}
-              <div className="flex items-center text-sm">
-                <span className="w-2 h-2 rounded-full bg-yellow-400 mr-2" title="Cloud: Disconnected"></span>
-                <span className="hidden sm:inline text-gray-500">Offline Mode</span>
+              <div className="flex items-center text-sm" title={cloudDisplay.title}>
+                <span className={`w-2 h-2 rounded-full ${cloudDisplay.color} mr-2`}></span>
+                <span className="hidden sm:inline text-gray-500">{cloudDisplay.text}</span>
               </div>
 
               {/* User badge */}
