@@ -59,6 +59,8 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   const [calibrationScale, setCalibrationScale] = useState('1');
   const [calibrationLoading, setCalibrationLoading] = useState(false);
   const [calibrationMessage, setCalibrationMessage] = useState(null);
+  const [testConnectionLoading, setTestConnectionLoading] = useState(false);
+  const [testConnectionResult, setTestConnectionResult] = useState(null);
 
   // History tab state
   const [activeTab, setActiveTab] = useState('details');
@@ -66,6 +68,12 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
   const [timeRange, setTimeRange] = useState('1h');
+
+  // Error Logs tab state
+  const [errorLogs, setErrorLogs] = useState([]);
+  const [errorLogsLoading, setErrorLogsLoading] = useState(false);
+  const [errorLogsError, setErrorLogsError] = useState(null);
+  const [showResolved, setShowResolved] = useState(false);
 
   // Check if user can control equipment (admin or operator only)
   const canControl = user?.role === 'admin' || user?.role === 'operator';
@@ -84,6 +92,13 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
       fetchHistory();
     }
   }, [activeTab, timeRange, equipment]);
+
+  // Fetch error logs when error logs tab is selected or showResolved changes
+  useEffect(() => {
+    if (activeTab === 'errors' && equipment) {
+      fetchErrorLogs();
+    }
+  }, [activeTab, showResolved, equipment]);
 
   const fetchDetails = async () => {
     if (!equipment) return;
@@ -179,6 +194,65 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
       setHistoryError(err.message);
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  const fetchErrorLogs = async () => {
+    if (!equipment) return;
+
+    setErrorLogsLoading(true);
+    setErrorLogsError(null);
+
+    try {
+      const resolvedParam = showResolved ? '' : '&resolved=false';
+      const response = await fetch(
+        `${API_BASE}/equipment/${equipment.id}/errors?limit=50${resolvedParam}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch error logs');
+      }
+
+      const data = await response.json();
+      setErrorLogs(data);
+    } catch (err) {
+      setErrorLogsError(err.message);
+    } finally {
+      setErrorLogsLoading(false);
+    }
+  };
+
+  const handleResolveError = async (errorId) => {
+    if (!equipment || !canControl) return;
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/equipment/${equipment.id}/errors/${errorId}/resolve`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to resolve error');
+      }
+
+      // Refresh error logs and equipment details
+      await fetchErrorLogs();
+      await fetchDetails();
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      console.error('Failed to resolve error:', err);
     }
   };
 
@@ -381,6 +455,46 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
       setCalibrationMessage({ type: 'error', text: err.message });
     } finally {
       setCalibrationLoading(false);
+    }
+  };
+
+  // Handle test connection
+  const handleTestConnection = async () => {
+    if (!equipment || !canControl) return;
+
+    setTestConnectionLoading(true);
+    setTestConnectionResult(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipment.id}/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Connection test failed');
+      }
+
+      setTestConnectionResult(result);
+
+      // Refresh equipment details to show updated last_communication
+      await fetchDetails();
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+
+      // Clear result after delay
+      setTimeout(() => setTestConnectionResult(null), 5000);
+    } catch (err) {
+      setTestConnectionResult({ success: false, message: err.message });
+      setTimeout(() => setTestConnectionResult(null), 5000);
+    } finally {
+      setTestConnectionLoading(false);
     }
   };
 
