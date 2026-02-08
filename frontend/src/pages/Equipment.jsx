@@ -51,6 +51,8 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   const [zoneMessage, setZoneMessage] = useState(null);
   const [controlLoading, setControlLoading] = useState(false);
   const [controlMessage, setControlMessage] = useState(null);
+  const [enableLoading, setEnableLoading] = useState(false);
+  const [enableMessage, setEnableMessage] = useState(null);
 
   // Check if user can control equipment (admin or operator only)
   const canControl = user?.role === 'admin' || user?.role === 'operator';
@@ -219,6 +221,46 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
     }
   };
 
+  // Handle enable/disable toggle
+  const handleToggleEnabled = async () => {
+    if (!equipment || !canControl) return;
+
+    const newEnabledState = !details?.enabled;
+    setEnableLoading(true);
+    setEnableMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipment.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ enabled: newEnabledState })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to update equipment');
+      }
+
+      setEnableMessage({ type: 'success', text: `Equipment ${newEnabledState ? 'enabled' : 'disabled'} successfully!` });
+
+      // Refresh equipment details
+      await fetchDetails();
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+
+      // Clear success message after delay
+      setTimeout(() => setEnableMessage(null), 3000);
+    } catch (err) {
+      setEnableMessage({ type: 'error', text: err.message });
+    } finally {
+      setEnableLoading(false);
+    }
+  };
+
   // Get zones that are not already assigned
   const availableZones = allZones.filter(
     zone => !details?.zones?.some(z => z.id === zone.id)
@@ -310,12 +352,42 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 </span>
               </div>
 
-              {/* Enabled */}
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Enabled</span>
-                <span className={`text-sm font-medium ${eq?.enabled ? 'text-green-600' : 'text-gray-400'}`}>
-                  {eq?.enabled ? 'Yes' : 'No'}
-                </span>
+              {/* Enabled Toggle */}
+              <div className="py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-500">Enabled</span>
+                  {canControl ? (
+                    <button
+                      onClick={handleToggleEnabled}
+                      disabled={enableLoading}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 ${
+                        eq?.enabled ? 'bg-green-500' : 'bg-gray-200'
+                      }`}
+                      role="switch"
+                      aria-checked={eq?.enabled}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          eq?.enabled ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  ) : (
+                    <span className={`text-sm font-medium ${eq?.enabled ? 'text-green-600' : 'text-gray-400'}`}>
+                      {eq?.enabled ? 'Yes' : 'No'}
+                    </span>
+                  )}
+                </div>
+                {/* Enable Message */}
+                {enableMessage && (
+                  <div className={`mt-2 p-2 rounded text-sm ${
+                    enableMessage.type === 'success'
+                      ? 'bg-green-50 text-green-800 border border-green-200'
+                      : 'bg-red-50 text-red-800 border border-red-200'
+                  }`}>
+                    {enableMessage.text}
+                  </div>
+                )}
               </div>
 
               {/* Zone Assignment Section */}
@@ -1027,6 +1099,8 @@ export default function Equipment() {
   const [equipmentToDelete, setEquipmentToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState(null);
+  const [sortColumn, setSortColumn] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
 
   useEffect(() => {
     fetchData();
@@ -1164,17 +1238,59 @@ export default function Equipment() {
     }
   };
 
-  // Filter equipment based on search and status
-  const filteredEquipment = equipment.filter(eq => {
-    const matchesSearch = !searchTerm ||
-      eq.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      eq.type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      eq.description?.toLowerCase().includes(searchTerm.toLowerCase());
+  // Handle column header click for sorting
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
 
-    const matchesStatus = !statusFilter || eq.status === statusFilter;
+  // Filter and sort equipment
+  const filteredEquipment = equipment
+    .filter(eq => {
+      const matchesSearch = !searchTerm ||
+        eq.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        eq.type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        eq.description?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesSearch && matchesStatus;
-  });
+      const matchesStatus = !statusFilter || eq.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortColumn) {
+        case 'name':
+          aVal = (a.name || '').toLowerCase();
+          bVal = (b.name || '').toLowerCase();
+          break;
+        case 'type':
+          aVal = (a.type || '').toLowerCase();
+          bVal = (b.type || '').toLowerCase();
+          break;
+        case 'status':
+          aVal = (a.status || '').toLowerCase();
+          bVal = (b.status || '').toLowerCase();
+          break;
+        case 'zone':
+          aVal = (a.zones && a.zones.length > 0 ? a.zones[0].name : '').toLowerCase();
+          bVal = (b.zones && b.zones.length > 0 ? b.zones[0].name : '').toLowerCase();
+          break;
+        default:
+          aVal = (a.name || '').toLowerCase();
+          bVal = (b.name || '').toLowerCase();
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
 
   if (loading) {
     return (
@@ -1290,17 +1406,61 @@ export default function Equipment() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('name')}
+                >
+                  <div className="flex items-center gap-1">
+                    Name
+                    {sortColumn === 'name' && (
+                      <svg className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''} transition-transform`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('type')}
+                >
+                  <div className="flex items-center gap-1">
+                    Type
+                    {sortColumn === 'type' && (
+                      <svg className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''} transition-transform`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('status')}
+                >
+                  <div className="flex items-center gap-1">
+                    Status
+                    {sortColumn === 'status' && (
+                      <svg className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''} transition-transform`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    )}
+                  </div>
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Zone
+                <th
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('zone')}
+                >
+                  <div className="flex items-center gap-1">
+                    Zone
+                    {sortColumn === 'zone' && (
+                      <svg className={`h-4 w-4 ${sortDirection === 'desc' ? 'rotate-180' : ''} transition-transform`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    )}
+                  </div>
                 </th>
                 <th scope="col" className="relative px-6 py-3">
                   <span className="sr-only">Actions</span>
@@ -1308,21 +1468,26 @@ export default function Equipment() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredEquipment.map((eq) => (
+              {filteredEquipment.map((eq) => {
+                const isDisabled = eq.enabled === 0 || eq.enabled === false;
+                return (
                 <tr
                   key={eq.id}
-                  className="hover:bg-gray-50 transition-colors cursor-pointer"
+                  className={`hover:bg-gray-50 transition-colors cursor-pointer ${isDisabled ? 'opacity-60 bg-gray-50' : ''}`}
                   onClick={() => handleViewEquipment(eq)}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <svg className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <div className={`flex-shrink-0 h-10 w-10 rounded-lg flex items-center justify-center ${isDisabled ? 'bg-gray-200' : 'bg-gray-100'}`}>
+                        <svg className={`h-6 w-6 ${isDisabled ? 'text-gray-400' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                         </svg>
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{eq.name}</div>
+                        <div className={`text-sm font-medium ${isDisabled ? 'text-gray-500' : 'text-gray-900'}`}>
+                          {eq.name}
+                          {isDisabled && <span className="ml-2 text-xs text-gray-400">(Disabled)</span>}
+                        </div>
                         {eq.description && (
                           <div className="text-sm text-gray-500 truncate max-w-xs">{eq.description}</div>
                         )}
@@ -1330,13 +1495,13 @@ export default function Equipment() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{eq.type || '-'}</div>
+                    <div className={`text-sm ${isDisabled ? 'text-gray-500' : 'text-gray-900'}`}>{eq.type || '-'}</div>
                     {eq.protocol && (
                       <div className="text-xs text-gray-500 uppercase">{eq.protocol}</div>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <StatusBadge status={eq.status} />
+                    <StatusBadge status={isDisabled ? 'disabled' : eq.status} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {eq.zones && eq.zones.length > 0 ? (
@@ -1386,7 +1551,8 @@ export default function Equipment() {
                     )}
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         )}
