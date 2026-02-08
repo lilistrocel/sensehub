@@ -2,10 +2,48 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 63
-- **Completion:** ~33%
+- **Passing:** 71
+- **Completion:** ~37.6%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #67, #69 - Zone Search and Dashboard)
+**Assigned Features:**
+- #67 - Zone search works
+- #69 - Zone-based dashboard view works
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #67 - Zone search works:
+- Added searchTerm state variable for zone filtering
+- Added search input with magnifying glass icon and clear button
+- Implemented case-insensitive search by zone name and description
+- Shows "Showing X of Y zones" count when filtering is active
+- Shows "No zones match your search" empty state when no results
+- Search clears with X button to show all zones
+
+Feature #69 - Zone-based dashboard view works:
+- Enhanced Dashboard.jsx with zone filtering capability
+- Added zone selector dropdown in dashboard header
+- Fetches real statistics from /api/dashboard/overview endpoint
+- When zone selected, fetches zone-specific data from /api/dashboard/zone/:id
+- Statistics update to reflect zone-only data:
+  - Equipment Online shows X / total for the zone
+  - Active Zones shows 1 when viewing single zone
+  - Automations Running shows "-" (not applicable to zone view)
+  - Active Alerts shows zone-specific count
+- Displays equipment table when zone is selected
+- Shows "Viewing: [Zone Name]" indicator with Clear filter button
+
+**Verification:**
+- Browser automation tests passed for all feature steps
+- Screenshots captured at each verification step
+- Zero console errors
+- No mock data patterns in codebase
+- Real data fetched from API endpoints
+
+---
 
 ### Session - 2026-02-08 (Feature #58 - Equipment Error Logs)
 **Assigned Feature:** #58 - Equipment error logs accessible
