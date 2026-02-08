@@ -419,7 +419,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   <p className="text-sm text-gray-500">Define when this automation should run.</p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                    <div className={formData.trigger_config?.type === 'schedule' ? '' : ''}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Trigger Type
                       </label>
@@ -436,18 +436,138 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     </div>
 
                     {formData.trigger_config?.type === 'schedule' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Cron Expression
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.trigger_config?.cron || ''}
-                          onChange={(e) => handleTriggerConfigChange('cron', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                          placeholder="0 8 * * * (daily at 8am)"
-                        />
-                      </div>
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Schedule Type
+                          </label>
+                          <select
+                            value={formData.trigger_config?.schedule_type || 'daily'}
+                            onChange={(e) => handleTriggerConfigChange('schedule_type', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                          >
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="hourly">Hourly</option>
+                            <option value="custom">Custom (Cron)</option>
+                          </select>
+                        </div>
+
+                        {formData.trigger_config?.schedule_type === 'daily' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Time
+                            </label>
+                            <input
+                              type="time"
+                              value={formData.trigger_config?.time || '08:00'}
+                              onChange={(e) => handleTriggerConfigChange('time', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            />
+                          </div>
+                        )}
+
+                        {formData.trigger_config?.schedule_type === 'weekly' && (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Day of Week
+                              </label>
+                              <select
+                                value={formData.trigger_config?.day_of_week || '1'}
+                                onChange={(e) => handleTriggerConfigChange('day_of_week', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                              >
+                                <option value="0">Sunday</option>
+                                <option value="1">Monday</option>
+                                <option value="2">Tuesday</option>
+                                <option value="3">Wednesday</option>
+                                <option value="4">Thursday</option>
+                                <option value="5">Friday</option>
+                                <option value="6">Saturday</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Time
+                              </label>
+                              <input
+                                type="time"
+                                value={formData.trigger_config?.time || '08:00'}
+                                onChange={(e) => handleTriggerConfigChange('time', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {formData.trigger_config?.schedule_type === 'hourly' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Minutes past the hour
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="59"
+                              value={formData.trigger_config?.minute || '0'}
+                              onChange={(e) => handleTriggerConfigChange('minute', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                              placeholder="0"
+                            />
+                          </div>
+                        )}
+
+                        {formData.trigger_config?.schedule_type === 'custom' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Cron Expression
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.trigger_config?.cron || ''}
+                              onChange={(e) => handleTriggerConfigChange('cron', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                              placeholder="0 8 * * * (daily at 8am)"
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Format: minute hour day month weekday
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Schedule Summary */}
+                        <div className="md:col-span-2 mt-2">
+                          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                            <p className="text-sm text-blue-800">
+                              <span className="font-medium">Schedule: </span>
+                              {(() => {
+                                const tc = formData.trigger_config;
+                                const schedType = tc?.schedule_type || 'daily';
+                                const time = tc?.time || '08:00';
+                                const [hours, mins] = time.split(':');
+                                const hour12 = parseInt(hours) % 12 || 12;
+                                const ampm = parseInt(hours) >= 12 ? 'PM' : 'AM';
+                                const timeStr = `${hour12}:${mins} ${ampm}`;
+
+                                if (schedType === 'daily') {
+                                  return `Runs daily at ${timeStr}`;
+                                } else if (schedType === 'weekly') {
+                                  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                                  const dayName = days[parseInt(tc?.day_of_week || 1)];
+                                  return `Runs every ${dayName} at ${timeStr}`;
+                                } else if (schedType === 'hourly') {
+                                  const minute = tc?.minute || '0';
+                                  return `Runs every hour at ${minute} minutes past`;
+                                } else if (schedType === 'custom') {
+                                  return tc?.cron ? `Custom: ${tc.cron}` : 'Enter a cron expression';
+                                }
+                                return 'Configure schedule above';
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+                      </>
                     )}
 
                     {formData.trigger_config?.type === 'threshold' && (
@@ -681,6 +801,32 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   );
 }
 
+// Helper to format schedule description
+function getScheduleDescription(tc) {
+  if (!tc || tc.type !== 'schedule') return null;
+
+  const schedType = tc.schedule_type || 'daily';
+  const time = tc.time || '08:00';
+  const [hours, mins] = time.split(':');
+  const hour12 = parseInt(hours) % 12 || 12;
+  const ampm = parseInt(hours) >= 12 ? 'PM' : 'AM';
+  const timeStr = `${hour12}:${mins} ${ampm}`;
+
+  if (schedType === 'daily') {
+    return `Daily at ${timeStr}`;
+  } else if (schedType === 'weekly') {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = days[parseInt(tc.day_of_week || 1)];
+    return `Every ${dayName} at ${timeStr}`;
+  } else if (schedType === 'hourly') {
+    const minute = tc.minute || '0';
+    return `Every hour at ${minute} minutes past`;
+  } else if (schedType === 'custom' && tc.cron) {
+    return `Cron: ${tc.cron}`;
+  }
+  return 'Schedule configured';
+}
+
 // Automation Detail Modal
 function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
   if (!isOpen || !automation) return null;
@@ -695,6 +841,8 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
   const actions = typeof automation.actions === 'string'
     ? JSON.parse(automation.actions || '[]')
     : automation.actions || [];
+
+  const scheduleDesc = getScheduleDescription(triggerConfig);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -738,7 +886,12 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
 
             <div className="flex items-center justify-between py-3 border-b border-gray-100">
               <span className="text-sm font-medium text-gray-500">Trigger</span>
-              <TriggerBadge triggerConfig={triggerConfig} />
+              <div className="flex flex-col items-end">
+                <TriggerBadge triggerConfig={triggerConfig} />
+                {scheduleDesc && (
+                  <span className="text-xs text-gray-500 mt-1">{scheduleDesc}</span>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center justify-between py-3 border-b border-gray-100">

@@ -19,6 +19,11 @@ export default function Zones() {
   const [loadingEquipment, setLoadingEquipment] = useState(false);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState('');
   const [assigningEquipment, setAssigningEquipment] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editZone, setEditZone] = useState({ name: '', description: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editSuccess, setEditSuccess] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchZones();
@@ -207,6 +212,76 @@ export default function Zones() {
 
   const canManageZones = user?.role === 'admin' || user?.role === 'operator';
 
+  // Filter zones based on search term
+  const filteredZones = zones.filter((zone) => {
+    if (!searchTerm.trim()) return true;
+    const searchLower = searchTerm.toLowerCase().trim();
+    return (
+      zone.name.toLowerCase().includes(searchLower) ||
+      (zone.description && zone.description.toLowerCase().includes(searchLower))
+    );
+  });
+
+  const openEditModal = () => {
+    if (zoneDetail) {
+      setEditZone({
+        name: zoneDetail.name || '',
+        description: zoneDetail.description || ''
+      });
+      setShowEditModal(true);
+      setEditSuccess(false);
+    }
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditZone({ name: '', description: '' });
+    setEditSuccess(false);
+  };
+
+  const handleEditZone = async (e) => {
+    e.preventDefault();
+    if (!editZone.name.trim() || !selectedZone) return;
+
+    try {
+      setEditSaving(true);
+      const response = await fetch(`${API_BASE}/zones/${selectedZone.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: editZone.name.trim(),
+          description: editZone.description.trim()
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to update zone');
+      }
+
+      // Update the selected zone and zone detail
+      const updatedZone = await response.json();
+      setSelectedZone({ ...selectedZone, name: updatedZone.name, description: updatedZone.description });
+      setZoneDetail({ ...zoneDetail, name: updatedZone.name, description: updatedZone.description, updated_at: updatedZone.updated_at });
+
+      // Refresh zones list
+      fetchZones();
+
+      // Show success and close modal
+      setEditSuccess(true);
+      setTimeout(() => {
+        closeEditModal();
+      }, 1500);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div>
@@ -252,13 +327,50 @@ export default function Zones() {
         )}
       </div>
 
+      {/* Search Bar */}
+      <div className="mb-6">
+        <div className="relative max-w-md">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search zones by name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+            >
+              <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {searchTerm && (
+          <p className="text-sm text-gray-500 mt-2">
+            Showing {filteredZones.length} of {zones.length} zones
+          </p>
+        )}
+      </div>
+
       {zones.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-gray-500 text-center">No zones configured yet.</p>
         </div>
+      ) : filteredZones.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-6">
+          <p className="text-gray-500 text-center">No zones match your search.</p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {zones.map((zone) => (
+          {filteredZones.map((zone) => (
             <div
               key={zone.id}
               onClick={() => handleZoneClick(zone)}
@@ -344,14 +456,27 @@ export default function Zones() {
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-4">
               <h2 className="text-xl font-bold text-gray-900">{selectedZone.name}</h2>
-              <button
-                onClick={closeDetailModal}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                {canManageZones && (
+                  <button
+                    onClick={openEditModal}
+                    className="text-blue-600 hover:text-blue-800 p-1"
+                    title="Edit zone"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                )}
+                <button
+                  onClick={closeDetailModal}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {loadingDetail ? (
@@ -547,6 +672,71 @@ export default function Zones() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Zone Modal */}
+      {showEditModal && selectedZone && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Edit Zone</h2>
+
+            {editSuccess ? (
+              <div className="py-6 text-center">
+                <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-green-600 font-medium">Zone updated successfully!</p>
+              </div>
+            ) : (
+              <form onSubmit={handleEditZone}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Zone Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editZone.name}
+                    onChange={(e) => setEditZone({ ...editZone, name: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Production Floor"
+                    required
+                  />
+                </div>
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    value={editZone.description}
+                    onChange={(e) => setEditZone({ ...editZone, description: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Optional description of this zone"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={closeEditModal}
+                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                    disabled={editSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editSaving || !editZone.name.trim()}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                  >
+                    {editSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
