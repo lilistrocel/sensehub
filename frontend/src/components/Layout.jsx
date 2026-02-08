@@ -13,6 +13,7 @@ export default function Layout({ children }) {
     lastSync: null,
     pendingItems: 0
   });
+  const [unacknowledgedCount, setUnacknowledgedCount] = useState(0);
 
   // Fetch cloud status on mount and periodically
   useEffect(() => {
@@ -33,6 +34,28 @@ export default function Layout({ children }) {
     fetchCloudStatus();
     // Refresh cloud status every 30 seconds
     const interval = setInterval(fetchCloudStatus, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  // Fetch unacknowledged alert count
+  useEffect(() => {
+    const fetchUnacknowledgedCount = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/alerts/unacknowledged/count`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUnacknowledgedCount(data.count);
+        }
+      } catch (err) {
+        console.error('Failed to fetch unacknowledged count:', err);
+      }
+    };
+
+    fetchUnacknowledgedCount();
+    // Refresh every 10 seconds for real-time updates
+    const interval = setInterval(fetchUnacknowledgedCount, 10000);
     return () => clearInterval(interval);
   }, [token]);
 
@@ -82,6 +105,24 @@ export default function Layout({ children }) {
 
             {/* User info and status */}
             <div className="flex items-center space-x-4">
+              {/* Unacknowledged alerts badge */}
+              {unacknowledgedCount > 0 && (
+                <a
+                  href="/alerts"
+                  className="flex items-center text-sm hover:opacity-80"
+                  title={`${unacknowledgedCount} unacknowledged alert${unacknowledgedCount !== 1 ? 's' : ''}`}
+                >
+                  <span className="relative">
+                    <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[18px]">
+                      {unacknowledgedCount > 99 ? '99+' : unacknowledgedCount}
+                    </span>
+                  </span>
+                </a>
+              )}
+
               {/* Cloud status indicator */}
               <div className="flex items-center text-sm" title={cloudDisplay.title}>
                 <span className={`w-2 h-2 rounded-full ${cloudDisplay.color} mr-2`}></span>
