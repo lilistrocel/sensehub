@@ -819,9 +819,52 @@ export default function Dashboard() {
             <div className="bg-white rounded-lg shadow mb-6">
               <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">Sensor Readings Chart</h2>
-                <span className="text-sm text-gray-500">
-                  {timeRangeOptions.find(o => o.value === timeRange)?.label || 'Last 24 hours'}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-500">
+                    {timeRangeOptions.find(o => o.value === timeRange)?.label || 'Last 24 hours'}
+                  </span>
+                  <button
+                    onClick={() => {
+                      // Export chart data to CSV
+                      const headers = ['Timestamp', 'Equipment', 'Value', 'Unit'];
+                      const rows = overview.chartReadings.map(r => [
+                        new Date(r.timestamp).toISOString(),
+                        r.equipment_name || `Equipment ${r.equipment_id}`,
+                        r.value || '',
+                        r.unit || ''
+                      ]);
+                      const escapeCSV = (val) => {
+                        if (val === null || val === undefined) return '';
+                        const str = String(val);
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                          return `"${str.replace(/"/g, '""')}"`;
+                        }
+                        return str;
+                      };
+                      const csvContent = [
+                        headers.map(escapeCSV).join(','),
+                        ...rows.map(row => row.map(escapeCSV).join(','))
+                      ].join('\n');
+                      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                      const link = document.createElement('a');
+                      const url = URL.createObjectURL(blob);
+                      link.setAttribute('href', url);
+                      link.setAttribute('download', `dashboard-chart-data-${new Date().toISOString().split('T')[0]}.csv`);
+                      link.style.visibility = 'hidden';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="bg-gray-600 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                    title="Export chart data to CSV"
+                  >
+                    <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Export CSV
+                  </button>
+                </div>
               </div>
               <div className="p-6">
                 {/* Simple SVG-based line chart */}
