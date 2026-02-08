@@ -62,6 +62,8 @@ function CloudSettings() {
   const [suggestedLoading, setSuggestedLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   const [programMessage, setProgramMessage] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState(null);
 
   const fetchCloudStatus = async () => {
     try {
@@ -135,6 +137,40 @@ function CloudSettings() {
       setProgramMessage({ type: 'error', text: err.message });
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestLoading(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/cloud/test`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setTestResult({
+          success: false,
+          message: data.message || 'Connection test failed'
+        });
+      } else {
+        setTestResult({
+          success: true,
+          message: data.message,
+          details: data.details
+        });
+      }
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: err.message || 'Failed to test connection'
+      });
+    } finally {
+      setTestLoading(false);
     }
   };
 
@@ -376,10 +412,60 @@ function CloudSettings() {
           </div>
         )}
 
+        {/* Test Connection Result */}
+        {testResult && (
+          <div className={`mb-4 p-3 rounded text-sm ${
+            testResult.success
+              ? 'bg-green-50 text-green-800 border border-green-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            <div className="flex items-center">
+              {testResult.success ? (
+                <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+              <span className="font-medium">{testResult.message}</span>
+            </div>
+            {testResult.success && testResult.details && (
+              <div className="mt-2 text-xs grid grid-cols-2 gap-2">
+                <span>Latency: {testResult.details.latency}ms</span>
+                <span>Server: v{testResult.details.serverVersion}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-3">
           {cloudStatus?.configured ? (
             <>
+              <button
+                onClick={handleTestConnection}
+                disabled={testLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
+              >
+                {testLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Testing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Test Connection
+                  </>
+                )}
+              </button>
               <button
                 onClick={handleSync}
                 disabled={syncLoading}
@@ -424,6 +510,132 @@ function CloudSettings() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Suggested Programs Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900 flex items-center">
+            <svg className="h-5 w-5 mr-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            Suggested Programs from Cloud
+          </h3>
+          <button
+            onClick={fetchSuggestedPrograms}
+            disabled={suggestedLoading}
+            className="text-gray-400 hover:text-gray-600"
+            title="Refresh suggested programs"
+          >
+            <svg className={`h-5 w-5 ${suggestedLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          When connected to the Cloud, automation programs may be suggested for your review. You can approve them to add to your local automations or reject them.
+        </p>
+
+        {programMessage && (
+          <div className={`mb-4 p-3 rounded text-sm ${
+            programMessage.type === 'success'
+              ? 'bg-green-50 text-green-800 border border-green-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            {programMessage.text}
+          </div>
+        )}
+
+        {suggestedLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <svg className="animate-spin h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : suggestedPrograms.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+            <p className="mt-2 text-gray-500">No pending suggested programs</p>
+            <p className="text-sm text-gray-400">Suggested automations from the Cloud will appear here</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {suggestedPrograms.map((program) => (
+              <div key={program.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-medium text-gray-900">{program.name}</h4>
+                      <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                        Cloud Suggested
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-2">{program.description || 'No description'}</p>
+
+                    {/* Trigger Info */}
+                    {program.trigger_config && (
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+                        <span className="font-medium">Trigger:</span>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                          {program.trigger_config.type === 'schedule' ? `Schedule (${program.trigger_config.schedule || 'custom'})` : program.trigger_config.type}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Actions Info */}
+                    {program.actions && program.actions.length > 0 && (
+                      <div className="flex items-center gap-2 text-xs text-gray-600">
+                        <span className="font-medium">Actions:</span>
+                        <span>{program.actions.length} action{program.actions.length !== 1 ? 's' : ''}</span>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-400 mt-2">
+                      Cloud ID: {program.cloud_id} | Received: {new Date(program.created_at).toLocaleString()}
+                    </p>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => handleApproveProgram(program.id)}
+                      disabled={actionLoading === program.id}
+                      className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
+                    >
+                      {actionLoading === program.id ? (
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Approve
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleRejectProgram(program.id)}
+                      disabled={actionLoading === program.id}
+                      className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 flex items-center"
+                    >
+                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Connect Modal */}
