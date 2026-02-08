@@ -2,10 +2,51 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 141
-- **Completion:** ~74.6%
+- **Passing:** 143
+- **Completion:** ~75.7%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #143, #144 - Accessibility)
+**Assigned Features:**
+- #143 - Status badges have text not just color
+- #144 - Error messages announced to screen readers
+**Status:** BOTH PASSED ✅
+
+**What was verified:**
+
+Feature #143 - Status badges have text not just color:
+- Verified StatusBadge component in Equipment.jsx already includes text labels
+- statusLabels object maps statuses to readable text: online→"Online", offline→"Offline", etc.
+- Status badges render both colored dot AND text label
+- Screenshot captured showing "Offline" text in equipment list and detail modal
+- Accessibility tree confirms status is accessible text content, not just color
+
+Feature #144 - Error messages announced to screen readers:
+- Added role="alert" and aria-live="assertive" to ErrorMessage component
+- Updated Login.jsx error display with alert role
+- Updated Profile.jsx password change error/success messages
+- Updated Users.jsx form errors and success messages (including form validation, reset password)
+- Updated Zones.jsx error display with alert role
+- Also added aria-atomic="true" to ErrorMessage for complete announcement
+- Added aria-hidden="true" to decorative SVG icons in Users.jsx
+- Toast component already had role="alert" and aria-live="assertive"
+- Verified in browser: error messages show as "alert" in accessibility tree
+
+**Files Modified:**
+- frontend/src/components/ErrorMessage.jsx (added role, aria-live, aria-atomic)
+- frontend/src/pages/Login.jsx (added role, aria-live)
+- frontend/src/pages/Zones.jsx (added role, aria-live)
+- frontend/src/pages/settings/Profile.jsx (added role, aria-live to 4 message divs)
+- frontend/src/pages/settings/Users.jsx (added role, aria-live to 5 message divs)
+
+**Verification:**
+- Browser automation tests passed
+- Accessibility tree shows "alert" role for error messages
+- Zero console errors
+- No mock data patterns in codebase
+
+---
 
 ### Session - 2026-02-08 (Features #133, #134 - Feedback & Confirmation)
 **Assigned Features:**
