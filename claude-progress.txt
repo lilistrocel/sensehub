@@ -2,10 +2,50 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 143
-- **Completion:** ~75.7%
+- **Passing:** 155
+- **Completion:** ~82.0%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #152, #153 - Export/Import)
+**Assigned Features:**
+- #152 - Sensor data can be exported
+- #153 - Dashboard data can be exported
+**Status:** BOTH PASSED ✅
+
+**What was implemented/verified:**
+
+Feature #152 - Sensor data can be exported:
+- Navigated to Equipment → View → History tab
+- Selected "Last 24 Hours" time range to see readings
+- Found "Export History" button in history tab
+- Clicked export and file downloaded: sensor-data-TEST_SENSOR_131-2026-02-08.csv
+- CSV contains Timestamp, Value, Unit columns
+- All 5 readings present with correct ISO timestamps
+- Data matches real database records exactly
+
+Feature #153 - Dashboard data can be exported:
+- Navigated to Dashboard
+- Found "Sensor Readings Chart" section with historical data
+- Added "Export CSV" button to chart header
+- Clicking export downloads: dashboard-chart-data-2026-02-08.csv
+- CSV contains Timestamp, Equipment, Value, Unit columns
+- Data sourced from overview.chartReadings (real database data)
+- All chart readings exported correctly
+
+**Files Modified:**
+- frontend/src/pages/Dashboard.jsx (added export button to chart section)
+
+**Verification:**
+- Browser automation tests passed for both features
+- Files download with correct content
+- Data matches database records exactly
+- Zero console errors
+- No mock data patterns in codebase
+
+**Progress:** 155/189 features passing (82.0%)
+
+---
 
 ### Session - 2026-02-08 (Features #143, #144 - Accessibility)
 **Assigned Features:**
