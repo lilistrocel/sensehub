@@ -122,9 +122,27 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
 
   const handleTriggerTypeChange = (e) => {
     const newType = e.target.value;
+    let newConfig = { type: newType };
+
+    // Set defaults based on trigger type
+    if (newType === 'schedule') {
+      newConfig = {
+        type: 'schedule',
+        schedule_type: 'daily',
+        time: '08:00'
+      };
+    } else if (newType === 'threshold') {
+      newConfig = {
+        type: 'threshold',
+        equipment_type: '',
+        operator: 'gt',
+        threshold_value: ''
+      };
+    }
+
     setFormData(prev => ({
       ...prev,
-      trigger_config: { type: newType }
+      trigger_config: newConfig
     }));
   };
 
