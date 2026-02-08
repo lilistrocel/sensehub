@@ -60,6 +60,8 @@ const initSchema = () => {
       last_reading TEXT,
       last_communication TEXT,
       error_log TEXT,
+      calibration_offset REAL DEFAULT 0,
+      calibration_scale REAL DEFAULT 1,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -168,6 +170,21 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
     CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
   `);
+
+  // Add calibration columns to existing equipment table if they don't exist
+  try {
+    const columns = db.pragma("table_info(equipment)").map(col => col.name);
+    if (!columns.includes('calibration_offset')) {
+      db.exec('ALTER TABLE equipment ADD COLUMN calibration_offset REAL DEFAULT 0');
+      console.log('Added calibration_offset column to equipment table');
+    }
+    if (!columns.includes('calibration_scale')) {
+      db.exec('ALTER TABLE equipment ADD COLUMN calibration_scale REAL DEFAULT 1');
+      console.log('Added calibration_scale column to equipment table');
+    }
+  } catch (err) {
+    console.log('Calibration columns already exist or migration skipped');
+  }
 
   console.log('Database schema initialized');
   return true;

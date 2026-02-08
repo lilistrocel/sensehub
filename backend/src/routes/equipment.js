@@ -138,13 +138,31 @@ router.post('/:id/control', requireRole('admin', 'operator'), (req, res) => {
 // POST /api/equipment/:id/calibrate - Calibrate equipment
 router.post('/:id/calibrate', requireRole('admin'), (req, res) => {
   const { offset, scale } = req.body;
-  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
+  const equipmentId = req.params.id;
+  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
 
   if (!equipment) {
     return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
   }
 
-  res.json({ message: 'Calibration applied', offset, scale });
+  // Validate input values
+  const calibrationOffset = parseFloat(offset) || 0;
+  const calibrationScale = parseFloat(scale) || 1;
+
+  // Save calibration values to database
+  db.prepare(
+    "UPDATE equipment SET calibration_offset = ?, calibration_scale = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(calibrationOffset, calibrationScale, equipmentId);
+
+  const updated = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+  global.broadcast('equipment_calibrated', updated);
+
+  res.json({
+    message: 'Calibration applied',
+    offset: calibrationOffset,
+    scale: calibrationScale,
+    equipment: updated
+  });
 });
 
 // GET /api/equipment/:id/history - Get equipment history

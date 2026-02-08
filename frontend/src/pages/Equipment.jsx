@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useWebSocket } from '../context/WebSocketContext';
 
 const API_BASE = '/api';
 
@@ -53,6 +54,11 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   const [controlMessage, setControlMessage] = useState(null);
   const [enableLoading, setEnableLoading] = useState(false);
   const [enableMessage, setEnableMessage] = useState(null);
+  const [showCalibration, setShowCalibration] = useState(false);
+  const [calibrationOffset, setCalibrationOffset] = useState('0');
+  const [calibrationScale, setCalibrationScale] = useState('1');
+  const [calibrationLoading, setCalibrationLoading] = useState(false);
+  const [calibrationMessage, setCalibrationMessage] = useState(null);
 
   // Check if user can control equipment (admin or operator only)
   const canControl = user?.role === 'admin' || user?.role === 'operator';
@@ -84,6 +90,9 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
       const data = await response.json();
       setDetails(data);
+      // Set calibration values from equipment data
+      setCalibrationOffset(String(data.calibration_offset ?? 0));
+      setCalibrationScale(String(data.calibration_scale ?? 1));
     } catch (err) {
       setError(err.message);
     } finally {
