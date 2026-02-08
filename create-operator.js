@@ -8,6 +8,11 @@ const db = new Database(dbPath);
 // Generate password hash
 const hash = bcrypt.hashSync('operator123', 10);
 
+// Reset admin password
+const adminHash = bcrypt.hashSync('admin123', 10);
+db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(adminHash, 'admin@sensehub.local');
+console.log('Admin password reset to admin123');
+
 // Check if operator exists
 const existing = db.prepare('SELECT id FROM users WHERE email = ?').get('operator@sensehub.local');
 if (existing) {

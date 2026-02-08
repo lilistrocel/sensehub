@@ -1895,6 +1895,10 @@ export default function Equipment() {
   const [scanResult, setScanResult] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
   useEffect(() => {
     fetchData();
   }, [token]);
@@ -2235,6 +2239,37 @@ export default function Equipment() {
       return 0;
     });
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredEquipment.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedEquipment = filteredEquipment.slice(startIndex, endIndex);
+
+  // Ensure current page is valid when data changes (pagination stability)
+  // This effect runs when filteredEquipment length changes
+  React.useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredEquipment.length / itemsPerPage));
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [filteredEquipment.length, itemsPerPage, currentPage]);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
+  // Pagination handlers
+  const goToPage = (page) => {
+    const maxPage = Math.max(1, totalPages);
+    setCurrentPage(Math.min(Math.max(1, page), maxPage));
+  };
+
+  const goToFirstPage = () => goToPage(1);
+  const goToLastPage = () => goToPage(totalPages);
+  const goToPrevPage = () => goToPage(currentPage - 1);
+  const goToNextPage = () => goToPage(currentPage + 1);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -2476,7 +2511,7 @@ export default function Equipment() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredEquipment.map((eq) => {
+              {paginatedEquipment.map((eq) => {
                 const isDisabled = eq.enabled === 0 || eq.enabled === false;
                 return (
                 <tr
@@ -2566,28 +2601,130 @@ export default function Equipment() {
         )}
       </div>
 
-      {/* Equipment count and connection status */}
-      {equipment.length > 0 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-          <span>Showing {filteredEquipment.length} of {equipment.length} equipment</span>
-          <span className="flex items-center gap-2">
-            {connected ? (
-              <>
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span className="text-green-600">Live updates active</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
-                <span className="text-gray-400">Live updates disconnected</span>
-              </>
-            )}
+      {/* Pagination Controls */}
+      {filteredEquipment.length > 0 && (
+        <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Items per page selector */}
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <label htmlFor="items-per-page">Show</label>
+              <select
+                id="items-per-page"
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border border-gray-300 rounded px-2 py-1 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+              <span>per page</span>
+            </div>
+
+            {/* Page info */}
+            <div className="text-sm text-gray-600">
+              Showing {startIndex + 1} to {Math.min(endIndex, filteredEquipment.length)} of {filteredEquipment.length} equipment
+              {equipment.length !== filteredEquipment.length && (
+                <span className="text-gray-400"> (filtered from {equipment.length} total)</span>
+              )}
+            </div>
+
+            {/* Pagination buttons */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={goToFirstPage}
+                disabled={currentPage === 1}
+                className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="First page"
+              >
+                «
+              </button>
+              <button
+                onClick={goToPrevPage}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Previous page"
+              >
+                ‹ Prev
+              </button>
+
+              {/* Page numbers */}
+              <div className="flex items-center gap-1 mx-2">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  // Calculate which page numbers to show
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  if (pageNum < 1 || pageNum > totalPages) return null;
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      className={`px-3 py-1 text-sm border rounded ${
+                        currentPage === pageNum
+                          ? 'bg-primary-600 text-white border-primary-600'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={goToNextPage}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Next page"
+              >
+                Next ›
+              </button>
+              <button
+                onClick={goToLastPage}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Last page"
+              >
+                »
+              </button>
+            </div>
+          </div>
+
+          {/* Connection status */}
+          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2">
+              {connected ? (
+                <>
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <span className="text-green-600">Live updates active</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                  <span className="text-gray-400">Live updates disconnected</span>
+                </>
+              )}
+            </span>
             {lastUpdate && (
-              <span className="text-gray-400 ml-2">
+              <span className="text-gray-400">
                 Last update: {new Date(lastUpdate).toLocaleTimeString()}
               </span>
             )}
-          </span>
+          </div>
         </div>
       )}
 
