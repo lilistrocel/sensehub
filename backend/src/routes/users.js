@@ -22,6 +22,12 @@ router.post('/', requireRole('admin'), (req, res) => {
     return res.status(400).json({ error: 'Bad Request', message: 'Email, password, and name are required' });
   }
 
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Invalid email format' });
+  }
+
   if (password.length < 8) {
     return res.status(400).json({ error: 'Bad Request', message: 'Password must be at least 8 characters' });
   }
@@ -79,6 +85,11 @@ router.put('/:id', requireRole('admin'), (req, res) => {
   const params = [];
 
   if (email) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Invalid email format' });
+    }
     updates.push('email = ?');
     params.push(email);
   }

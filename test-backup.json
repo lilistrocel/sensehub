@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-02-08T14:20:00.000Z",
+  "type": "sensehub_backup",
+  "data": {
+    "users": [],
+    "equipment": [],
+    "zones": [],
+    "automations": [],
+    "settings": {}
+  }
+}

@@ -80,6 +80,13 @@ export default function Users() {
       setFormLoading(false);
       return;
     }
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setFormError('Invalid email format');
+      setFormLoading(false);
+      return;
+    }
     if (!formData.password || formData.password.length < 8) {
       setFormError('Password must be at least 8 characters');
       setFormLoading(false);
@@ -128,6 +135,13 @@ export default function Users() {
     }
     if (!formData.email.trim()) {
       setFormError('Email is required');
+      setFormLoading(false);
+      return;
+    }
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setFormError('Invalid email format');
       setFormLoading(false);
       return;
     }
