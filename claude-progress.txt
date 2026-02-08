@@ -2,10 +2,49 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 50
-- **Completion:** ~26.5%
+- **Passing:** 51
+- **Completion:** ~27%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #31, #32 - User Management)
+**Assigned Features:**
+- #31 - Duplicate email rejected
+- #32 - Last login timestamp tracked
+**Status:** ALL PASSED ✅
+
+**Feature #31 - Duplicate email rejected:**
+- Logged in as admin user
+- Navigated to /settings/users
+- Clicked "Add User" button
+- Entered existing email (admin@sensehub.local) with valid name and password
+- Clicked Create User
+- Error message "Email already exists" displayed correctly
+- User not created - verified user list unchanged
+- Database confirmed no duplicate entry
+
+**Implementation Fix:**
+- Backend users.js was checking for 'SQLITE_CONSTRAINT' but SQLite returns 'SQLITE_CONSTRAINT_UNIQUE'
+- Updated POST and PUT handlers to check for both error codes
+- 409 Conflict response now returned with "Email already exists" message
+
+**Feature #32 - Last login timestamp tracked:**
+- User Management page displays "Last Login" column
+- Verified timestamp updates on each login (05:41 → 05:43 → 05:44 AM)
+- New users show "Never" before first login
+- Database stores last_login field correctly
+- Backend auth.js line 333 updates last_login on successful login
+
+**Files Modified:**
+- backend/src/routes/users.js (error code fix)
+
+**Verification:**
+- Browser automation tests passed for both features
+- Screenshots captured showing error message and timestamps
+- Zero console errors
+- No mock data patterns in codebase
+
+---
 
 ### Session - 2026-02-08 (Feature #30 - Admin Password Reset)
 **Assigned Feature:** #30 - Admin can reset user password
