@@ -1126,6 +1126,301 @@ function getScheduleDescription(tc) {
   return 'Schedule configured';
 }
 
+// Template Selection Modal
+function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [customName, setCustomName] = useState('');
+
+  useEffect(() => {
+    if (isOpen && token) {
+      fetchTemplates();
+    }
+  }, [isOpen, token]);
+
+  const fetchTemplates = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`${API_BASE}/automations/templates`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch templates');
+      }
+
+      const data = await response.json();
+      setTemplates(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectTemplate = (template) => {
+    setSelectedTemplate(template);
+    setCustomName(template.name);
+  };
+
+  const handleCreateFromTemplate = async () => {
+    if (!selectedTemplate) return;
+
+    setCreating(true);
+    try {
+      const response = await fetch(`${API_BASE}/automations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: customName || selectedTemplate.name,
+          description: selectedTemplate.description,
+          trigger_config: selectedTemplate.trigger_config,
+          conditions: selectedTemplate.conditions || [],
+          actions: selectedTemplate.actions || [],
+          priority: 0,
+          enabled: false // Start disabled so user can customize
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create automation from template');
+      }
+
+      const newAutomation = await response.json();
+      onSelectTemplate(newAutomation);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  // Group templates by category
+  const templatesByCategory = templates.reduce((acc, template) => {
+    const category = template.category || 'Other';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(template);
+    return acc;
+  }, {});
+
+  const categoryIcons = {
+    Monitoring: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ),
+    Scheduling: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    Maintenance: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+    Safety: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+    ),
+    Manual: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+      </svg>
+    ),
+    Logging: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    Other: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    )
+  };
+
+  const categoryColors = {
+    Monitoring: 'bg-blue-100 text-blue-700 border-blue-200',
+    Scheduling: 'bg-purple-100 text-purple-700 border-purple-200',
+    Maintenance: 'bg-orange-100 text-orange-700 border-orange-200',
+    Safety: 'bg-red-100 text-red-700 border-red-200',
+    Manual: 'bg-gray-100 text-gray-700 border-gray-200',
+    Logging: 'bg-green-100 text-green-700 border-green-200',
+    Other: 'bg-gray-100 text-gray-700 border-gray-200'
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          onClick={onClose}
+        ></div>
+
+        {/* Modal */}
+        <div className="inline-block w-full max-w-4xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Choose a Template
+          </h3>
+          <p className="text-sm text-gray-500 mb-6">
+            Select a pre-built automation template to get started quickly. You can customize it after creation.
+          </p>
+
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+              <span className="ml-3 text-gray-500">Loading templates...</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center">
+                <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-red-800">{error}</span>
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
+              {Object.entries(templatesByCategory).map(([category, categoryTemplates]) => (
+                <React.Fragment key={category}>
+                  {categoryTemplates.map((template) => (
+                    <div
+                      key={template.id}
+                      onClick={() => handleSelectTemplate(template)}
+                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                        selectedTemplate?.id === template.id
+                          ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-start">
+                        <div className={`p-2 rounded-lg mr-3 ${categoryColors[category] || categoryColors.Other}`}>
+                          {categoryIcons[category] || categoryIcons.Other}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium text-gray-900 truncate">
+                              {template.name}
+                            </h4>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${categoryColors[category] || categoryColors.Other}`}>
+                              {category}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                            {template.description}
+                          </p>
+                          <div className="mt-2 flex items-center text-xs text-gray-400">
+                            <TriggerBadge triggerConfig={template.trigger_config} />
+                            <span className="mx-2">•</span>
+                            <span>{template.actions?.length || 0} action(s)</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </React.Fragment>
+              ))}
+            </div>
+          )}
+
+          {/* Selected Template Preview & Name Customization */}
+          {selectedTemplate && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">
+                  Customize Your Automation
+                </h4>
+                <div className="mb-4">
+                  <label htmlFor="template-name" className="block text-sm font-medium text-gray-700 mb-1">
+                    Automation Name
+                  </label>
+                  <input
+                    type="text"
+                    id="template-name"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Enter a name for your automation"
+                  />
+                </div>
+                <p className="text-xs text-gray-500">
+                  <strong>Template:</strong> {selectedTemplate.name} — {selectedTemplate.description}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div className="flex justify-end gap-3 pt-6 border-t mt-6">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              disabled={creating}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateFromTemplate}
+              disabled={!selectedTemplate || creating}
+              className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            >
+              {creating ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create from Template
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Automation Detail Modal
 function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
   if (!isOpen || !automation) return null;
@@ -1263,6 +1558,7 @@ export default function Automations() {
 
   const [showBuilderModal, setShowBuilderModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [selectedAutomation, setSelectedAutomation] = useState(null);
   const [isNewAutomation, setIsNewAutomation] = useState(false);
 
@@ -1339,6 +1635,14 @@ export default function Automations() {
 
   const handleSaveAutomation = () => {
     fetchAutomations();
+  };
+
+  const handleTemplateCreated = (newAutomation) => {
+    // Refresh list and open the builder to let user customize
+    fetchAutomations();
+    setSelectedAutomation(newAutomation);
+    setIsNewAutomation(false);
+    setShowBuilderModal(true);
   };
 
   const [triggerLoading, setTriggerLoading] = useState(null);
@@ -1514,15 +1818,26 @@ export default function Automations() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Automations</h1>
         {canEdit && (
-          <button
-            onClick={handleNewAutomation}
-            className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center"
-          >
-            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            New Automation
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowTemplatesModal(true)}
+              className="bg-white text-primary-600 border border-primary-600 px-4 py-2 rounded-lg hover:bg-primary-50 transition-colors flex items-center"
+            >
+              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              New from Template
+            </button>
+            <button
+              onClick={handleNewAutomation}
+              className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center"
+            >
+              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Automation
+            </button>
+          </div>
         )}
       </div>
 
@@ -1782,6 +2097,14 @@ export default function Automations() {
         }}
         automation={selectedAutomation}
         onEdit={handleEditAutomation}
+      />
+
+      {/* Templates Modal */}
+      <TemplatesModal
+        isOpen={showTemplatesModal}
+        onClose={() => setShowTemplatesModal(false)}
+        token={token}
+        onSelectTemplate={handleTemplateCreated}
       />
 
       {/* Delete Confirmation Modal */}

@@ -40,18 +40,144 @@ router.get('/templates', (req, res) => {
     {
       id: 'temperature_alert',
       name: 'Temperature Alert',
-      description: 'Send alert when temperature exceeds threshold',
-      trigger_config: { type: 'threshold', equipment_type: 'temperature' },
-      conditions: [{ field: 'value', operator: 'gt', value: 30 }],
-      actions: [{ type: 'alert', severity: 'warning', message: 'High temperature detected' }]
+      description: 'Send alert when temperature exceeds a threshold value',
+      category: 'Monitoring',
+      trigger_config: {
+        type: 'threshold',
+        sensor_type: 'temperature',
+        operator: 'gt',
+        threshold_value: 30,
+        unit: '°C'
+      },
+      conditions: [],
+      actions: [{ type: 'alert', severity: 'warning', message: 'High temperature detected - exceeds threshold' }]
     },
     {
-      id: 'scheduled_control',
-      name: 'Scheduled Equipment Control',
-      description: 'Turn equipment on/off at scheduled times',
-      trigger_config: { type: 'schedule', cron: '0 8 * * *' },
+      id: 'humidity_alert',
+      name: 'Humidity Alert',
+      description: 'Send alert when humidity goes outside normal range',
+      category: 'Monitoring',
+      trigger_config: {
+        type: 'threshold',
+        sensor_type: 'humidity',
+        operator: 'gt',
+        threshold_value: 80,
+        unit: '%'
+      },
+      conditions: [],
+      actions: [{ type: 'alert', severity: 'warning', message: 'High humidity detected - check ventilation' }]
+    },
+    {
+      id: 'scheduled_on',
+      name: 'Daily Equipment Start',
+      description: 'Turn equipment on at a scheduled time each day',
+      category: 'Scheduling',
+      trigger_config: {
+        type: 'schedule',
+        schedule_type: 'daily',
+        time: '08:00'
+      },
       conditions: [],
       actions: [{ type: 'control', action: 'on' }]
+    },
+    {
+      id: 'scheduled_off',
+      name: 'Daily Equipment Shutdown',
+      description: 'Turn equipment off at a scheduled time each day',
+      category: 'Scheduling',
+      trigger_config: {
+        type: 'schedule',
+        schedule_type: 'daily',
+        time: '18:00'
+      },
+      conditions: [],
+      actions: [{ type: 'control', action: 'off' }]
+    },
+    {
+      id: 'weekly_maintenance',
+      name: 'Weekly Maintenance Alert',
+      description: 'Send maintenance reminder every week',
+      category: 'Maintenance',
+      trigger_config: {
+        type: 'schedule',
+        schedule_type: 'weekly',
+        day_of_week: '1',
+        time: '09:00'
+      },
+      conditions: [],
+      actions: [{ type: 'alert', severity: 'info', message: 'Weekly maintenance check reminder' }]
+    },
+    {
+      id: 'low_temperature_alert',
+      name: 'Low Temperature Alert',
+      description: 'Send critical alert when temperature drops below threshold',
+      category: 'Monitoring',
+      trigger_config: {
+        type: 'threshold',
+        sensor_type: 'temperature',
+        operator: 'lt',
+        threshold_value: 5,
+        unit: '°C'
+      },
+      conditions: [],
+      actions: [{ type: 'alert', severity: 'critical', message: 'Critical: Low temperature detected - risk of freezing' }]
+    },
+    {
+      id: 'pressure_alert',
+      name: 'Pressure Alert',
+      description: 'Alert when pressure exceeds safe operating limit',
+      category: 'Safety',
+      trigger_config: {
+        type: 'threshold',
+        sensor_type: 'pressure',
+        operator: 'gt',
+        threshold_value: 100,
+        unit: 'PSI'
+      },
+      conditions: [],
+      actions: [{ type: 'alert', severity: 'critical', message: 'Critical: High pressure detected - check equipment immediately' }]
+    },
+    {
+      id: 'manual_inspection',
+      name: 'Manual Inspection Trigger',
+      description: 'Manually triggered inspection with logging',
+      category: 'Manual',
+      trigger_config: {
+        type: 'manual'
+      },
+      conditions: [],
+      actions: [
+        { type: 'log', message: 'Manual inspection initiated' },
+        { type: 'alert', severity: 'info', message: 'Manual inspection in progress' }
+      ]
+    },
+    {
+      id: 'power_monitor',
+      name: 'Power Consumption Alert',
+      description: 'Alert when power consumption exceeds limit',
+      category: 'Monitoring',
+      trigger_config: {
+        type: 'threshold',
+        sensor_type: 'power',
+        operator: 'gt',
+        threshold_value: 5000,
+        unit: 'W'
+      },
+      conditions: [],
+      actions: [{ type: 'alert', severity: 'warning', message: 'High power consumption detected' }]
+    },
+    {
+      id: 'hourly_log',
+      name: 'Hourly Status Log',
+      description: 'Log system status every hour',
+      category: 'Logging',
+      trigger_config: {
+        type: 'schedule',
+        schedule_type: 'hourly',
+        minute: '0'
+      },
+      conditions: [],
+      actions: [{ type: 'log', message: 'Hourly status check completed' }]
     }
   ];
 
