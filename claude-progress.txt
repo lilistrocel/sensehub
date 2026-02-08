@@ -2,10 +2,57 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 117
-- **Completion:** ~61.9%
+- **Passing:** 119
+- **Completion:** ~63.0%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #124, #125 - Form Validation)
+**Assigned Features:**
+- #124 - Zone name required
+- #125 - Automation name required
+**Status:** BOTH PASSED ✅
+
+**What was verified:**
+
+Feature #124 - Zone name required:
+- Logged in as admin user (admin@sensehub.local)
+- Navigated to /zones page
+- Clicked "Add Zone" button to open modal
+- Left name field empty
+- Observed "Create Zone" button is DISABLED when name is empty
+- Code validation (Zones.jsx line 506): `disabled={saving || !newZone.name.trim()}`
+- Additional validation (line 187): `if (!newZone.name.trim()) return;`
+- Screenshot captured: feature124-add-zone-empty-name.png
+
+Feature #125 - Automation name required:
+- Navigated to /automations page
+- Clicked "New Automation" button to open modal
+- Left name field empty
+- Clicked "Create Automation" button
+- Form focus moved to Name field (validation prevented submission)
+- Code validation (Automations.jsx lines 278-281):
+  ```javascript
+  if (!formData.name.trim()) {
+    setError('Name is required');
+    return;
+  }
+  ```
+- Screenshot captured: feature125-automation-name-required.png
+
+**Implementation Notes:**
+- Both features already had proper validation implemented in the codebase
+- Zone form uses disabled button + early return pattern
+- Automation form uses error state + early return pattern
+- No code changes needed - validation working as expected
+
+**Verification:**
+- Browser automation tests passed for both features
+- Screenshots captured showing empty name validation
+- Zero console errors
+- Both features marked as passing
+
+---
 
 ### Session - 2026-02-08 (Feature #119 - Network Settings Viewable)
 **Assigned Feature:** #119 - Network settings viewable
