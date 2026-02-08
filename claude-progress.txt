@@ -2,10 +2,55 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 115
-- **Completion:** ~60.8%
+- **Passing:** 117
+- **Completion:** ~61.9%
 
 ## Session Log
+
+### Session - 2026-02-08 (Feature #120 - System Logs Viewable)
+**Assigned Feature:** #120 - System logs viewable
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #120 - System logs viewable:
+- Logged in as admin user (admin@sensehub.local)
+- Navigated to /settings/system
+- Found System Logs section with:
+  - 81 log entries displayed
+  - Timestamps on each entry
+  - Log levels with color-coded badges (info, error, warning)
+  - Source badges (backend, frontend, init, alert, automation)
+  - Scrollable container for browsing logs
+  - Level filter dropdown (All, Error, Warning, Info, Debug)
+  - Refresh button to reload logs
+- Terminal-style dark themed display for readability
+- Verified log entries come from multiple sources
+
+**Implementation Details:**
+- Backend: Updated /api/system/logs in system.js
+  - Reads actual log files from logs directory (backend.log, frontend.log, init.log)
+  - Aggregates automation_logs and alerts from database
+  - Parses log lines to extract timestamps and levels
+  - Strips ANSI color codes from nodemon output
+  - Supports level filtering with hierarchical levels
+  - Pagination with limit/offset parameters
+- Frontend: Added System Logs UI to Settings.jsx SystemSettings
+  - systemLogs, logsLoading, logsFilter state variables
+  - fetchLogs function with level filter parameter
+  - Dark terminal-style scrollable container
+  - Color-coded level badges (error=red, warning=amber, info=blue)
+  - Source badges for log origin identification
+
+**Verification:**
+- Browser automation tests passed
+- All 7 feature requirements verified
+- Screenshot captured: feature120-system-logs-bottom.png
+- Zero console errors
+
+**Progress:** 117/189 features passing (61.9%)
+
+---
 
 ### Session - 2026-02-08 (Feature #118 - Restore from Backup)
 **Assigned Feature:** #118 - Restore from backup works
