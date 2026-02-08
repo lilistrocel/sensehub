@@ -44,7 +44,7 @@ router.post('/', requireRole('admin'), (req, res) => {
       message: 'User created successfully'
     });
   } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT') {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === 'SQLITE_CONSTRAINT') {
       return res.status(409).json({ error: 'Conflict', message: 'Email already exists' });
     }
     throw error;
@@ -112,7 +112,7 @@ router.put('/:id', requireRole('admin'), (req, res) => {
     db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
     res.json({ message: 'User updated successfully' });
   } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT') {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === 'SQLITE_CONSTRAINT') {
       return res.status(409).json({ error: 'Conflict', message: 'Email already exists' });
     }
     throw error;

@@ -161,6 +161,79 @@ router.post('/setup/timezone', (req, res) => {
   }
 });
 
+// POST /api/auth/setup/quick - Quick setup with default admin account (skip wizard)
+router.post('/setup/quick', (req, res) => {
+  // Check if setup is already complete
+  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
+  if (userCount.count > 0) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Setup already completed. Users already exist.' });
+  }
+
+  // Create default admin account
+  const defaultEmail = 'admin@sensehub.local';
+  const defaultPassword = 'admin123'; // Will need to change on first login
+  const defaultName = 'Administrator';
+
+  const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+
+  try {
+    // Create admin user with default credentials
+    const result = db.prepare(
+      'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)'
+    ).run(defaultEmail, passwordHash, defaultName, 'admin');
+
+    const userId = result.lastInsertRowid;
+
+    // Set default network config (DHCP)
+    db.prepare(
+      "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))"
+    ).run('network', JSON.stringify({ dhcp: true, ipAddress: '', gateway: '', dns: '' }));
+
+    // Set default timezone (UTC)
+    db.prepare(
+      "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))"
+    ).run('timezone', JSON.stringify({ timezone: 'UTC', updatedAt: new Date().toISOString() }));
+
+    // Mark initial setup as complete
+    db.prepare(
+      'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+    ).run('setup_completed', JSON.stringify(true));
+
+    // Mark as quick setup (so we can prompt for password change later)
+    db.prepare(
+      'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+    ).run('quick_setup', JSON.stringify(true));
+
+    // Create session for immediate login
+    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '8h' });
+    const expiresAt = new Date(Date.now() + SESSION_TIMEOUT).toISOString();
+
+    db.prepare(
+      'INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)'
+    ).run(userId, token, expiresAt);
+
+    res.status(201).json({
+      message: 'Quick setup completed successfully',
+      token,
+      user: {
+        id: userId,
+        email: defaultEmail,
+        name: defaultName,
+        role: 'admin'
+      },
+      expiresAt,
+      defaultCredentials: {
+        email: defaultEmail,
+        password: defaultPassword,
+        note: 'Please change your password in Settings after login'
+      }
+    });
+  } catch (error) {
+    console.error('Quick setup error:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to complete quick setup' });
+  }
+});
+
 // POST /api/auth/setup - Initial admin account setup
 router.post('/setup', (req, res) => {
   const { email, password, name } = req.body;

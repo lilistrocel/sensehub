@@ -22,6 +22,11 @@ export default function Users() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [userToResetPassword, setUserToResetPassword] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false);
+  const [resetPasswordError, setResetPasswordError] = useState('');
 
   useEffect(() => {
     fetchUsers();
@@ -241,6 +246,64 @@ export default function Users() {
     }
   };
 
+  const openResetPasswordModal = (userToReset) => {
+    setUserToResetPassword(userToReset);
+    setNewPassword('');
+    setResetPasswordError('');
+    setShowResetPasswordModal(true);
+  };
+
+  const closeResetPasswordModal = () => {
+    setShowResetPasswordModal(false);
+    setUserToResetPassword(null);
+    setNewPassword('');
+    setResetPasswordError('');
+  };
+
+  const handleResetPassword = async () => {
+    if (!userToResetPassword) return;
+
+    // Validation
+    if (!newPassword) {
+      setResetPasswordError('Password is required');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setResetPasswordError('Password must be at least 8 characters');
+      return;
+    }
+
+    setResetPasswordLoading(true);
+    setResetPasswordError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/users/${userToResetPassword.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: newPassword })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to reset password');
+      }
+
+      // Success - close modal and show message
+      setShowResetPasswordModal(false);
+      setUserToResetPassword(null);
+      setNewPassword('');
+      setSuccessMessage(`Password for "${userToResetPassword.name}" has been reset successfully!`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (err) {
+      setResetPasswordError(err.message);
+    } finally {
+      setResetPasswordLoading(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'Never';
     const date = new Date(dateString);
@@ -388,12 +451,20 @@ export default function Users() {
                       Edit
                     </button>
                     {u.id !== user?.id && (
-                      <button
-                        onClick={() => openDeleteConfirmation(u)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Delete
-                      </button>
+                      <>
+                        <button
+                          onClick={() => openResetPasswordModal(u)}
+                          className="text-amber-600 hover:text-amber-900 mr-3"
+                        >
+                          Reset Password
+                        </button>
+                        <button
+                          onClick={() => openDeleteConfirmation(u)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -604,6 +675,100 @@ export default function Users() {
                   type="button"
                   onClick={closeDeleteConfirmation}
                   disabled={deleteLoading}
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {showResetPasswordModal && userToResetPassword && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="reset-password-modal-title" role="dialog" aria-modal="true">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            {/* Background overlay */}
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              aria-hidden="true"
+              onClick={closeResetPasswordModal}
+            ></div>
+
+            {/* Modal panel */}
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-amber-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900" id="reset-password-modal-title">
+                      Reset Password
+                    </h3>
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-500">
+                        Set a new password for <strong>{userToResetPassword.name}</strong> ({userToResetPassword.email})
+                      </p>
+                    </div>
+
+                    {resetPasswordError && (
+                      <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
+                        {resetPasswordError}
+                      </div>
+                    )}
+
+                    <div className="mt-4">
+                      <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
+                        New Password
+                      </label>
+                      <input
+                        type="password"
+                        name="new-password"
+                        id="new-password"
+                        value={newPassword}
+                        onChange={(e) => {
+                          setNewPassword(e.target.value);
+                          setResetPasswordError('');
+                        }}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-amber-500 focus:border-amber-500 sm:text-sm"
+                        placeholder="Minimum 8 characters"
+                        autoFocus
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        The user will need to use this password to log in.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  disabled={resetPasswordLoading || !newPassword}
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-amber-600 text-base font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {resetPasswordLoading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Resetting...
+                    </>
+                  ) : (
+                    'Reset Password'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeResetPasswordModal}
+                  disabled={resetPasswordLoading}
                   className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
                 >
                   Cancel

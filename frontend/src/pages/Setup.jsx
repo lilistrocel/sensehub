@@ -8,6 +8,8 @@ function Setup() {
   const navigate = useNavigate();
   const { setUserAfterSetup } = useAuth();
   const [step, setStep] = useState(1);
+  const [showSkipWarning, setShowSkipWarning] = useState(false);
+  const [skipLoading, setSkipLoading] = useState(false);
   const [formData, setFormData] = useState({
     // Network config
     dhcp: true,
@@ -294,6 +296,46 @@ function Setup() {
     navigate('/');
   };
 
+  const handleSkipSetup = () => {
+    setShowSkipWarning(true);
+  };
+
+  const cancelSkip = () => {
+    setShowSkipWarning(false);
+  };
+
+  const confirmSkipSetup = async () => {
+    setSkipLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/setup/quick`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Quick setup failed');
+      }
+
+      // Store token and update auth context
+      localStorage.setItem('token', data.token);
+      setUserAfterSetup(data.token, data.user);
+
+      // Navigate directly to dashboard
+      navigate('/');
+    } catch (err) {
+      setError(err.message || 'An error occurred during quick setup');
+      setShowSkipWarning(false);
+    } finally {
+      setSkipLoading(false);
+    }
+  };
+
   const stepLabels = ['Welcome', 'Network', 'Timezone', 'Admin Account', 'Cloud', 'Complete'];
 
   return (
@@ -382,12 +424,87 @@ function Setup() {
                 </ul>
               </div>
 
-              <button
-                onClick={() => setStep(2)}
-                className="px-8 py-3 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
-              >
-                Get Started
-              </button>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button
+                  onClick={() => setStep(2)}
+                  className="px-8 py-3 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
+                >
+                  Get Started
+                </button>
+                <button
+                  onClick={handleSkipSetup}
+                  className="px-8 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  Skip Setup
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Skip Setup Warning Modal */}
+          {showSkipWarning && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mr-4">
+                    <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">Skip Setup?</h3>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6">
+                  <p className="text-amber-800 text-sm font-medium mb-2">
+                    ⚠️ Minimal Configuration Warning
+                  </p>
+                  <p className="text-amber-700 text-sm">
+                    Skipping setup will create a default administrator account with basic credentials. You will need to:
+                  </p>
+                  <ul className="text-amber-700 text-sm mt-2 list-disc list-inside space-y-1">
+                    <li>Change the default password immediately</li>
+                    <li>Configure network settings manually</li>
+                    <li>Set your timezone in Settings</li>
+                  </ul>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6">
+                  <p className="text-gray-600 text-sm font-medium mb-2">Default Admin Credentials:</p>
+                  <div className="text-sm text-gray-800 space-y-1">
+                    <p><span className="font-medium">Email:</span> admin@sensehub.local</p>
+                    <p><span className="font-medium">Password:</span> admin123</p>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={cancelSkip}
+                    disabled={skipLoading}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmSkipSetup}
+                    disabled={skipLoading}
+                    className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {skipLoading && (
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    {skipLoading ? 'Setting Up...' : 'Confirm Skip'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
