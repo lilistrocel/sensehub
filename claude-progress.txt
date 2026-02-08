@@ -2,10 +2,57 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 95
-- **Completion:** ~50.3%
+- **Passing:** 100
+- **Completion:** ~52.9%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #97, #98, #99 - Alert Features)
+**Assigned Features:**
+- #97 - Alert list displays
+- #98 - Alert severity levels displayed correctly
+- #99 - Alert can be acknowledged
+**Status:** ALL PASSED ✅
+
+**What was verified:**
+
+Feature #97 - Alert list displays:
+- Navigated to /alerts page as admin user
+- Alert list displayed in table format with all 19 alerts
+- Columns visible: Message, Severity, Equipment, Timestamp, Status, Actions
+- Statistics cards show: Total Alerts (19), Critical (5), Warning (7), Unacknowledged (18)
+- Search, severity filter, and status filter all functional
+- Zero console errors
+
+Feature #98 - Alert severity levels displayed correctly:
+- Critical alerts: Red badge with red X icon
+- Warning alerts: Amber/yellow badge with amber triangle icon
+- Info alerts: Blue badge with blue info icon
+- All severity colors match design system specification
+- Badges are correctly styled with background colors
+
+Feature #99 - Alert can be acknowledged:
+- Tested with admin user: clicked Acknowledge on first alert
+- Alert status changed from "Pending" to "Acknowledged"
+- Acknowledger name recorded: "by Administrator"
+- Unacknowledged count decreased from 19 to 18
+- Tested with operator user: acknowledged second alert
+- Status changed to "Acknowledged by Operator User"
+- Unacknowledged count decreased from 18 to 17
+- Both admin and operator roles can acknowledge alerts
+
+**Implementation Notes:**
+- All alerts functionality was already implemented in Alerts.jsx
+- Backend API endpoints working correctly (GET /api/alerts, POST /api/alerts/:id/acknowledge)
+- Role-based permissions: canAcknowledge = admin or operator
+- Acknowledged alerts show green checkmark badge and acknowledger name
+
+**Verification:**
+- Browser automation tests passed for all features
+- Zero console errors
+- Screenshots captured: feature97-alert-list-displays.png, feature98-severity-levels.png, feature99-alert-acknowledged.png, feature99-operator-acknowledged.png
+
+---
 
 ### Session - 2026-02-08 (Features #95, #96 - Dashboard Cloud Status & Quick Actions)
 **Assigned Features:**
