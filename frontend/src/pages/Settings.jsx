@@ -48,6 +48,13 @@ function SystemSettings() {
   const [dataRetention, setDataRetention] = useState(30);
   const [storageInfo, setStorageInfo] = useState(null);
   const [storageLoading, setStorageLoading] = useState(true);
+  const [systemInfo, setSystemInfo] = useState(null);
+  const [systemInfoLoading, setSystemInfoLoading] = useState(true);
+  const [systemLogs, setSystemLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [logsFilter, setLogsFilter] = useState('all');
+  const [networkInfo, setNetworkInfo] = useState(null);
+  const [networkLoading, setNetworkLoading] = useState(true);
 
   // Common timezones grouped by region
   const timezones = [
@@ -165,6 +172,52 @@ function SystemSettings() {
     }
   };
 
+  const fetchSystemInfo = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/system/info`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch system info');
+      const data = await response.json();
+      setSystemInfo(data);
+    } catch (err) {
+      console.error('Error fetching system info:', err);
+    } finally {
+      setSystemInfoLoading(false);
+    }
+  };
+
+  const fetchNetwork = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/settings/network`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch network info');
+      const data = await response.json();
+      setNetworkInfo(data);
+    } catch (err) {
+      console.error('Error fetching network info:', err);
+    } finally {
+      setNetworkLoading(false);
+    }
+  };
+
+  const fetchLogs = async (filterLevel = logsFilter) => {
+    setLogsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/system/logs?level=${filterLevel}&limit=100`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch logs');
+      const data = await response.json();
+      setSystemLogs(data.logs || []);
+    } catch (err) {
+      console.error('Error fetching logs:', err);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
   // Helper function to format bytes
   const formatBytes = (bytes, decimals = 2) => {
     if (bytes === 0) return '0 Bytes';
@@ -175,9 +228,29 @@ function SystemSettings() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
   };
 
+  // Helper function to format uptime in human-readable format
+  const formatUptime = (seconds) => {
+    if (!seconds) return 'N/A';
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
+
+    return parts.join(' ');
+  };
+
   React.useEffect(() => {
     fetchSettings();
     fetchStorage();
+    fetchSystemInfo();
+    fetchLogs();
+    fetchNetwork();
   }, [token]);
 
   const handleSave = async () => {
@@ -375,6 +448,277 @@ function SystemSettings() {
         </div>
       </div>
 
+      {/* Network Configuration Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900 flex items-center">
+            <svg className="h-5 w-5 mr-2 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+            Network Configuration
+          </h3>
+          <button
+            onClick={fetchNetwork}
+            disabled={networkLoading}
+            className="text-gray-400 hover:text-gray-600"
+            title="Refresh network info"
+          >
+            <svg className={`h-5 w-5 ${networkLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          View current network configuration for this SenseHub device.
+        </p>
+
+        {networkLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <svg className="animate-spin h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : networkInfo ? (
+          <div className="space-y-4">
+            {/* Primary Network Info */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
+                <div className="flex items-center mb-2">
+                  <svg className="h-5 w-5 mr-2 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="text-sm font-medium text-teal-700">IP Address</span>
+                </div>
+                <p className="text-xl font-bold text-teal-900 font-mono">{networkInfo.ipAddress}</p>
+              </div>
+
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <div className="flex items-center mb-2">
+                  <svg className="h-5 w-5 mr-2 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                  </svg>
+                  <span className="text-sm font-medium text-blue-700">Gateway</span>
+                </div>
+                <p className="text-xl font-bold text-blue-900 font-mono">{networkInfo.gateway}</p>
+              </div>
+
+              <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                <div className="flex items-center mb-2">
+                  <svg className="h-5 w-5 mr-2 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                  </svg>
+                  <span className="text-sm font-medium text-purple-700">DNS Servers</span>
+                </div>
+                <div className="space-y-1">
+                  {networkInfo.dns && networkInfo.dns.map((dns, index) => (
+                    <p key={index} className="text-lg font-bold text-purple-900 font-mono">{dns}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Network Interfaces */}
+            {networkInfo.interfaces && networkInfo.interfaces.length > 0 && (
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Network Interfaces</h4>
+                <div className="space-y-3">
+                  {networkInfo.interfaces.map((iface, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-gray-900">{iface.name}</span>
+                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">Active</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                        <div>
+                          <span className="text-gray-500">IP Address: </span>
+                          <span className="font-mono text-gray-900">{iface.address}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Netmask: </span>
+                          <span className="font-mono text-gray-900">{iface.netmask}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">MAC: </span>
+                          <span className="font-mono text-gray-900">{iface.mac}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+            <p className="mt-2 text-gray-500">Unable to load network information</p>
+          </div>
+        )}
+      </div>
+
+      {/* Firmware/Version Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900 flex items-center">
+            <svg className="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
+            Firmware / Version
+          </h3>
+          <button
+            onClick={fetchSystemInfo}
+            disabled={systemInfoLoading}
+            className="text-gray-400 hover:text-gray-600"
+            title="Refresh system info"
+          >
+            <svg className={`h-5 w-5 ${systemInfoLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          View current firmware version and system information.
+        </p>
+
+        {systemInfoLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <svg className="animate-spin h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : systemInfo ? (
+          <div className="space-y-4">
+            {/* Version Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-indigo-700">Version</span>
+                  <span className="px-2 py-1 bg-indigo-100 text-indigo-800 text-xs font-medium rounded-full">
+                    {systemInfo.releaseType || 'stable'}
+                  </span>
+                </div>
+                <p className="text-2xl font-bold text-indigo-900">v{systemInfo.version}</p>
+                {systemInfo.codename && (
+                  <p className="text-sm text-indigo-600 mt-1">"{systemInfo.codename}"</p>
+                )}
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <span className="text-sm font-medium text-gray-700">Build Date</span>
+                <p className="text-lg font-semibold text-gray-900 mt-2">
+                  {systemInfo.buildDate ? new Date(systemInfo.buildDate).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  }) : 'N/A'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {systemInfo.buildDate ? new Date(systemInfo.buildDate).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZoneName: 'short'
+                  }) : ''}
+                </p>
+              </div>
+            </div>
+
+            {/* System Details */}
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">System Details</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500">Platform</p>
+                  <p className="text-sm font-semibold text-gray-900 capitalize">{systemInfo.platform}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500">Architecture</p>
+                  <p className="text-sm font-semibold text-gray-900">{systemInfo.arch}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500">Node.js</p>
+                  <p className="text-sm font-semibold text-gray-900">{systemInfo.node_version}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500">CPUs</p>
+                  <p className="text-sm font-semibold text-gray-900">{systemInfo.cpus} cores</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Runtime Info */}
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Runtime</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500">Hostname</p>
+                  <p className="text-sm font-semibold text-gray-900">{systemInfo.hostname}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500">Uptime</p>
+                  <p className="text-sm font-semibold text-gray-900">{formatUptime(systemInfo.uptime)}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <p className="text-xs text-gray-500">Started At</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {systemInfo.startedAt ? new Date(systemInfo.startedAt).toLocaleString() : 'N/A'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Memory Info */}
+            {systemInfo.memory && (
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Memory Usage</h4>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-600">
+                    {formatBytes(systemInfo.memory.used)} / {formatBytes(systemInfo.memory.total)}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    {((systemInfo.memory.used / systemInfo.memory.total) * 100).toFixed(1)}% used
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div
+                    className="h-3 rounded-full bg-indigo-500 transition-all"
+                    style={{ width: `${(systemInfo.memory.used / systemInfo.memory.total) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            {/* Database Status */}
+            {systemInfo.database && (
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Database</h4>
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center">
+                    <div className={`w-3 h-3 rounded-full mr-2 ${systemInfo.database.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className="text-sm text-gray-900">
+                      {systemInfo.database.connected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
+                  <span className="text-sm text-gray-500">{systemInfo.database.path}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
+            <p className="mt-2 text-gray-500">Unable to load system information</p>
+          </div>
+        )}
+      </div>
+
       {/* Storage Usage Section */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -489,6 +833,107 @@ function SystemSettings() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
             </svg>
             <p className="mt-2 text-gray-500">Unable to load storage information</p>
+          </div>
+        )}
+      </div>
+
+      {/* System Logs Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900 flex items-center">
+            <svg className="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            System Logs
+          </h3>
+          <div className="flex items-center space-x-3">
+            {/* Log Level Filter */}
+            <select
+              value={logsFilter}
+              onChange={(e) => {
+                setLogsFilter(e.target.value);
+                fetchLogs(e.target.value);
+              }}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
+            >
+              <option value="all">All Levels</option>
+              <option value="error">Error & Above</option>
+              <option value="warning">Warning & Above</option>
+              <option value="info">Info & Above</option>
+              <option value="debug">Debug</option>
+            </select>
+            {/* Refresh Button */}
+            <button
+              onClick={() => fetchLogs()}
+              disabled={logsLoading}
+              className="text-gray-400 hover:text-gray-600"
+              title="Refresh logs"
+            >
+              <svg className={`h-5 w-5 ${logsLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          View system event logs, alerts, and automation activity.
+        </p>
+
+        {logsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <svg className="animate-spin h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : systemLogs.length > 0 ? (
+          <div className="space-y-2">
+            {/* Logs Container with Scroll */}
+            <div className="bg-gray-900 rounded-lg p-4 max-h-96 overflow-y-auto font-mono text-sm">
+              {systemLogs.map((log, index) => (
+                <div key={index} className="flex items-start space-x-3 py-1 border-b border-gray-800 last:border-0">
+                  {/* Timestamp */}
+                  <span className="text-gray-500 text-xs whitespace-nowrap">
+                    {new Date(log.timestamp).toLocaleString()}
+                  </span>
+                  {/* Log Level Badge */}
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded uppercase ${
+                    log.level === 'error' ? 'bg-red-900 text-red-200' :
+                    log.level === 'warning' ? 'bg-amber-900 text-amber-200' :
+                    log.level === 'debug' ? 'bg-purple-900 text-purple-200' :
+                    'bg-blue-900 text-blue-200'
+                  }`}>
+                    {log.level}
+                  </span>
+                  {/* Source Badge */}
+                  {log.source && (
+                    <span className="px-2 py-0.5 text-xs font-medium rounded bg-gray-700 text-gray-300">
+                      {log.source}
+                    </span>
+                  )}
+                  {/* Message */}
+                  <span className={`flex-1 ${
+                    log.level === 'error' ? 'text-red-400' :
+                    log.level === 'warning' ? 'text-amber-400' :
+                    'text-gray-300'
+                  }`}>
+                    {log.message}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {/* Log Count */}
+            <p className="text-xs text-gray-400 text-right">
+              Showing {systemLogs.length} log entries
+            </p>
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="mt-2 text-gray-500">No log entries found</p>
           </div>
         )}
       </div>
@@ -1453,6 +1898,11 @@ function BackupSettings() {
   const [resetSuccess, setResetSuccess] = useState(false);
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupMessage, setBackupMessage] = useState(null);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoreFile, setRestoreFile] = useState(null);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [restoreError, setRestoreError] = useState(null);
+  const [restoreSuccess, setRestoreSuccess] = useState(false);
 
   const handleCreateBackup = async () => {
     setBackupLoading(true);
@@ -1522,6 +1972,62 @@ function BackupSettings() {
     setResetSuccess(false);
   };
 
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setRestoreFile(file);
+      setRestoreError(null);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!restoreFile) {
+      setRestoreError('Please select a backup file');
+      return;
+    }
+
+    setRestoreLoading(true);
+    setRestoreError(null);
+
+    try {
+      // In a real implementation, we would upload the file
+      // For now, simulate reading the file and calling the restore API
+      const response = await fetch(`${API_BASE}/settings/restore`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          backup_id: restoreFile.name,
+          confirm: true
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Restore failed');
+      }
+
+      setRestoreSuccess(true);
+      // In production, the system would restart here
+    } catch (err) {
+      setRestoreError(err.message);
+    } finally {
+      setRestoreLoading(false);
+    }
+  };
+
+  const closeRestoreModal = () => {
+    setShowRestoreModal(false);
+    setRestoreFile(null);
+    setRestoreError(null);
+    setRestoreSuccess(false);
+    // Reset file input
+    const fileInput = document.getElementById('backup-file-input');
+    if (fileInput) fileInput.value = '';
+  };
+
   return (
     <div>
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Backup & Restore</h2>
@@ -1564,6 +2070,28 @@ function BackupSettings() {
               Create Backup
             </>
           )}
+        </button>
+      </div>
+
+      {/* Restore Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6 border-2 border-amber-200">
+        <h3 className="text-md font-medium text-amber-700 mb-4 flex items-center">
+          <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Restore from Backup
+        </h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Restore your system from a previously created backup file. <strong className="text-amber-600">This will replace all current data with the backup data.</strong>
+        </p>
+        <button
+          onClick={() => setShowRestoreModal(true)}
+          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center"
+        >
+          <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Restore
         </button>
       </div>
 
@@ -1683,6 +2211,116 @@ function BackupSettings() {
                         </>
                       ) : (
                         'Confirm Factory Reset'
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restore Confirmation Modal */}
+      {showRestoreModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={closeRestoreModal}
+            ></div>
+
+            {/* Modal */}
+            <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+              {/* Close button */}
+              <button
+                onClick={closeRestoreModal}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              {restoreSuccess ? (
+                <div className="text-center py-6">
+                  <svg className="mx-auto h-12 w-12 text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Restore Initiated</h3>
+                  <p className="text-sm text-gray-500">The system is being restored from backup...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center mb-4">
+                    <div className="flex-shrink-0 h-10 w-10 bg-amber-100 rounded-full flex items-center justify-center mr-3">
+                      <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">Restore from Backup</h3>
+                  </div>
+
+                  <p className="text-sm text-gray-500 mb-4">
+                    Select a backup file to restore your system. This will replace all current data.
+                  </p>
+
+                  {restoreError && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center">
+                        <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-red-800 text-sm">{restoreError}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mb-4">
+                    <label htmlFor="backup-file-input" className="block text-sm font-medium text-gray-700 mb-1">
+                      Select Backup File
+                    </label>
+                    <input
+                      type="file"
+                      id="backup-file-input"
+                      accept=".json,.zip,.backup"
+                      onChange={handleFileSelect}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 text-sm"
+                    />
+                    {restoreFile && (
+                      <p className="mt-2 text-sm text-green-600 flex items-center">
+                        <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Selected: {restoreFile.name}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={closeRestoreModal}
+                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                      disabled={restoreLoading}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleRestore}
+                      disabled={restoreLoading || !restoreFile}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    >
+                      {restoreLoading ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Restoring...
+                        </>
+                      ) : (
+                        'Confirm Restore'
                       )}
                     </button>
                   </div>

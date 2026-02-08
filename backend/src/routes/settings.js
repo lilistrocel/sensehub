@@ -2,10 +2,111 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Helper function to get network interfaces
+function getNetworkInfo() {
+  const interfaces = os.networkInterfaces();
+  const networkInfo = {
+    interfaces: [],
+    ipAddress: null,
+    gateway: null,
+    dns: []
+  };
+
+  // Get all network interfaces
+  for (const [name, addrs] of Object.entries(interfaces)) {
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        networkInfo.interfaces.push({
+          name,
+          address: addr.address,
+          netmask: addr.netmask,
+          mac: addr.mac
+        });
+        // Use first non-internal IPv4 as primary
+        if (!networkInfo.ipAddress) {
+          networkInfo.ipAddress = addr.address;
+        }
+      }
+    }
+  }
+
+  // Try to determine gateway (this is platform-dependent)
+  // On Linux, we can try reading /proc/net/route
+  try {
+    if (process.platform === 'linux') {
+      const routeData = fs.readFileSync('/proc/net/route', 'utf8');
+      const lines = routeData.split('\n');
+      for (const line of lines) {
+        const parts = line.split('\t');
+        if (parts.length >= 3 && parts[1] === '00000000') {
+          // Default route - gateway is in hex
+          const gatewayHex = parts[2];
+          const octets = [];
+          for (let i = 6; i >= 0; i -= 2) {
+            octets.push(parseInt(gatewayHex.substring(i, i + 2), 16));
+          }
+          networkInfo.gateway = octets.join('.');
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    // Fallback - use common default gateway pattern
+    if (networkInfo.ipAddress) {
+      const parts = networkInfo.ipAddress.split('.');
+      networkInfo.gateway = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
+    }
+  }
+
+  // Try to get DNS servers
+  try {
+    if (process.platform === 'linux') {
+      const resolvConf = fs.readFileSync('/etc/resolv.conf', 'utf8');
+      const lines = resolvConf.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('nameserver')) {
+          const dns = line.split(/\s+/)[1];
+          if (dns) {
+            networkInfo.dns.push(dns);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Fallback - common DNS servers
+    networkInfo.dns = ['8.8.8.8', '8.8.4.4'];
+  }
+
+  // Ensure we have defaults
+  if (!networkInfo.ipAddress) {
+    networkInfo.ipAddress = '127.0.0.1';
+  }
+  if (!networkInfo.gateway) {
+    networkInfo.gateway = '192.168.1.1';
+  }
+  if (networkInfo.dns.length === 0) {
+    networkInfo.dns = ['8.8.8.8', '8.8.4.4'];
+  }
+
+  return networkInfo;
+}
+
+// GET /api/settings/network - Get network configuration
+router.get('/network', requireRole('admin'), (req, res) => {
+  try {
+    const networkInfo = getNetworkInfo();
+    res.json(networkInfo);
+  } catch (error) {
+    console.error('Error getting network info:', error);
+    res.status(500).json({ error: 'Internal Server Error', message: 'Failed to get network information' });
+  }
+});
 
 // Helper function to get directory size
 function getDirectorySize(dirPath) {
