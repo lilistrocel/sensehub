@@ -175,6 +175,20 @@ const initSchema = () => {
       FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
     );
 
+    -- User preferences table
+    CREATE TABLE IF NOT EXISTS user_preferences (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL UNIQUE,
+      sound_alerts_enabled INTEGER DEFAULT 0,
+      sound_volume REAL DEFAULT 0.5,
+      alert_sound_critical TEXT DEFAULT 'alarm',
+      alert_sound_warning TEXT DEFAULT 'beep',
+      alert_sound_info TEXT DEFAULT 'chime',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
@@ -184,6 +198,7 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
     CREATE INDEX IF NOT EXISTS idx_equipment_errors_equipment ON equipment_errors(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_equipment_errors_created ON equipment_errors(created_at);
+    CREATE INDEX IF NOT EXISTS idx_user_preferences_user ON user_preferences(user_id);
   `);
 
   // Add calibration columns to existing equipment table if they don't exist

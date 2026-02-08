@@ -8,7 +8,7 @@ const router = express.Router();
 router.get('/', (req, res) => {
   const { severity, equipment_id, acknowledged, limit } = req.query;
 
-  let query = 'SELECT a.*, e.name as equipment_name, z.name as zone_name FROM alerts a LEFT JOIN equipment e ON a.equipment_id = e.id LEFT JOIN zones z ON a.zone_id = z.id';
+  let query = 'SELECT a.*, e.name as equipment_name, z.name as zone_name, u.name as acknowledged_by_name FROM alerts a LEFT JOIN equipment e ON a.equipment_id = e.id LEFT JOIN zones z ON a.zone_id = z.id LEFT JOIN users u ON a.acknowledged_by = u.id';
   const conditions = [];
   const params = [];
 
@@ -66,7 +66,14 @@ router.post('/:id/acknowledge', requireRole('admin', 'operator'), (req, res) => 
     "UPDATE alerts SET acknowledged = 1, acknowledged_by = ?, acknowledged_at = datetime('now') WHERE id = ?"
   ).run(req.user.id, alertId);
 
-  const updated = db.prepare('SELECT * FROM alerts WHERE id = ?').get(alertId);
+  const updated = db.prepare(`
+    SELECT a.*, e.name as equipment_name, z.name as zone_name, u.name as acknowledged_by_name
+    FROM alerts a
+    LEFT JOIN equipment e ON a.equipment_id = e.id
+    LEFT JOIN zones z ON a.zone_id = z.id
+    LEFT JOIN users u ON a.acknowledged_by = u.id
+    WHERE a.id = ?
+  `).get(alertId);
   global.broadcast('alert_acknowledged', updated);
 
   res.json(updated);

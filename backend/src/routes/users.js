@@ -137,4 +137,102 @@ router.delete('/:id', requireRole('admin'), (req, res) => {
   res.json({ message: 'User deleted successfully' });
 });
 
+// GET /api/users/preferences - Get current user's preferences
+router.get('/me/preferences', (req, res) => {
+  const userId = req.user.id;
+
+  let prefs = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(userId);
+
+  // If no preferences exist, create default ones
+  if (!prefs) {
+    db.prepare(`
+      INSERT INTO user_preferences (user_id, sound_alerts_enabled, sound_volume)
+      VALUES (?, 0, 0.5)
+    `).run(userId);
+
+    prefs = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(userId);
+  }
+
+  res.json({
+    sound_alerts_enabled: prefs.sound_alerts_enabled === 1,
+    sound_volume: prefs.sound_volume,
+    alert_sound_critical: prefs.alert_sound_critical,
+    alert_sound_warning: prefs.alert_sound_warning,
+    alert_sound_info: prefs.alert_sound_info
+  });
+});
+
+// PUT /api/users/preferences - Update current user's preferences
+router.put('/me/preferences', (req, res) => {
+  const userId = req.user.id;
+  const { sound_alerts_enabled, sound_volume, alert_sound_critical, alert_sound_warning, alert_sound_info } = req.body;
+
+  // Check if preferences exist
+  const existing = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(userId);
+
+  if (!existing) {
+    // Create new preferences
+    db.prepare(`
+      INSERT INTO user_preferences (user_id, sound_alerts_enabled, sound_volume, alert_sound_critical, alert_sound_warning, alert_sound_info)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      userId,
+      sound_alerts_enabled ? 1 : 0,
+      sound_volume !== undefined ? sound_volume : 0.5,
+      alert_sound_critical || 'alarm',
+      alert_sound_warning || 'beep',
+      alert_sound_info || 'chime'
+    );
+  } else {
+    // Update existing preferences
+    const updates = [];
+    const params = [];
+
+    if (sound_alerts_enabled !== undefined) {
+      updates.push('sound_alerts_enabled = ?');
+      params.push(sound_alerts_enabled ? 1 : 0);
+    }
+
+    if (sound_volume !== undefined) {
+      updates.push('sound_volume = ?');
+      params.push(Math.max(0, Math.min(1, sound_volume)));
+    }
+
+    if (alert_sound_critical !== undefined) {
+      updates.push('alert_sound_critical = ?');
+      params.push(alert_sound_critical);
+    }
+
+    if (alert_sound_warning !== undefined) {
+      updates.push('alert_sound_warning = ?');
+      params.push(alert_sound_warning);
+    }
+
+    if (alert_sound_info !== undefined) {
+      updates.push('alert_sound_info = ?');
+      params.push(alert_sound_info);
+    }
+
+    if (updates.length > 0) {
+      updates.push("updated_at = datetime('now')");
+      params.push(userId);
+      db.prepare(`UPDATE user_preferences SET ${updates.join(', ')} WHERE user_id = ?`).run(...params);
+    }
+  }
+
+  // Fetch and return updated preferences
+  const prefs = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(userId);
+
+  res.json({
+    message: 'Preferences updated successfully',
+    preferences: {
+      sound_alerts_enabled: prefs.sound_alerts_enabled === 1,
+      sound_volume: prefs.sound_volume,
+      alert_sound_critical: prefs.alert_sound_critical,
+      alert_sound_warning: prefs.alert_sound_warning,
+      alert_sound_info: prefs.alert_sound_info
+    }
+  });
+});
+
 module.exports = router;

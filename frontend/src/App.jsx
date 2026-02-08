@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
+import { AlertSoundProvider } from './context/AlertSoundContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
@@ -163,7 +164,9 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <WebSocketProvider>
-          <AppRoutes />
+          <AlertSoundProvider>
+            <AppRoutes />
+          </AlertSoundProvider>
         </WebSocketProvider>
       </AuthProvider>
     </BrowserRouter>
