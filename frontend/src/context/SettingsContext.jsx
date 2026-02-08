@@ -101,6 +101,48 @@ export function SettingsProvider({ children }) {
   }, [formatDateTime]);
 
   /**
+   * Format a date as relative time (e.g., "5 minutes ago") for recent timestamps,
+   * or as a full date for older items
+   * @param {string|Date} dateValue - The date to format
+   * @param {number} threshold - Maximum age in hours to show relative time (default: 24)
+   * @returns {string} Formatted relative or absolute time string
+   */
+  const formatRelativeTime = useCallback((dateValue, threshold = 24) => {
+    if (!dateValue) return '-';
+
+    try {
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) return '-';
+
+      const now = new Date();
+      const diffMs = now - date;
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      // If older than threshold hours, show full date
+      if (diffHours >= threshold) {
+        return formatDateTime(dateValue);
+      }
+
+      // Show relative time for recent items
+      if (diffSecs < 60) {
+        return diffSecs <= 5 ? 'Just now' : `${diffSecs} seconds ago`;
+      } else if (diffMins < 60) {
+        return diffMins === 1 ? '1 minute ago' : `${diffMins} minutes ago`;
+      } else if (diffHours < 24) {
+        return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
+      } else {
+        return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+      }
+    } catch (error) {
+      console.error('Error formatting relative time:', error);
+      return formatDateTime(dateValue);
+    }
+  }, [formatDateTime]);
+
+  /**
    * Refresh settings from the server
    */
   const refreshSettings = useCallback(() => {
@@ -113,6 +155,7 @@ export function SettingsProvider({ children }) {
     formatDateTime,
     formatDate,
     formatTime,
+    formatRelativeTime,
     refreshSettings,
   };
 

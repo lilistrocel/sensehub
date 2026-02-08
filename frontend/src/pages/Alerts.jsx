@@ -6,7 +6,7 @@ import { useSettings } from '../context/SettingsContext';
 export default function Alerts() {
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
-  const { formatDateTime } = useSettings();
+  const { formatDateTime, formatRelativeTime } = useSettings();
   const [alerts, setAlerts] = useState([]);
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -341,8 +341,8 @@ export default function Alerts() {
                         {alert.equipment_name || alert.zone_name || '-'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDateTime(alert.created_at)}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" title={formatDateTime(alert.created_at)}>
+                      {formatRelativeTime(alert.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {alert.acknowledged ? (
