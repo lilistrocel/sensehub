@@ -48,12 +48,392 @@ function SystemSettings() {
 }
 
 function CloudSettings() {
+  const { token } = useAuth();
+  const [cloudStatus, setCloudStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [connectForm, setConnectForm] = useState({ url: '', apiKey: '' });
+  const [connectError, setConnectError] = useState(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
+
+  const fetchCloudStatus = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/cloud/status`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch cloud status');
+      const data = await response.json();
+      setCloudStatus(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial fetch and refresh every 30 seconds
+  React.useEffect(() => {
+    fetchCloudStatus();
+    const interval = setInterval(fetchCloudStatus, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  const handleConnect = async () => {
+    if (!connectForm.url || !connectForm.apiKey) {
+      setConnectError('Both URL and API key are required');
+      return;
+    }
+
+    setConnectLoading(true);
+    setConnectError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/cloud/connect`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(connectForm)
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to connect');
+      }
+
+      setShowConnectModal(false);
+      setConnectForm({ url: '', apiKey: '' });
+      fetchCloudStatus();
+    } catch (err) {
+      setConnectError(err.message);
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect from the cloud?')) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/cloud/disconnect`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('Failed to disconnect');
+      fetchCloudStatus();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncLoading(true);
+    setSyncMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/cloud/sync`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('Sync failed');
+      const data = await response.json();
+      setSyncMessage({ type: 'success', text: `Sync triggered at ${new Date(data.timestamp).toLocaleString()}` });
+      fetchCloudStatus();
+    } catch (err) {
+      setSyncMessage({ type: 'error', text: err.message });
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48">
+        <svg className="animate-spin h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Cloud Connection</h2>
-      <div className="bg-white rounded-lg shadow p-6">
-        <p className="text-gray-500">Cloud settings coming soon.</p>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Connection Status Card */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900">Connection Status</h3>
+          <button
+            onClick={fetchCloudStatus}
+            className="text-gray-400 hover:text-gray-600"
+            title="Refresh status"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Status Indicator */}
+        <div className="flex items-center mb-6">
+          <div className={`h-4 w-4 rounded-full mr-3 ${
+            cloudStatus?.connected
+              ? 'bg-green-500'
+              : cloudStatus?.configured
+                ? 'bg-amber-500'
+                : 'bg-gray-400'
+          }`}></div>
+          <div>
+            <p className="font-medium text-gray-900">
+              {cloudStatus?.connected
+                ? 'Connected'
+                : cloudStatus?.configured
+                  ? 'Configured (Disconnected)'
+                  : 'Not Configured'}
+            </p>
+            <p className="text-sm text-gray-500">
+              {cloudStatus?.connected
+                ? 'Cloud sync is active'
+                : cloudStatus?.configured
+                  ? 'Unable to reach cloud server'
+                  : 'No cloud connection configured'}
+            </p>
+          </div>
+        </div>
+
+        {/* Large Status Display */}
+        <div className={`rounded-lg p-6 mb-6 border-2 ${
+          cloudStatus?.connected
+            ? 'bg-green-50 border-green-200'
+            : cloudStatus?.configured
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-gray-50 border-gray-200'
+        }`}>
+          <div className="flex items-center">
+            <div className={`h-12 w-12 rounded-full flex items-center justify-center ${
+              cloudStatus?.connected
+                ? 'bg-green-100'
+                : cloudStatus?.configured
+                  ? 'bg-amber-100'
+                  : 'bg-gray-200'
+            }`}>
+              {cloudStatus?.connected ? (
+                <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : cloudStatus?.configured ? (
+                <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              ) : (
+                <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                </svg>
+              )}
+            </div>
+            <div className="ml-4">
+              <h4 className={`text-lg font-semibold ${
+                cloudStatus?.connected
+                  ? 'text-green-800'
+                  : cloudStatus?.configured
+                    ? 'text-amber-800'
+                    : 'text-gray-700'
+              }`}>
+                {cloudStatus?.connected
+                  ? 'Cloud Connected'
+                  : cloudStatus?.configured
+                    ? 'Cloud Disconnected'
+                    : 'Offline Mode'}
+              </h4>
+              <p className={`text-sm ${
+                cloudStatus?.connected
+                  ? 'text-green-700'
+                  : cloudStatus?.configured
+                    ? 'text-amber-700'
+                    : 'text-gray-500'
+              }`}>
+                {cloudStatus?.connected
+                  ? 'All systems syncing normally'
+                  : cloudStatus?.configured
+                    ? 'Reconnection will be attempted automatically'
+                    : 'System operating independently'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Status Details */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-sm text-gray-500">Last Sync</p>
+            <p className="font-medium text-gray-900">
+              {cloudStatus?.lastSync
+                ? new Date(cloudStatus.lastSync.timestamp).toLocaleString()
+                : 'Never'}
+            </p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-sm text-gray-500">Pending Items</p>
+            <p className="font-medium text-gray-900">
+              {cloudStatus?.pendingItems || 0} items
+            </p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <p className="text-sm text-gray-500">Configuration</p>
+            <p className="font-medium text-gray-900">
+              {cloudStatus?.configured ? 'Configured' : 'Not configured'}
+            </p>
+          </div>
+        </div>
+
+        {/* Sync Message */}
+        {syncMessage && (
+          <div className={`mb-4 p-3 rounded text-sm ${
+            syncMessage.type === 'success'
+              ? 'bg-green-50 text-green-800 border border-green-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}>
+            {syncMessage.text}
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-3">
+          {cloudStatus?.configured ? (
+            <>
+              <button
+                onClick={handleSync}
+                disabled={syncLoading}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center"
+              >
+                {syncLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Sync Now
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleDisconnect}
+                className="px-4 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 flex items-center"
+              >
+                <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Disconnect
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setShowConnectModal(true)}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center"
+            >
+              <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+              </svg>
+              Configure Cloud Connection
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Connect Modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setShowConnectModal(false)}></div>
+            <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+              <button onClick={() => setShowConnectModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Configure Cloud Connection</h3>
+
+              {connectError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                  {connectError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cloud Server URL</label>
+                  <input
+                    type="url"
+                    value={connectForm.url}
+                    onChange={(e) => setConnectForm({ ...connectForm, url: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="https://cloud.sensehub.io"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                  <input
+                    type="password"
+                    value={connectForm.apiKey}
+                    onChange={(e) => setConnectForm({ ...connectForm, apiKey: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="Enter your API key"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowConnectModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConnect}
+                  disabled={connectLoading}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center"
+                >
+                  {connectLoading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Connecting...
+                    </>
+                  ) : (
+                    'Connect'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,10 +4,12 @@ import { useAuth } from '../context/AuthContext';
 export default function Alerts() {
   const { token, user } = useAuth();
   const [alerts, setAlerts] = useState([]);
+  const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [severityFilter, setSeverityFilter] = useState('all');
   const [acknowledgedFilter, setAcknowledgedFilter] = useState('all');
+  const [equipmentFilter, setEquipmentFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   const fetchAlerts = async () => {
@@ -33,8 +35,26 @@ export default function Alerts() {
     }
   };
 
+  const fetchEquipment = async () => {
+    try {
+      const response = await fetch('/api/equipment', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setEquipment(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch equipment:', err);
+    }
+  };
+
   useEffect(() => {
     fetchAlerts();
+    fetchEquipment();
   }, [token]);
 
   const handleAcknowledge = async (alertId) => {
@@ -103,6 +123,21 @@ export default function Alerts() {
     }
     if (acknowledgedFilter === 'unacknowledged' && alert.acknowledged) {
       return false;
+    }
+
+    // Filter by equipment
+    if (equipmentFilter !== 'all') {
+      if (equipmentFilter === 'none') {
+        // Show alerts with no equipment
+        if (alert.equipment_id) {
+          return false;
+        }
+      } else {
+        // Show alerts for specific equipment
+        if (String(alert.equipment_id) !== equipmentFilter) {
+          return false;
+        }
+      }
     }
 
     // Filter by search query
@@ -198,6 +233,24 @@ export default function Alerts() {
               <option value="all">All Alerts</option>
               <option value="unacknowledged">Unacknowledged</option>
               <option value="acknowledged">Acknowledged</option>
+            </select>
+          </div>
+
+          {/* Equipment Filter */}
+          <div className="w-48">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Equipment</label>
+            <select
+              value={equipmentFilter}
+              onChange={(e) => setEquipmentFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="all">All Equipment</option>
+              <option value="none">No Equipment</option>
+              {equipment.map((eq) => (
+                <option key={eq.id} value={eq.id}>
+                  {eq.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>
