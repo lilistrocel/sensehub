@@ -551,12 +551,44 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             onChange={(e) => handleTriggerConfigChange('schedule_type', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
                           >
+                            <option value="once">One-time</option>
                             <option value="daily">Daily</option>
                             <option value="weekly">Weekly</option>
                             <option value="hourly">Hourly</option>
                             <option value="custom">Custom (Cron)</option>
                           </select>
                         </div>
+
+                        {formData.trigger_config?.schedule_type === 'once' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Run At (Date & Time)
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={formData.trigger_config?.run_at || ''}
+                              min={new Date().toISOString().slice(0, 16)}
+                              onChange={(e) => {
+                                const selectedDate = new Date(e.target.value);
+                                const now = new Date();
+                                if (selectedDate < now) {
+                                  // Don't allow past dates - show error but don't update
+                                  return;
+                                }
+                                handleTriggerConfigChange('run_at', e.target.value);
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Select a future date and time for this automation to run once.
+                            </p>
+                            {formData.trigger_config?.run_at && new Date(formData.trigger_config.run_at) < new Date() && (
+                              <p className="mt-1 text-xs text-red-500">
+                                ⚠️ Selected date is in the past. Please select a future date.
+                              </p>
+                            )}
+                          </div>
+                        )}
 
                         {formData.trigger_config?.schedule_type === 'daily' && (
                           <div>
@@ -655,7 +687,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                                 const ampm = parseInt(hours) >= 12 ? 'PM' : 'AM';
                                 const timeStr = `${hour12}:${mins} ${ampm}`;
 
-                                if (schedType === 'daily') {
+                                if (schedType === 'once') {
+                                  if (tc?.run_at) {
+                                    const runDate = new Date(tc.run_at);
+                                    return `Runs once on ${runDate.toLocaleDateString()} at ${runDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                                  }
+                                  return 'Select a date and time';
+                                } else if (schedType === 'daily') {
                                   return `Runs daily at ${timeStr}`;
                                 } else if (schedType === 'weekly') {
                                   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -1309,7 +1347,13 @@ function getScheduleDescription(tc) {
   const ampm = parseInt(hours) >= 12 ? 'PM' : 'AM';
   const timeStr = `${hour12}:${mins} ${ampm}`;
 
-  if (schedType === 'daily') {
+  if (schedType === 'once') {
+    if (tc.run_at) {
+      const runDate = new Date(tc.run_at);
+      return `Once on ${runDate.toLocaleDateString()} at ${runDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    return 'One-time (date not set)';
+  } else if (schedType === 'daily') {
     return `Daily at ${timeStr}`;
   } else if (schedType === 'weekly') {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

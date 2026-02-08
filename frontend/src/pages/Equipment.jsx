@@ -117,6 +117,9 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
       });
 
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('This equipment no longer exists. It may have been deleted.');
+        }
         throw new Error('Failed to fetch equipment details');
       }
 

@@ -1,0 +1,5 @@
+ID,Name,Description,Type,Protocol,Address,Status,Enabled,Last Reading,Last Communication,Zones,Created At,Updated At
+28,DELETE_TEST_149,Test for viewing deleted equipment,,modbus,,offline,Yes,,,,2026-02-08 16:36:12,2026-02-08 16:36:12
+15,TEST_SENSOR_131,Test sensor for feature 131 verification,Temperature Sensor,modbus,192.168.1.100:502,offline,Yes,,,,2026-02-08 15:19:42,2026-02-08 15:19:42
+16,TEST_SENSOR_131B,Second test for success toast,Humidity Sensor,modbus,,offline,Yes,,,,2026-02-08 15:20:02,2026-02-08 15:20:02
+19,TOAST_VERIFY_131,,,modbus,,offline,Yes,,,,2026-02-08 15:21:08,2026-02-08 15:21:08
