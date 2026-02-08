@@ -2,10 +2,42 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 71
-- **Completion:** ~37.6%
+- **Passing:** 73
+- **Completion:** ~38.6%
 
 ## Session Log
+
+### Session - 2026-02-08 (Feature #66 - Zone Hierarchy)
+**Assigned Feature:** #66 - Zone hierarchy parent-child works
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #66 - Zone hierarchy parent-child works:
+- Logged in as admin user
+- Navigated to /zones page
+- Building A zone already existed
+- Created "Floor 1" zone with "Building A" as parent zone
+- Used "Parent Zone" dropdown in Add Zone modal to set hierarchy
+- Verified Building A zone detail shows "Child Zones (1)" section with Floor 1 listed
+- Verified Floor 1 zone detail shows "Parent Zone: Building A"
+- Edit Zone modal allows changing parent zone for existing zones
+- Database confirmed: Floor 1 (id=15) has parent_id=14 (Building A)
+
+**Implementation already existed:**
+- Backend: zones.js supports parent_id in POST/PUT, returns children in GET /:id
+- Frontend: Zones.jsx has parent zone dropdown in Add/Edit modals
+- Frontend: Zone detail shows parent zone and child zones sections
+- Database: zones table has parent_id column with foreign key to self
+
+**Verification:**
+- Browser automation tests passed for all feature steps
+- Screenshots captured: zone list, add zone with parent, Building A with child zones, Floor 1 showing parent zone
+- Zero console errors
+- No mock data patterns in codebase
+- Real database queries confirmed via sqlite3
+
+---
 
 ### Session - 2026-02-08 (Features #67, #69 - Zone Search and Dashboard)
 **Assigned Features:**
