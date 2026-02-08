@@ -287,8 +287,49 @@ router.post('/factory-reset', requireRole('admin'), (req, res) => {
     return res.status(401).json({ error: 'Unauthorized', message: 'Invalid password' });
   }
 
-  // In production, this would perform factory reset
-  res.json({ message: 'Factory reset initiated - system will restart' });
+  try {
+    // Clear all data tables (in order to respect foreign keys)
+    const tablesToClear = [
+      'sync_queue',
+      'automation_logs',
+      'alerts',
+      'readings',
+      'equipment_zones',
+      'automations',
+      'zones',
+      'equipment',
+      'sessions',
+      'users',
+      'system_settings'
+    ];
+
+    // Use transaction for atomic operation
+    const clearTables = db.transaction(() => {
+      for (const table of tablesToClear) {
+        try {
+          db.prepare(`DELETE FROM ${table}`).run();
+        } catch (e) {
+          console.log(`Note: Could not clear table ${table}: ${e.message}`);
+        }
+      }
+
+      // Mark system as needing setup by ensuring no users exist
+      // The setup-status endpoint checks for user count
+    });
+
+    clearTables();
+
+    console.log('Factory reset completed - all data cleared');
+
+    res.json({
+      success: true,
+      message: 'Factory reset complete - redirecting to setup wizard',
+      redirectTo: '/setup'
+    });
+  } catch (error) {
+    console.error('Factory reset error:', error);
+    res.status(500).json({ error: 'Internal Server Error', message: 'Factory reset failed' });
+  }
 });
 
 module.exports = router;

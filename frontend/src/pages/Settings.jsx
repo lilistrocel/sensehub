@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Users from './settings/Users';
 import Profile from './settings/Profile';
@@ -1890,7 +1890,8 @@ function CloudSettings() {
 }
 
 function BackupSettings() {
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
   const [showFactoryResetModal, setShowFactoryResetModal] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetError, setResetError] = useState(null);
@@ -1957,7 +1958,11 @@ function BackupSettings() {
       }
 
       setResetSuccess(true);
-      // In production, the system would restart here
+      // Clear local auth state and redirect to setup wizard after a brief delay
+      setTimeout(() => {
+        logout();
+        navigate('/setup');
+      }, 2000);
     } catch (err) {
       setResetError(err.message);
     } finally {
