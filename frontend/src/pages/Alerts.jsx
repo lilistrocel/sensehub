@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useSettings } from '../context/SettingsContext';
 
 export default function Alerts() {
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
+  const { formatDateTime } = useSettings();
   const [alerts, setAlerts] = useState([]);
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -340,7 +342,7 @@ export default function Alerts() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(alert.created_at).toLocaleString()}
+                      {formatDateTime(alert.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {alert.acknowledged ? (

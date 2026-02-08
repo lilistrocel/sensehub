@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useSettings } from '../context/SettingsContext';
 
 const API_BASE = '/api';
 
@@ -197,6 +198,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
+  const { formatDateTime, formatTime } = useSettings();
   const [zones, setZones] = useState([]);
   const [selectedZoneId, setSelectedZoneId] = useState('');
   const [overview, setOverview] = useState(null);
@@ -714,7 +716,7 @@ export default function Dashboard() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {equip.last_communication
-                              ? new Date(equip.last_communication).toLocaleString()
+                              ? formatDateTime(equip.last_communication)
                               : 'Never'}
                           </td>
                         </tr>
@@ -746,7 +748,7 @@ export default function Dashboard() {
                       <div>
                         <p className="text-sm font-medium text-gray-900">{alert.message}</p>
                         <p className="text-xs text-gray-500">
-                          {new Date(alert.created_at).toLocaleString()}
+                          {formatDateTime(alert.created_at)}
                         </p>
                       </div>
                     </div>
@@ -773,7 +775,7 @@ export default function Dashboard() {
                   )}
                   {lastReadingUpdate && (
                     <span className="text-xs text-gray-400">
-                      Updated: {lastReadingUpdate.toLocaleTimeString()}
+                      Updated: {formatTime(lastReadingUpdate)}
                     </span>
                   )}
                 </div>
@@ -803,7 +805,7 @@ export default function Dashboard() {
                     </div>
                     <div className="text-xs text-gray-400 mt-2">
                       {reading.timestamp
-                        ? new Date(reading.timestamp).toLocaleString()
+                        ? formatDateTime(reading.timestamp)
                         : 'No timestamp'}
                     </div>
                   </div>
@@ -980,7 +982,7 @@ export default function Dashboard() {
                       <div className="text-right">
                         <div className="text-xs text-gray-500">
                           {automation.last_run
-                            ? `Last run: ${new Date(automation.last_run).toLocaleString()}`
+                            ? `Last run: ${formatDateTime(automation.last_run)}`
                             : 'Never run'}
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
@@ -1024,7 +1026,7 @@ export default function Dashboard() {
                         <p className="text-sm font-medium text-gray-900">{alert.message}</p>
                         <p className="text-xs text-gray-500">
                           {alert.equipment_name && `${alert.equipment_name} • `}
-                          {new Date(alert.created_at).toLocaleString()}
+                          {formatDateTime(alert.created_at)}
                         </p>
                       </div>
                     </div>
@@ -1093,7 +1095,7 @@ export default function Dashboard() {
                   <div>
                     <span className="text-sm font-medium text-gray-500">Created:</span>
                     <p className="mt-1 text-sm text-gray-900">
-                      {new Date(selectedAlert.created_at).toLocaleString()}
+                      {formatDateTime(selectedAlert.created_at)}
                     </p>
                   </div>
 
@@ -1104,7 +1106,7 @@ export default function Dashboard() {
                       {selectedAlert.acknowledged ? (
                         <span className="text-green-600">
                           Acknowledged
-                          {selectedAlert.acknowledged_at && ` on ${new Date(selectedAlert.acknowledged_at).toLocaleString()}`}
+                          {selectedAlert.acknowledged_at && ` on ${formatDateTime(selectedAlert.acknowledged_at)}`}
                         </span>
                       ) : (
                         <span className="text-amber-600">Unacknowledged</span>

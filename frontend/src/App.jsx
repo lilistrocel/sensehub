@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { AlertSoundProvider } from './context/AlertSoundContext';
 import { ToastProvider } from './context/ToastContext';
+import { SettingsProvider } from './context/SettingsContext';
 import Layout from './components/Layout';
 import { ToastContainer } from './components/Toast';
 import Login from './pages/Login';
@@ -166,14 +167,16 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <WebSocketProvider>
-          <AlertSoundProvider>
-            <ToastProvider>
-              <AppRoutes />
-              <ToastContainer />
-            </ToastProvider>
-          </AlertSoundProvider>
-        </WebSocketProvider>
+        <SettingsProvider>
+          <WebSocketProvider>
+            <AlertSoundProvider>
+              <ToastProvider>
+                <AppRoutes />
+                <ToastContainer />
+              </ToastProvider>
+            </AlertSoundProvider>
+          </WebSocketProvider>
+        </SettingsProvider>
       </AuthProvider>
     </BrowserRouter>
   );
