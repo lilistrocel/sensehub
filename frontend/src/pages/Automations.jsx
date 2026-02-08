@@ -523,10 +523,11 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className={formData.trigger_config?.type === 'schedule' ? '' : ''}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="trigger-type" className="block text-sm font-medium text-gray-700 mb-1">
                         Trigger Type
                       </label>
                       <select
+                        id="trigger-type"
                         value={formData.trigger_config?.type || 'manual'}
                         onChange={handleTriggerTypeChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
@@ -541,10 +542,11 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     {formData.trigger_config?.type === 'schedule' && (
                       <>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label htmlFor="schedule-type" className="block text-sm font-medium text-gray-700 mb-1">
                             Schedule Type
                           </label>
                           <select
+                            id="schedule-type"
                             value={formData.trigger_config?.schedule_type || 'daily'}
                             onChange={(e) => handleTriggerConfigChange('schedule_type', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"

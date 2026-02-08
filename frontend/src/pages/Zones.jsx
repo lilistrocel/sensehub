@@ -455,10 +455,11 @@ export default function Zones() {
             <h2 className="text-xl font-bold text-gray-900 mb-4">Add New Zone</h2>
             <form onSubmit={handleAddZone}>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="zone-name" className="block text-sm font-medium text-gray-700 mb-1">
                   Zone Name *
                 </label>
                 <input
+                  id="zone-name"
                   type="text"
                   value={newZone.name}
                   onChange={(e) => setNewZone({ ...newZone, name: e.target.value })}
@@ -468,10 +469,11 @@ export default function Zones() {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="zone-description" className="block text-sm font-medium text-gray-700 mb-1">
                   Description
                 </label>
                 <textarea
+                  id="zone-description"
                   value={newZone.description}
                   onChange={(e) => setNewZone({ ...newZone, description: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -480,10 +482,11 @@ export default function Zones() {
                 />
               </div>
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="zone-parent" className="block text-sm font-medium text-gray-700 mb-1">
                   Parent Zone
                 </label>
                 <select
+                  id="zone-parent"
                   value={newZone.parent_id}
                   onChange={(e) => setNewZone({ ...newZone, parent_id: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -727,10 +730,11 @@ export default function Zones() {
               </div>
             ) : (
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="select-equipment" className="block text-sm font-medium text-gray-700 mb-2">
                   Select Equipment
                 </label>
                 <select
+                  id="select-equipment"
                   value={selectedEquipmentId}
                   onChange={(e) => setSelectedEquipmentId(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -786,10 +790,11 @@ export default function Zones() {
             ) : (
               <form onSubmit={handleEditZone}>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="edit-zone-name" className="block text-sm font-medium text-gray-700 mb-1">
                     Zone Name *
                   </label>
                   <input
+                    id="edit-zone-name"
                     type="text"
                     value={editZone.name}
                     onChange={(e) => setEditZone({ ...editZone, name: e.target.value })}
@@ -799,10 +804,11 @@ export default function Zones() {
                   />
                 </div>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="edit-zone-description" className="block text-sm font-medium text-gray-700 mb-1">
                     Description
                   </label>
                   <textarea
+                    id="edit-zone-description"
                     value={editZone.description}
                     onChange={(e) => setEditZone({ ...editZone, description: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -811,10 +817,11 @@ export default function Zones() {
                   />
                 </div>
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="edit-zone-parent" className="block text-sm font-medium text-gray-700 mb-1">
                     Parent Zone
                   </label>
                   <select
+                    id="edit-zone-parent"
                     value={editZone.parent_id || ''}
                     onChange={(e) => setEditZone({ ...editZone, parent_id: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
