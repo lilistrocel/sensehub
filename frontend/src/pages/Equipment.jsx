@@ -830,7 +830,113 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 )}
               </div>
             </div>
-          )}
+          ) : activeTab === 'history' ? (
+            /* History Tab */
+            <div className="space-y-4">
+              {/* Time Range Selector */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Time Range</span>
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value)}
+                  className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="1h">Last Hour</option>
+                  <option value="24h">Last 24 Hours</option>
+                  <option value="7d">Last 7 Days</option>
+                  <option value="30d">Last 30 Days</option>
+                </select>
+              </div>
+
+              {/* History Loading State */}
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                  <span className="ml-3 text-gray-500 text-sm">Loading history...</span>
+                </div>
+              ) : historyError ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-red-800 text-sm">{historyError}</span>
+                  </div>
+                  <button
+                    onClick={fetchHistory}
+                    className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : historyData.length === 0 ? (
+                <div className="text-center py-8">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No readings</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    No historical data available for the selected time range.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="bg-blue-50 rounded-lg p-3 text-center">
+                      <div className="text-xs text-blue-600 uppercase font-medium">Readings</div>
+                      <div className="text-xl font-bold text-blue-900">{historyData.length}</div>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <div className="text-xs text-green-600 uppercase font-medium">Avg Value</div>
+                      <div className="text-xl font-bold text-green-900">
+                        {(historyData.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0) / historyData.length).toFixed(2)}
+                      </div>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-3 text-center">
+                      <div className="text-xs text-purple-600 uppercase font-medium">Range</div>
+                      <div className="text-sm font-bold text-purple-900">
+                        {Math.min(...historyData.map(r => parseFloat(r.value) || 0)).toFixed(1)} - {Math.max(...historyData.map(r => parseFloat(r.value) || 0)).toFixed(1)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* History Table */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {historyData.slice(0, 10).map((reading, idx) => (
+                          <tr key={reading.id || idx} className="hover:bg-gray-50">
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {new Date(reading.timestamp).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-2 text-sm font-mono text-gray-900">
+                              {reading.value}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-500">
+                              {reading.unit || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {historyData.length > 10 && (
+                      <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500 text-center border-t">
+                        Showing 10 of {historyData.length} readings
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
 
           {/* Close Button */}
           <div className="mt-6 flex justify-end">

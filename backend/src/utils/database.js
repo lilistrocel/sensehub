@@ -162,6 +162,19 @@ const initSchema = () => {
       synced_at TEXT
     );
 
+    -- Equipment error logs table
+    CREATE TABLE IF NOT EXISTS equipment_errors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      equipment_id INTEGER NOT NULL,
+      error_type TEXT CHECK(error_type IN ('connection', 'timeout', 'protocol', 'validation', 'hardware', 'other')) DEFAULT 'other',
+      message TEXT NOT NULL,
+      details TEXT,
+      resolved INTEGER DEFAULT 0,
+      resolved_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
+    );
+
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
@@ -169,6 +182,8 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_automation_logs_automation ON automation_logs(automation_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
     CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
+    CREATE INDEX IF NOT EXISTS idx_equipment_errors_equipment ON equipment_errors(equipment_id);
+    CREATE INDEX IF NOT EXISTS idx_equipment_errors_created ON equipment_errors(created_at);
   `);
 
   // Add calibration columns to existing equipment table if they don't exist
