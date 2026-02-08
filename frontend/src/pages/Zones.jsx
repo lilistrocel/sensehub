@@ -24,6 +24,8 @@ export default function Zones() {
   const [editSaving, setEditSaving] = useState(false);
   const [editSuccess, setEditSuccess] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchZones();
@@ -279,6 +281,42 @@ export default function Zones() {
       alert(err.message);
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  const openDeleteModal = () => {
+    setShowDeleteModal(true);
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+  };
+
+  const handleDeleteZone = async () => {
+    if (!selectedZone) return;
+
+    try {
+      setDeleting(true);
+      const response = await fetch(`${API_BASE}/zones/${selectedZone.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to delete zone');
+      }
+
+      // Close modals and refresh list
+      closeDeleteModal();
+      closeDetailModal();
+      fetchZones();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
