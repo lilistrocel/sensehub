@@ -1301,6 +1301,8 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [retryFn, setRetryFn] = useState(null);
+  // Ref to track submission state synchronously for double-click protection
+  const isSubmittingRef = React.useRef(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -1309,11 +1311,17 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
+
+    // Double-click protection: use ref to check synchronously
+    if (isSubmittingRef.current || saving) return;
+    isSubmittingRef.current = true;
+
     setError(null);
     setSuccessMessage(null);
     setRetryFn(null);
 
     if (!formData.name.trim()) {
+      isSubmittingRef.current = false;
       setError({ message: 'Name is required', canRetry: false });
       return;
     }
@@ -1369,6 +1377,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
       }
     } finally {
       setSaving(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -1556,6 +1565,8 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [retryFn, setRetryFn] = useState(null);
+  // Ref to track submission state synchronously for double-click protection
+  const isSubmittingRef = React.useRef(false);
 
   // Initialize form data when equipment changes
   useEffect(() => {
@@ -1570,6 +1581,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
       setError(null);
       setSuccessMessage(null);
       setRetryFn(null);
+      isSubmittingRef.current = false;
     }
   }, [equipment]);
 
@@ -1580,11 +1592,17 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
+
+    // Double-click protection: use ref to check synchronously
+    if (isSubmittingRef.current || saving) return;
+    isSubmittingRef.current = true;
+
     setError(null);
     setSuccessMessage(null);
     setRetryFn(null);
 
     if (!formData.name.trim()) {
+      isSubmittingRef.current = false;
       setError({ message: 'Name is required', canRetry: false });
       return;
     }
@@ -1631,6 +1649,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
       }
     } finally {
       setSaving(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -1962,6 +1981,60 @@ export default function Equipment() {
     fetchData();
   };
 
+  // Export equipment to CSV
+  const handleExportCSV = () => {
+    // Define CSV headers
+    const headers = ['ID', 'Name', 'Description', 'Type', 'Protocol', 'Address', 'Status', 'Enabled', 'Last Reading', 'Last Communication', 'Zones', 'Created At', 'Updated At'];
+
+    // Convert equipment data to CSV rows
+    const rows = equipment.map(eq => {
+      const zoneNames = eq.zones ? eq.zones.map(z => z.name).join('; ') : '';
+      return [
+        eq.id,
+        eq.name || '',
+        eq.description || '',
+        eq.type || '',
+        eq.protocol || '',
+        eq.address || '',
+        eq.status || '',
+        eq.enabled ? 'Yes' : 'No',
+        eq.last_reading || '',
+        eq.last_communication || '',
+        zoneNames,
+        eq.created_at || '',
+        eq.updated_at || ''
+      ];
+    });
+
+    // Escape CSV values (handle commas, quotes, newlines)
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    // Build CSV content
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `equipment-export-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleScan = async () => {
     setScanning(true);
     setScanResult(null);
@@ -2177,6 +2250,17 @@ export default function Equipment() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add Equipment
+          </button>
+          <button
+            onClick={handleExportCSV}
+            disabled={equipment.length === 0}
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Export equipment to CSV"
+          >
+            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export CSV
           </button>
         </div>
       </div>
