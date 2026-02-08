@@ -37,11 +37,340 @@ const settingsTabs = [
 ];
 
 function SystemSettings() {
+  const { token } = useAuth();
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [timezone, setTimezone] = useState('UTC');
+  const [locale, setLocale] = useState('en-US');
+  const [dataRetention, setDataRetention] = useState(30);
+
+  // Common timezones grouped by region
+  const timezones = [
+    { group: 'Americas', options: [
+      { value: 'America/New_York', label: 'Eastern Time (US & Canada)' },
+      { value: 'America/Chicago', label: 'Central Time (US & Canada)' },
+      { value: 'America/Denver', label: 'Mountain Time (US & Canada)' },
+      { value: 'America/Los_Angeles', label: 'Pacific Time (US & Canada)' },
+      { value: 'America/Anchorage', label: 'Alaska' },
+      { value: 'America/Phoenix', label: 'Arizona (no DST)' },
+      { value: 'Pacific/Honolulu', label: 'Hawaii' },
+      { value: 'America/Toronto', label: 'Eastern Time (Canada)' },
+      { value: 'America/Vancouver', label: 'Pacific Time (Canada)' },
+      { value: 'America/Mexico_City', label: 'Mexico City' },
+      { value: 'America/Sao_Paulo', label: 'São Paulo' },
+      { value: 'America/Buenos_Aires', label: 'Buenos Aires' },
+    ]},
+    { group: 'Europe', options: [
+      { value: 'Europe/London', label: 'London (GMT/BST)' },
+      { value: 'Europe/Paris', label: 'Paris (CET)' },
+      { value: 'Europe/Berlin', label: 'Berlin (CET)' },
+      { value: 'Europe/Amsterdam', label: 'Amsterdam (CET)' },
+      { value: 'Europe/Madrid', label: 'Madrid (CET)' },
+      { value: 'Europe/Rome', label: 'Rome (CET)' },
+      { value: 'Europe/Zurich', label: 'Zurich (CET)' },
+      { value: 'Europe/Stockholm', label: 'Stockholm (CET)' },
+      { value: 'Europe/Warsaw', label: 'Warsaw (CET)' },
+      { value: 'Europe/Athens', label: 'Athens (EET)' },
+      { value: 'Europe/Moscow', label: 'Moscow (MSK)' },
+    ]},
+    { group: 'Asia', options: [
+      { value: 'Asia/Dubai', label: 'Dubai (GST)' },
+      { value: 'Asia/Kolkata', label: 'India (IST)' },
+      { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
+      { value: 'Asia/Hong_Kong', label: 'Hong Kong (HKT)' },
+      { value: 'Asia/Shanghai', label: 'China (CST)' },
+      { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+      { value: 'Asia/Seoul', label: 'Seoul (KST)' },
+      { value: 'Asia/Bangkok', label: 'Bangkok (ICT)' },
+      { value: 'Asia/Jakarta', label: 'Jakarta (WIB)' },
+    ]},
+    { group: 'Pacific & Oceania', options: [
+      { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
+      { value: 'Australia/Melbourne', label: 'Melbourne (AEST/AEDT)' },
+      { value: 'Australia/Brisbane', label: 'Brisbane (AEST)' },
+      { value: 'Australia/Perth', label: 'Perth (AWST)' },
+      { value: 'Australia/Adelaide', label: 'Adelaide (ACST/ACDT)' },
+      { value: 'Pacific/Auckland', label: 'Auckland (NZST/NZDT)' },
+      { value: 'Pacific/Fiji', label: 'Fiji' },
+    ]},
+    { group: 'Africa', options: [
+      { value: 'Africa/Cairo', label: 'Cairo (EET)' },
+      { value: 'Africa/Johannesburg', label: 'Johannesburg (SAST)' },
+      { value: 'Africa/Lagos', label: 'Lagos (WAT)' },
+      { value: 'Africa/Nairobi', label: 'Nairobi (EAT)' },
+    ]},
+    { group: 'Other', options: [
+      { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
+    ]},
+  ];
+
+  // Locale options
+  const locales = [
+    { value: 'en-US', label: 'English (US)' },
+    { value: 'en-GB', label: 'English (UK)' },
+    { value: 'de-DE', label: 'German' },
+    { value: 'fr-FR', label: 'French' },
+    { value: 'es-ES', label: 'Spanish' },
+    { value: 'pt-BR', label: 'Portuguese (Brazil)' },
+    { value: 'ja-JP', label: 'Japanese' },
+    { value: 'zh-CN', label: 'Chinese (Simplified)' },
+    { value: 'ko-KR', label: 'Korean' },
+  ];
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/settings`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch settings');
+      const data = await response.json();
+      setSettings(data);
+
+      // Extract timezone from settings
+      if (data.timezone?.timezone) {
+        setTimezone(data.timezone.timezone);
+      }
+      if (data.locale) {
+        setLocale(data.locale);
+      }
+      if (data.dataRetention) {
+        setDataRetention(data.dataRetention);
+      }
+
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchSettings();
+  }, [token]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSuccessMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/settings`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          timezone: { timezone, updatedAt: new Date().toISOString() },
+          locale,
+          dataRetention
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to save settings');
+      }
+
+      setSuccessMessage('Settings saved successfully!');
+      fetchSettings(); // Refresh settings
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Get current time in selected timezone
+  const getCurrentTime = () => {
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZoneName: 'short'
+      }).format(new Date());
+    } catch {
+      return 'Invalid timezone';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48">
+        <svg className="animate-spin h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h2 className="text-lg font-semibold text-gray-900 mb-4">System Settings</h2>
-      <div className="bg-white rounded-lg shadow p-6">
-        <p className="text-gray-500">System settings coming soon.</p>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+          {error}
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm flex items-center">
+          <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          {successMessage}
+        </div>
+      )}
+
+      {/* Timezone Settings */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+          <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Timezone Configuration
+        </h3>
+
+        <p className="text-sm text-gray-500 mb-4">
+          Select the timezone for all system timestamps and scheduled automations.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="timezone" className="block text-sm font-medium text-gray-700 mb-1">
+              System Timezone
+            </label>
+            <select
+              id="timezone"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+            >
+              {timezones.map((group) => (
+                <optgroup key={group.group} label={group.group}>
+                  {group.options.map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+
+          {/* Time Preview */}
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <p className="text-sm text-gray-500 mb-1">Current time in selected timezone:</p>
+            <p className="text-lg font-medium text-gray-900">{getCurrentTime()}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Locale Settings */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+          <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+          </svg>
+          Locale & Language
+        </h3>
+
+        <p className="text-sm text-gray-500 mb-4">
+          Select the language and regional format for dates and numbers.
+        </p>
+
+        <div>
+          <label htmlFor="locale" className="block text-sm font-medium text-gray-700 mb-1">
+            Language / Locale
+          </label>
+          <select
+            id="locale"
+            value={locale}
+            onChange={(e) => setLocale(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+          >
+            {locales.map((loc) => (
+              <option key={loc.value} value={loc.value}>
+                {loc.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Data Retention Settings */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+          <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+          </svg>
+          Data Retention
+        </h3>
+
+        <p className="text-sm text-gray-500 mb-4">
+          Configure how long sensor readings and historical data are retained locally.
+        </p>
+
+        <div>
+          <label htmlFor="dataRetention" className="block text-sm font-medium text-gray-700 mb-1">
+            Retention Period (days)
+          </label>
+          <select
+            id="dataRetention"
+            value={dataRetention}
+            onChange={(e) => setDataRetention(parseInt(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+          >
+            <option value={7}>7 days</option>
+            <option value={14}>14 days</option>
+            <option value={30}>30 days (default)</option>
+            <option value={60}>60 days</option>
+            <option value={90}>90 days</option>
+            <option value={180}>180 days</option>
+            <option value={365}>365 days (1 year)</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500">
+            Data older than this will be automatically purged to save storage space.
+          </p>
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+        >
+          {saving ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Saving...
+            </>
+          ) : (
+            <>
+              <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Save Settings
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -66,6 +395,24 @@ function CloudSettings() {
   const [testResult, setTestResult] = useState(null);
   const [syncHistory, setSyncHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [pendingQueue, setPendingQueue] = useState([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+
+  const fetchPendingQueue = async () => {
+    setQueueLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/cloud/pending`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch pending queue');
+      const data = await response.json();
+      setPendingQueue(data);
+    } catch (err) {
+      console.error('Error fetching pending queue:', err);
+    } finally {
+      setQueueLoading(false);
+    }
+  };
 
   const fetchSyncHistory = async () => {
     setHistoryLoading(true);
@@ -197,7 +544,11 @@ function CloudSettings() {
     fetchCloudStatus();
     fetchSuggestedPrograms();
     fetchSyncHistory();
-    const interval = setInterval(fetchCloudStatus, 30000);
+    fetchPendingQueue();
+    const interval = setInterval(() => {
+      fetchCloudStatus();
+      fetchPendingQueue();
+    }, 30000);
     return () => clearInterval(interval);
   }, [token]);
 
@@ -265,6 +616,7 @@ function CloudSettings() {
       const data = await response.json();
       setSyncMessage({ type: 'success', text: `Sync triggered at ${new Date(data.timestamp).toLocaleString()}` });
       fetchCloudStatus();
+      fetchSyncHistory(); // Refresh sync history
     } catch (err) {
       setSyncMessage({ type: 'error', text: err.message });
     } finally {
@@ -529,6 +881,219 @@ function CloudSettings() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Pending Sync Queue Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900 flex items-center">
+            <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Pending Sync Queue
+            {pendingQueue.length > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                {pendingQueue.length}
+              </span>
+            )}
+          </h3>
+          <button
+            onClick={fetchPendingQueue}
+            disabled={queueLoading}
+            className="text-gray-400 hover:text-gray-600"
+            title="Refresh pending queue"
+          >
+            <svg className={`h-5 w-5 ${queueLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          Items waiting to be synchronized with the Cloud. Changes made while offline are queued here.
+        </p>
+
+        {queueLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <svg className="animate-spin h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : pendingQueue.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <svg className="mx-auto h-10 w-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <p className="mt-2 text-gray-500">No pending items</p>
+            <p className="text-sm text-gray-400">All changes have been synchronized</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entity</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {pendingQueue.map((item) => {
+                  const payload = item.payload ? JSON.parse(item.payload) : {};
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded mr-2">
+                            {item.entity_type}
+                          </span>
+                          <span className="text-sm text-gray-900">
+                            {payload.name || `#${item.entity_id}`}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          item.action === 'create' ? 'bg-green-100 text-green-700' :
+                          item.action === 'update' ? 'bg-blue-100 text-blue-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {item.action}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          item.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                          item.status === 'syncing' ? 'bg-blue-100 text-blue-700' :
+                          item.status === 'failed' ? 'bg-red-100 text-red-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {item.status}
+                        </span>
+                        {item.retry_count > 0 && (
+                          <span className="ml-1 text-xs text-gray-500">
+                            (retry #{item.retry_count})
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                        {new Date(item.created_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Sync History Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900 flex items-center">
+            <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Sync History
+          </h3>
+          <button
+            onClick={fetchSyncHistory}
+            disabled={historyLoading}
+            className="text-gray-400 hover:text-gray-600"
+            title="Refresh sync history"
+          >
+            <svg className={`h-5 w-5 ${historyLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-500 mb-4">
+          View the history of Cloud synchronization operations.
+        </p>
+
+        {historyLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <svg className="animate-spin h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        ) : syncHistory.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="mt-2 text-gray-500">No sync history yet</p>
+            <p className="text-sm text-gray-400">Sync operations will be recorded here</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Triggered By</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {syncHistory.map((sync) => (
+                  <tr key={sync.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                      {new Date(sync.started_at).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        sync.sync_type === 'manual' ? 'bg-blue-100 text-blue-700' :
+                        sync.sync_type === 'automatic' ? 'bg-purple-100 text-purple-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {sync.sync_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full flex items-center w-fit ${
+                        sync.status === 'success' ? 'bg-green-100 text-green-700' :
+                        sync.status === 'partial' ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {sync.status === 'success' ? (
+                          <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : sync.status === 'partial' ? (
+                          <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        ) : (
+                          <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                        {sync.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                      {sync.items_synced} synced
+                      {sync.items_failed > 0 && (
+                        <span className="text-red-500 ml-1">({sync.items_failed} failed)</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                      {sync.triggered_by_name || 'System'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Suggested Programs Section */}

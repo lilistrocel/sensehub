@@ -162,6 +162,20 @@ const initSchema = () => {
       synced_at TEXT
     );
 
+    -- Cloud sync history table
+    CREATE TABLE IF NOT EXISTS sync_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sync_type TEXT CHECK(sync_type IN ('manual', 'automatic', 'scheduled')) DEFAULT 'manual',
+      status TEXT CHECK(status IN ('success', 'partial', 'failed')) DEFAULT 'success',
+      items_synced INTEGER DEFAULT 0,
+      items_failed INTEGER DEFAULT 0,
+      message TEXT,
+      triggered_by INTEGER,
+      started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT,
+      FOREIGN KEY (triggered_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
     -- Equipment error logs table
     CREATE TABLE IF NOT EXISTS equipment_errors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

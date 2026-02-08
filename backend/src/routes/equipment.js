@@ -4,6 +4,18 @@ const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Helper function to add item to sync queue
+const queueForSync = (entityType, entityId, action, payload = null) => {
+  try {
+    db.prepare(`
+      INSERT INTO sync_queue (entity_type, entity_id, action, payload, status, created_at)
+      VALUES (?, ?, ?, ?, 'pending', datetime('now'))
+    `).run(entityType, entityId, action, payload ? JSON.stringify(payload) : null);
+  } catch (err) {
+    console.error('Error queuing for sync:', err);
+  }
+};
+
 // GET /api/equipment - List all equipment
 router.get('/', (req, res) => {
   const { status, search, zone } = req.query;
@@ -45,6 +57,9 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
   ).run(name, description, type, protocol, address);
 
   const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(result.lastInsertRowid);
+
+  // Queue for cloud sync
+  queueForSync('equipment', equipment.id, 'create', equipment);
 
   global.broadcast('equipment_created', equipment);
 
@@ -91,6 +106,10 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   );
 
   const updated = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+
+  // Queue for cloud sync
+  queueForSync('equipment', updated.id, 'update', updated);
+
   global.broadcast('equipment_updated', updated);
 
   res.json(updated);
@@ -98,13 +117,23 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
 
 // DELETE /api/equipment/:id - Delete equipment
 router.delete('/:id', requireRole('admin'), (req, res) => {
-  const result = db.prepare('DELETE FROM equipment WHERE id = ?').run(req.params.id);
+  const equipmentId = parseInt(req.params.id);
+
+  // Get equipment info before deletion for sync queue
+  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+
+  const result = db.prepare('DELETE FROM equipment WHERE id = ?').run(equipmentId);
 
   if (result.changes === 0) {
     return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
   }
 
-  global.broadcast('equipment_deleted', { id: parseInt(req.params.id) });
+  // Queue for cloud sync
+  if (equipment) {
+    queueForSync('equipment', equipmentId, 'delete', { id: equipmentId, name: equipment.name });
+  }
+
+  global.broadcast('equipment_deleted', { id: equipmentId });
 
   res.json({ message: 'Equipment deleted successfully' });
 });
