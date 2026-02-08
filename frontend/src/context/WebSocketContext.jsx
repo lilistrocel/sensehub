@@ -3,6 +3,11 @@ import { useAuth } from './AuthContext';
 
 const WebSocketContext = createContext(null);
 
+// Heartbeat interval in milliseconds (30 seconds)
+const HEARTBEAT_INTERVAL = 30000;
+// Pong timeout - if no pong received within this time, consider connection dead
+const PONG_TIMEOUT = 10000;
+
 export function WebSocketProvider({ children }) {
   const { isAuthenticated } = useAuth();
   const [connected, setConnected] = useState(false);
@@ -10,6 +15,9 @@ export function WebSocketProvider({ children }) {
   const wsRef = useRef(null);
   const listenersRef = useRef({});
   const reconnectTimeoutRef = useRef(null);
+  const heartbeatIntervalRef = useRef(null);
+  const pongTimeoutRef = useRef(null);
+  const missedPongsRef = useRef(0);
 
   // Subscribe to specific event types
   const subscribe = useCallback((eventType, callback) => {
@@ -38,6 +46,53 @@ export function WebSocketProvider({ children }) {
     });
   }, []);
 
+  // Start heartbeat mechanism
+  const startHeartbeat = useCallback(() => {
+    // Clear any existing intervals
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+    if (pongTimeoutRef.current) {
+      clearTimeout(pongTimeoutRef.current);
+    }
+
+    missedPongsRef.current = 0;
+
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        // Send ping
+        wsRef.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+
+        // Set timeout for pong response
+        pongTimeoutRef.current = setTimeout(() => {
+          missedPongsRef.current++;
+          console.warn(`WebSocket: Missed pong response (${missedPongsRef.current})`);
+
+          // If we've missed 2 pongs, force reconnect
+          if (missedPongsRef.current >= 2) {
+            console.warn('WebSocket: Connection appears stale, forcing reconnect');
+            if (wsRef.current) {
+              wsRef.current.close();
+            }
+          }
+        }, PONG_TIMEOUT);
+      }
+    }, HEARTBEAT_INTERVAL);
+  }, []);
+
+  // Stop heartbeat mechanism
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+    if (pongTimeoutRef.current) {
+      clearTimeout(pongTimeoutRef.current);
+      pongTimeoutRef.current = null;
+    }
+    missedPongsRef.current = 0;
+  }, []);
+
   // Connect to WebSocket
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -54,11 +109,23 @@ export function WebSocketProvider({ children }) {
       ws.onopen = () => {
         console.log('WebSocket connected');
         setConnected(true);
+        startHeartbeat();
       };
 
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+
+          // Handle pong response - clear the timeout and reset missed count
+          if (message.type === 'pong') {
+            if (pongTimeoutRef.current) {
+              clearTimeout(pongTimeoutRef.current);
+              pongTimeoutRef.current = null;
+            }
+            missedPongsRef.current = 0;
+            return; // Don't process pong as a regular message
+          }
+
           setLastMessage(message);
 
           // Notify listeners based on message type
@@ -76,6 +143,7 @@ export function WebSocketProvider({ children }) {
         console.log('WebSocket disconnected');
         setConnected(false);
         wsRef.current = null;
+        stopHeartbeat();
 
         // Attempt to reconnect after 3 seconds
         if (isAuthenticated) {
@@ -93,10 +161,11 @@ export function WebSocketProvider({ children }) {
     } catch (error) {
       console.error('WebSocket connection error:', error);
     }
-  }, [isAuthenticated, notifyListeners]);
+  }, [isAuthenticated, notifyListeners, startHeartbeat, stopHeartbeat]);
 
   // Disconnect from WebSocket
   const disconnect = useCallback(() => {
+    stopHeartbeat();
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
@@ -106,7 +175,7 @@ export function WebSocketProvider({ children }) {
       wsRef.current = null;
     }
     setConnected(false);
-  }, []);
+  }, [stopHeartbeat]);
 
   // Send a message through WebSocket
   const send = useCallback((data) => {

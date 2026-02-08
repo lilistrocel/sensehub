@@ -64,11 +64,27 @@ wss.on('connection', (ws) => {
   console.log('WebSocket client connected');
 
   ws.on('message', (message) => {
-    console.log('Received:', message.toString());
+    try {
+      const data = JSON.parse(message.toString());
+
+      // Handle ping/pong for connection keepalive
+      if (data.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }));
+        return;
+      }
+
+      console.log('Received:', data);
+    } catch (error) {
+      console.log('Received non-JSON message:', message.toString());
+    }
   });
 
   ws.on('close', () => {
     console.log('WebSocket client disconnected');
+  });
+
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
   });
 
   // Send initial connection confirmation
