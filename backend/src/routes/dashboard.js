@@ -59,7 +59,7 @@ router.get('/overview', (req, res) => {
 
   // Latest sensor readings - get latest reading per equipment
   const latestReadings = db.prepare(`
-    SELECT r.*, e.name as equipment_name, e.status as equipment_status
+    SELECT r.*, e.name as equipment_name, e.status as equipment_status, e.enabled as equipment_enabled
     FROM readings r
     INNER JOIN equipment e ON r.equipment_id = e.id
     WHERE r.id IN (
@@ -67,6 +67,15 @@ router.get('/overview', (req, res) => {
     )
     ORDER BY r.timestamp DESC
     LIMIT 10
+  `).all();
+
+  // Equipment list for direct control (enabled equipment only)
+  const equipmentList = db.prepare(`
+    SELECT id, name, description, type, status, enabled
+    FROM equipment
+    WHERE enabled = 1
+    ORDER BY status DESC, name ASC
+    LIMIT 20
   `).all();
 
   // Historical readings for chart (filtered by time range)
@@ -105,6 +114,7 @@ router.get('/overview', (req, res) => {
     latestReadings,
     activeAutomations,
     chartReadings,
+    equipmentList,
     timeRange: { hours: hoursAgo, startTime }
   });
 });

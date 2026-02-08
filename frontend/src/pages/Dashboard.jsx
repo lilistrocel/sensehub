@@ -193,7 +193,7 @@ function ReadingsChart({ readings }) {
 }
 
 export default function Dashboard() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
   const [zones, setZones] = useState([]);
   const [selectedZoneId, setSelectedZoneId] = useState('');
@@ -205,6 +205,12 @@ export default function Dashboard() {
   const [lastReadingUpdate, setLastReadingUpdate] = useState(null);
   const [timeRange, setTimeRange] = useState('24'); // hours
   const [selectedAlert, setSelectedAlert] = useState(null); // For alert details modal
+  const [equipmentList, setEquipmentList] = useState([]); // For equipment controls
+  const [controlLoading, setControlLoading] = useState({}); // Track loading state per equipment
+  const [controlMessage, setControlMessage] = useState(null); // Control feedback message
+
+  // Check if user can control equipment (admin or operator only)
+  const canControl = user?.role === 'admin' || user?.role === 'operator';
 
   // Time range options
   const timeRangeOptions = [
@@ -236,6 +242,71 @@ export default function Dashboard() {
 
     return () => unsubscribe();
   }, [subscribe]);
+
+  // Subscribe to equipment control events for real-time status updates
+  useEffect(() => {
+    const unsubscribeControl = subscribe('equipment_control', (data) => {
+      // Update equipment status in real-time
+      setEquipmentList(prev => prev.map(eq => {
+        if (eq.id === data.id) {
+          const newStatus = data.action === 'on' ? 'online' :
+                           data.action === 'off' ? 'offline' : eq.status;
+          return { ...eq, status: newStatus };
+        }
+        return eq;
+      }));
+    });
+
+    const unsubscribeStatus = subscribe('equipment_status', (data) => {
+      // Update equipment status when it changes
+      setEquipmentList(prev => prev.map(eq =>
+        eq.id === data.id ? { ...eq, status: data.status } : eq
+      ));
+    });
+
+    return () => {
+      unsubscribeControl();
+      unsubscribeStatus();
+    };
+  }, [subscribe]);
+
+  // Handle equipment control (on/off toggle)
+  const handleEquipmentControl = async (equipmentId, action) => {
+    if (!canControl) return;
+
+    setControlLoading(prev => ({ ...prev, [equipmentId]: true }));
+    setControlMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipmentId}/control`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ action })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to control equipment');
+      }
+
+      // Update local state immediately
+      setEquipmentList(prev => prev.map(eq =>
+        eq.id === equipmentId
+          ? { ...eq, status: action === 'on' ? 'online' : 'offline' }
+          : eq
+      ));
+
+      setControlMessage({ type: 'success', text: `Equipment turned ${action}!` });
+      setTimeout(() => setControlMessage(null), 3000);
+    } catch (err) {
+      setControlMessage({ type: 'error', text: err.message });
+    } finally {
+      setControlLoading(prev => ({ ...prev, [equipmentId]: false }));
+    }
+  };
 
   // Fetch zones for the dropdown
   useEffect(() => {
@@ -284,6 +355,10 @@ export default function Dashboard() {
           if (data.latestReadings) {
             setSensorReadings(data.latestReadings);
             setLastReadingUpdate(new Date());
+          }
+          // Initialize equipment list for controls
+          if (data.equipmentList) {
+            setEquipmentList(data.equipmentList);
           }
         }
       } catch (err) {
