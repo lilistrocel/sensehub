@@ -1223,3 +1223,50 @@ Feature #42 - Equipment detail view displays:
 - Alert management
 - Dashboard widgets
 - Equipment discovery scan
+
+---
+
+### Session - 2026-02-08 (Features #112, #113, #114 - System Settings)
+**Assigned Features:**
+- #112 - Timezone setting configurable
+- #113 - Storage usage displayed
+- #114 - Data retention settings configurable
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #112 - Timezone setting configurable:
+- Completely rewrote SystemSettings component (was placeholder)
+- Added timezone selector with regions: Americas, Europe, Asia, Pacific, Africa
+- Real-time preview shows current time in selected timezone
+- Settings saved via PUT /api/settings endpoint
+- Timezone persists in system_settings table with key 'timezone'
+- Also added locale selector and data retention dropdown
+
+Feature #113 - Storage usage displayed:
+- Added GET /api/settings/storage backend endpoint
+- Shows disk usage with progress bar (25% used, 8GB/32GB)
+- Color-coded: green <70%, amber <90%, red 90%+
+- Storage breakdown: Database size, Data Directory, Logs
+- Database Records grid showing table counts (users, sessions, equipment, etc.)
+- Refresh button and timestamp
+
+Feature #114 - Data retention settings configurable:
+- Data retention dropdown with 7, 14, 30, 60, 90, 180, 365 day options
+- Changed from 30 days (default) to 60 days and saved
+- Verified success message displayed
+- Confirmed value in database: dataRetention=60
+- Setting persisted after page refresh
+
+**Files Modified:**
+- frontend/src/pages/Settings.jsx (SystemSettings component rewritten)
+- backend/src/routes/settings.js (added /storage endpoint)
+
+**Verification:**
+- Browser automation tests passed for all features
+- Database persistence confirmed via sqlite3 queries
+- Zero console errors
+- No mock data patterns in codebase
+
+**Progress:** 114/189 features passing (60.3%)
+
