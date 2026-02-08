@@ -645,6 +645,30 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Quick Actions Panel */}
+          {!selectedZoneId && canControl && (
+            <div className="bg-white rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {quickActions.map((action) => (
+                    <button
+                      key={action.id}
+                      onClick={() => handleQuickAction(action)}
+                      className={`${action.color} text-white rounded-lg p-4 flex flex-col items-center gap-2 transition-transform transform hover:scale-105`}
+                      title={action.description}
+                    >
+                      {action.icon}
+                      <span className="text-sm font-medium">{action.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Zone Equipment List */}
           {zoneData && zoneData.equipment && (
             <div className="bg-white rounded-lg shadow">
