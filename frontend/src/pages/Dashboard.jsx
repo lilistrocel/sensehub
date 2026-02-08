@@ -4,6 +4,194 @@ import { useWebSocket } from '../context/WebSocketContext';
 
 const API_BASE = '/api';
 
+// Simple readings chart component
+function ReadingsChart({ readings }) {
+  if (!readings || readings.length === 0) {
+    return (
+      <div className="text-center text-gray-500 py-8">
+        No readings data available for this time range
+      </div>
+    );
+  }
+
+  // Group readings by equipment
+  const equipmentReadings = {};
+  readings.forEach((reading) => {
+    const name = reading.equipment_name || `Equipment ${reading.equipment_id}`;
+    if (!equipmentReadings[name]) {
+      equipmentReadings[name] = [];
+    }
+    equipmentReadings[name].push(reading);
+  });
+
+  // Chart dimensions
+  const width = 800;
+  const height = 300;
+  const padding = { top: 20, right: 40, bottom: 40, left: 60 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  // Get time range
+  const timestamps = readings.map(r => new Date(r.timestamp).getTime());
+  const minTime = Math.min(...timestamps);
+  const maxTime = Math.max(...timestamps);
+  const timeRange = maxTime - minTime || 1;
+
+  // Get value range
+  const values = readings.map(r => parseFloat(r.value)).filter(v => !isNaN(v));
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const valueRange = maxValue - minValue || 1;
+  const valueBuffer = valueRange * 0.1;
+
+  // Color palette for different equipment
+  const colors = ['#2563EB', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+
+  // Generate paths for each equipment
+  const equipmentNames = Object.keys(equipmentReadings);
+  const paths = equipmentNames.map((name, idx) => {
+    const data = equipmentReadings[name].sort((a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    const pathPoints = data.map((reading) => {
+      const x = padding.left + ((new Date(reading.timestamp).getTime() - minTime) / timeRange) * chartWidth;
+      const y = padding.top + chartHeight - ((parseFloat(reading.value) - minValue + valueBuffer) / (valueRange + valueBuffer * 2)) * chartHeight;
+      return { x, y };
+    });
+
+    const pathD = pathPoints.map((p, i) =>
+      `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`
+    ).join(' ');
+
+    return { name, path: pathD, color: colors[idx % colors.length], data };
+  });
+
+  // Format time labels
+  const formatTime = (ms) => {
+    const date = new Date(ms);
+    const diff = maxTime - minTime;
+    if (diff > 48 * 60 * 60 * 1000) {
+      // More than 48 hours - show date
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } else {
+      // Less than 48 hours - show time
+      return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    }
+  };
+
+  // Generate axis labels
+  const timeLabels = [0, 0.25, 0.5, 0.75, 1].map(p => ({
+    x: padding.left + p * chartWidth,
+    label: formatTime(minTime + p * timeRange)
+  }));
+
+  const valueLabels = [0, 0.25, 0.5, 0.75, 1].map(p => ({
+    y: padding.top + chartHeight - p * chartHeight,
+    label: (minValue - valueBuffer + p * (valueRange + valueBuffer * 2)).toFixed(1)
+  }));
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+        {/* Grid lines */}
+        {valueLabels.map((label, i) => (
+          <line
+            key={`grid-h-${i}`}
+            x1={padding.left}
+            y1={label.y}
+            x2={width - padding.right}
+            y2={label.y}
+            stroke="#E5E7EB"
+            strokeWidth="1"
+          />
+        ))}
+        {timeLabels.map((label, i) => (
+          <line
+            key={`grid-v-${i}`}
+            x1={label.x}
+            y1={padding.top}
+            x2={label.x}
+            y2={height - padding.bottom}
+            stroke="#E5E7EB"
+            strokeWidth="1"
+          />
+        ))}
+
+        {/* Axes */}
+        <line
+          x1={padding.left}
+          y1={height - padding.bottom}
+          x2={width - padding.right}
+          y2={height - padding.bottom}
+          stroke="#9CA3AF"
+          strokeWidth="1"
+        />
+        <line
+          x1={padding.left}
+          y1={padding.top}
+          x2={padding.left}
+          y2={height - padding.bottom}
+          stroke="#9CA3AF"
+          strokeWidth="1"
+        />
+
+        {/* Time labels */}
+        {timeLabels.map((label, i) => (
+          <text
+            key={`time-${i}`}
+            x={label.x}
+            y={height - padding.bottom + 20}
+            textAnchor="middle"
+            className="text-xs fill-gray-500"
+          >
+            {label.label}
+          </text>
+        ))}
+
+        {/* Value labels */}
+        {valueLabels.map((label, i) => (
+          <text
+            key={`value-${i}`}
+            x={padding.left - 10}
+            y={label.y + 4}
+            textAnchor="end"
+            className="text-xs fill-gray-500"
+          >
+            {label.label}
+          </text>
+        ))}
+
+        {/* Data lines */}
+        {paths.map(({ name, path, color }) => (
+          <path
+            key={name}
+            d={path}
+            fill="none"
+            stroke={color}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+      </svg>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mt-4 justify-center">
+        {paths.map(({ name, color }) => (
+          <div key={name} className="flex items-center gap-2">
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: color }}
+            ></div>
+            <span className="text-sm text-gray-600">{name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { token } = useAuth();
   const { subscribe, connected } = useWebSocket();
@@ -15,6 +203,17 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [sensorReadings, setSensorReadings] = useState([]);
   const [lastReadingUpdate, setLastReadingUpdate] = useState(null);
+  const [timeRange, setTimeRange] = useState('24'); // hours
+  const [selectedAlert, setSelectedAlert] = useState(null); // For alert details modal
+
+  // Time range options
+  const timeRangeOptions = [
+    { value: '1', label: 'Last 1 hour' },
+    { value: '6', label: 'Last 6 hours' },
+    { value: '24', label: 'Last 24 hours' },
+    { value: '168', label: 'Last 7 days' },
+    { value: '720', label: 'Last 30 days' },
+  ];
 
   // Subscribe to real-time sensor updates
   useEffect(() => {
@@ -73,8 +272,8 @@ export default function Dashboard() {
           setZoneData(data);
           setOverview(null);
         } else {
-          // Fetch overview dashboard
-          const response = await fetch(`${API_BASE}/dashboard/overview`, {
+          // Fetch overview dashboard with time range
+          const response = await fetch(`${API_BASE}/dashboard/overview?hours=${timeRange}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (!response.ok) throw new Error('Failed to fetch dashboard');
@@ -94,7 +293,7 @@ export default function Dashboard() {
       }
     };
     fetchDashboardData();
-  }, [token, selectedZoneId]);
+  }, [token, selectedZoneId, timeRange]);
 
   const handleZoneChange = (e) => {
     setSelectedZoneId(e.target.value);
@@ -141,23 +340,44 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
 
         {/* Zone Filter */}
-        <div className="flex items-center gap-2">
-          <label htmlFor="zone-filter" className="text-sm font-medium text-gray-700">
-            Filter by Zone:
-          </label>
-          <select
-            id="zone-filter"
-            value={selectedZoneId}
-            onChange={handleZoneChange}
-            className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
-          >
-            <option value="">All Zones</option>
-            {zones.map((zone) => (
-              <option key={zone.id} value={zone.id}>
-                {zone.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label htmlFor="zone-filter" className="text-sm font-medium text-gray-700">
+              Zone:
+            </label>
+            <select
+              id="zone-filter"
+              value={selectedZoneId}
+              onChange={handleZoneChange}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
+            >
+              <option value="">All Zones</option>
+              {zones.map((zone) => (
+                <option key={zone.id} value={zone.id}>
+                  {zone.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Time Range Selector */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="time-range" className="text-sm font-medium text-gray-700">
+              Time Range:
+            </label>
+            <select
+              id="time-range"
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
+            >
+              {timeRangeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -360,6 +580,22 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Historical Readings Chart */}
+          {!selectedZoneId && overview && overview.chartReadings && overview.chartReadings.length > 0 && (
+            <div className="bg-white rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Sensor Readings Chart</h2>
+                <span className="text-sm text-gray-500">
+                  {timeRangeOptions.find(o => o.value === timeRange)?.label || 'Last 24 hours'}
+                </span>
+              </div>
+              <div className="p-6">
+                {/* Simple SVG-based line chart */}
+                <ReadingsChart readings={overview.chartReadings} />
+              </div>
+            </div>
+          )}
+
           {/* Active Automations Panel */}
           {!selectedZoneId && overview && overview.activeAutomations && overview.activeAutomations.length > 0 && (
             <div className="bg-white rounded-lg shadow mb-6">
@@ -433,7 +669,14 @@ export default function Dashboard() {
               </div>
               <div className="divide-y divide-gray-200">
                 {overview.recentAlerts.map((alert) => (
-                  <div key={alert.id} className="px-6 py-4 flex items-center justify-between">
+                  <div
+                    key={alert.id}
+                    className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 cursor-pointer transition-colors"
+                    onClick={() => setSelectedAlert(alert)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === 'Enter' && setSelectedAlert(alert)}
+                  >
                     <div className="flex items-center gap-3">
                       <span className={`w-2 h-2 rounded-full ${
                         alert.severity === 'critical' ? 'bg-red-500' :
@@ -448,11 +691,104 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    {alert.acknowledged && (
+                    {alert.acknowledged ? (
                       <span className="text-xs text-green-600">Acknowledged</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">0</span>
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Alert Details Modal */}
+          {selectedAlert && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setSelectedAlert(null)}>
+              <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Alert Details</h3>
+                  <button
+                    onClick={() => setSelectedAlert(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="px-6 py-4 space-y-4">
+                  {/* Severity Badge */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-500">Severity:</span>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                      selectedAlert.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                      selectedAlert.severity === 'warning' ? 'bg-amber-100 text-amber-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {selectedAlert.severity?.toUpperCase() || 'INFO'}
+                    </span>
+                  </div>
+
+                  {/* Message */}
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">Message:</span>
+                    <p className="mt-1 text-sm text-gray-900">{selectedAlert.message}</p>
+                  </div>
+
+                  {/* Equipment */}
+                  {selectedAlert.equipment_name && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Equipment:</span>
+                      <p className="mt-1 text-sm text-gray-900">{selectedAlert.equipment_name}</p>
+                    </div>
+                  )}
+
+                  {/* Zone */}
+                  {selectedAlert.zone_name && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-500">Zone:</span>
+                      <p className="mt-1 text-sm text-gray-900">{selectedAlert.zone_name}</p>
+                    </div>
+                  )}
+
+                  {/* Timestamp */}
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">Created:</span>
+                    <p className="mt-1 text-sm text-gray-900">
+                      {new Date(selectedAlert.created_at).toLocaleString()}
+                    </p>
+                  </div>
+
+                  {/* Acknowledged Status */}
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">Status:</span>
+                    <p className="mt-1 text-sm">
+                      {selectedAlert.acknowledged ? (
+                        <span className="text-green-600">
+                          Acknowledged
+                          {selectedAlert.acknowledged_at && ` on ${new Date(selectedAlert.acknowledged_at).toLocaleString()}`}
+                        </span>
+                      ) : (
+                        <span className="text-amber-600">Unacknowledged</span>
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Alert ID */}
+                  <div>
+                    <span className="text-sm font-medium text-gray-500">Alert ID:</span>
+                    <p className="mt-1 text-sm text-gray-400">#{selectedAlert.id}</p>
+                  </div>
+                </div>
+                <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+                  <button
+                    onClick={() => setSelectedAlert(null)}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           )}

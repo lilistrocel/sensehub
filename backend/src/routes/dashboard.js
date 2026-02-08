@@ -5,6 +5,9 @@ const router = express.Router();
 
 // GET /api/dashboard/overview - Get dashboard overview
 router.get('/overview', (req, res) => {
+  // Parse time range from query params (in hours, default 24)
+  const hoursAgo = parseInt(req.query.hours) || 24;
+  const startTime = new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
   // Equipment statistics
   const equipmentStats = db.prepare(`
     SELECT
@@ -66,6 +69,15 @@ router.get('/overview', (req, res) => {
     LIMIT 10
   `).all();
 
+  // Historical readings for chart (filtered by time range)
+  const chartReadings = db.prepare(`
+    SELECT r.*, e.name as equipment_name
+    FROM readings r
+    INNER JOIN equipment e ON r.equipment_id = e.id
+    WHERE r.timestamp >= ?
+    ORDER BY r.timestamp ASC
+  `).all(startTime);
+
   // Active automations list with last run info
   const activeAutomations = db.prepare(`
     SELECT
@@ -91,7 +103,9 @@ router.get('/overview', (req, res) => {
     recentAlerts,
     recentAutomations,
     latestReadings,
-    activeAutomations
+    activeAutomations,
+    chartReadings,
+    timeRange: { hours: hoursAgo, startTime }
   });
 });
 

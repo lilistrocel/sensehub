@@ -2,10 +2,62 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 76
-- **Completion:** ~40.2%
+- **Passing:** 83
+- **Completion:** ~43.9%
 
 ## Session Log
+
+### Session - 2026-02-08 (Features #86, #87, #88 - Dashboard Features)
+**Assigned Features:**
+- #86 - Main dashboard displays overview
+- #87 - Real-time sensor readings display
+- #88 - Active automations panel displays
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #86 - Main dashboard displays overview:
+- Verified dashboard loads at / route
+- System overview widgets display: Equipment Online (1/5), Active Zones (10), Automations Running (11), Active Alerts (4)
+- Equipment summary visible with online/total count
+- Zone summary visible with total count
+- Connection status shown: "Offline Mode" in header, "System OK" and "DB Connected" in footer
+
+Feature #87 - Real-time sensor readings display:
+- Added "Live Sensor Readings" widget to dashboard
+- Shows current sensor values (e.g., 42.5 C, 46.8 %)
+- Units displayed with values (C for Celsius, % for percentage)
+- Real-time updates via WebSocket (tested by submitting new reading via API)
+- "Live" indicator with green pulsing dot when WebSocket connected
+- "Updated: [timestamp]" shows last update time
+- Added POST /api/equipment/:id/readings endpoint to backend
+- WebSocket broadcasts sensor_reading events to all connected clients
+
+Feature #88 - Active automations panel displays:
+- Added "Active Automations" panel to dashboard
+- Shows enabled automations (10 enabled)
+- Each automation displays:
+  - Status indicator (green dot for success/enabled)
+  - Automation name
+  - Trigger type badge (manual, schedule, threshold)
+  - Run count (e.g., "1 runs")
+  - Last run time or "Never run"
+  - Enabled status badge
+- Added activeAutomations query to dashboard overview API
+
+**Files Modified:**
+- backend/src/routes/dashboard.js (added latestReadings and activeAutomations queries)
+- backend/src/routes/equipment.js (added POST /:id/readings endpoint)
+- frontend/src/pages/Dashboard.jsx (added sensor readings and active automations widgets)
+
+**Verification:**
+- Browser automation tests passed for all features
+- Screenshots captured at each step
+- Zero console errors
+- Real-time updates verified via WebSocket
+- No mock data patterns in codebase
+
+---
 
 ### Session - 2026-02-08 (Feature #81 - Automation Deletion)
 **Assigned Feature:** #81 - Automation can be deleted
