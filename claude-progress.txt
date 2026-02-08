@@ -2,10 +2,46 @@
 
 ## Current Status
 - **Total Features:** 189
-- **Passing:** 74
-- **Completion:** ~39.2%
+- **Passing:** 76
+- **Completion:** ~40.2%
 
 ## Session Log
+
+### Session - 2026-02-08 (Feature #81 - Automation Deletion)
+**Assigned Feature:** #81 - Automation can be deleted
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #81 - Automation can be deleted:
+- Logged in as admin user (admin@sensehub.local)
+- Navigated to /automations page
+- Created test automation "DELETE_TEST_81_Automation" for testing
+- Clicked Delete button on the test automation
+- Confirmation dialog appeared with:
+  - Warning icon (red/orange triangle)
+  - "Delete Automation" heading
+  - Message: "Are you sure you want to delete 'DELETE_TEST_81_Automation'? This action cannot be undone."
+  - Cancel and Delete buttons
+- Clicked Delete in the confirmation dialog
+- Automation removed from list immediately (7 → 6 automations)
+- Database verified: automation permanently deleted from SQLite
+
+**Implementation Details:**
+- Frontend: Automations.jsx has delete confirmation modal (lines 1347-1391, 1787-1842)
+- State variables: showDeleteConfirm, automationToDelete, deleteLoading
+- Functions: openDeleteConfirmation, closeDeleteConfirmation, handleDeleteAutomation
+- Backend: DELETE /api/automations/:id endpoint (automations.js lines 106-115)
+- Role-based access: only admin/operator can delete
+
+**Verification:**
+- Browser automation tests passed for all steps
+- Screenshots captured: confirmation dialog, before/after deletion
+- Database persistence verified
+- Zero console errors
+- No mock data patterns in codebase
+
+---
 
 ### Session - 2026-02-08 (Feature #74 - Automation Threshold Trigger)
 **Assigned Feature:** #74 - Automation trigger threshold works
