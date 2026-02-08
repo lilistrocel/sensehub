@@ -62,6 +62,11 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   const [successMessage, setSuccessMessage] = useState(null);
   const [activeTab, setActiveTab] = useState('trigger');
 
+  // Test/Simulation state
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [showTestResults, setShowTestResults] = useState(false);
+
   // Equipment list for threshold triggers
   const [equipment, setEquipment] = useState([]);
   const [loadingEquipment, setLoadingEquipment] = useState(false);
@@ -318,6 +323,39 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTestAutomation = async () => {
+    if (isNew || !automation?.id) {
+      setError('Please save the automation before testing');
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/automations/${automation.id}/test`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to test automation');
+      }
+
+      const result = await response.json();
+      setTestResult(result);
+      setShowTestResults(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -1066,34 +1104,192 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
             </div>
 
             {/* Buttons */}
-            <div className="flex justify-end gap-3 pt-6 border-t mt-6">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                disabled={saving}
-              >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Saving...
-                  </>
-                ) : (
-                  isNew ? 'Create Automation' : 'Save Changes'
+            <div className="flex justify-between gap-3 pt-6 border-t mt-6">
+              <div>
+                {/* Test Button - only show for existing automations */}
+                {!isNew && automation?.id && (
+                  <button
+                    type="button"
+                    onClick={handleTestAutomation}
+                    disabled={testing || saving}
+                    className="px-4 py-2 text-amber-700 bg-amber-100 border border-amber-300 rounded-lg hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {testing ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-amber-700" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Testing...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Test / Simulate
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    isNew ? 'Create Automation' : 'Save Changes'
+                  )}
+                </button>
+              </div>
             </div>
           </form>
+
+          {/* Test Results Modal */}
+          {showTestResults && testResult && (
+            <div className="fixed inset-0 z-60 overflow-y-auto">
+              <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowTestResults(false)}></div>
+                <div className="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+                  <button
+                    onClick={() => setShowTestResults(false)}
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+
+                  {/* Test Results Header */}
+                  <div className="flex items-center mb-4">
+                    <div className={`p-3 rounded-full mr-4 ${testResult.status === 'success' ? 'bg-green-100' : 'bg-amber-100'}`}>
+                      <svg className={`h-6 w-6 ${testResult.status === 'success' ? 'text-green-600' : 'text-amber-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Test Results</h3>
+                      <p className="text-sm text-gray-500">{testResult.mode}</p>
+                    </div>
+                  </div>
+
+                  {/* Test Summary */}
+                  <div className={`mb-4 p-4 rounded-lg ${testResult.status === 'success' ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
+                    <p className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800' : 'text-amber-800'}`}>
+                      {testResult.message}
+                    </p>
+                  </div>
+
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="bg-gray-50 p-3 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-gray-900">{testResult.summary?.conditions_evaluated || 0}</p>
+                      <p className="text-xs text-gray-500">Conditions</p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-gray-900">{testResult.summary?.total_actions || 0}</p>
+                      <p className="text-xs text-gray-500">Total Actions</p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-green-600">{testResult.summary?.actions_to_execute || 0}</p>
+                      <p className="text-xs text-gray-500">Would Execute</p>
+                    </div>
+                  </div>
+
+                  {/* Trigger Details */}
+                  {testResult.trigger && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Trigger Evaluation</h4>
+                      <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                        <p><span className="font-medium">Type:</span> {testResult.trigger.type}</p>
+                        <p><span className="font-medium">Would Fire:</span> {testResult.trigger.would_fire ? 'Yes' : 'No'}</p>
+                        {testResult.trigger.details && Object.entries(testResult.trigger.details).map(([key, value]) => (
+                          <p key={key}><span className="font-medium">{key.replace(/_/g, ' ')}:</span> {String(value)}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Conditions */}
+                  {testResult.conditions && testResult.conditions.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Conditions ({testResult.summary?.conditions_logic || 'AND'})</h4>
+                      <div className="space-y-2">
+                        {testResult.conditions.map((cond) => (
+                          <div key={cond.index} className={`p-2 rounded text-sm ${cond.would_pass ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                            <span className="font-medium">{cond.field}</span> {cond.operator} <span className="font-mono">{cond.expected_value}</span>
+                            <span className={`ml-2 text-xs ${cond.would_pass ? 'text-green-600' : 'text-red-600'}`}>({cond.test_result})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  {testResult.actions && testResult.actions.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Actions (Simulated)</h4>
+                      <div className="space-y-2">
+                        {testResult.actions.map((action) => (
+                          <div key={action.index} className={`p-3 rounded text-sm ${action.would_execute ? 'bg-blue-50 border border-blue-200' : 'bg-gray-100 border border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                action.type === 'alert' ? 'bg-amber-100 text-amber-800' :
+                                action.type === 'control' ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-200 text-gray-800'
+                              }`}>
+                                {action.type}
+                              </span>
+                              <span className={`text-xs ${action.would_execute ? 'text-green-600' : 'text-gray-500'}`}>
+                                {action.would_execute ? '✓ Would Execute' : '✗ Would NOT Execute'}
+                              </span>
+                            </div>
+                            {action.details && (
+                              <div className="text-xs text-gray-600 mt-1">
+                                {Object.entries(action.details).map(([key, value]) => (
+                                  key !== 'simulation_note' && <p key={key}><span className="font-medium">{key}:</span> {String(value)}</p>
+                                ))}
+                                {action.details.simulation_note && (
+                                  <p className="text-amber-600 italic mt-1">{action.details.simulation_note}</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-4 border-t">
+                    <button
+                      onClick={() => setShowTestResults(false)}
+                      className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      Close Results
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1422,7 +1618,47 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
 }
 
 // Automation Detail Modal
-function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
+function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
+  const [activeTab, setActiveTab] = useState('details');
+  const [logs, setLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  // Reset to details tab when modal opens with a new automation
+  useEffect(() => {
+    if (isOpen && automation) {
+      setActiveTab('details');
+      setLogs([]);
+    }
+  }, [isOpen, automation?.id]);
+
+  // Fetch logs when switching to history tab
+  useEffect(() => {
+    if (isOpen && automation && activeTab === 'history') {
+      fetchLogs();
+    }
+  }, [isOpen, automation, activeTab]);
+
+  const fetchLogs = async () => {
+    if (!automation?.id) return;
+    try {
+      setLoadingLogs(true);
+      const response = await fetch(`${API_BASE}/automations/${automation.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setLogs(data.logs || []);
+      }
+    } catch (err) {
+      console.error('Error fetching logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
   if (!isOpen || !automation) return null;
 
   // Parse JSON fields
@@ -1438,6 +1674,31 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
 
   const scheduleDesc = getScheduleDescription(triggerConfig);
 
+  // Status badge for logs
+  const LogStatusBadge = ({ status }) => {
+    const styles = {
+      success: 'bg-green-100 text-green-800 border-green-200',
+      error: 'bg-red-100 text-red-800 border-red-200',
+      warning: 'bg-amber-100 text-amber-800 border-amber-200',
+      pending: 'bg-gray-100 text-gray-800 border-gray-200'
+    };
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${styles[status] || styles.pending}`}>
+        {status === 'success' && (
+          <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+        {status === 'error' && (
+          <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        )}
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
@@ -1446,7 +1707,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
           onClick={onClose}
         ></div>
 
-        <div className="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
@@ -1456,7 +1717,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
             </svg>
           </button>
 
-          <div className="flex items-start mb-6">
+          <div className="flex items-start mb-4">
             <div className="flex-shrink-0 h-12 w-12 bg-primary-100 rounded-lg flex items-center justify-center mr-4">
               <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -1472,58 +1733,142 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit }) {
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-sm font-medium text-gray-500">Status</span>
-              <EnabledBadge enabled={automation.enabled === 1 || automation.enabled === true} />
-            </div>
-
-            <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-sm font-medium text-gray-500">Trigger</span>
-              <div className="flex flex-col items-end">
-                <TriggerBadge triggerConfig={triggerConfig} />
-                {scheduleDesc && (
-                  <span className="text-xs text-gray-500 mt-1">{scheduleDesc}</span>
+          {/* Tabs */}
+          <div className="border-b border-gray-200 mb-4">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('details')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'details'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Details
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
+                  activeTab === 'history'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Run History
+                {automation.run_count > 0 && (
+                  <span className="ml-2 bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                    {automation.run_count}
+                  </span>
                 )}
-              </div>
-            </div>
+              </button>
+            </nav>
+          </div>
 
-            <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-sm font-medium text-gray-500">Priority</span>
-              <span className="text-sm text-gray-900">{automation.priority || 0}</span>
-            </div>
-
-            <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-sm font-medium text-gray-500">Run Count</span>
-              <span className="text-sm text-gray-900">{automation.run_count || 0}</span>
-            </div>
-
-            <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-sm font-medium text-gray-500">Conditions</span>
-              <span className="text-sm text-gray-900">{conditions.length} condition(s)</span>
-            </div>
-
-            <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-sm font-medium text-gray-500">Actions</span>
-              <span className="text-sm text-gray-900">{actions.length} action(s)</span>
-            </div>
-
-            {automation.last_run && (
+          {/* Details Tab */}
+          {activeTab === 'details' && (
+            <div className="space-y-4">
               <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Last Run</span>
+                <span className="text-sm font-medium text-gray-500">Status</span>
+                <EnabledBadge enabled={automation.enabled === 1 || automation.enabled === true} />
+              </div>
+
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Trigger</span>
+                <div className="flex flex-col items-end">
+                  <TriggerBadge triggerConfig={triggerConfig} />
+                  {scheduleDesc && (
+                    <span className="text-xs text-gray-500 mt-1">{scheduleDesc}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Priority</span>
+                <span className="text-sm text-gray-900">{automation.priority || 0}</span>
+              </div>
+
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Run Count</span>
+                <span className="text-sm text-gray-900">{automation.run_count || 0}</span>
+              </div>
+
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Conditions</span>
+                <span className="text-sm text-gray-900">{conditions.length} condition(s)</span>
+              </div>
+
+              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-500">Actions</span>
+                <span className="text-sm text-gray-900">{actions.length} action(s)</span>
+              </div>
+
+              {automation.last_run && (
+                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                  <span className="text-sm font-medium text-gray-500">Last Run</span>
+                  <span className="text-sm text-gray-900">
+                    {new Date(automation.last_run).toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between py-3">
+                <span className="text-sm font-medium text-gray-500">Created</span>
                 <span className="text-sm text-gray-900">
-                  {new Date(automation.last_run).toLocaleString()}
+                  {automation.created_at ? new Date(automation.created_at).toLocaleString() : '-'}
                 </span>
               </div>
-            )}
-
-            <div className="flex items-center justify-between py-3">
-              <span className="text-sm font-medium text-gray-500">Created</span>
-              <span className="text-sm text-gray-900">
-                {automation.created_at ? new Date(automation.created_at).toLocaleString() : '-'}
-              </span>
             </div>
-          </div>
+          )}
+
+          {/* History Tab */}
+          {activeTab === 'history' && (
+            <div className="min-h-[300px]">
+              {loadingLogs ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="text-center py-12">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No run history</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    This automation hasn't been executed yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {logs.map((log, index) => (
+                    <div
+                      key={log.id || index}
+                      className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <LogStatusBadge status={log.status} />
+                            <span className="text-xs text-gray-500">
+                              {log.triggered_at ? new Date(log.triggered_at).toLocaleString() : '-'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-700">{log.message || 'No message'}</p>
+                          {log.completed_at && log.triggered_at && (
+                            <p className="text-xs text-gray-500 mt-2">
+                              Duration: {Math.round((new Date(log.completed_at) - new Date(log.triggered_at)) / 1000)}s
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-6 flex justify-end gap-3">
             <button
@@ -2097,6 +2442,7 @@ export default function Automations() {
         }}
         automation={selectedAutomation}
         onEdit={handleEditAutomation}
+        token={token}
       />
 
       {/* Templates Modal */}

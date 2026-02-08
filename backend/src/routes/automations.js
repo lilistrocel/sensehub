@@ -240,7 +240,7 @@ router.delete('/:id', requireRole('admin', 'operator'), (req, res) => {
   res.json({ message: 'Automation deleted successfully' });
 });
 
-// POST /api/automations/:id/test - Test automation
+// POST /api/automations/:id/test - Test automation in simulation mode
 router.post('/:id/test', requireRole('admin', 'operator'), (req, res) => {
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(req.params.id);
 
@@ -248,13 +248,126 @@ router.post('/:id/test', requireRole('admin', 'operator'), (req, res) => {
     return res.status(404).json({ error: 'Not Found', message: 'Automation not found' });
   }
 
-  // Simulate automation test
+  // Parse automation configuration
+  let triggerConfig, conditions, actions;
+  try {
+    triggerConfig = typeof automation.trigger_config === 'string'
+      ? JSON.parse(automation.trigger_config)
+      : automation.trigger_config || {};
+    conditions = typeof automation.conditions === 'string'
+      ? JSON.parse(automation.conditions)
+      : automation.conditions || [];
+    actions = typeof automation.actions === 'string'
+      ? JSON.parse(automation.actions)
+      : automation.actions || [];
+  } catch (e) {
+    triggerConfig = {};
+    conditions = [];
+    actions = [];
+  }
+
+  // Build trigger evaluation result
+  const triggerEvaluation = {
+    type: triggerConfig.type || 'manual',
+    would_fire: true,
+    details: {}
+  };
+
+  if (triggerConfig.type === 'schedule') {
+    triggerEvaluation.details = {
+      schedule_type: triggerConfig.schedule_type || 'daily',
+      time: triggerConfig.time || '08:00',
+      next_run: 'Next scheduled run calculated based on configuration'
+    };
+  } else if (triggerConfig.type === 'threshold') {
+    const equipment = triggerConfig.equipment_id
+      ? db.prepare('SELECT * FROM equipment WHERE id = ?').get(triggerConfig.equipment_id)
+      : null;
+    triggerEvaluation.details = {
+      equipment: equipment?.name || 'Any equipment',
+      sensor_type: triggerConfig.sensor_type || 'temperature',
+      condition: `${triggerConfig.operator || 'gt'} ${triggerConfig.threshold_value || 0}${triggerConfig.unit || ''}`,
+      current_value: 'N/A (simulated)',
+      would_trigger: 'Yes (simulated threshold met)'
+    };
+  } else if (triggerConfig.type === 'manual') {
+    triggerEvaluation.details = {
+      message: 'Manual trigger - fires when user clicks Run button'
+    };
+  }
+
+  // Evaluate conditions (simulated)
+  const conditionResults = conditions.map((cond, idx) => ({
+    index: idx + 1,
+    field: cond.field,
+    operator: cond.operator,
+    expected_value: cond.value,
+    test_result: 'PASS (simulated)',
+    would_pass: true
+  }));
+
+  const conditionLogic = automation.condition_logic || 'AND';
+  const allConditionsMet = conditionResults.length === 0 ||
+    (conditionLogic === 'AND' ? conditionResults.every(c => c.would_pass) : conditionResults.some(c => c.would_pass));
+
+  // Simulate actions (no real execution)
+  const actionResults = actions.map((action, idx) => {
+    const result = {
+      index: idx + 1,
+      type: action.type,
+      simulated: true,
+      would_execute: allConditionsMet
+    };
+
+    if (action.type === 'alert') {
+      result.details = {
+        severity: action.severity || 'info',
+        message: action.message,
+        simulation_note: 'Would create alert in alerts table (NOT CREATED during test)'
+      };
+    } else if (action.type === 'control') {
+      const equipment = action.equipment_id
+        ? db.prepare('SELECT * FROM equipment WHERE id = ?').get(action.equipment_id)
+        : null;
+      result.details = {
+        action: action.action,
+        equipment: equipment?.name || action.equipment_name || 'Unknown',
+        equipment_id: action.equipment_id,
+        value: action.value,
+        simulation_note: 'Would send control command to equipment (NOT SENT during test)'
+      };
+    } else if (action.type === 'log') {
+      result.details = {
+        message: action.message,
+        simulation_note: 'Would log event (NOT LOGGED during test)'
+      };
+    }
+
+    return result;
+  });
+
+  // Build comprehensive test result
   const testResult = {
     automation_id: automation.id,
-    status: 'success',
-    message: 'Test completed - conditions evaluated, actions simulated',
+    automation_name: automation.name,
+    status: allConditionsMet ? 'success' : 'conditions_not_met',
     simulated: true,
-    timestamp: new Date().toISOString()
+    mode: 'TEST MODE - No actual actions executed',
+    timestamp: new Date().toISOString(),
+    summary: {
+      trigger_would_fire: triggerEvaluation.would_fire,
+      conditions_evaluated: conditionResults.length,
+      conditions_logic: conditionLogic,
+      all_conditions_met: allConditionsMet,
+      actions_to_execute: actionResults.filter(a => a.would_execute).length,
+      total_actions: actions.length
+    },
+    trigger: triggerEvaluation,
+    conditions: conditionResults,
+    actions: actionResults,
+    message: allConditionsMet
+      ? `Test completed successfully. ${actionResults.length} action(s) would be executed.`
+      : `Test completed. Conditions not met - ${actionResults.length} action(s) would NOT execute.`
   };
 
   res.json(testResult);
