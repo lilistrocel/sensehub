@@ -60,6 +60,13 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   const [calibrationLoading, setCalibrationLoading] = useState(false);
   const [calibrationMessage, setCalibrationMessage] = useState(null);
 
+  // History tab state
+  const [activeTab, setActiveTab] = useState('details');
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [timeRange, setTimeRange] = useState('1h');
+
   // Check if user can control equipment (admin or operator only)
   const canControl = user?.role === 'admin' || user?.role === 'operator';
 
@@ -67,8 +74,16 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
     if (isOpen && equipment) {
       fetchDetails();
       fetchAllZones();
+      setActiveTab('details'); // Reset to details tab when opening
     }
   }, [isOpen, equipment]);
+
+  // Fetch history when history tab is selected or time range changes
+  useEffect(() => {
+    if (activeTab === 'history' && equipment) {
+      fetchHistory();
+    }
+  }, [activeTab, timeRange, equipment]);
 
   const fetchDetails = async () => {
     if (!equipment) return;
@@ -115,6 +130,55 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
       }
     } catch (err) {
       console.error('Failed to fetch zones:', err);
+    }
+  };
+
+  const fetchHistory = async () => {
+    if (!equipment) return;
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const now = new Date();
+      let from;
+      switch (timeRange) {
+        case '1h':
+          from = new Date(now.getTime() - 60 * 60 * 1000);
+          break;
+        case '24h':
+          from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          break;
+        case '7d':
+          from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          from = new Date(now.getTime() - 60 * 60 * 1000);
+      }
+
+      const response = await fetch(
+        `${API_BASE}/equipment/${equipment.id}/history?from=${from.toISOString()}&limit=100`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch history');
+      }
+
+      const data = await response.json();
+      setHistoryData(data);
+    } catch (err) {
+      setHistoryError(err.message);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -367,6 +431,32 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
             </div>
           </div>
 
+          {/* Tabs */}
+          <div className="border-b border-gray-200 mb-4">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('details')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'details'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Details
+              </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'history'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                History
+              </button>
+            </nav>
+          </div>
+
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -381,7 +471,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 <span className="text-red-800 text-sm">{error}</span>
               </div>
             </div>
-          ) : (
+          ) : activeTab === 'details' ? (
             <div className="space-y-4">
               {/* Status */}
               <div className="flex items-center justify-between py-3 border-b border-gray-100">
