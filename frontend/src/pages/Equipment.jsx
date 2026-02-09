@@ -2503,6 +2503,21 @@ export default function Equipment() {
               <option value="disabled">Disabled</option>
             </select>
           </div>
+          {/* Clear Filters Button - only shown when filters are active */}
+          {(searchTerm || statusFilter) && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('');
+              }}
+              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center whitespace-nowrap"
+            >
+              <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Clear Filters
+            </button>
+          )}
         </div>
       </div>
 
