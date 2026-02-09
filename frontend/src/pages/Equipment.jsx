@@ -1897,6 +1897,7 @@ export default function Equipment() {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [equipmentNotFound, setEquipmentNotFound] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -1913,7 +1914,16 @@ export default function Equipment() {
       if (eq) {
         setSelectedEquipment(eq);
         setShowDetailModal(true);
+        setEquipmentNotFound(false);
+      } else {
+        // Equipment ID in URL not found in the list
+        setEquipmentNotFound(true);
+        setShowDetailModal(false);
+        setSelectedEquipment(null);
       }
+    } else if (!urlEquipmentId) {
+      // No equipment ID in URL, clear not found state
+      setEquipmentNotFound(false);
     }
   }, [urlEquipmentId, equipment, loading]);
 
@@ -2142,6 +2152,15 @@ export default function Equipment() {
   const handleViewEquipment = (eq) => {
     setSelectedEquipment(eq);
     setShowDetailModal(true);
+    // Update URL to enable deep linking
+    navigate(`/equipment/${eq.id}`, { replace: true });
+  };
+
+  const handleCloseDetailModal = () => {
+    setShowDetailModal(false);
+    setSelectedEquipment(null);
+    // Clear URL when closing modal
+    navigate('/equipment', { replace: true });
   };
 
   const handleEditEquipment = (eq) => {
@@ -2308,6 +2327,32 @@ export default function Equipment() {
         >
           Try again
         </button>
+      </div>
+    );
+  }
+
+  // Show not found message when URL contains invalid equipment ID
+  if (equipmentNotFound) {
+    return (
+      <div className="max-w-lg mx-auto mt-12">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+          <svg className="h-12 w-12 text-amber-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h2 className="text-xl font-semibold text-amber-800 mb-2">Equipment Not Found</h2>
+          <p className="text-amber-700 mb-4">
+            The equipment with ID "{urlEquipmentId}" does not exist or may have been deleted.
+          </p>
+          <button
+            onClick={() => navigate('/equipment')}
+            className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors inline-flex items-center"
+          >
+            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back to Equipment List
+          </button>
+        </div>
       </div>
     );
   }
@@ -2753,10 +2798,7 @@ export default function Equipment() {
       {/* Equipment Detail Modal */}
       <EquipmentDetailModal
         isOpen={showDetailModal}
-        onClose={() => {
-          setShowDetailModal(false);
-          setSelectedEquipment(null);
-        }}
+        onClose={handleCloseDetailModal}
         equipment={selectedEquipment}
         token={token}
         onUpdate={fetchData}
