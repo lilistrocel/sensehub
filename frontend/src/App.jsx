@@ -5,6 +5,7 @@ import { WebSocketProvider } from './context/WebSocketContext';
 import { AlertSoundProvider } from './context/AlertSoundContext';
 import { ToastProvider } from './context/ToastContext';
 import { SettingsProvider } from './context/SettingsContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import { ToastContainer } from './components/Toast';
 import { BreadcrumbProvider } from './components/Breadcrumb';
@@ -185,20 +186,22 @@ function AppRoutes() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <SettingsProvider>
-          <BreadcrumbProvider>
-            <WebSocketProvider>
-              <AlertSoundProvider>
-                <ToastProvider>
-                  <AppRoutes />
-                  <ToastContainer />
-                </ToastProvider>
-              </AlertSoundProvider>
-            </WebSocketProvider>
-          </BreadcrumbProvider>
-        </SettingsProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <SettingsProvider>
+            <BreadcrumbProvider>
+              <WebSocketProvider>
+                <AlertSoundProvider>
+                  <ToastProvider>
+                    <AppRoutes />
+                    <ToastContainer />
+                  </ToastProvider>
+                </AlertSoundProvider>
+              </WebSocketProvider>
+            </BreadcrumbProvider>
+          </SettingsProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

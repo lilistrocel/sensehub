@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Breadcrumb from './Breadcrumb';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const API_BASE = '/api';
 
 export default function Layout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, token } = useAuth();
+  const { isDarkMode, toggleTheme } = useTheme();
   const [cloudStatus, setCloudStatus] = useState({
     configured: false,
     connected: false,
