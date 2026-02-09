@@ -191,10 +191,34 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   };
 
   const handleTriggerConfigChange = (key, value) => {
-    setFormData(prev => ({
-      ...prev,
-      trigger_config: { ...prev.trigger_config, [key]: value }
-    }));
+    setFormData(prev => {
+      const newConfig = { ...prev.trigger_config, [key]: value };
+
+      // When switching to 'once' schedule type, set a sensible default date/time
+      // Default to 1 hour from now, rounded to the nearest 15 minutes
+      if (key === 'schedule_type' && value === 'once' && !prev.trigger_config?.run_at) {
+        const now = new Date();
+        now.setHours(now.getHours() + 1);
+        // Round to nearest 15 minutes
+        const minutes = Math.ceil(now.getMinutes() / 15) * 15;
+        now.setMinutes(minutes === 60 ? 0 : minutes);
+        if (minutes === 60) now.setHours(now.getHours() + 1);
+        now.setSeconds(0);
+        now.setMilliseconds(0);
+        // Format as datetime-local value (YYYY-MM-DDTHH:MM)
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const mins = String(now.getMinutes()).padStart(2, '0');
+        newConfig.run_at = `${year}-${month}-${day}T${hours}:${mins}`;
+      }
+
+      return {
+        ...prev,
+        trigger_config: newConfig
+      };
+    });
   };
 
   const addCondition = () => {

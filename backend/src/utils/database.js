@@ -14,6 +14,7 @@ let db = null;
 try {
   db = new Database(dbPath, { verbose: process.env.NODE_ENV === 'development' ? console.log : null });
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   console.log(`Database connected: ${dbPath}`);
 } catch (error) {
   console.error('Failed to connect to database:', error);
