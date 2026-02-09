@@ -2421,3 +2421,46 @@ Feature #167 - URL manipulation doesn't grant unauthorized access:
 - No mock data patterns found in codebase
 
 **Progress:** 168/189 features passing (88.9%)
+
+---
+
+### Session - 2026-02-09 (Features #179, #180, #181 - Data Cleanup)
+**Assigned Features:**
+- #179 - Deleting equipment updates zone count
+- #180 - Deleting zone removes equipment associations
+- #181 - Equipment readings deleted with equipment
+**Status:** ALL PASSED ✅
+
+**What was verified:**
+
+Feature #179 - Deleting equipment updates zone count:
+- Logged in as admin
+- Zone "Test Zone Toast" had 1 equipment (Door Sensor H1)
+- Deleted Door Sensor H1 from Equipment page
+- Zone count updated from 1 to 0 immediately
+- Database confirmed: equipment_zones cleared
+- Screenshots: feature179-zone-initial-count.png, feature179-zone-count-after-delete.png
+
+Feature #180 - Deleting zone removes equipment associations:
+- Created test zone "TEST_ZONE_180_DELETE"
+- Assigned "Door Sensor H2" to the zone
+- Deleted the zone
+- Equipment still exists with all data intact
+- Zone assignment shows "No zones assigned"
+- Database confirmed: equipment_zones table cleared, equipment intact
+- Screenshots: feature180-zone-with-equipment.png, feature180-equipment-after-zone-delete.png
+
+Feature #181 - Equipment readings deleted with equipment:
+- Found TEST_SENSOR_131 (ID 15) with 5 historical readings
+- Deleted the equipment
+- Database verified: readings for equipment_id=15 removed (COUNT = 0)
+- Historical data properly cleaned up on delete
+- Screenshot: feature181-equipment-deleted.png
+
+**Verification:**
+- Browser automation tests passed for all features
+- Database persistence confirmed via sqlite3 queries
+- Zero console errors
+- No mock data patterns found
+
+**Progress:** 182/190 features passing (95.8%)
