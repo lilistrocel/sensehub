@@ -1,11 +1,44 @@
 # SenseHub Development Progress
 
 ## Current Status
-- **Total Features:** 189
-- **Passing:** 178
-- **Completion:** ~94.2%
+- **Total Features:** 190
+- **Passing:** 183
+- **Completion:** ~96.3%
 
 ## Session Log
+
+### Session - 2026-02-09 (Feature #190 - Session Token Fix)
+**Assigned Feature:** #190 - Fix session token unique constraint error
+**Status:** PASSED ✅
+
+**What was implemented:**
+
+Feature #190 - Fix session token unique constraint error:
+- Issue: Login could fail with SQLITE_CONSTRAINT_UNIQUE error when logins
+  happen at the same second, because JWT tokens only included userId and
+  timestamp (seconds precision), causing duplicate tokens
+- Fix: Added `jti` (JWT ID) claim with UUID to all JWT token generation
+- Modified 3 locations in backend/src/routes/auth.js:
+  1. Line 209 - Quick setup session creation
+  2. Line 274 - Normal setup session creation
+  3. Line 328 - Login session creation
+- Token now includes: `{ userId, jti: uuidv4() }` ensuring uniqueness
+
+**Verification:**
+- Tested 5 rapid sequential logins via curl - all succeeded
+- Sessions 503, 504, 505 created at exact same second (09:43:24) - no errors
+- Database verified: 132 sessions, all 132 tokens unique
+- Browser automation: logged in/out twice successfully
+- Zero console errors
+- No UNIQUE constraint errors in backend logs
+- No mock data patterns found
+
+**Files Modified:**
+- backend/src/routes/auth.js (added jti nonce to all jwt.sign calls)
+
+**Progress:** 183/190 features passing (96.3%)
+
+---
 
 ### Session - 2026-02-09 (Features #177, #178 - Double Action Prevention)
 **Assigned Features:**
