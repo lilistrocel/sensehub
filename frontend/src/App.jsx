@@ -142,6 +142,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/zones/:id"
+        element={
+          <ProtectedRoute>
+            <Zones />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/automations"
         element={
           <ProtectedRoute>

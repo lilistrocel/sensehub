@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -7,6 +8,8 @@ const API_BASE = '/api';
 export default function Zones() {
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
+  const { id: urlZoneId } = useParams();
+  const navigate = useNavigate();
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -32,6 +35,17 @@ export default function Zones() {
   useEffect(() => {
     fetchZones();
   }, []);
+
+  // Handle deep linking - open zone detail when URL contains zone ID
+  useEffect(() => {
+    if (urlZoneId && zones.length > 0 && !loading) {
+      const zone = zones.find(z => z.id === parseInt(urlZoneId, 10));
+      if (zone) {
+        setSelectedZone(zone);
+        fetchZoneDetail(zone.id);
+      }
+    }
+  }, [urlZoneId, zones, loading]);
 
   const fetchZones = async () => {
     try {
@@ -86,6 +100,10 @@ export default function Zones() {
   const closeDetailModal = () => {
     setSelectedZone(null);
     setZoneDetail(null);
+    // If we navigated here via deep link, go back to zones list
+    if (urlZoneId) {
+      navigate('/zones');
+    }
   };
 
   const fetchAvailableEquipment = async () => {
