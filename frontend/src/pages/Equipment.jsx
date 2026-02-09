@@ -1340,13 +1340,14 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
 // Add Equipment Modal
 function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
-  const [formData, setFormData] = useState({
+  const initialFormData = {
     name: '',
     description: '',
     type: '',
     protocol: 'modbus',
     address: ''
-  });
+  };
+  const [formData, setFormData] = useState(initialFormData);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
@@ -1357,6 +1358,13 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleReset = () => {
+    setFormData(initialFormData);
+    setError(null);
+    setSuccessMessage(null);
+    setRetryFn(null);
   };
 
   const handleSubmit = async (e) => {
@@ -1576,6 +1584,14 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                 disabled={saving}
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                disabled={saving}
+              >
+                Reset
               </button>
               <button
                 type="submit"
