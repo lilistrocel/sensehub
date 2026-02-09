@@ -7,6 +7,39 @@
 
 ## Session Log
 
+### Session - 2026-02-09 (Feature #170 - Navigation)
+**Assigned Feature:** #170 - Post-login redirect works
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #170 - Post-login redirect works:
+- Cleared localStorage to ensure logged out state
+- Navigated to /equipment while logged out
+- Verified automatic redirect to /login page
+- Confirmed location state contains intended destination: {from: {pathname: "/equipment"}}
+- Logged in with admin@sensehub.local / admin123
+- After login, redirected to /equipment (NOT dashboard)
+- Equipment page fully loaded with correct content
+- Also tested with /zones route - same behavior confirmed
+- Direct login (no redirect state) correctly goes to dashboard
+- Screenshots: feature170-post-login-redirect-equipment.png, feature170-post-login-redirect-zones.png, feature170-direct-login-to-dashboard.png
+
+**Implementation verified:**
+- ProtectedRoute in App.jsx passes current location to login via state
+- Login.jsx reads location.state?.from?.pathname and redirects there after login
+- Falls back to '/' (dashboard) if no intended destination exists
+
+**Verification:**
+- Browser automation tests passed
+- Zero console errors
+- No mock data patterns in codebase
+- All test scenarios verified with screenshots
+
+**Progress:** 176/189 features passing (93.1%)
+
+---
+
 ### Session - 2026-02-09 (Features #173, #174, #175 - Search Filter)
 **Assigned Features:**
 - #173 - Empty search returns all results
