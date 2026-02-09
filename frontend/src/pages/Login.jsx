@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -9,6 +9,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Get the intended destination from location state, or default to dashboard
+  const from = location.state?.from?.pathname || '/';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -17,7 +21,8 @@ export default function Login() {
 
     try {
       await login(email, password);
-      navigate('/');
+      // Redirect to the originally intended page, not just the dashboard
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err.message || 'Login failed');
     } finally {

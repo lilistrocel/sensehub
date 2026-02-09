@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { AlertSoundProvider } from './context/AlertSoundContext';
@@ -33,6 +33,7 @@ function LoadingSpinner() {
 // Protected route wrapper
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading, needsSetup } = useAuth();
+  const location = useLocation();
 
   if (loading || needsSetup === null) {
     return <LoadingSpinner />;
@@ -44,7 +45,8 @@ function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    // Pass the current location as state so we can redirect back after login
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return <Layout>{children}</Layout>;
