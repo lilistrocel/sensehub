@@ -7,6 +7,7 @@ import { ToastProvider } from './context/ToastContext';
 import { SettingsProvider } from './context/SettingsContext';
 import Layout from './components/Layout';
 import { ToastContainer } from './components/Toast';
+import { BreadcrumbProvider } from './components/Breadcrumb';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
@@ -184,14 +185,16 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <SettingsProvider>
-          <WebSocketProvider>
-            <AlertSoundProvider>
-              <ToastProvider>
-                <AppRoutes />
-                <ToastContainer />
-              </ToastProvider>
-            </AlertSoundProvider>
-          </WebSocketProvider>
+          <BreadcrumbProvider>
+            <WebSocketProvider>
+              <AlertSoundProvider>
+                <ToastProvider>
+                  <AppRoutes />
+                  <ToastContainer />
+                </ToastProvider>
+              </AlertSoundProvider>
+            </WebSocketProvider>
+          </BreadcrumbProvider>
         </SettingsProvider>
       </AuthProvider>
     </BrowserRouter>

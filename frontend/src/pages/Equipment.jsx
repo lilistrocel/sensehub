@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useBreadcrumb } from '../components/Breadcrumb';
 import { getUserFriendlyError } from '../utils/errorHandler';
 import ErrorMessage from '../components/ErrorMessage';
 
@@ -1878,6 +1879,7 @@ export default function Equipment() {
   const { subscribe, connected } = useWebSocket();
   const { id: urlEquipmentId } = useParams();
   const navigate = useNavigate();
+  const { setCustomSegment } = useBreadcrumb();
   const [equipment, setEquipment] = useState([]);
   const [zones, setZones] = useState({});
   const [loading, setLoading] = useState(true);
@@ -1906,6 +1908,17 @@ export default function Equipment() {
   useEffect(() => {
     fetchData();
   }, [token]);
+
+  // Update breadcrumb when viewing equipment detail
+  useEffect(() => {
+    if (selectedEquipment && showDetailModal) {
+      setCustomSegment(selectedEquipment.name);
+    } else {
+      setCustomSegment(null);
+    }
+    // Cleanup when unmounting
+    return () => setCustomSegment(null);
+  }, [selectedEquipment, showDetailModal, setCustomSegment]);
 
   // Handle deep linking - open equipment detail when URL contains equipment ID
   useEffect(() => {

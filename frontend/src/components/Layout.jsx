@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
+import Breadcrumb from './Breadcrumb';
 import { useAuth } from '../context/AuthContext';
 
 const API_BASE = '/api';
@@ -98,9 +99,9 @@ export default function Layout({ children }) {
             {/* Spacer for mobile menu button */}
             <div className="w-10 md:hidden" />
 
-            {/* Page title placeholder */}
+            {/* Breadcrumb navigation */}
             <div className="flex-1 ml-4 md:ml-0">
-              {/* This will be updated per-page */}
+              <Breadcrumb />
             </div>
 
             {/* User info and status */}
