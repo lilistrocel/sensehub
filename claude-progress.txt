@@ -2176,3 +2176,45 @@ Feature #163 - User role changes persist:
 
 **Progress:** 163/189 features passing (86.2%)
 
+
+---
+
+### Session - 2026-02-09 (Feature #167 - URL Security)
+**Assigned Feature:** #167 - URL manipulation doesn't grant unauthorized access
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #167 - URL manipulation doesn't grant unauthorized access:
+- Logged in as viewer user (operator@sensehub.local with role "viewer")
+- Navigated to allowed equipment detail page (/equipment/43)
+- Tested URL manipulation to admin-only routes:
+  - /settings/users → Redirected to /settings/profile
+  - /settings/system → Redirected to /settings/profile
+- Only "Profile" tab visible in Settings navigation for viewers
+- Backend API properly rejects unauthorized requests:
+  - GET /api/users → 403 Forbidden
+  - GET /api/settings → 403 Forbidden
+  - GET /api/settings/storage → 403 Forbidden
+  - GET /api/system/logs → 403 Forbidden
+  - POST /api/settings/factory-reset → 403 Forbidden
+  - DELETE /api/equipment/43 → 403 Forbidden
+  - POST /api/equipment → 403 Forbidden
+  - PUT /api/equipment/43 → 403 Forbidden
+  - GET /api/users/47 → 403 Forbidden (cross-user access blocked)
+- No data leaked - admin APIs return error messages, not data
+- Equipment detail shows "requires admin/operator permissions" for restricted actions
+
+**Security Verification:**
+- Frontend role-based routing: Viewers redirected away from admin-only routes
+- Backend role-based middleware: requireRole() properly enforces permissions
+- Cross-user protection: Cannot access other users' data via URL ID manipulation
+- Read-only access preserved: Viewers can still GET equipment list (authorized)
+
+**Verification:**
+- Browser automation tests passed
+- API curl tests confirmed 403 Forbidden responses
+- Zero console errors
+- No mock data patterns found in codebase
+
+**Progress:** 168/189 features passing (88.9%)
