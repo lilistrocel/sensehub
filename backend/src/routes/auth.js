@@ -205,7 +205,8 @@ router.post('/setup/quick', (req, res) => {
     ).run('quick_setup', JSON.stringify(true));
 
     // Create session for immediate login
-    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '8h' });
+    // Add jti (JWT ID) nonce to ensure token uniqueness even for rapid logins
+    const token = jwt.sign({ userId, jti: uuidv4() }, JWT_SECRET, { expiresIn: '8h' });
     const expiresAt = new Date(Date.now() + SESSION_TIMEOUT).toISOString();
 
     db.prepare(
@@ -269,7 +270,8 @@ router.post('/setup', (req, res) => {
     const userId = result.lastInsertRowid;
 
     // Create session for immediate login
-    const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '8h' });
+    // Add jti (JWT ID) nonce to ensure token uniqueness even for rapid logins
+    const token = jwt.sign({ userId, jti: uuidv4() }, JWT_SECRET, { expiresIn: '8h' });
     const expiresAt = new Date(Date.now() + SESSION_TIMEOUT).toISOString();
 
     db.prepare(
@@ -322,7 +324,8 @@ router.post('/login', (req, res) => {
   }
 
   // Create session
-  const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '8h' });
+  // Add jti (JWT ID) nonce to ensure token uniqueness even for rapid logins
+  const token = jwt.sign({ userId: user.id, jti: uuidv4() }, JWT_SECRET, { expiresIn: '8h' });
   const expiresAt = new Date(Date.now() + SESSION_TIMEOUT).toISOString();
 
   db.prepare(
