@@ -2497,3 +2497,43 @@ Feature #181 - Equipment readings deleted with equipment:
 - No mock data patterns found
 
 **Progress:** 182/190 features passing (95.8%)
+
+---
+
+### Session - 2026-02-09 (Features #182, #183 - Default Reset)
+**Assigned Features:**
+- #182 - Form reset button works
+- #183 - Filter reset button clears all filters
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #182 - Form reset button works:
+- Added Reset button to Add Equipment modal form
+- Created initialFormData constant for consistent reset state
+- Added handleReset function that clears form data, errors, and messages
+- Reset button positioned between Cancel and Add Equipment buttons
+- Verified: all fields cleared to initial state when clicked
+- Verified: no validation errors showing after reset
+- Zero console errors
+
+Feature #183 - Filter reset button clears all filters:
+- Added "Clear Filters" button to Equipment page filter section
+- Button only appears when search term OR status filter is active
+- Button clears both search term and status filter in one click
+- After clearing, button disappears (conditional render)
+- Verified: search term cleared, status back to "All Statuses"
+- Verified: all equipment displayed after clearing filters
+- Zero console errors
+
+**Files Modified:**
+- frontend/src/pages/Equipment.jsx (Reset button in AddEquipmentModal, Clear Filters button in filter section)
+
+**Verification:**
+- Browser automation tests passed for both features
+- Screenshots captured: feature182-form-filled-before-reset.png, feature182-form-after-reset.png
+- Screenshots captured: feature183-filters-applied.png, feature183-filters-cleared.png
+- Zero console errors
+- No mock data patterns in codebase
+
+**Progress:** 182/189 features passing (96.3%)
