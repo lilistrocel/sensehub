@@ -7,6 +7,46 @@
 
 ## Session Log
 
+### Session - 2026-02-09 (Feature #164 - URL Handling)
+**Assigned Feature:** #164 - Direct URL to equipment detail works
+**Status:** PASSED ✅
+
+**What was verified:**
+
+Feature #164 - Direct URL to equipment detail works:
+- Route `/equipment/:id` already exists in App.jsx
+- Equipment.jsx already implements `useParams` to read URL parameter
+- Auto-opens equipment detail modal when navigating to `/equipment/:id`
+- Enhanced implementation with:
+  - URL updates when viewing equipment detail (`navigate(\`/equipment/${eq.id}\`)`)
+  - URL clears when closing modal for clean navigation
+  - Handles equipment not found case
+
+**Verification Steps Completed:**
+1. Logged in as admin user
+2. Navigated to `/equipment` page
+3. Clicked "View" on "Door Sensor H1" - URL updated to `/equipment/43`
+4. Opened new browser tab
+5. Pasted URL `http://localhost:5176/equipment/43` and navigated
+6. Verified equipment detail modal auto-opened with correct data:
+   - Equipment name: Door Sensor H1
+   - Status: Online
+   - Type: Sensor
+   - Protocol: zigbee
+   - Connection Address: zigbee://door/h1
+   - Zone: Test Zone Toast
+7. Zero console errors
+8. No mock data patterns found in codebase
+
+**Files Modified:**
+- frontend/src/pages/Equipment.jsx (enhanced deep link handling)
+
+**Screenshots:**
+- feature164-deep-link-works.png
+- feature164-deep-link-verified.png
+
+---
+
 ### Session - 2026-02-09 (Feature #165 - URL Handling)
 **Assigned Feature:** #165 - Direct URL to zone detail works
 **Status:** PASSED ✅
