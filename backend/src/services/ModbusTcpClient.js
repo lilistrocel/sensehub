@@ -112,10 +112,13 @@ class ModbusTcpClient {
   }
 
   /**
-   * Generate a unique key for a connection
+   * Generate a unique key for a connection.
+   * Uses host:port only (not unitId) so all devices on the same gateway
+   * share one TCP connection and one request queue. This prevents RS485
+   * bus collisions when daisy-chaining multiple devices.
    */
   getConnectionKey(host, port, unitId) {
-    return `${host}:${port}:${unitId}`;
+    return `${host}:${port}`;
   }
 
   /**
@@ -308,6 +311,7 @@ class ModbusTcpClient {
    */
   async readCoils(host, port = 502, unitId = 1, address, quantity, options = {}) {
     return this.queueRequest(host, port, unitId, async (client) => {
+      client.setID(unitId);
       const result = await client.readCoils(address, quantity);
       return result.data;
     }, options);
@@ -326,6 +330,7 @@ class ModbusTcpClient {
    */
   async readDiscreteInputs(host, port = 502, unitId = 1, address, quantity, options = {}) {
     return this.queueRequest(host, port, unitId, async (client) => {
+      client.setID(unitId);
       const result = await client.readDiscreteInputs(address, quantity);
       return result.data;
     }, options);
@@ -344,6 +349,7 @@ class ModbusTcpClient {
    */
   async readHoldingRegisters(host, port = 502, unitId = 1, address, quantity, options = {}) {
     return this.queueRequest(host, port, unitId, async (client) => {
+      client.setID(unitId);
       const result = await client.readHoldingRegisters(address, quantity);
       return result.data;
     }, options);
@@ -362,6 +368,7 @@ class ModbusTcpClient {
    */
   async readInputRegisters(host, port = 502, unitId = 1, address, quantity, options = {}) {
     return this.queueRequest(host, port, unitId, async (client) => {
+      client.setID(unitId);
       const result = await client.readInputRegisters(address, quantity);
       return result.data;
     }, options);
@@ -384,6 +391,7 @@ class ModbusTcpClient {
    */
   async writeSingleCoil(host, port = 502, unitId = 1, address, value, options = {}) {
     return this.queueRequest(host, port, unitId, async (client) => {
+      client.setID(unitId);
       await client.writeCoil(address, value);
       return { address, value };
     }, options);
@@ -409,6 +417,7 @@ class ModbusTcpClient {
     return new Promise((resolve, reject) => {
       const request = new QueuedRequest(
         async (client) => {
+          client.setID(unitId);
           // Save the original timeout and set a short one
           const originalTimeout = client._timeout;
           client.setTimeout(1500); // Short timeout — we just need TCP write to go through
@@ -459,6 +468,7 @@ class ModbusTcpClient {
     return new Promise((resolve, reject) => {
       const request = new QueuedRequest(
         async (client) => {
+          client.setID(unitId);
           const originalTimeout = client._timeout;
           client.setTimeout(1500);
           try {
@@ -521,6 +531,7 @@ class ModbusTcpClient {
    */
   async writeMultipleCoils(host, port = 502, unitId = 1, address, values, options = {}) {
     return this.queueRequest(host, port, unitId, async (client) => {
+      client.setID(unitId);
       await client.writeCoils(address, values);
       return { address, quantity: values.length };
     }, options);

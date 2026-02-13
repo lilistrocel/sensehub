@@ -348,19 +348,20 @@ class ModbusPollingService {
       // Read each configured register mapping
       for (const mapping of state.registerMappings) {
         try {
+          const regAddress = mapping.address ?? mapping.register;
           const value = await this.readRegister(host, port, state.slaveId, mapping);
 
           if (value !== null) {
             readings.push({
-              name: mapping.name || `Register ${mapping.address}`,
+              name: mapping.name || `Register ${regAddress}`,
               value,
               unit: mapping.unit || '',
-              registerAddress: mapping.address,
-              functionCode: mapping.functionCode || 3
+              registerAddress: regAddress,
+              functionCode: this.getFunctionCode(mapping)
             });
           }
         } catch (regError) {
-          console.error(`[Polling] Error reading register ${mapping.address} on device ${equipmentId}:`, regError.message);
+          console.error(`[Polling] Error reading register ${mapping.address ?? mapping.register} on device ${equipmentId}:`, regError.message);
         }
       }
 
@@ -419,12 +420,40 @@ class ModbusPollingService {
   }
 
   /**
-   * Read a single register based on mapping configuration
+   * Determine the Modbus function code from a register mapping.
+   * Supports both explicit functionCode and type-based lookup.
+   */
+  getFunctionCode(mapping) {
+    // Explicit functionCode takes priority
+    if (mapping.functionCode !== undefined) {
+      return parseInt(mapping.functionCode, 10);
+    }
+    // Map register type names to function codes
+    const typeMap = {
+      'coil': 1,
+      'discrete': 2,
+      'discreteInput': 2,
+      'holding': 3,
+      'holdingRegister': 3,
+      'input': 4,
+      'inputRegister': 4
+    };
+    if (mapping.type && typeMap[mapping.type]) {
+      return typeMap[mapping.type];
+    }
+    return 3; // Default: holding registers
+  }
+
+  /**
+   * Read a single register based on mapping configuration.
+   * Supports both mapping formats:
+   *   - {address, functionCode, quantity} (explicit)
+   *   - {register, type, dataType}        (equipment template style)
    */
   async readRegister(host, port, unitId, mapping) {
-    const address = parseInt(mapping.address, 10);
+    const address = parseInt(mapping.address ?? mapping.register, 10);
     const quantity = parseInt(mapping.quantity, 10) || 1;
-    const functionCode = parseInt(mapping.functionCode, 10) || 3;
+    const functionCode = this.getFunctionCode(mapping);
 
     let data;
 
@@ -537,15 +566,28 @@ class ModbusPollingService {
 
       const timestamp = new Date().toISOString();
 
-      // Find the primary reading (first one, or one marked as primary)
-      let primaryReading = readings.find(r => r.isPrimary) || readings[0];
+      // For relay devices, store coil states as JSON in last_reading
+      const isRelayDevice = equipment.type === 'relay' ||
+        state.registerMappings.some(m => (m.type === 'coil' || parseInt(m.functionCode, 10) === 1));
 
-      // Apply calibration to primary reading
-      const calibratedValue = this.applyCalibration(
-        primaryReading.value,
-        equipment,
-        state.registerMappings.find(m => m.name === primaryReading.name) || {}
-      );
+      let lastReadingValue;
+      if (isRelayDevice) {
+        const relayStates = {};
+        for (const reading of readings) {
+          const addr = reading.registerAddress;
+          relayStates[addr] = reading.value === 1;
+        }
+        lastReadingValue = JSON.stringify({ relayStates });
+      } else {
+        // Find the primary reading (first one, or one marked as primary)
+        let primaryReading = readings.find(r => r.isPrimary) || readings[0];
+        const calibratedValue = this.applyCalibration(
+          primaryReading.value,
+          equipment,
+          state.registerMappings.find(m => m.name === primaryReading.name) || {}
+        );
+        lastReadingValue = calibratedValue.toString();
+      }
 
       // Update equipment status and last_reading
       db.prepare(`
@@ -556,26 +598,28 @@ class ModbusPollingService {
             updated_at = ?
         WHERE id = ?
       `).run(
-        calibratedValue.toString(),
+        lastReadingValue,
         timestamp,
         timestamp,
         equipmentId
       );
 
-      // Record readings to history
-      for (const reading of readings) {
-        const mapping = state.registerMappings.find(m => m.name === reading.name) || {};
-        const calibratedReadingValue = this.applyCalibration(reading.value, equipment, mapping);
+      // Record readings to history (skip for relay/coil devices to avoid database bloat)
+      if (!isRelayDevice) {
+        for (const reading of readings) {
+          const mapping = state.registerMappings.find(m => m.name === reading.name) || {};
+          const calibratedReadingValue = this.applyCalibration(reading.value, equipment, mapping);
 
-        db.prepare(`
-          INSERT INTO readings (equipment_id, value, unit, timestamp)
-          VALUES (?, ?, ?, ?)
-        `).run(
-          equipmentId,
-          calibratedReadingValue,
-          reading.unit,
-          timestamp
-        );
+          db.prepare(`
+            INSERT INTO readings (equipment_id, value, unit, timestamp)
+            VALUES (?, ?, ?, ?)
+          `).run(
+            equipmentId,
+            calibratedReadingValue,
+            reading.unit,
+            timestamp
+          );
+        }
       }
 
       // Broadcast updates via WebSocket
@@ -583,14 +627,10 @@ class ModbusPollingService {
         equipmentId,
         name: state.name,
         status: 'online',
-        lastReading: calibratedValue,
+        lastReading: lastReadingValue,
         readings: readings.map(r => ({
           name: r.name,
-          value: this.applyCalibration(
-            r.value,
-            equipment,
-            state.registerMappings.find(m => m.name === r.name) || {}
-          ),
+          value: r.value,
           unit: r.unit
         })),
         timestamp
@@ -598,13 +638,26 @@ class ModbusPollingService {
 
       if (global.broadcast) {
         global.broadcast('equipment_reading', broadcastData);
-        global.broadcast('sensor_reading', {
-          equipment_id: equipmentId,
-          equipment_name: state.name,
-          value: calibratedValue,
-          unit: readings[0].unit,
-          timestamp
-        });
+        if (isRelayDevice) {
+          // Broadcast relay-specific state for UI
+          const relayStates = {};
+          for (const reading of readings) {
+            relayStates[reading.registerAddress] = reading.value === 1;
+          }
+          global.broadcast('relay_state_changed', {
+            equipmentId,
+            relayStates,
+            timestamp
+          });
+        } else {
+          global.broadcast('sensor_reading', {
+            equipment_id: equipmentId,
+            equipment_name: state.name,
+            value: readings[0].value,
+            unit: readings[0].unit,
+            timestamp
+          });
+        }
       }
 
     } catch (error) {
