@@ -1338,6 +1338,117 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   );
 }
 
+// Discovered Devices Modal - Shows devices found during network scan
+function DiscoveredDevicesModal({ isOpen, onClose, devices, onAddDevice, addingDevice }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Discovered Modbus TCP Devices
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-4 overflow-y-auto max-h-[60vh]">
+          {devices.length === 0 ? (
+            <p className="text-center text-gray-500 py-8">
+              No new Modbus devices discovered on the network.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 mb-4">
+                Found {devices.length} Modbus TCP device(s) on the network. Click "Add" to add them to your equipment list.
+              </p>
+
+              {devices.map((device) => (
+                <div
+                  key={device.address}
+                  className="border border-gray-200 rounded-lg p-4 hover:border-primary-300 transition-colors"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">
+                        {device.suggestedName}
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Address: <span className="font-mono">{device.address}</span>
+                      </p>
+                      {device.deviceInfo && Object.keys(device.deviceInfo).length > 0 && (
+                        <div className="mt-2 text-xs text-gray-500">
+                          {device.deviceInfo.VendorName && (
+                            <p>Vendor: {device.deviceInfo.VendorName}</p>
+                          )}
+                          {device.deviceInfo.ProductName && (
+                            <p>Product: {device.deviceInfo.ProductName}</p>
+                          )}
+                          {device.deviceInfo.MajorMinorRevision && (
+                            <p>Version: {device.deviceInfo.MajorMinorRevision}</p>
+                          )}
+                        </div>
+                      )}
+                      <div className="mt-2 flex items-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          device.responsive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {device.responsive ? 'Responsive' : 'Detected'}
+                        </span>
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          Port {device.port}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onAddDevice(device)}
+                      disabled={addingDevice === device.address}
+                      className="ml-4 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    >
+                      {addingDevice === device.address ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Add
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end p-4 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Add Equipment Modal
 function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
   const initialFormData = {
@@ -1345,19 +1456,27 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
     description: '',
     type: '',
     protocol: 'modbus',
-    address: ''
+    address: '',
+    slave_id: '',
+    polling_interval_ms: '1000',
+    register_mappings: []
   };
   const [formData, setFormData] = useState(initialFormData);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [retryFn, setRetryFn] = useState(null);
+  const [showModbusConfig, setShowModbusConfig] = useState(true);
   // Ref to track submission state synchronously for double-click protection
   const isSubmittingRef = React.useRef(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    // Update Modbus config visibility when protocol changes
+    if (name === 'protocol') {
+      setShowModbusConfig(value === 'modbus');
+    }
   };
 
   const handleReset = () => {
@@ -1365,6 +1484,38 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
     setError(null);
     setSuccessMessage(null);
     setRetryFn(null);
+    setShowModbusConfig(true);
+  };
+
+  // Handle adding a new register mapping
+  const handleAddRegisterMapping = () => {
+    setFormData(prev => ({
+      ...prev,
+      register_mappings: [...prev.register_mappings, {
+        name: '',
+        register: '',
+        type: 'holding',
+        dataType: 'uint16',
+        access: 'read'
+      }]
+    }));
+  };
+
+  // Handle updating a register mapping
+  const handleUpdateRegisterMapping = (index, field, value) => {
+    setFormData(prev => {
+      const updated = [...prev.register_mappings];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, register_mappings: updated };
+    });
+  };
+
+  // Handle removing a register mapping
+  const handleRemoveRegisterMapping = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      register_mappings: prev.register_mappings.filter((_, i) => i !== index)
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -1387,6 +1538,13 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
     setSaving(true);
 
     try {
+      // Prepare Modbus-specific fields only if protocol is modbus
+      const modbusFields = formData.protocol === 'modbus' ? {
+        slave_id: formData.slave_id ? parseInt(formData.slave_id) : null,
+        polling_interval_ms: formData.polling_interval_ms ? parseInt(formData.polling_interval_ms) : 1000,
+        register_mappings: formData.register_mappings.length > 0 ? formData.register_mappings : null
+      } : {};
+
       const response = await fetch(`${API_BASE}/equipment`, {
         method: 'POST',
         headers: {
@@ -1398,7 +1556,8 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
           description: formData.description.trim(),
           type: formData.type.trim(),
           protocol: formData.protocol,
-          address: formData.address.trim()
+          address: formData.address.trim(),
+          ...modbusFields
         })
       });
 
@@ -1416,8 +1575,12 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
         description: '',
         type: '',
         protocol: 'modbus',
-        address: ''
+        address: '',
+        slave_id: '',
+        polling_interval_ms: '1000',
+        register_mappings: []
       });
+      setShowModbusConfig(true);
 
       // Notify parent and close after a brief delay
       setTimeout(() => {
@@ -1575,6 +1738,146 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
               />
             </div>
 
+            {/* Modbus Configuration Section */}
+            {showModbusConfig && (
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                  <svg className="w-4 h-4 mr-2 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Modbus Configuration
+                </h4>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="slave_id" className="block text-sm font-medium text-gray-700 mb-1">
+                      Slave ID (1-247)
+                    </label>
+                    <input
+                      type="number"
+                      id="slave_id"
+                      name="slave_id"
+                      min="1"
+                      max="247"
+                      value={formData.slave_id}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="e.g., 1"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="polling_interval_ms" className="block text-sm font-medium text-gray-700 mb-1">
+                      Polling Interval (ms)
+                    </label>
+                    <input
+                      type="number"
+                      id="polling_interval_ms"
+                      name="polling_interval_ms"
+                      min="100"
+                      max="60000"
+                      step="100"
+                      value={formData.polling_interval_ms}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="1000"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Register Mappings
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddRegisterMapping}
+                      className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add Register
+                    </button>
+                  </div>
+
+                  {formData.register_mappings.length === 0 ? (
+                    <p className="text-sm text-gray-500 italic">No register mappings defined. Click "Add Register" to configure.</p>
+                  ) : (
+                    <div className="space-y-3 max-h-48 overflow-y-auto">
+                      {formData.register_mappings.map((mapping, index) => (
+                        <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-xs font-medium text-gray-500">Register #{index + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRegisterMapping(index)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              placeholder="Name"
+                              value={mapping.name}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'name', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <input
+                              type="number"
+                              placeholder="Register #"
+                              value={mapping.register}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'register', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <select
+                              value={mapping.type}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'type', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            >
+                              <option value="holding">Holding Register</option>
+                              <option value="input">Input Register</option>
+                              <option value="coil">Coil</option>
+                              <option value="discrete">Discrete Input</option>
+                            </select>
+                            <select
+                              value={mapping.dataType}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'dataType', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            >
+                              <option value="uint16">UInt16</option>
+                              <option value="int16">Int16</option>
+                              <option value="uint32">UInt32</option>
+                              <option value="int32">Int32</option>
+                              <option value="float32">Float32</option>
+                              <option value="bool">Boolean</option>
+                            </select>
+                          </div>
+                          <div className="mt-2">
+                            <select
+                              value={mapping.access}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'access', e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            >
+                              <option value="read">Read Only</option>
+                              <option value="write">Write Only</option>
+                              <option value="readwrite">Read/Write</option>
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Buttons */}
             <div className="flex justify-end gap-3 pt-4">
               <button
@@ -1625,12 +1928,16 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
     description: '',
     type: '',
     protocol: 'modbus',
-    address: ''
+    address: '',
+    slave_id: '',
+    polling_interval_ms: '1000',
+    register_mappings: []
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [retryFn, setRetryFn] = useState(null);
+  const [showModbusConfig, setShowModbusConfig] = useState(true);
   // Ref to track submission state synchronously for double-click protection
   const isSubmittingRef = React.useRef(false);
 
@@ -1642,8 +1949,12 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
         description: equipment.description || '',
         type: equipment.type || '',
         protocol: equipment.protocol || 'modbus',
-        address: equipment.address || ''
+        address: equipment.address || '',
+        slave_id: equipment.slave_id !== null && equipment.slave_id !== undefined ? String(equipment.slave_id) : '',
+        polling_interval_ms: equipment.polling_interval_ms ? String(equipment.polling_interval_ms) : '1000',
+        register_mappings: Array.isArray(equipment.register_mappings) ? equipment.register_mappings : []
       });
+      setShowModbusConfig(equipment.protocol === 'modbus');
       setError(null);
       setSuccessMessage(null);
       setRetryFn(null);
@@ -1654,6 +1965,41 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    // Update Modbus config visibility when protocol changes
+    if (name === 'protocol') {
+      setShowModbusConfig(value === 'modbus');
+    }
+  };
+
+  // Handle adding a new register mapping
+  const handleAddRegisterMapping = () => {
+    setFormData(prev => ({
+      ...prev,
+      register_mappings: [...prev.register_mappings, {
+        name: '',
+        register: '',
+        type: 'holding',
+        dataType: 'uint16',
+        access: 'read'
+      }]
+    }));
+  };
+
+  // Handle updating a register mapping
+  const handleUpdateRegisterMapping = (index, field, value) => {
+    setFormData(prev => {
+      const updated = [...prev.register_mappings];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, register_mappings: updated };
+    });
+  };
+
+  // Handle removing a register mapping
+  const handleRemoveRegisterMapping = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      register_mappings: prev.register_mappings.filter((_, i) => i !== index)
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -1676,6 +2022,13 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
     setSaving(true);
 
     try {
+      // Prepare Modbus-specific fields only if protocol is modbus
+      const modbusFields = formData.protocol === 'modbus' ? {
+        slave_id: formData.slave_id ? parseInt(formData.slave_id) : null,
+        polling_interval_ms: formData.polling_interval_ms ? parseInt(formData.polling_interval_ms) : 1000,
+        register_mappings: formData.register_mappings.length > 0 ? formData.register_mappings : null
+      } : {};
+
       const response = await fetch(`${API_BASE}/equipment/${equipment.id}`, {
         method: 'PUT',
         headers: {
@@ -1687,7 +2040,8 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
           description: formData.description.trim(),
           type: formData.type.trim(),
           protocol: formData.protocol,
-          address: formData.address.trim()
+          address: formData.address.trim(),
+          ...modbusFields
         })
       });
 
@@ -1914,6 +2268,9 @@ export default function Equipment() {
   const [sortDirection, setSortDirection] = useState('asc');
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
+  const [discoveredDevices, setDiscoveredDevices] = useState([]);
+  const [showDiscoveredModal, setShowDiscoveredModal] = useState(false);
+  const [addingDevice, setAddingDevice] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [equipmentNotFound, setEquipmentNotFound] = useState(false);
 
@@ -2143,6 +2500,7 @@ export default function Equipment() {
   const handleScan = async () => {
     setScanning(true);
     setScanResult(null);
+    setDiscoveredDevices([]);
 
     try {
       const response = await fetch(`${API_BASE}/equipment/scan`, {
@@ -2150,7 +2508,8 @@ export default function Equipment() {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ scanType: 'network' })
       });
 
       if (!response.ok) {
@@ -2159,22 +2518,80 @@ export default function Equipment() {
       }
 
       const data = await response.json();
+      const discovered = data.discovered || [];
+
       setScanResult({
         type: 'success',
         message: data.message,
-        discovered: data.discovered || []
+        discovered: discovered,
+        totalFound: data.totalFound || 0,
+        existingDevicesFound: data.existingDevicesFound || 0
       });
+
+      // If devices were discovered, store them and show the modal
+      if (discovered.length > 0) {
+        setDiscoveredDevices(discovered);
+        setShowDiscoveredModal(true);
+      }
 
       // Refresh equipment list after scan
       await fetchData();
 
-      // Clear result after delay
-      setTimeout(() => setScanResult(null), 5000);
+      // Don't auto-clear if devices found - let user dismiss
+      if (discovered.length === 0) {
+        setTimeout(() => setScanResult(null), 5000);
+      }
     } catch (err) {
       setScanResult({ type: 'error', message: err.message });
       setTimeout(() => setScanResult(null), 5000);
     } finally {
       setScanning(false);
+    }
+  };
+
+  // Add discovered device to equipment list
+  const handleAddDiscoveredDevice = async (device) => {
+    setAddingDevice(device.address);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: device.suggestedName || `Modbus Device (${device.ip})`,
+          description: device.deviceInfo?.ProductName
+            ? `${device.deviceInfo.VendorName || ''} ${device.deviceInfo.ProductName}`.trim()
+            : `Discovered Modbus TCP device at ${device.address}`,
+          type: 'sensor',
+          protocol: 'modbus',
+          address: device.address
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || 'Failed to add device');
+      }
+
+      // Remove device from discovered list
+      setDiscoveredDevices(prev => prev.filter(d => d.address !== device.address));
+
+      // Refresh equipment list
+      await fetchData();
+
+      // If no more devices, close modal
+      if (discoveredDevices.length <= 1) {
+        setShowDiscoveredModal(false);
+        setScanResult(null);
+      }
+    } catch (err) {
+      console.error('Error adding device:', err);
+      alert(`Failed to add device: ${err.message}`);
+    } finally {
+      setAddingDevice(null);
     }
   };
 
@@ -2409,7 +2826,7 @@ export default function Equipment() {
                 <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                Scan for Equipment
+                Scan Network for Modbus Devices
               </>
             )}
           </button>
@@ -2944,6 +3361,18 @@ export default function Equipment() {
           </div>
         </div>
       )}
+
+      {/* Discovered Devices Modal */}
+      <DiscoveredDevicesModal
+        isOpen={showDiscoveredModal}
+        onClose={() => {
+          setShowDiscoveredModal(false);
+          setScanResult(null);
+        }}
+        devices={discoveredDevices}
+        onAddDevice={handleAddDiscoveredDevice}
+        addingDevice={addingDevice}
+      />
     </div>
   );
 }

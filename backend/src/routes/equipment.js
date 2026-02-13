@@ -41,22 +41,72 @@ router.get('/', (req, res) => {
   query += ' ORDER BY name ASC';
 
   const equipment = db.prepare(query).all(...params);
+
+  // Parse register_mappings JSON for each equipment
+  equipment.forEach(item => {
+    if (item.register_mappings) {
+      try {
+        item.register_mappings = JSON.parse(item.register_mappings);
+      } catch (e) {
+        // Keep as string if not valid JSON
+      }
+    }
+  });
+
   res.json(equipment);
 });
 
 // POST /api/equipment - Create equipment
 router.post('/', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, type, protocol, address } = req.body;
+  const { name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Bad Request', message: 'Name is required' });
   }
 
+  // Validate Modbus-specific fields if protocol is Modbus
+  if (protocol === 'modbus') {
+    if (slave_id !== undefined && slave_id !== null && slave_id !== '') {
+      const slaveIdNum = parseInt(slave_id);
+      if (isNaN(slaveIdNum) || slaveIdNum < 1 || slaveIdNum > 247) {
+        return res.status(400).json({ error: 'Bad Request', message: 'Modbus slave ID must be between 1 and 247' });
+      }
+    }
+    if (polling_interval_ms !== undefined && polling_interval_ms !== null && polling_interval_ms !== '') {
+      const pollingMs = parseInt(polling_interval_ms);
+      if (isNaN(pollingMs) || pollingMs < 100 || pollingMs > 60000) {
+        return res.status(400).json({ error: 'Bad Request', message: 'Polling interval must be between 100ms and 60000ms' });
+      }
+    }
+  }
+
+  // Serialize register_mappings to JSON if it's an array/object
+  const registerMappingsJson = register_mappings ?
+    (typeof register_mappings === 'string' ? register_mappings : JSON.stringify(register_mappings)) : null;
+
   const result = db.prepare(
-    'INSERT INTO equipment (name, description, type, protocol, address) VALUES (?, ?, ?, ?, ?)'
-  ).run(name, description, type, protocol, address);
+    'INSERT INTO equipment (name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    name,
+    description,
+    type,
+    protocol,
+    address,
+    slave_id ? parseInt(slave_id) : null,
+    polling_interval_ms ? parseInt(polling_interval_ms) : 1000,
+    registerMappingsJson
+  );
 
   const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(result.lastInsertRowid);
+
+  // Parse register_mappings for response
+  if (equipment.register_mappings) {
+    try {
+      equipment.register_mappings = JSON.parse(equipment.register_mappings);
+    } catch (e) {
+      // Keep as string if not valid JSON
+    }
+  }
 
   // Queue for cloud sync
   queueForSync('equipment', equipment.id, 'create', equipment);
@@ -74,6 +124,15 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
   }
 
+  // Parse register_mappings JSON if present
+  if (equipment.register_mappings) {
+    try {
+      equipment.register_mappings = JSON.parse(equipment.register_mappings);
+    } catch (e) {
+      // Keep as string if not valid JSON
+    }
+  }
+
   // Get zones for this equipment
   const zones = db.prepare(
     'SELECT z.* FROM zones z JOIN equipment_zones ez ON z.id = ez.zone_id WHERE ez.equipment_id = ?'
@@ -84,7 +143,7 @@ router.get('/:id', (req, res) => {
 
 // PUT /api/equipment/:id - Update equipment
 router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, type, protocol, address, enabled } = req.body;
+  const { name, description, type, protocol, address, enabled, slave_id, polling_interval_ms, register_mappings } = req.body;
   const equipmentId = req.params.id;
 
   const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
@@ -93,8 +152,34 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
     return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
   }
 
+  // Determine the effective protocol for validation
+  const effectiveProtocol = protocol ?? equipment.protocol;
+
+  // Validate Modbus-specific fields if protocol is Modbus
+  if (effectiveProtocol === 'modbus') {
+    if (slave_id !== undefined && slave_id !== null && slave_id !== '') {
+      const slaveIdNum = parseInt(slave_id);
+      if (isNaN(slaveIdNum) || slaveIdNum < 1 || slaveIdNum > 247) {
+        return res.status(400).json({ error: 'Bad Request', message: 'Modbus slave ID must be between 1 and 247' });
+      }
+    }
+    if (polling_interval_ms !== undefined && polling_interval_ms !== null && polling_interval_ms !== '') {
+      const pollingMs = parseInt(polling_interval_ms);
+      if (isNaN(pollingMs) || pollingMs < 100 || pollingMs > 60000) {
+        return res.status(400).json({ error: 'Bad Request', message: 'Polling interval must be between 100ms and 60000ms' });
+      }
+    }
+  }
+
+  // Serialize register_mappings to JSON if it's an array/object
+  let registerMappingsJson = equipment.register_mappings;
+  if (register_mappings !== undefined) {
+    registerMappingsJson = register_mappings ?
+      (typeof register_mappings === 'string' ? register_mappings : JSON.stringify(register_mappings)) : null;
+  }
+
   db.prepare(
-    "UPDATE equipment SET name = ?, description = ?, type = ?, protocol = ?, address = ?, enabled = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE equipment SET name = ?, description = ?, type = ?, protocol = ?, address = ?, enabled = ?, slave_id = ?, polling_interval_ms = ?, register_mappings = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(
     name ?? equipment.name,
     description ?? equipment.description,
@@ -102,10 +187,22 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
     protocol ?? equipment.protocol,
     address ?? equipment.address,
     enabled !== undefined ? (enabled ? 1 : 0) : equipment.enabled,
+    slave_id !== undefined ? (slave_id ? parseInt(slave_id) : null) : equipment.slave_id,
+    polling_interval_ms !== undefined ? (polling_interval_ms ? parseInt(polling_interval_ms) : 1000) : equipment.polling_interval_ms,
+    registerMappingsJson,
     equipmentId
   );
 
   const updated = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+
+  // Parse register_mappings for response
+  if (updated.register_mappings) {
+    try {
+      updated.register_mappings = JSON.parse(updated.register_mappings);
+    } catch (e) {
+      // Keep as string if not valid JSON
+    }
+  }
 
   // Queue for cloud sync
   queueForSync('equipment', updated.id, 'update', updated);
@@ -138,13 +235,78 @@ router.delete('/:id', requireRole('admin'), (req, res) => {
   res.json({ message: 'Equipment deleted successfully' });
 });
 
-// POST /api/equipment/scan - Discover equipment
-router.post('/scan', requireRole('admin', 'operator'), (req, res) => {
-  // Simulate equipment discovery
-  res.json({
-    message: 'Scan initiated',
-    discovered: []
-  });
+// POST /api/equipment/scan - Discover equipment (Modbus TCP Scanner)
+router.post('/scan', requireRole('admin', 'operator'), async (req, res) => {
+  const { subnet, ports, timeout, scanType = 'network' } = req.body;
+
+  try {
+    const { scanNetwork, quickScan, getLocalNetworks } = require('../services/modbusScanner');
+
+    let discovered = [];
+    let scanInfo = {};
+
+    if (scanType === 'quick' && subnet) {
+      // Quick scan of a specific IP or range
+      discovered = await quickScan(subnet, { ports, timeout });
+      scanInfo = {
+        type: 'quick',
+        target: subnet
+      };
+    } else {
+      // Full network scan
+      const networks = getLocalNetworks();
+      scanInfo = {
+        type: 'network',
+        networks: networks.map(n => n.cidr || `${n.address}/${n.netmask}`)
+      };
+
+      discovered = await scanNetwork({
+        subnet,
+        ports,
+        timeout: timeout || 1000
+      });
+    }
+
+    // Get existing equipment addresses to filter out already-added devices
+    const existingEquipment = db.prepare('SELECT address FROM equipment WHERE address IS NOT NULL').all();
+    const existingAddresses = new Set(existingEquipment.map(e => e.address));
+
+    // Transform discovered devices to a more useful format
+    const devices = discovered.map(device => {
+      const address = `${device.ip}:${device.port}`;
+      return {
+        ip: device.ip,
+        port: device.port,
+        address,
+        protocol: 'modbus',
+        responsive: device.responsive,
+        deviceInfo: device.deviceInfo,
+        alreadyAdded: existingAddresses.has(address),
+        suggestedName: device.deviceInfo?.ProductName ||
+                       device.deviceInfo?.VendorName ||
+                       `Modbus Device (${device.ip})`
+      };
+    });
+
+    // Filter out already added devices by default, but include the info
+    const newDevices = devices.filter(d => !d.alreadyAdded);
+    const existingDevicesFound = devices.filter(d => d.alreadyAdded);
+
+    res.json({
+      message: `Scan completed. Found ${devices.length} Modbus device(s).`,
+      discovered: newDevices,
+      existingDevicesFound: existingDevicesFound.length,
+      scanInfo,
+      totalFound: devices.length
+    });
+
+  } catch (err) {
+    console.error('Scan error:', err);
+    res.status(500).json({
+      error: 'Scan Failed',
+      message: err.message || 'Failed to scan for Modbus devices'
+    });
+  }
 });
 
 // POST /api/equipment/:id/control - Control equipment
