@@ -2,10 +2,59 @@
 
 ## Current Status
 - **Total Features:** 198
-- **Passing:** 191
-- **Completion:** 96.5%
+- **Passing:** 193
+- **Completion:** 97.5%
 
 ## Session Log
+
+### Session - 2026-02-13 (Features #197, #192 - Modbus Services)
+**Assigned Features:**
+- #197 - Modbus TCP Client Service
+- #192 - Modbus Slave ID Scanner
+**Status:** ALL PASSED ✅
+
+**What was implemented:**
+
+Feature #197 - Modbus TCP Client Service:
+- Installed modbus-serial npm package for Modbus TCP communication
+- Created ModbusTcpClient class with connection pooling (max 10 connections)
+- Implemented read functions: FC01 (coils), FC02 (discrete inputs), FC03 (holding registers), FC04 (input registers)
+- Implemented write functions: FC05 (single coil), FC06 (single register), FC15 (multiple coils), FC16 (multiple registers)
+- Request queue with configurable timeout (default 5s) and retry logic (default 3 retries)
+- Automatic reconnection with exponential backoff
+- Idle connection cleanup (60 second timeout)
+- Created REST API routes at /api/modbus/* for all operations
+
+Feature #192 - Modbus Slave ID Scanner:
+- Created POST /api/equipment/scan-slaves endpoint for slave ID discovery
+- Scans slave IDs 1-247 (or custom range) to find RTU devices behind TCP gateways
+- Configurable timeout and batch scanning for efficiency
+- Returns list of responding slaves with response times and sample data
+- Created POST /api/equipment/scan-slaves/create-bulk for batch equipment creation
+- Added SlaveIdScannerModal UI component with configuration fields
+- Progress indicator shows scan progress
+- Results table allows selecting discovered slaves
+- "Add X Device(s)" button creates equipment entries from selected slaves
+
+**Files Created:**
+- backend/src/services/ModbusTcpClient.js (538 lines)
+- backend/src/routes/modbus.js (362 lines)
+
+**Files Modified:**
+- backend/package.json (added modbus-serial dependency)
+- backend/src/index.js (added modbus routes)
+- backend/src/routes/equipment.js (scan-slaves endpoints)
+- frontend/src/pages/Equipment.jsx (SlaveIdScannerModal, scan handlers)
+
+**Verification:**
+- Browser automation tests passed for both features
+- API endpoints validated with proper error handling
+- Zero console errors
+- No mock data patterns found in codebase
+
+**Progress:** 193/198 features passing (97.5%)
+
+---
 
 ### Session - 2026-02-13 (Feature #191 - Modbus TCP Device Scanner)
 **Assigned Feature:** #191 - Modbus TCP Device Scanner
