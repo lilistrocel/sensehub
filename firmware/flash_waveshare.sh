@@ -124,7 +124,8 @@ echo ""
 # Create a temporary copy of the firmware with the specified slave ID
 TEMP_DIR=$(mktemp -d)
 TEMP_FIRMWARE_DIR="$TEMP_DIR/waveshare_modbus_slave"
-mkdir -p "$TEMP_FIRMWARE_DIR"
+BUILD_DIR="$TEMP_DIR/build"
+mkdir -p "$TEMP_FIRMWARE_DIR" "$BUILD_DIR"
 cp "$FIRMWARE_FILE" "$TEMP_FIRMWARE_DIR/"
 
 # Patch the slave ID in the temporary copy
@@ -142,6 +143,7 @@ echo -e "${CYAN}Compiling firmware (slave ID = ${SLAVE_ID})...${NC}"
 arduino-cli compile \
     --fqbn "$BOARD_FQBN" \
     --build-property "build.extra_flags=-DARDUINO_USB_MODE=1 -DARDUINO_USB_CDC_ON_BOOT=1" \
+    --output-dir "$BUILD_DIR" \
     "$TEMP_FIRMWARE_DIR/waveshare_modbus_slave.ino"
 
 echo ""
@@ -153,11 +155,10 @@ echo ""
 arduino-cli upload \
     --fqbn "$BOARD_FQBN" \
     --port "$USB_PORT" \
-    --input-dir "$TEMP_FIRMWARE_DIR/build/esp32.esp32.esp32s3" 2>&1 || {
+    --input-dir "$BUILD_DIR" 2>&1 || {
     # Retry with esptool directly if arduino-cli upload fails
     echo ""
     echo -e "${YELLOW}Retrying with esptool...${NC}"
-    BUILD_DIR="$TEMP_FIRMWARE_DIR/build/esp32.esp32.esp32s3"
     if [ -f "$BUILD_DIR/waveshare_modbus_slave.ino.bin" ]; then
         esptool.py --chip esp32s3 --port "$USB_PORT" --baud "$BAUD_RATE" \
             --before default_reset --after hard_reset \
