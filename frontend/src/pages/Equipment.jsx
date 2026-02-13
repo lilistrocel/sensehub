@@ -1442,6 +1442,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 }
 
 // Relay Control Modal - Controls Modbus relay devices using coil read/write operations
+// Supports write-only mode for devices that can't send Modbus responses (e.g. RS485 DE/RE pin issue)
 function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }) {
   const [loading, setLoading] = useState(false);
   const [coilStates, setCoilStates] = useState([]);
@@ -1450,6 +1451,7 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
   const [connectionStatus, setConnectionStatus] = useState({ connected: false, lastActivity: null });
   const [actionLoading, setActionLoading] = useState({});
   const [lastCommunication, setLastCommunication] = useState(null);
+  const [writeOnlyMode, setWriteOnlyMode] = useState(false);
 
   // Check if user can control equipment (admin or operator only)
   const canControl = user?.role === 'admin' || user?.role === 'operator';
@@ -1492,11 +1494,46 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
 
   // Fetch current states of all relay coils
   const fetchCoilStates = async () => {
-    if (!modbusConfig || relayChannels.length === 0) return;
+    if (!equipment || relayChannels.length === 0) return;
 
     setLoading(true);
     setError(null);
 
+    // Check if device is write-only
+    const isWriteOnly = !!equipment.write_only;
+    setWriteOnlyMode(isWriteOnly);
+
+    if (isWriteOnly) {
+      // For write-only devices, load cached states from the API
+      try {
+        const response = await fetch(`/api/equipment/${equipment.id}/relay/state`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCoilStates(data.channels.map(ch => ({
+            ...ch,
+            register: String(ch.address),
+            type: 'coil',
+            access: 'readwrite'
+          })));
+          setConnectionStatus({ connected: true, lastActivity: Date.now() });
+          setLastCommunication(new Date());
+        } else {
+          // Fallback: initialize all as OFF
+          setCoilStates(relayChannels.map(c => ({ ...c, state: false })));
+          setConnectionStatus({ connected: true, lastActivity: Date.now() });
+        }
+      } catch (err) {
+        setCoilStates(relayChannels.map(c => ({ ...c, state: false })));
+        setConnectionStatus({ connected: true, lastActivity: Date.now() });
+      }
+      setLoading(false);
+      return;
+    }
+
+    // Normal mode: read coil states via Modbus
+    if (!modbusConfig) { setLoading(false); return; }
     try {
       const minAddress = Math.min(...relayChannels.map(c => c.address));
       const maxAddress = Math.max(...relayChannels.map(c => c.address));
@@ -1547,30 +1584,44 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
     }
   };
 
-  // Write single coil (FC 05)
+  // Write single coil — uses equipment relay API for write-only, direct Modbus for normal
   const handleToggleRelay = async (channel) => {
-    if (!canControl || !modbusConfig) return;
+    if (!canControl) return;
 
     setActionLoading(prev => ({ ...prev, [channel.address]: true }));
     setMessage(null);
 
     try {
       const newState = !channel.state;
+      let response;
 
-      const response = await fetch('/api/modbus/write/coil', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          host: modbusConfig.host,
-          port: modbusConfig.port,
-          unitId: equipment.slave_id || 1,
-          address: channel.address,
-          value: newState
-        })
-      });
+      if (writeOnlyMode) {
+        // Use equipment relay control API (handles write-only mode server-side)
+        response = await fetch(`/api/equipment/${equipment.id}/relay/control`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ channel: channel.address, state: newState })
+        });
+      } else {
+        // Direct Modbus write
+        response = await fetch('/api/modbus/write/coil', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            host: modbusConfig.host,
+            port: modbusConfig.port,
+            unitId: equipment.slave_id || 1,
+            address: channel.address,
+            value: newState
+          })
+        });
+      }
 
       if (!response.ok) {
         const data = await response.json();
@@ -1582,7 +1633,8 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
         c.address === channel.address ? { ...c, state: newState } : c
       ));
 
-      setMessage({ type: 'success', text: `${channel.name} turned ${newState ? 'ON' : 'OFF'}` });
+      const confirmText = writeOnlyMode ? ' (command sent)' : '';
+      setMessage({ type: 'success', text: `${channel.name} turned ${newState ? 'ON' : 'OFF'}${confirmText}` });
       setLastCommunication(new Date());
       setConnectionStatus({ connected: true, lastActivity: Date.now() });
 
@@ -1593,38 +1645,51 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
       if (onUpdate) onUpdate();
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
-      setConnectionStatus({ connected: false, lastActivity: null });
+      if (!writeOnlyMode) setConnectionStatus({ connected: false, lastActivity: null });
     } finally {
       setActionLoading(prev => ({ ...prev, [channel.address]: false }));
     }
   };
 
-  // Write multiple coils (FC 15) - All On
+  // All On
   const handleAllOn = async () => {
-    if (!canControl || !modbusConfig || coilStates.length === 0) return;
+    if (!canControl || coilStates.length === 0) return;
 
     setActionLoading(prev => ({ ...prev, allOn: true }));
     setMessage(null);
 
     try {
-      const minAddress = Math.min(...coilStates.map(c => c.address));
-      const maxAddress = Math.max(...coilStates.map(c => c.address));
-      const values = new Array(maxAddress - minAddress + 1).fill(true);
+      let response;
 
-      const response = await fetch('/api/modbus/write/coils', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          host: modbusConfig.host,
-          port: modbusConfig.port,
-          unitId: equipment.slave_id || 1,
-          address: minAddress,
-          values: values
-        })
-      });
+      if (writeOnlyMode) {
+        response = await fetch(`/api/equipment/${equipment.id}/relay/all`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ state: true })
+        });
+      } else {
+        const minAddress = Math.min(...coilStates.map(c => c.address));
+        const maxAddress = Math.max(...coilStates.map(c => c.address));
+        const values = new Array(maxAddress - minAddress + 1).fill(true);
+
+        response = await fetch('/api/modbus/write/coils', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            host: modbusConfig.host,
+            port: modbusConfig.port,
+            unitId: equipment.slave_id || 1,
+            address: minAddress,
+            values: values
+          })
+        });
+      }
 
       if (!response.ok) {
         const data = await response.json();
@@ -1638,45 +1703,55 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
       setLastCommunication(new Date());
       setConnectionStatus({ connected: true, lastActivity: Date.now() });
 
-      // Clear message after delay
       setTimeout(() => setMessage(null), 2000);
-
-      // Notify parent to refresh
       if (onUpdate) onUpdate();
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
-      setConnectionStatus({ connected: false, lastActivity: null });
+      if (!writeOnlyMode) setConnectionStatus({ connected: false, lastActivity: null });
     } finally {
       setActionLoading(prev => ({ ...prev, allOn: false }));
     }
   };
 
-  // Write multiple coils (FC 15) - All Off
+  // All Off
   const handleAllOff = async () => {
-    if (!canControl || !modbusConfig || coilStates.length === 0) return;
+    if (!canControl || coilStates.length === 0) return;
 
     setActionLoading(prev => ({ ...prev, allOff: true }));
     setMessage(null);
 
     try {
-      const minAddress = Math.min(...coilStates.map(c => c.address));
-      const maxAddress = Math.max(...coilStates.map(c => c.address));
-      const values = new Array(maxAddress - minAddress + 1).fill(false);
+      let response;
 
-      const response = await fetch('/api/modbus/write/coils', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          host: modbusConfig.host,
-          port: modbusConfig.port,
-          unitId: equipment.slave_id || 1,
-          address: minAddress,
-          values: values
-        })
-      });
+      if (writeOnlyMode) {
+        response = await fetch(`/api/equipment/${equipment.id}/relay/all`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ state: false })
+        });
+      } else {
+        const minAddress = Math.min(...coilStates.map(c => c.address));
+        const maxAddress = Math.max(...coilStates.map(c => c.address));
+        const values = new Array(maxAddress - minAddress + 1).fill(false);
+
+        response = await fetch('/api/modbus/write/coils', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            host: modbusConfig.host,
+            port: modbusConfig.port,
+            unitId: equipment.slave_id || 1,
+            address: minAddress,
+            values: values
+          })
+        });
+      }
 
       if (!response.ok) {
         const data = await response.json();
@@ -1690,14 +1765,11 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
       setLastCommunication(new Date());
       setConnectionStatus({ connected: true, lastActivity: Date.now() });
 
-      // Clear message after delay
       setTimeout(() => setMessage(null), 2000);
-
-      // Notify parent to refresh
       if (onUpdate) onUpdate();
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
-      setConnectionStatus({ connected: false, lastActivity: null });
+      if (!writeOnlyMode) setConnectionStatus({ connected: false, lastActivity: null });
     } finally {
       setActionLoading(prev => ({ ...prev, allOff: false }));
     }
@@ -1749,6 +1821,11 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                 <span className={`text-sm font-medium ${connectionStatus.connected ? 'text-green-700' : 'text-red-700'}`}>
                   {connectionStatus.connected ? 'Connected' : 'Disconnected'}
                 </span>
+                {writeOnlyMode && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                    Write-Only
+                  </span>
+                )}
               </div>
               <button
                 onClick={fetchCoilStates}
@@ -1761,6 +1838,11 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                 Refresh
               </button>
             </div>
+            {writeOnlyMode && (
+              <p className="text-xs text-amber-600 mt-1">
+                Device cannot send responses. States shown are expected values from last commands sent.
+              </p>
+            )}
             {lastCommunication && (
               <p className="text-xs text-gray-500 mt-1">
                 Last communication: {lastCommunication.toLocaleString()}

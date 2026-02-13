@@ -390,6 +390,107 @@ class ModbusTcpClient {
   }
 
   /**
+   * FC05 - Write Single Coil (Fire and Forget / Write-Only mode)
+   * Sends the write command and assumes success even if the device doesn't respond.
+   * Used for devices where the RS485 transceiver can't send responses back.
+   * @param {string} host - Device IP address
+   * @param {number} port - TCP port (default 502)
+   * @param {number} unitId - Modbus unit ID
+   * @param {number} address - Coil address
+   * @param {boolean} value - Coil value (true = ON, false = OFF)
+   * @returns {Promise<{address, value, writeOnly: true}>}
+   */
+  async writeSingleCoilFireAndForget(host, port = 502, unitId = 1, address, value) {
+    const key = this.getConnectionKey(host, port, unitId);
+
+    // Ensure connection exists
+    const connection = await this.getConnection(host, port, unitId);
+
+    return new Promise((resolve, reject) => {
+      const request = new QueuedRequest(
+        async (client) => {
+          // Save the original timeout and set a short one
+          const originalTimeout = client._timeout;
+          client.setTimeout(1500); // Short timeout — we just need TCP write to go through
+          try {
+            await client.writeCoil(address, value);
+            return { address, value, writeOnly: true, confirmed: true };
+          } catch (err) {
+            // Timeout is expected for write-only devices — the TCP data was already sent
+            if (err.message.includes('Timed out') || err.message.includes('Request timeout') || err.message.includes('timeout')) {
+              console.log(`[Modbus] Write-only FC05: addr=${address} val=${value} to ${host}:${port}:${unitId} (timeout expected)`);
+              return { address, value, writeOnly: true, confirmed: false };
+            }
+            throw err; // Re-throw real errors (connection refused, etc.)
+          } finally {
+            client.setTimeout(originalTimeout || 5000);
+          }
+        },
+        resolve,
+        reject,
+        3000, // timeout for the whole operation
+        1     // only 1 attempt — no retries for fire-and-forget
+      );
+
+      let queue = this.requestQueues.get(key);
+      if (!queue) {
+        queue = [];
+        this.requestQueues.set(key, queue);
+      }
+      queue.push(request);
+      this.processQueue(key);
+    });
+  }
+
+  /**
+   * FC15 - Write Multiple Coils (Fire and Forget / Write-Only mode)
+   * @param {string} host - Device IP address
+   * @param {number} port - TCP port (default 502)
+   * @param {number} unitId - Modbus unit ID
+   * @param {number} address - Starting coil address
+   * @param {boolean[]} values - Array of coil values
+   * @returns {Promise<{address, quantity, writeOnly: true}>}
+   */
+  async writeMultipleCoilsFireAndForget(host, port = 502, unitId = 1, address, values) {
+    const key = this.getConnectionKey(host, port, unitId);
+
+    const connection = await this.getConnection(host, port, unitId);
+
+    return new Promise((resolve, reject) => {
+      const request = new QueuedRequest(
+        async (client) => {
+          const originalTimeout = client._timeout;
+          client.setTimeout(1500);
+          try {
+            await client.writeCoils(address, values);
+            return { address, quantity: values.length, writeOnly: true, confirmed: true };
+          } catch (err) {
+            if (err.message.includes('Timed out') || err.message.includes('Request timeout') || err.message.includes('timeout')) {
+              console.log(`[Modbus] Write-only FC15: addr=${address} qty=${values.length} to ${host}:${port}:${unitId} (timeout expected)`);
+              return { address, quantity: values.length, writeOnly: true, confirmed: false };
+            }
+            throw err;
+          } finally {
+            client.setTimeout(originalTimeout || 5000);
+          }
+        },
+        resolve,
+        reject,
+        3000,
+        1
+      );
+
+      let queue = this.requestQueues.get(key);
+      if (!queue) {
+        queue = [];
+        this.requestQueues.set(key, queue);
+      }
+      queue.push(request);
+      this.processQueue(key);
+    });
+  }
+
+  /**
    * FC06 - Write Single Register
    * Writes a single holding register in a remote device
    * @param {string} host - Device IP address

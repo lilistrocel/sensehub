@@ -299,6 +299,17 @@ const initSchema = () => {
     console.log('Modbus columns already exist or migration skipped');
   }
 
+  // Add write_only column to equipment table for devices that don't send Modbus responses
+  try {
+    const eqCols = db.pragma("table_info(equipment)").map(col => col.name);
+    if (!eqCols.includes('write_only')) {
+      db.exec('ALTER TABLE equipment ADD COLUMN write_only INTEGER DEFAULT 0');
+      console.log('Added write_only column to equipment table');
+    }
+  } catch (err) {
+    console.log('write_only column already exists or migration skipped');
+  }
+
   console.log('Database schema initialized');
   return true;
 };

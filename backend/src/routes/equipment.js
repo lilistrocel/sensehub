@@ -59,7 +59,7 @@ router.get('/', (req, res) => {
 
 // POST /api/equipment - Create equipment
 router.post('/', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings } = req.body;
+  const { name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings, write_only } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Bad Request', message: 'Name is required' });
@@ -86,7 +86,7 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
     (typeof register_mappings === 'string' ? register_mappings : JSON.stringify(register_mappings)) : null;
 
   const result = db.prepare(
-    'INSERT INTO equipment (name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO equipment (name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings, write_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     name,
     description,
@@ -95,7 +95,8 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
     address,
     slave_id ? parseInt(slave_id) : null,
     polling_interval_ms ? parseInt(polling_interval_ms) : 1000,
-    registerMappingsJson
+    registerMappingsJson,
+    write_only ? 1 : 0
   );
 
   const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(result.lastInsertRowid);
@@ -144,7 +145,7 @@ router.get('/:id', (req, res) => {
 
 // PUT /api/equipment/:id - Update equipment
 router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, type, protocol, address, enabled, slave_id, polling_interval_ms, register_mappings } = req.body;
+  const { name, description, type, protocol, address, enabled, slave_id, polling_interval_ms, register_mappings, write_only } = req.body;
   const equipmentId = req.params.id;
 
   const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
@@ -180,7 +181,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   }
 
   db.prepare(
-    "UPDATE equipment SET name = ?, description = ?, type = ?, protocol = ?, address = ?, enabled = ?, slave_id = ?, polling_interval_ms = ?, register_mappings = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE equipment SET name = ?, description = ?, type = ?, protocol = ?, address = ?, enabled = ?, slave_id = ?, polling_interval_ms = ?, register_mappings = ?, write_only = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(
     name ?? equipment.name,
     description ?? equipment.description,
@@ -191,6 +192,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
     slave_id !== undefined ? (slave_id ? parseInt(slave_id) : null) : equipment.slave_id,
     polling_interval_ms !== undefined ? (polling_interval_ms ? parseInt(polling_interval_ms) : 1000) : equipment.polling_interval_ms,
     registerMappingsJson,
+    write_only !== undefined ? (write_only ? 1 : 0) : (equipment.write_only || 0),
     equipmentId
   );
 
@@ -567,6 +569,215 @@ router.put('/:id/errors/:errorId/resolve', requireRole('admin', 'operator'), (re
 
   const updated = db.prepare('SELECT * FROM equipment_errors WHERE id = ?').get(errorId);
   res.json(updated);
+});
+
+// ==========================================
+// Relay Control Endpoints (Write-Only Mode)
+// ==========================================
+
+// GET /api/equipment/:id/relay/state - Get cached relay states
+router.get('/:id/relay/state', (req, res) => {
+  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
+  if (!equipment) {
+    return res.status(404).json({ error: 'Equipment not found' });
+  }
+
+  // Parse cached relay states from last_reading
+  let relayStates = {};
+  if (equipment.last_reading) {
+    try {
+      const parsed = JSON.parse(equipment.last_reading);
+      if (parsed.relayStates) {
+        relayStates = parsed.relayStates;
+      }
+    } catch (e) {
+      // last_reading might be a simple value, not JSON
+    }
+  }
+
+  // Build channel info from register_mappings
+  let mappings = [];
+  if (equipment.register_mappings) {
+    try {
+      mappings = typeof equipment.register_mappings === 'string'
+        ? JSON.parse(equipment.register_mappings)
+        : equipment.register_mappings;
+    } catch (e) {}
+  }
+
+  const channels = mappings
+    .filter(m => m.type === 'coil' && m.access === 'readwrite')
+    .map(m => {
+      const addr = parseInt(m.register, 10) || 0;
+      return {
+        name: m.name,
+        address: addr,
+        state: relayStates[addr] !== undefined ? relayStates[addr] : false
+      };
+    });
+
+  res.json({
+    equipmentId: equipment.id,
+    name: equipment.name,
+    writeOnly: !!equipment.write_only,
+    channels,
+    lastUpdated: equipment.updated_at
+  });
+});
+
+// POST /api/equipment/:id/relay/control - Control a single relay channel (write-only safe)
+router.post('/:id/relay/control', requireRole('admin', 'operator'), async (req, res) => {
+  const { channel, state } = req.body;
+  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
+
+  if (!equipment) {
+    return res.status(404).json({ error: 'Equipment not found' });
+  }
+
+  if (channel === undefined || state === undefined) {
+    return res.status(400).json({ error: 'channel (coil address) and state (boolean) are required' });
+  }
+
+  const address = parseInt(channel, 10);
+  const value = !!state;
+
+  // Parse Modbus connection info
+  const addrParts = (equipment.address || '').split(':');
+  if (addrParts.length !== 2) {
+    return res.status(400).json({ error: 'Equipment address must be host:port format' });
+  }
+  const host = addrParts[0];
+  const port = parseInt(addrParts[1], 10);
+  const unitId = equipment.slave_id || 1;
+
+  try {
+    let result;
+    if (equipment.write_only) {
+      // Fire-and-forget mode: send FC05, catch timeout, assume success
+      result = await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, value);
+    } else {
+      // Normal mode: send FC05 and expect response
+      result = await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
+    }
+
+    // Update cached relay state in last_reading
+    let lastReading = {};
+    try {
+      if (equipment.last_reading) lastReading = JSON.parse(equipment.last_reading);
+    } catch (e) {}
+    if (!lastReading.relayStates) lastReading.relayStates = {};
+    lastReading.relayStates[address] = value;
+
+    db.prepare(
+      "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
+    ).run(JSON.stringify(lastReading), equipment.id);
+
+    // Broadcast state change
+    global.broadcast('relay_state_changed', {
+      equipmentId: equipment.id,
+      channel: address,
+      state: value,
+      writeOnly: !!equipment.write_only,
+      confirmed: result.confirmed !== false
+    });
+
+    res.json({
+      success: true,
+      channel: address,
+      state: value,
+      writeOnly: !!equipment.write_only,
+      confirmed: result.confirmed !== false
+    });
+  } catch (err) {
+    console.error(`[Relay Control] Error writing coil ${address} on ${equipment.name}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/equipment/:id/relay/all - Control all relay channels at once
+router.post('/:id/relay/all', requireRole('admin', 'operator'), async (req, res) => {
+  const { state } = req.body;
+  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
+
+  if (!equipment) {
+    return res.status(404).json({ error: 'Equipment not found' });
+  }
+
+  if (state === undefined) {
+    return res.status(400).json({ error: 'state (boolean) is required' });
+  }
+
+  const value = !!state;
+
+  // Parse register mappings to find relay coils
+  let mappings = [];
+  try {
+    mappings = typeof equipment.register_mappings === 'string'
+      ? JSON.parse(equipment.register_mappings)
+      : (equipment.register_mappings || []);
+  } catch (e) {}
+
+  const coilMappings = mappings.filter(m => m.type === 'coil' && m.access === 'readwrite');
+  if (coilMappings.length === 0) {
+    return res.status(400).json({ error: 'No relay coil mappings found for this equipment' });
+  }
+
+  // Parse Modbus connection info
+  const addrParts = (equipment.address || '').split(':');
+  if (addrParts.length !== 2) {
+    return res.status(400).json({ error: 'Equipment address must be host:port format' });
+  }
+  const host = addrParts[0];
+  const port = parseInt(addrParts[1], 10);
+  const unitId = equipment.slave_id || 1;
+
+  const minAddress = Math.min(...coilMappings.map(m => parseInt(m.register, 10) || 0));
+  const maxAddress = Math.max(...coilMappings.map(m => parseInt(m.register, 10) || 0));
+  const quantity = maxAddress - minAddress + 1;
+  const values = new Array(quantity).fill(value);
+
+  try {
+    let result;
+    if (equipment.write_only) {
+      result = await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, minAddress, values);
+    } else {
+      result = await modbusTcpClient.writeMultipleCoils(host, port, unitId, minAddress, values);
+    }
+
+    // Update cached relay states
+    let lastReading = {};
+    try {
+      if (equipment.last_reading) lastReading = JSON.parse(equipment.last_reading);
+    } catch (e) {}
+    if (!lastReading.relayStates) lastReading.relayStates = {};
+    coilMappings.forEach(m => {
+      lastReading.relayStates[parseInt(m.register, 10) || 0] = value;
+    });
+
+    db.prepare(
+      "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
+    ).run(JSON.stringify(lastReading), equipment.id);
+
+    // Broadcast state change
+    global.broadcast('relay_state_changed', {
+      equipmentId: equipment.id,
+      allChannels: true,
+      state: value,
+      writeOnly: !!equipment.write_only,
+      confirmed: result.confirmed !== false
+    });
+
+    res.json({
+      success: true,
+      channels: coilMappings.length,
+      state: value,
+      writeOnly: !!equipment.write_only,
+      confirmed: result.confirmed !== false
+    });
+  } catch (err) {
+    console.error(`[Relay Control] Error writing all coils on ${equipment.name}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/equipment/scan-slaves - Scan for Modbus slave devices

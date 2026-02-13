@@ -99,10 +99,12 @@ function probeModbusDevice(ip, port, timeout = SCAN_TIMEOUT) {
     const socket = new net.Socket();
     let deviceInfo = null;
     let responseReceived = false;
+    let connected = false;
 
     socket.setTimeout(timeout);
 
     socket.on('connect', () => {
+      connected = true;
       // Connection successful - this is likely a Modbus device
       // Try to send a Modbus identification request (Function Code 43, MEI Type 14)
       // Read Device Identification request
@@ -157,7 +159,22 @@ function probeModbusDevice(ip, port, timeout = SCAN_TIMEOUT) {
 
     socket.on('timeout', () => {
       socket.destroy();
-      resolve(null);
+      // If we connected but got no Modbus response, the port is open
+      // (e.g. a Modbus gateway with no RS485 slaves responding).
+      // Still report the device as discovered.
+      if (connected && !responseReceived) {
+        resolve({
+          ip,
+          port,
+          protocol: 'modbus_tcp',
+          responsive: true,
+          deviceInfo: {
+            note: 'TCP port open but no Modbus response (gateway/converter with no active slaves)'
+          }
+        });
+      } else {
+        resolve(null);
+      }
     });
 
     socket.on('error', (err) => {
@@ -175,7 +192,7 @@ function probeModbusDevice(ip, port, timeout = SCAN_TIMEOUT) {
     });
 
     socket.on('close', () => {
-      if (!responseReceived && deviceInfo === null) {
+      if (!responseReceived && deviceInfo === null && !connected) {
         resolve(null);
       }
     });

@@ -24,6 +24,7 @@ class DevicePollingState {
     this.slaveId = equipment.slave_id || 1;
     this.pollingInterval = equipment.polling_interval_ms || 1000;
     this.registerMappings = this.parseRegisterMappings(equipment.register_mappings);
+    this.writeOnly = !!equipment.write_only;
 
     // Error tracking for exponential backoff
     this.consecutiveErrors = 0;
@@ -318,6 +319,11 @@ class ModbusPollingService {
   async pollDevice(equipmentId) {
     const state = this.devices.get(equipmentId);
     if (!state || state.isPolling) return;
+
+    // Skip polling for write-only devices (they can't send responses)
+    if (state.writeOnly) {
+      return;
+    }
 
     const addressInfo = state.parseAddress();
     if (!addressInfo) {
