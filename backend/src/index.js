@@ -24,6 +24,9 @@ const modbusRoutes = require('./routes/modbus');
 const { authMiddleware } = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
 
+// Import polling service
+const { modbusPollingService } = require('./services/ModbusPollingService');
+
 const app = express();
 const server = http.createServer(app);
 
@@ -104,10 +107,30 @@ global.broadcast = (type, data) => {
 
 // Start server
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`SenseHub backend server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/api/health`);
   console.log(`WebSocket: ws://localhost:${PORT}/ws`);
   console.log(`Database: ${db.isConnected() ? 'Connected' : 'Not connected'}`);
+
+  // Start Modbus polling service
+  try {
+    await modbusPollingService.start();
+    console.log('Modbus polling service: Started');
+  } catch (error) {
+    console.error('Modbus polling service: Failed to start -', error.message);
+  }
 });
-// trigger reload Sat Feb  7 08:13:02 PM UTC 2026
+
+// Graceful shutdown handler
+process.on('SIGINT', async () => {
+  console.log('\\nGraceful shutdown initiated...');
+  await modbusPollingService.stop();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\\nGraceful shutdown initiated...');
+  await modbusPollingService.stop();
+  process.exit(0);
+});

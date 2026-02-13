@@ -7,6 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const { modbusTcpClient } = require('../services/ModbusTcpClient');
+const { modbusPollingService } = require('../services/ModbusPollingService');
 const { requireRole } = require('../middleware/auth');
 
 // Helper to validate IP address
@@ -425,6 +426,107 @@ router.post('/connection/disconnect', requireRole('admin'), validateModbusParams
     });
   } catch (error) {
     console.error('[Modbus API] Disconnect error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Polling Service Endpoints
+// ==========================================
+
+/**
+ * GET /api/modbus/polling/status
+ * Get the status of the Modbus polling service
+ */
+router.get('/polling/status', requireRole('admin', 'operator'), (req, res) => {
+  try {
+    const status = modbusPollingService.getStatus();
+    res.json({
+      success: true,
+      ...status
+    });
+  } catch (error) {
+    console.error('[Modbus API] Polling status error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/modbus/polling/start
+ * Start the Modbus polling service
+ */
+router.post('/polling/start', requireRole('admin'), async (req, res) => {
+  try {
+    await modbusPollingService.start();
+    const status = modbusPollingService.getStatus();
+    res.json({
+      success: true,
+      message: 'Polling service started',
+      ...status
+    });
+  } catch (error) {
+    console.error('[Modbus API] Polling start error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/modbus/polling/stop
+ * Stop the Modbus polling service
+ */
+router.post('/polling/stop', requireRole('admin'), async (req, res) => {
+  try {
+    await modbusPollingService.stop();
+    res.json({
+      success: true,
+      message: 'Polling service stopped',
+      isRunning: false
+    });
+  } catch (error) {
+    console.error('[Modbus API] Polling stop error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/modbus/polling/refresh
+ * Refresh device list (pick up new devices or config changes)
+ */
+router.post('/polling/refresh', requireRole('admin', 'operator'), async (req, res) => {
+  try {
+    await modbusPollingService.refreshDevices();
+    const status = modbusPollingService.getStatus();
+    res.json({
+      success: true,
+      message: 'Device list refreshed',
+      ...status
+    });
+  } catch (error) {
+    console.error('[Modbus API] Polling refresh error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/modbus/polling/device/:id/poll
+ * Force poll a specific device
+ */
+router.post('/polling/device/:id/poll', requireRole('admin', 'operator'), async (req, res) => {
+  try {
+    const equipmentId = parseInt(req.params.id, 10);
+
+    if (isNaN(equipmentId)) {
+      return res.status(400).json({ error: 'Invalid equipment ID' });
+    }
+
+    const result = await modbusPollingService.forcePoll(equipmentId);
+    res.json({
+      success: true,
+      message: `Device ${equipmentId} polled successfully`,
+      ...result
+    });
+  } catch (error) {
+    console.error('[Modbus API] Force poll error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
