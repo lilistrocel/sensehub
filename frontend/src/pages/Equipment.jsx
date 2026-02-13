@@ -8,6 +8,58 @@ import ErrorMessage from '../components/ErrorMessage';
 
 const API_BASE = '/api';
 
+// Modbus Register Mapping Preset Templates
+const REGISTER_PRESETS = {
+  waveshare_8ch_relay: {
+    name: 'Waveshare 8-Channel Relay',
+    mappings: [
+      { name: 'Relay 1', register: '0', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 2', register: '1', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 3', register: '2', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 4', register: '3', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 5', register: '4', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 6', register: '5', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 7', register: '6', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 8', register: '7', type: 'coil', dataType: 'bool', access: 'readwrite' },
+    ]
+  },
+  waveshare_4ch_relay: {
+    name: 'Waveshare 4-Channel Relay',
+    mappings: [
+      { name: 'Relay 1', register: '0', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 2', register: '1', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 3', register: '2', type: 'coil', dataType: 'bool', access: 'readwrite' },
+      { name: 'Relay 4', register: '3', type: 'coil', dataType: 'bool', access: 'readwrite' },
+    ]
+  },
+  generic_temp_humidity: {
+    name: 'Temperature/Humidity Sensor',
+    mappings: [
+      { name: 'Temperature', register: '0', type: 'input', dataType: 'int16', access: 'read' },
+      { name: 'Humidity', register: '1', type: 'input', dataType: 'uint16', access: 'read' },
+    ]
+  },
+  generic_power_meter: {
+    name: 'Power Meter',
+    mappings: [
+      { name: 'Voltage', register: '0', type: 'input', dataType: 'float32', access: 'read' },
+      { name: 'Current', register: '2', type: 'input', dataType: 'float32', access: 'read' },
+      { name: 'Power', register: '4', type: 'input', dataType: 'float32', access: 'read' },
+      { name: 'Energy', register: '6', type: 'input', dataType: 'float32', access: 'read' },
+    ]
+  },
+  generic_vfd: {
+    name: 'Variable Frequency Drive (VFD)',
+    mappings: [
+      { name: 'Frequency Setpoint', register: '0', type: 'holding', dataType: 'uint16', access: 'readwrite' },
+      { name: 'Actual Frequency', register: '1', type: 'input', dataType: 'uint16', access: 'read' },
+      { name: 'Motor Current', register: '2', type: 'input', dataType: 'uint16', access: 'read' },
+      { name: 'Motor Voltage', register: '3', type: 'input', dataType: 'uint16', access: 'read' },
+      { name: 'Run/Stop Command', register: '0', type: 'coil', dataType: 'bool', access: 'readwrite' },
+    ]
+  }
+};
+
 // Status badge component with color coding
 function StatusBadge({ status, large = false }) {
   const statusStyles = {
@@ -1338,6 +1390,167 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   );
 }
 
+// Slave ID Scanner Modal - Scans for Modbus RTU devices behind a TCP gateway
+function SlaveIdScannerModal({
+  isOpen,
+  onClose,
+  config,
+  onConfigChange,
+  progress,
+  results,
+  selectedSlaves,
+  onSelectedSlavesChange,
+  onScan,
+  onCreateEquipment
+}) {
+  if (!isOpen) return null;
+
+  const handleConfigChange = (field, value) => {
+    onConfigChange({ ...config, [field]: value });
+  };
+
+  const handleSelectAll = () => {
+    if (results?.discovered?.length > 0) {
+      if (selectedSlaves.length === results.discovered.length) {
+        onSelectedSlavesChange([]);
+      } else {
+        onSelectedSlavesChange(results.discovered.map(d => d.slaveId));
+      }
+    }
+  };
+
+  const handleSlaveToggle = (slaveId) => {
+    if (selectedSlaves.includes(slaveId)) {
+      onSelectedSlavesChange(selectedSlaves.filter(id => id !== slaveId));
+    } else {
+      onSelectedSlavesChange([...selectedSlaves, slaveId]);
+    }
+  };
+
+  const isScanning = progress !== null && progress < 100;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Modbus Slave ID Scanner
+          </h2>
+          <button
+            onClick={onClose}
+            disabled={isScanning}
+            className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-4 overflow-y-auto max-h-[70vh]">
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Scan Configuration</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="scan-host" className="block text-xs font-medium text-gray-500 mb-1">Host IP Address</label>
+                <input type="text" id="scan-host" value={config.host} onChange={(e) => handleConfigChange('host', e.target.value)} placeholder="192.168.1.100" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+              </div>
+              <div>
+                <label htmlFor="scan-port" className="block text-xs font-medium text-gray-500 mb-1">TCP Port</label>
+                <input type="number" id="scan-port" value={config.port} onChange={(e) => handleConfigChange('port', e.target.value)} placeholder="502" min="1" max="65535" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+              </div>
+              <div>
+                <label htmlFor="scan-timeout" className="block text-xs font-medium text-gray-500 mb-1">Timeout (ms)</label>
+                <input type="number" id="scan-timeout" value={config.timeout} onChange={(e) => handleConfigChange('timeout', e.target.value)} placeholder="500" min="100" max="5000" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+              </div>
+              <div>
+                <label htmlFor="scan-start" className="block text-xs font-medium text-gray-500 mb-1">Start Slave ID</label>
+                <input type="number" id="scan-start" value={config.startSlaveId} onChange={(e) => handleConfigChange('startSlaveId', e.target.value)} placeholder="1" min="1" max="247" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+              </div>
+              <div>
+                <label htmlFor="scan-end" className="block text-xs font-medium text-gray-500 mb-1">End Slave ID</label>
+                <input type="number" id="scan-end" value={config.endSlaveId} onChange={(e) => handleConfigChange('endSlaveId', e.target.value)} placeholder="247" min="1" max="247" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">Scans for Modbus RTU devices connected to a TCP gateway (e.g., USR-DR134).</p>
+          </div>
+
+          {progress !== null && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">{isScanning ? 'Scanning...' : 'Scan Complete'}</span>
+                <span className="text-sm text-gray-500">{Math.round(progress)}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className={`h-2 rounded-full transition-all duration-300 ${isScanning ? 'bg-primary-600' : 'bg-green-600'}`} style={{ width: `${progress}%` }}></div>
+              </div>
+            </div>
+          )}
+
+          {results && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-700">Discovered Devices ({results.discovered?.length || 0})</h3>
+                {results.discovered?.length > 0 && (
+                  <button onClick={handleSelectAll} className="text-sm text-primary-600 hover:text-primary-700">{selectedSlaves.length === results.discovered.length ? 'Deselect All' : 'Select All'}</button>
+                )}
+              </div>
+              {results.discovered?.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <p className="mt-2 text-sm text-gray-500">No responding devices found in the scanned range.</p>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Select</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Slave ID</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Response Time</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sample Data</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {results.discovered.map((device) => (
+                        <tr key={device.slaveId} className={`hover:bg-gray-50 cursor-pointer ${selectedSlaves.includes(device.slaveId) ? 'bg-primary-50' : ''}`} onClick={() => handleSlaveToggle(device.slaveId)}>
+                          <td className="px-4 py-3"><input type="checkbox" checked={selectedSlaves.includes(device.slaveId)} onChange={() => {}} className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded" /></td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{device.slaveId}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{device.responseTime}ms</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 font-mono">{device.sampleData ? `[${device.sampleData.slice(0, 3).join(', ')}...]` : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-gray-50">
+          <button onClick={onClose} disabled={isScanning} className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">Close</button>
+          <div className="flex gap-3">
+            {results?.discovered?.length > 0 && selectedSlaves.length > 0 && (
+              <button onClick={onCreateEquipment} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center">
+                <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                Add {selectedSlaves.length} Device{selectedSlaves.length > 1 ? 's' : ''}
+              </button>
+            )}
+            <button onClick={onScan} disabled={isScanning || !config.host} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center">
+              {isScanning ? (
+                <><svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Scanning...</>
+              ) : (
+                <><svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>Start Scan</>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Discovered Devices Modal - Shows devices found during network scan
 function DiscoveredDevicesModal({ isOpen, onClose, devices, onAddDevice, addingDevice }) {
   if (!isOpen) return null;
@@ -1516,6 +1729,74 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
       ...prev,
       register_mappings: prev.register_mappings.filter((_, i) => i !== index)
     }));
+  };
+
+  // Handle loading a preset template
+  const handleLoadPreset = (presetKey) => {
+    if (!presetKey || !REGISTER_PRESETS[presetKey]) return;
+    const preset = REGISTER_PRESETS[presetKey];
+    setFormData(prev => ({
+      ...prev,
+      register_mappings: [...preset.mappings]
+    }));
+  };
+
+  // Handle exporting register mappings as JSON
+  const handleExportMappings = () => {
+    if (formData.register_mappings.length === 0) return;
+    const exportData = {
+      version: '1.0',
+      exported_at: new Date().toISOString(),
+      mappings: formData.register_mappings
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `register-mappings-${formData.name || 'export'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Handle importing register mappings from JSON file
+  const fileInputRef = React.useRef(null);
+  const handleImportMappings = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importData = JSON.parse(e.target.result);
+        // Support both direct array and wrapped format
+        const mappings = Array.isArray(importData) ? importData : importData.mappings;
+        if (Array.isArray(mappings)) {
+          // Validate mapping structure
+          const validMappings = mappings.filter(m =>
+            typeof m === 'object' && m.name && m.register !== undefined
+          ).map(m => ({
+            name: m.name || '',
+            register: String(m.register || ''),
+            type: m.type || 'holding',
+            dataType: m.dataType || 'uint16',
+            access: m.access || 'read'
+          }));
+          setFormData(prev => ({
+            ...prev,
+            register_mappings: validMappings
+          }));
+        } else {
+          console.error('Invalid register mappings format');
+        }
+      } catch (err) {
+        console.error('Failed to parse imported file:', err);
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input so the same file can be selected again
+    event.target.value = '';
   };
 
   const handleSubmit = async (e) => {
@@ -1791,20 +2072,62 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                     <label className="block text-sm font-medium text-gray-700">
                       Register Mappings
                     </label>
-                    <button
-                      type="button"
-                      onClick={handleAddRegisterMapping}
-                      className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center"
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Add Register
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {/* Preset Templates Dropdown */}
+                      <select
+                        onChange={(e) => {
+                          handleLoadPreset(e.target.value);
+                          e.target.value = '';
+                        }}
+                        className="text-xs px-2 py-1 border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="">Load Preset...</option>
+                        {Object.entries(REGISTER_PRESETS).map(([key, preset]) => (
+                          <option key={key} value={key}>{preset.name}</option>
+                        ))}
+                      </select>
+                      {/* Import Button */}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImportMappings}
+                        accept=".json"
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                        title="Import from JSON"
+                      >
+                        Import
+                      </button>
+                      {/* Export Button */}
+                      <button
+                        type="button"
+                        onClick={handleExportMappings}
+                        disabled={formData.register_mappings.length === 0}
+                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Export to JSON"
+                      >
+                        Export
+                      </button>
+                      {/* Add Register Button */}
+                      <button
+                        type="button"
+                        onClick={handleAddRegisterMapping}
+                        className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center"
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add
+                      </button>
+                    </div>
                   </div>
 
                   {formData.register_mappings.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic">No register mappings defined. Click "Add Register" to configure.</p>
+                    <p className="text-sm text-gray-500 italic">No register mappings defined. Use a preset template, import from JSON, or click "Add" to configure manually.</p>
                   ) : (
                     <div className="space-y-3 max-h-48 overflow-y-auto">
                       {formData.register_mappings.map((mapping, index) => (
@@ -2000,6 +2323,74 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
       ...prev,
       register_mappings: prev.register_mappings.filter((_, i) => i !== index)
     }));
+  };
+
+  // Handle loading a preset template
+  const handleLoadPreset = (presetKey) => {
+    if (!presetKey || !REGISTER_PRESETS[presetKey]) return;
+    const preset = REGISTER_PRESETS[presetKey];
+    setFormData(prev => ({
+      ...prev,
+      register_mappings: [...preset.mappings]
+    }));
+  };
+
+  // Handle exporting register mappings as JSON
+  const handleExportMappings = () => {
+    if (formData.register_mappings.length === 0) return;
+    const exportData = {
+      version: '1.0',
+      exported_at: new Date().toISOString(),
+      mappings: formData.register_mappings
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `register-mappings-${formData.name || 'export'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Handle importing register mappings from JSON file
+  const fileInputRef = React.useRef(null);
+  const handleImportMappings = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importData = JSON.parse(e.target.result);
+        // Support both direct array and wrapped format
+        const mappings = Array.isArray(importData) ? importData : importData.mappings;
+        if (Array.isArray(mappings)) {
+          // Validate mapping structure
+          const validMappings = mappings.filter(m =>
+            typeof m === 'object' && m.name && m.register !== undefined
+          ).map(m => ({
+            name: m.name || '',
+            register: String(m.register || ''),
+            type: m.type || 'holding',
+            dataType: m.dataType || 'uint16',
+            access: m.access || 'read'
+          }));
+          setFormData(prev => ({
+            ...prev,
+            register_mappings: validMappings
+          }));
+        } else {
+          console.error('Invalid register mappings format');
+        }
+      } catch (err) {
+        console.error('Failed to parse imported file:', err);
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input so the same file can be selected again
+    event.target.value = '';
   };
 
   const handleSubmit = async (e) => {
@@ -2262,20 +2653,62 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                     <label className="block text-sm font-medium text-gray-700">
                       Register Mappings
                     </label>
-                    <button
-                      type="button"
-                      onClick={handleAddRegisterMapping}
-                      className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center"
-                    >
-                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Add Register
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {/* Preset Templates Dropdown */}
+                      <select
+                        onChange={(e) => {
+                          handleLoadPreset(e.target.value);
+                          e.target.value = '';
+                        }}
+                        className="text-xs px-2 py-1 border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="">Load Preset...</option>
+                        {Object.entries(REGISTER_PRESETS).map(([key, preset]) => (
+                          <option key={key} value={key}>{preset.name}</option>
+                        ))}
+                      </select>
+                      {/* Import Button */}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImportMappings}
+                        accept=".json"
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                        title="Import from JSON"
+                      >
+                        Import
+                      </button>
+                      {/* Export Button */}
+                      <button
+                        type="button"
+                        onClick={handleExportMappings}
+                        disabled={formData.register_mappings.length === 0}
+                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Export to JSON"
+                      >
+                        Export
+                      </button>
+                      {/* Add Register Button */}
+                      <button
+                        type="button"
+                        onClick={handleAddRegisterMapping}
+                        className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center"
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add
+                      </button>
+                    </div>
                   </div>
 
                   {formData.register_mappings.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic">No register mappings defined. Click "Add Register" to configure.</p>
+                    <p className="text-sm text-gray-500 italic">No register mappings defined. Use a preset template, import from JSON, or click "Add" to configure manually.</p>
                   ) : (
                     <div className="space-y-3 max-h-48 overflow-y-auto">
                       {formData.register_mappings.map((mapping, index) => (
@@ -2410,6 +2843,18 @@ export default function Equipment() {
   const [scanResult, setScanResult] = useState(null);
   const [discoveredDevices, setDiscoveredDevices] = useState([]);
   const [showDiscoveredModal, setShowDiscoveredModal] = useState(false);
+  // Slave ID Scanner state
+  const [showSlaveScanner, setShowSlaveScanner] = useState(false);
+  const [slaveScanConfig, setSlaveScanConfig] = useState({
+    host: '',
+    port: '502',
+    startSlaveId: '1',
+    endSlaveId: '247',
+    timeout: '500'
+  });
+  const [slaveScanProgress, setSlaveScanProgress] = useState(null);
+  const [slaveScanResults, setSlaveScanResults] = useState(null);
+  const [selectedSlaves, setSelectedSlaves] = useState([]);
   const [addingDevice, setAddingDevice] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [equipmentNotFound, setEquipmentNotFound] = useState(false);
@@ -2686,6 +3131,91 @@ export default function Equipment() {
       setTimeout(() => setScanResult(null), 5000);
     } finally {
       setScanning(false);
+    }
+  };
+
+  // Slave ID Scanner handlers
+  const handleSlaveScan = async () => {
+    setSlaveScanProgress(0);
+    setSlaveScanResults(null);
+    setSelectedSlaves([]);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/scan-slaves`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          host: slaveScanConfig.host,
+          port: parseInt(slaveScanConfig.port) || 502,
+          startSlaveId: parseInt(slaveScanConfig.startSlaveId) || 1,
+          endSlaveId: parseInt(slaveScanConfig.endSlaveId) || 247,
+          timeout: parseInt(slaveScanConfig.timeout) || 500
+        })
+      });
+
+      // Simulate progress since we don't have streaming
+      const progressInterval = setInterval(() => {
+        setSlaveScanProgress(prev => Math.min(prev + 5, 95));
+      }, 500);
+
+      if (!response.ok) {
+        clearInterval(progressInterval);
+        const data = await response.json();
+        throw new Error(data.message || 'Slave scan failed');
+      }
+
+      clearInterval(progressInterval);
+      const data = await response.json();
+      setSlaveScanProgress(100);
+      setSlaveScanResults(data);
+
+      // Auto-select all discovered devices
+      if (data.discovered && data.discovered.length > 0) {
+        setSelectedSlaves(data.discovered.map(d => d.slaveId));
+      }
+    } catch (err) {
+      setSlaveScanProgress(null);
+      alert('Scan failed: ' + err.message);
+    }
+  };
+
+  const handleCreateSlavesAsEquipment = async () => {
+    if (selectedSlaves.length === 0) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/scan-slaves/create-bulk`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          host: slaveScanConfig.host,
+          port: parseInt(slaveScanConfig.port) || 502,
+          slaves: selectedSlaves.map(slaveId => ({ slaveId })),
+          namePrefix: 'Modbus Device'
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to create equipment');
+      }
+
+      const data = await response.json();
+      alert(`Successfully created ${data.count} equipment entries!`);
+
+      // Close modal and refresh
+      setShowSlaveScanner(false);
+      setSlaveScanProgress(null);
+      setSlaveScanResults(null);
+      setSelectedSlaves([]);
+      await fetchData();
+    } catch (err) {
+      alert('Failed to create equipment: ' + err.message);
     }
   };
 
@@ -2969,6 +3499,15 @@ export default function Equipment() {
                 Scan Network for Modbus Devices
               </>
             )}
+          </button>
+          <button
+            onClick={() => setShowSlaveScanner(true)}
+            className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors flex items-center"
+          >
+            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
+            Scan Slave IDs
           </button>
           <button
             onClick={() => setShowAddModal(true)}
@@ -3512,6 +4051,25 @@ export default function Equipment() {
         devices={discoveredDevices}
         onAddDevice={handleAddDiscoveredDevice}
         addingDevice={addingDevice}
+      />
+
+      {/* Slave ID Scanner Modal */}
+      <SlaveIdScannerModal
+        isOpen={showSlaveScanner}
+        onClose={() => {
+          setShowSlaveScanner(false);
+          setSlaveScanProgress(null);
+          setSlaveScanResults(null);
+          setSelectedSlaves([]);
+        }}
+        config={slaveScanConfig}
+        onConfigChange={setSlaveScanConfig}
+        progress={slaveScanProgress}
+        results={slaveScanResults}
+        selectedSlaves={selectedSlaves}
+        onSelectedSlavesChange={setSelectedSlaves}
+        onScan={handleSlaveScan}
+        onCreateEquipment={handleCreateSlavesAsEquipment}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
+const { modbusTcpClient } = require('../services/ModbusTcpClient');
 
 const router = express.Router();
 
@@ -566,6 +567,192 @@ router.put('/:id/errors/:errorId/resolve', requireRole('admin', 'operator'), (re
 
   const updated = db.prepare('SELECT * FROM equipment_errors WHERE id = ?').get(errorId);
   res.json(updated);
+});
+
+// POST /api/equipment/scan-slaves - Scan for Modbus slave devices
+// Scans slave IDs 1-247 (or custom range) to discover RTU devices behind a gateway
+router.post('/scan-slaves', requireRole('admin', 'operator'), async (req, res) => {
+  const {
+    host,
+    port = 502,
+    startSlaveId = 1,
+    endSlaveId = 247,
+    timeout = 500,
+    batchSize = 10
+  } = req.body;
+
+  // Validate host
+  const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  if (!host || !ipRegex.test(host)) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Valid host IP address is required' });
+  }
+
+  // Validate port
+  const portNum = parseInt(port);
+  if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Port must be between 1 and 65535' });
+  }
+
+  // Validate slave ID range
+  const startId = parseInt(startSlaveId);
+  const endId = parseInt(endSlaveId);
+  if (isNaN(startId) || startId < 1 || startId > 247) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Start slave ID must be between 1 and 247' });
+  }
+  if (isNaN(endId) || endId < 1 || endId > 247) {
+    return res.status(400).json({ error: 'Bad Request', message: 'End slave ID must be between 1 and 247' });
+  }
+  if (startId > endId) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Start slave ID must be less than or equal to end slave ID' });
+  }
+
+  // Validate timeout
+  const timeoutMs = parseInt(timeout);
+  if (isNaN(timeoutMs) || timeoutMs < 100 || timeoutMs > 5000) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Timeout must be between 100ms and 5000ms' });
+  }
+
+  console.log(`[Modbus Scan] Starting slave scan on ${host}:${portNum} for IDs ${startId}-${endId}`);
+
+  const discoveredSlaves = [];
+  const totalToScan = endId - startId + 1;
+  let scannedCount = 0;
+
+  // Scan function for a single slave ID
+  const scanSlave = async (slaveId) => {
+    const startTime = Date.now();
+    try {
+      // Try to read holding registers at address 0 (common identification area)
+      // Using a short timeout for quick scanning
+      const data = await modbusTcpClient.readHoldingRegisters(
+        host,
+        portNum,
+        slaveId,
+        0, // Starting address
+        1, // Read just 1 register to check if device responds
+        { timeout: timeoutMs, retries: 1 }
+      );
+
+      const responseTime = Date.now() - startTime;
+      console.log(`[Modbus Scan] Slave ${slaveId} responded in ${responseTime}ms`);
+
+      return {
+        slaveId,
+        responding: true,
+        responseTime,
+        sampleData: data
+      };
+    } catch (error) {
+      // Device didn't respond or error occurred
+      return {
+        slaveId,
+        responding: false,
+        error: error.message
+      };
+    }
+  };
+
+  // Process slaves in batches for efficiency
+  const batchSizeNum = Math.min(parseInt(batchSize) || 10, 50);
+
+  for (let i = startId; i <= endId; i += batchSizeNum) {
+    const batchEnd = Math.min(i + batchSizeNum - 1, endId);
+    const batch = [];
+
+    for (let slaveId = i; slaveId <= batchEnd; slaveId++) {
+      batch.push(scanSlave(slaveId));
+    }
+
+    // Wait for batch to complete
+    const results = await Promise.all(batch);
+
+    // Add responding slaves to discovered list
+    for (const result of results) {
+      scannedCount++;
+      if (result.responding) {
+        discoveredSlaves.push(result);
+      }
+    }
+  }
+
+  console.log(`[Modbus Scan] Scan complete. Found ${discoveredSlaves.length} responding slaves out of ${totalToScan} scanned`);
+
+  // Disconnect after scan to clean up connection
+  await modbusTcpClient.disconnectDevice(host, portNum, 1);
+
+  res.json({
+    success: true,
+    host,
+    port: portNum,
+    scanned: {
+      start: startId,
+      end: endId,
+      total: totalToScan
+    },
+    discovered: discoveredSlaves,
+    count: discoveredSlaves.length
+  });
+});
+
+// POST /api/equipment/scan-slaves/create-bulk - Create equipment entries from discovered slaves
+router.post('/scan-slaves/create-bulk', requireRole('admin', 'operator'), (req, res) => {
+  const { host, port, slaves, namePrefix = 'Modbus Device' } = req.body;
+
+  if (!host || !Array.isArray(slaves) || slaves.length === 0) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Host and slaves array are required' });
+  }
+
+  const createdEquipment = [];
+  const errors = [];
+
+  for (const slave of slaves) {
+    const slaveId = parseInt(slave.slaveId);
+    if (isNaN(slaveId) || slaveId < 1 || slaveId > 247) {
+      errors.push({ slaveId: slave.slaveId, error: 'Invalid slave ID' });
+      continue;
+    }
+
+    // Check if equipment with same address and slave ID already exists
+    const existing = db.prepare(
+      'SELECT id FROM equipment WHERE address = ? AND slave_id = ?'
+    ).get(`${host}:${port}`, slaveId);
+
+    if (existing) {
+      errors.push({ slaveId, error: 'Equipment with this address and slave ID already exists' });
+      continue;
+    }
+
+    try {
+      const name = slave.name || `${namePrefix} ${slaveId}`;
+      const result = db.prepare(
+        'INSERT INTO equipment (name, description, type, protocol, address, slave_id, status, polling_interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(
+        name,
+        slave.description || `Modbus device discovered at slave ID ${slaveId}`,
+        slave.type || 'sensor',
+        'modbus',
+        `${host}:${port}`,
+        slaveId,
+        'offline',
+        slave.pollingInterval || 1000
+      );
+
+      const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(result.lastInsertRowid);
+      createdEquipment.push(equipment);
+
+      // Queue for cloud sync
+      queueForSync('equipment', equipment.id, 'create', equipment);
+    } catch (error) {
+      errors.push({ slaveId, error: error.message });
+    }
+  }
+
+  res.status(201).json({
+    success: true,
+    created: createdEquipment,
+    count: createdEquipment.length,
+    errors: errors.length > 0 ? errors : undefined
+  });
 });
 
 module.exports = router;
