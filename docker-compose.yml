@@ -7,18 +7,18 @@ services:
       dockerfile: Dockerfile
     container_name: sensehub-backend
     ports:
-      - "3001:3001"
+      - "0.0.0.0:3003:3003"  # Bind to all interfaces (allows Tailscale access)
     volumes:
       - ./backend/data:/app/data
       - ./logs:/app/logs
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - PORT=3003
       - JWT_SECRET=${JWT_SECRET:-sensehub-production-secret}
       - DB_PATH=/app/data/sensehub.db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3003/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,7 +30,7 @@ services:
       dockerfile: Dockerfile
     container_name: sensehub-frontend
     ports:
-      - "3000:80"
+      - "0.0.0.0:3002:80"  # Bind to all interfaces (allows Tailscale access)
     depends_on:
       - backend
     restart: unless-stopped

@@ -99,9 +99,10 @@ export function WebSocketProvider({ children }) {
       return;
     }
 
-    // Get WebSocket URL - use same host as current page
+    // Get WebSocket URL - use same host and port as current page (works with Tailscale, reverse proxy, etc.)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.hostname}:3000/ws`;
+    const host = window.location.host; // includes port if non-standard
+    const wsUrl = `${protocol}//${host}/ws`;
 
     try {
       const ws = new WebSocket(wsUrl);
