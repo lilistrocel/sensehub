@@ -2209,6 +2209,146 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
               />
             </div>
 
+            {/* Modbus Configuration Section */}
+            {showModbusConfig && (
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                  <svg className="w-4 h-4 mr-2 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Modbus Configuration
+                </h4>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="edit-slave_id" className="block text-sm font-medium text-gray-700 mb-1">
+                      Slave ID (1-247)
+                    </label>
+                    <input
+                      type="number"
+                      id="edit-slave_id"
+                      name="slave_id"
+                      min="1"
+                      max="247"
+                      value={formData.slave_id}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="e.g., 1"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="edit-polling_interval_ms" className="block text-sm font-medium text-gray-700 mb-1">
+                      Polling Interval (ms)
+                    </label>
+                    <input
+                      type="number"
+                      id="edit-polling_interval_ms"
+                      name="polling_interval_ms"
+                      min="100"
+                      max="60000"
+                      step="100"
+                      value={formData.polling_interval_ms}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="1000"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Register Mappings
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddRegisterMapping}
+                      className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add Register
+                    </button>
+                  </div>
+
+                  {formData.register_mappings.length === 0 ? (
+                    <p className="text-sm text-gray-500 italic">No register mappings defined. Click "Add Register" to configure.</p>
+                  ) : (
+                    <div className="space-y-3 max-h-48 overflow-y-auto">
+                      {formData.register_mappings.map((mapping, index) => (
+                        <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-xs font-medium text-gray-500">Register #{index + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRegisterMapping(index)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              placeholder="Name"
+                              value={mapping.name}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'name', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <input
+                              type="number"
+                              placeholder="Register #"
+                              value={mapping.register}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'register', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <select
+                              value={mapping.type}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'type', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            >
+                              <option value="holding">Holding Register</option>
+                              <option value="input">Input Register</option>
+                              <option value="coil">Coil</option>
+                              <option value="discrete">Discrete Input</option>
+                            </select>
+                            <select
+                              value={mapping.dataType}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'dataType', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            >
+                              <option value="uint16">UInt16</option>
+                              <option value="int16">Int16</option>
+                              <option value="uint32">UInt32</option>
+                              <option value="int32">Int32</option>
+                              <option value="float32">Float32</option>
+                              <option value="bool">Boolean</option>
+                            </select>
+                          </div>
+                          <div className="mt-2">
+                            <select
+                              value={mapping.access}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'access', e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            >
+                              <option value="read">Read Only</option>
+                              <option value="write">Write Only</option>
+                              <option value="readwrite">Read/Write</option>
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Buttons */}
             <div className="flex justify-end gap-3 pt-4">
               <button

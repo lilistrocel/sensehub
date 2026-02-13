@@ -18,6 +18,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const cloudRoutes = require('./routes/cloud');
 const settingsRoutes = require('./routes/settings');
 const systemRoutes = require('./routes/system');
+const modbusRoutes = require('./routes/modbus');
 
 // Import middleware
 const { authMiddleware } = require('./middleware/auth');
@@ -55,6 +56,7 @@ app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 app.use('/api/cloud', authMiddleware, cloudRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
 app.use('/api/system', authMiddleware, systemRoutes);
+app.use('/api/modbus', authMiddleware, modbusRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

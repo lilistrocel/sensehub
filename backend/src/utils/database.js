@@ -63,6 +63,9 @@ const initSchema = () => {
       error_log TEXT,
       calibration_offset REAL DEFAULT 0,
       calibration_scale REAL DEFAULT 1,
+      slave_id INTEGER,
+      polling_interval_ms INTEGER DEFAULT 1000,
+      register_mappings TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -257,6 +260,25 @@ const initSchema = () => {
     }
   } catch (err) {
     console.log('condition_logic column already exists or migration skipped');
+  }
+
+  // Add Modbus configuration columns to equipment table if they don't exist
+  try {
+    const equipmentColumns = db.pragma("table_info(equipment)").map(col => col.name);
+    if (!equipmentColumns.includes('slave_id')) {
+      db.exec('ALTER TABLE equipment ADD COLUMN slave_id INTEGER');
+      console.log('Added slave_id column to equipment table');
+    }
+    if (!equipmentColumns.includes('polling_interval_ms')) {
+      db.exec('ALTER TABLE equipment ADD COLUMN polling_interval_ms INTEGER DEFAULT 1000');
+      console.log('Added polling_interval_ms column to equipment table');
+    }
+    if (!equipmentColumns.includes('register_mappings')) {
+      db.exec('ALTER TABLE equipment ADD COLUMN register_mappings TEXT');
+      console.log('Added register_mappings column to equipment table');
+    }
+  } catch (err) {
+    console.log('Modbus columns already exist or migration skipped');
   }
 
   console.log('Database schema initialized');
