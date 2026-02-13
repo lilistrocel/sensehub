@@ -223,6 +223,23 @@ const initSchema = () => {
       FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
     );
 
+    -- Device templates table for pre-configured Modbus device profiles
+    CREATE TABLE IF NOT EXISTS device_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      manufacturer TEXT,
+      model TEXT,
+      description TEXT,
+      protocol TEXT DEFAULT 'modbus',
+      default_slave_id INTEGER,
+      default_polling_interval_ms INTEGER DEFAULT 1000,
+      register_mappings TEXT NOT NULL,
+      is_system INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
@@ -234,6 +251,7 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_equipment_errors_created ON equipment_errors(created_at);
     CREATE INDEX IF NOT EXISTS idx_user_preferences_user ON user_preferences(user_id);
     CREATE INDEX IF NOT EXISTS idx_cloud_suggested_programs_status ON cloud_suggested_programs(status);
+    CREATE INDEX IF NOT EXISTS idx_device_templates_category ON device_templates(category);
   `);
 
   // Add calibration columns to existing equipment table if they don't exist

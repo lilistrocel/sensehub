@@ -9,31 +9,78 @@ import ErrorMessage from '../components/ErrorMessage';
 const API_BASE = '/api';
 
 // Modbus Register Mapping Preset Templates
+// Waveshare relay modules use:
+// - Coil addresses 0x0000-0x001F for relay control
+// - Holding register 0x2000 (8192) for baud rate configuration
+// - Holding register 0x4000 (16384) for device address configuration
+
+// Helper function to generate relay coil mappings
+const generateRelayMappings = (channelCount) => {
+  const mappings = [];
+  for (let i = 0; i < channelCount; i++) {
+    mappings.push({
+      name: `Relay ${i + 1}`,
+      register: String(i),
+      type: 'coil',
+      dataType: 'bool',
+      access: 'readwrite'
+    });
+  }
+  // Add Waveshare configuration registers
+  mappings.push({
+    name: 'Baud Rate Config',
+    register: '8192', // 0x2000
+    type: 'holding',
+    dataType: 'uint16',
+    access: 'readwrite'
+  });
+  mappings.push({
+    name: 'Device Address Config',
+    register: '16384', // 0x4000
+    type: 'holding',
+    dataType: 'uint16',
+    access: 'readwrite'
+  });
+  return mappings;
+};
+
 const REGISTER_PRESETS = {
-  waveshare_8ch_relay: {
-    name: 'Waveshare 8-Channel Relay',
-    mappings: [
-      { name: 'Relay 1', register: '0', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 2', register: '1', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 3', register: '2', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 4', register: '3', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 5', register: '4', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 6', register: '5', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 7', register: '6', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 8', register: '7', type: 'coil', dataType: 'bool', access: 'readwrite' },
-    ]
-  },
+  // Waveshare Relay Modules (all channel variants)
   waveshare_4ch_relay: {
     name: 'Waveshare 4-Channel Relay',
-    mappings: [
-      { name: 'Relay 1', register: '0', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 2', register: '1', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 3', register: '2', type: 'coil', dataType: 'bool', access: 'readwrite' },
-      { name: 'Relay 4', register: '3', type: 'coil', dataType: 'bool', access: 'readwrite' },
-    ]
+    category: 'waveshare',
+    description: 'Waveshare Modbus RTU 4-channel relay module with configuration registers',
+    mappings: generateRelayMappings(4)
   },
+  waveshare_6ch_relay: {
+    name: 'Waveshare 6-Channel Relay',
+    category: 'waveshare',
+    description: 'Waveshare Modbus RTU 6-channel relay module with configuration registers',
+    mappings: generateRelayMappings(6)
+  },
+  waveshare_8ch_relay: {
+    name: 'Waveshare 8-Channel Relay',
+    category: 'waveshare',
+    description: 'Waveshare Modbus RTU 8-channel relay module with configuration registers',
+    mappings: generateRelayMappings(8)
+  },
+  waveshare_16ch_relay: {
+    name: 'Waveshare 16-Channel Relay',
+    category: 'waveshare',
+    description: 'Waveshare Modbus RTU 16-channel relay module with configuration registers',
+    mappings: generateRelayMappings(16)
+  },
+  waveshare_32ch_relay: {
+    name: 'Waveshare 32-Channel Relay',
+    category: 'waveshare',
+    description: 'Waveshare Modbus RTU 32-channel relay module with configuration registers',
+    mappings: generateRelayMappings(32)
+  },
+  // Generic device templates
   generic_temp_humidity: {
     name: 'Temperature/Humidity Sensor',
+    category: 'sensor',
+    description: 'Generic temperature and humidity sensor',
     mappings: [
       { name: 'Temperature', register: '0', type: 'input', dataType: 'int16', access: 'read' },
       { name: 'Humidity', register: '1', type: 'input', dataType: 'uint16', access: 'read' },
@@ -41,6 +88,8 @@ const REGISTER_PRESETS = {
   },
   generic_power_meter: {
     name: 'Power Meter',
+    category: 'meter',
+    description: 'Generic power meter with voltage, current, power and energy readings',
     mappings: [
       { name: 'Voltage', register: '0', type: 'input', dataType: 'float32', access: 'read' },
       { name: 'Current', register: '2', type: 'input', dataType: 'float32', access: 'read' },
@@ -50,6 +99,8 @@ const REGISTER_PRESETS = {
   },
   generic_vfd: {
     name: 'Variable Frequency Drive (VFD)',
+    category: 'controller',
+    description: 'Generic VFD with frequency control and monitoring',
     mappings: [
       { name: 'Frequency Setpoint', register: '0', type: 'holding', dataType: 'uint16', access: 'readwrite' },
       { name: 'Actual Frequency', register: '1', type: 'input', dataType: 'uint16', access: 'read' },
@@ -1374,6 +1425,513 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
               )}
             </div>
           ) : null}
+
+          {/* Close Button */}
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Relay Control Modal - Controls Modbus relay devices using coil read/write operations
+function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }) {
+  const [loading, setLoading] = useState(false);
+  const [coilStates, setCoilStates] = useState([]);
+  const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState({ connected: false, lastActivity: null });
+  const [actionLoading, setActionLoading] = useState({});
+  const [lastCommunication, setLastCommunication] = useState(null);
+
+  // Check if user can control equipment (admin or operator only)
+  const canControl = user?.role === 'admin' || user?.role === 'operator';
+
+  // Get relay channels from register_mappings (filter for coil types with readwrite access)
+  const getRelayChannels = () => {
+    if (!equipment?.register_mappings || !Array.isArray(equipment.register_mappings)) {
+      return [];
+    }
+    return equipment.register_mappings
+      .filter(mapping => mapping.type === 'coil' && mapping.access === 'readwrite')
+      .map((mapping, idx) => ({
+        ...mapping,
+        index: idx,
+        address: parseInt(mapping.register, 10) || idx
+      }));
+  };
+
+  const relayChannels = getRelayChannels();
+
+  // Parse Modbus connection details from equipment address
+  const parseModbusAddress = () => {
+    if (!equipment?.address) return null;
+    const match = equipment.address.match(/^([^:]+):(\d+)$/);
+    if (match) {
+      return { host: match[1], port: parseInt(match[2], 10) };
+    }
+    // Default to port 502 if no port specified
+    return { host: equipment.address, port: 502 };
+  };
+
+  const modbusConfig = parseModbusAddress();
+
+  // Fetch current coil states when modal opens
+  useEffect(() => {
+    if (isOpen && equipment && relayChannels.length > 0) {
+      fetchCoilStates();
+    }
+  }, [isOpen, equipment]);
+
+  // Fetch current states of all relay coils
+  const fetchCoilStates = async () => {
+    if (!modbusConfig || relayChannels.length === 0) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const minAddress = Math.min(...relayChannels.map(c => c.address));
+      const maxAddress = Math.max(...relayChannels.map(c => c.address));
+      const quantity = maxAddress - minAddress + 1;
+
+      const response = await fetch('/api/modbus/read/coils', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          host: modbusConfig.host,
+          port: modbusConfig.port,
+          unitId: equipment.slave_id || 1,
+          address: minAddress,
+          quantity: quantity
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to read coil states');
+      }
+
+      const result = await response.json();
+
+      // Map the returned coil states to our channel structure
+      const states = relayChannels.map(channel => {
+        const offset = channel.address - minAddress;
+        return {
+          ...channel,
+          state: result.data[offset] || false
+        };
+      });
+
+      setCoilStates(states);
+      setLastCommunication(new Date());
+      setConnectionStatus({ connected: true, lastActivity: Date.now() });
+    } catch (err) {
+      console.error('Failed to fetch coil states:', err);
+      setError(err.message);
+      setConnectionStatus({ connected: false, lastActivity: null });
+      // Initialize with unknown states
+      setCoilStates(relayChannels.map(c => ({ ...c, state: false })));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Write single coil (FC 05)
+  const handleToggleRelay = async (channel) => {
+    if (!canControl || !modbusConfig) return;
+
+    setActionLoading(prev => ({ ...prev, [channel.address]: true }));
+    setMessage(null);
+
+    try {
+      const newState = !channel.state;
+
+      const response = await fetch('/api/modbus/write/coil', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          host: modbusConfig.host,
+          port: modbusConfig.port,
+          unitId: equipment.slave_id || 1,
+          address: channel.address,
+          value: newState
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to write coil');
+      }
+
+      // Update local state
+      setCoilStates(prev => prev.map(c =>
+        c.address === channel.address ? { ...c, state: newState } : c
+      ));
+
+      setMessage({ type: 'success', text: `${channel.name} turned ${newState ? 'ON' : 'OFF'}` });
+      setLastCommunication(new Date());
+      setConnectionStatus({ connected: true, lastActivity: Date.now() });
+
+      // Clear message after delay
+      setTimeout(() => setMessage(null), 2000);
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+      setConnectionStatus({ connected: false, lastActivity: null });
+    } finally {
+      setActionLoading(prev => ({ ...prev, [channel.address]: false }));
+    }
+  };
+
+  // Write multiple coils (FC 15) - All On
+  const handleAllOn = async () => {
+    if (!canControl || !modbusConfig || coilStates.length === 0) return;
+
+    setActionLoading(prev => ({ ...prev, allOn: true }));
+    setMessage(null);
+
+    try {
+      const minAddress = Math.min(...coilStates.map(c => c.address));
+      const maxAddress = Math.max(...coilStates.map(c => c.address));
+      const values = new Array(maxAddress - minAddress + 1).fill(true);
+
+      const response = await fetch('/api/modbus/write/coils', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          host: modbusConfig.host,
+          port: modbusConfig.port,
+          unitId: equipment.slave_id || 1,
+          address: minAddress,
+          values: values
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to write coils');
+      }
+
+      // Update all local states to ON
+      setCoilStates(prev => prev.map(c => ({ ...c, state: true })));
+
+      setMessage({ type: 'success', text: 'All relays turned ON' });
+      setLastCommunication(new Date());
+      setConnectionStatus({ connected: true, lastActivity: Date.now() });
+
+      // Clear message after delay
+      setTimeout(() => setMessage(null), 2000);
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+      setConnectionStatus({ connected: false, lastActivity: null });
+    } finally {
+      setActionLoading(prev => ({ ...prev, allOn: false }));
+    }
+  };
+
+  // Write multiple coils (FC 15) - All Off
+  const handleAllOff = async () => {
+    if (!canControl || !modbusConfig || coilStates.length === 0) return;
+
+    setActionLoading(prev => ({ ...prev, allOff: true }));
+    setMessage(null);
+
+    try {
+      const minAddress = Math.min(...coilStates.map(c => c.address));
+      const maxAddress = Math.max(...coilStates.map(c => c.address));
+      const values = new Array(maxAddress - minAddress + 1).fill(false);
+
+      const response = await fetch('/api/modbus/write/coils', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          host: modbusConfig.host,
+          port: modbusConfig.port,
+          unitId: equipment.slave_id || 1,
+          address: minAddress,
+          values: values
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to write coils');
+      }
+
+      // Update all local states to OFF
+      setCoilStates(prev => prev.map(c => ({ ...c, state: false })));
+
+      setMessage({ type: 'success', text: 'All relays turned OFF' });
+      setLastCommunication(new Date());
+      setConnectionStatus({ connected: true, lastActivity: Date.now() });
+
+      // Clear message after delay
+      setTimeout(() => setMessage(null), 2000);
+
+      // Notify parent to refresh
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+      setConnectionStatus({ connected: false, lastActivity: null });
+    } finally {
+      setActionLoading(prev => ({ ...prev, allOff: false }));
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          onClick={onClose}
+        ></div>
+
+        {/* Modal */}
+        <div className="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          {/* Header */}
+          <div className="flex items-start mb-6">
+            <div className="flex-shrink-0 h-12 w-12 bg-amber-100 rounded-lg flex items-center justify-center mr-4">
+              <svg className="h-7 w-7 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 truncate">
+                Relay Control
+              </h3>
+              <p className="text-sm text-gray-500">{equipment?.name || 'Modbus Relay Device'}</p>
+            </div>
+          </div>
+
+          {/* Connection Status */}
+          <div className="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${connectionStatus.connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                <span className={`text-sm font-medium ${connectionStatus.connected ? 'text-green-700' : 'text-red-700'}`}>
+                  {connectionStatus.connected ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+              <button
+                onClick={fetchCoilStates}
+                disabled={loading}
+                className="text-sm text-primary-600 hover:text-primary-800 disabled:opacity-50 flex items-center gap-1"
+              >
+                <svg className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
+            {lastCommunication && (
+              <p className="text-xs text-gray-500 mt-1">
+                Last communication: {lastCommunication.toLocaleString()}
+              </p>
+            )}
+            {modbusConfig && (
+              <p className="text-xs text-gray-400 mt-1 font-mono">
+                {modbusConfig.host}:{modbusConfig.port} (Unit ID: {equipment?.slave_id || 1})
+              </p>
+            )}
+          </div>
+
+          {/* Message */}
+          {message && (
+            <div className={`mb-4 p-3 rounded-lg text-sm ${
+              message.type === 'success'
+                ? 'bg-green-50 text-green-800 border border-green-200'
+                : 'bg-red-50 text-red-800 border border-red-200'
+            }`}>
+              <div className="flex items-center">
+                {message.type === 'success' ? (
+                  <svg className="h-4 w-4 mr-2 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4 mr-2 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                {message.text}
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && !message && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-800 border border-red-200 text-sm">
+              <div className="flex items-center">
+                <svg className="h-4 w-4 mr-2 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {error}
+              </div>
+            </div>
+          )}
+
+          {/* Loading State */}
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+              <span className="ml-3 text-gray-500">Reading relay states...</span>
+            </div>
+          ) : relayChannels.length === 0 ? (
+            <div className="text-center py-8">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No relay channels configured</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                This device doesn't have any coil mappings configured for relay control.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Quick Actions */}
+              {canControl && (
+                <div className="mb-4 flex gap-3">
+                  <button
+                    onClick={handleAllOn}
+                    disabled={actionLoading.allOn || actionLoading.allOff}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                  >
+                    {actionLoading.allOn ? (
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        All On
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleAllOff}
+                    disabled={actionLoading.allOn || actionLoading.allOff}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-gray-600 rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                  >
+                    {actionLoading.allOff ? (
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                        All Off
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Relay Channels Grid */}
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {coilStates.map((channel) => (
+                  <div
+                    key={channel.address}
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      channel.state
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* State indicator */}
+                      <div className={`w-3 h-3 rounded-full ${
+                        channel.state ? 'bg-green-500 shadow-sm shadow-green-500' : 'bg-gray-400'
+                      }`}></div>
+                      <div>
+                        <div className="font-medium text-gray-900">{channel.name}</div>
+                        <div className="text-xs text-gray-500">Address: {channel.address}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-sm font-medium px-2 py-0.5 rounded ${
+                        channel.state
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        {channel.state ? 'ON' : 'OFF'}
+                      </span>
+                      {canControl ? (
+                        <button
+                          onClick={() => handleToggleRelay(channel)}
+                          disabled={actionLoading[channel.address]}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 ${
+                            channel.state ? 'bg-green-500' : 'bg-gray-300'
+                          }`}
+                          role="switch"
+                          aria-checked={channel.state}
+                        >
+                          {actionLoading[channel.address] ? (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            </span>
+                          ) : (
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                channel.state ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">View only</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Close Button */}
           <div className="mt-6 flex justify-end">
@@ -2857,6 +3415,9 @@ export default function Equipment() {
   const [selectedSlaves, setSelectedSlaves] = useState([]);
   const [addingDevice, setAddingDevice] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
+  // Relay Control Modal state
+  const [showRelayControl, setShowRelayControl] = useState(false);
+  const [relayControlEquipment, setRelayControlEquipment] = useState(null);
   const [equipmentNotFound, setEquipmentNotFound] = useState(false);
 
   // Pagination state
@@ -3771,6 +4332,22 @@ export default function Equipment() {
                     >
                       View
                     </button>
+                    {/* Relay Control button - show for Modbus equipment with coil mappings */}
+                    {eq.protocol === 'modbus' && eq.register_mappings &&
+                     Array.isArray(eq.register_mappings) &&
+                     eq.register_mappings.some(m => m.type === 'coil' && m.access === 'readwrite') && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRelayControlEquipment(eq);
+                          setShowRelayControl(true);
+                        }}
+                        className="text-amber-600 hover:text-amber-900 mr-3"
+                        title="Control Relays"
+                      >
+                        Relays
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -4070,6 +4647,19 @@ export default function Equipment() {
         onSelectedSlavesChange={setSelectedSlaves}
         onScan={handleSlaveScan}
         onCreateEquipment={handleCreateSlavesAsEquipment}
+      />
+
+      {/* Relay Control Modal */}
+      <RelayControlModal
+        isOpen={showRelayControl}
+        onClose={() => {
+          setShowRelayControl(false);
+          setRelayControlEquipment(null);
+        }}
+        equipment={relayControlEquipment}
+        token={token}
+        user={user}
+        onUpdate={fetchData}
       />
     </div>
   );

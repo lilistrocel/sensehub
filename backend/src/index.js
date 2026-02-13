@@ -19,6 +19,7 @@ const cloudRoutes = require('./routes/cloud');
 const settingsRoutes = require('./routes/settings');
 const systemRoutes = require('./routes/system');
 const modbusRoutes = require('./routes/modbus');
+const templateRoutes = require('./routes/templates');
 
 // Import middleware
 const { authMiddleware } = require('./middleware/auth');
@@ -60,6 +61,7 @@ app.use('/api/cloud', authMiddleware, cloudRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
 app.use('/api/system', authMiddleware, systemRoutes);
 app.use('/api/modbus', authMiddleware, modbusRoutes);
+app.use('/api/templates', authMiddleware, templateRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
