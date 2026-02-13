@@ -2,10 +2,65 @@
 
 ## Current Status
 - **Total Features:** 198
-- **Passing:** 193
-- **Completion:** 97.5%
+- **Passing:** 194
+- **Completion:** 98.0%
 
 ## Session Log
+
+### Session - 2026-02-13 (Feature #198 - Modbus Device Polling Service)
+**Assigned Feature:** #198 - Modbus Device Polling Service
+**Status:** PASSED ✅
+
+**What was implemented:**
+
+Feature #198 - Modbus Device Polling Service:
+- Created ModbusPollingService background service for polling Modbus devices
+- Per-device polling intervals (respects equipment.polling_interval_ms setting)
+- DevicePollingState class tracks each device's poll state and error history
+- Register mapping support: reads configured registers from equipment.register_mappings
+- Supports all Modbus function codes: FC01-FC04 for reading
+- Data type interpretation: uint16, int16, uint32, int32, float32, boolean
+- Updates equipment status and last_reading in database
+- Records readings to equipment_history table (readings table)
+- Broadcasts value changes via WebSocket for real-time UI updates:
+  - 'equipment_reading' for new readings
+  - 'equipment_status' for status changes
+  - 'equipment_error' for communication errors
+  - 'sensor_reading' for sensor-specific updates
+- Exponential backoff for communication errors:
+  - Base delay: 1 second
+  - Max backoff: 60 seconds
+  - Formula: baseDelay * 2^(consecutiveErrors-1)
+- Logs errors to equipment_errors table with details
+- Auto-starts with backend server on startup
+- Refreshes device list every 30 seconds (picks up new/changed devices)
+- Graceful shutdown on SIGINT/SIGTERM
+- Added API endpoints for polling service control:
+  - GET /api/modbus/polling/status - Get service status
+  - POST /api/modbus/polling/start - Start service
+  - POST /api/modbus/polling/stop - Stop service
+  - POST /api/modbus/polling/refresh - Refresh device list
+  - POST /api/modbus/polling/device/:id/poll - Force poll a device
+
+**Files Created:**
+- backend/src/services/ModbusPollingService.js (600+ lines)
+
+**Files Modified:**
+- backend/src/index.js (import and start polling service, graceful shutdown)
+- backend/src/routes/modbus.js (added polling API endpoints)
+
+**Verification:**
+- Browser automation tests passed
+- Backend logs confirmed polling service started with 10 Modbus devices
+- Exponential backoff confirmed: "Device X error (6 consecutive). Next poll in 32000ms"
+- Equipment status updates visible in UI (Error status for unreachable devices)
+- WebSocket connection confirmed (Dashboard shows "Live updates active")
+- Zero console errors
+- No mock data patterns found in codebase
+
+**Progress:** 194/198 features passing (98.0%)
+
+---
 
 ### Session - 2026-02-13 (Features #197, #192 - Modbus Services)
 **Assigned Features:**
