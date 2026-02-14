@@ -213,7 +213,7 @@ export default function Alerts() {
           </div>
 
           {/* Severity Filter */}
-          <div className="w-40">
+          <div className="w-full sm:w-40">
             <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
             <select
               value={severityFilter}
@@ -228,7 +228,7 @@ export default function Alerts() {
           </div>
 
           {/* Acknowledged Filter */}
-          <div className="w-48">
+          <div className="w-full sm:w-48">
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               value={acknowledgedFilter}
@@ -242,7 +242,7 @@ export default function Alerts() {
           </div>
 
           {/* Equipment Filter */}
-          <div className="w-48">
+          <div className="w-full sm:w-48">
             <label className="block text-sm font-medium text-gray-700 mb-1">Equipment</label>
             <select
               value={equipmentFilter}
@@ -262,7 +262,7 @@ export default function Alerts() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow p-4">
           <p className="text-sm font-medium text-gray-500">Total Alerts</p>
           <p className="text-2xl font-bold text-gray-900">{alerts.length}</p>

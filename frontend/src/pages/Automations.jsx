@@ -83,6 +83,10 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   const [controlEquipmentId, setControlEquipmentId] = useState('');
   const [controlAction, setControlAction] = useState('on');
   const [controlValue, setControlValue] = useState('');
+  const [controlChannel, setControlChannel] = useState('');
+  const [controlChannelName, setControlChannelName] = useState('');
+  const [controlDuration, setControlDuration] = useState('');
+  const [controlDelay, setControlDelay] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -265,7 +269,11 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
         action: controlAction,
         equipment_id: parseInt(controlEquipmentId),
         equipment_name: selectedEq?.name || 'Unknown Equipment',
-        value: controlAction === 'set' ? controlValue : null
+        value: controlAction === 'set' ? controlValue : null,
+        channel: controlChannel ? parseInt(controlChannel) : null,
+        channel_name: controlChannelName || null,
+        delay_seconds: controlDelay ? parseInt(controlDelay) : null,
+        duration_seconds: controlDuration ? parseInt(controlDuration) : null
       };
     } else if (actionType === 'log') {
       newAction = {
@@ -285,6 +293,10 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     setControlEquipmentId('');
     setControlAction('on');
     setControlValue('');
+    setControlChannel('');
+    setControlChannelName('');
+    setControlDuration('');
+    setControlDelay('');
   };
 
   const removeAction = (index) => {
@@ -395,7 +407,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-3xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-3xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
@@ -1023,7 +1035,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             {action.type}
                           </span>
                           {action.type === 'control' ? (
-                            <span className="text-sm">
+                            <span className="text-sm flex items-center gap-1 flex-wrap">
                               <span className="font-medium">
                                 {action.action === 'on' ? 'Turn On' :
                                  action.action === 'off' ? 'Turn Off' :
@@ -1034,6 +1046,21 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                               <span className="text-gray-600">
                                 {action.equipment_name || `Equipment #${action.equipment_id}` || 'Unknown'}
                               </span>
+                              {action.channel_name && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
+                                  {action.channel_name}
+                                </span>
+                              )}
+                              {action.delay_seconds > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-800">
+                                  {action.delay_seconds}s delay
+                                </span>
+                              )}
+                              {action.duration_seconds > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-800">
+                                  {action.duration_seconds}s auto-off
+                                </span>
+                              )}
                             </span>
                           ) : (
                             <span className="text-sm">{action.message || '-'}</span>
@@ -1101,7 +1128,11 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                           <label className="block text-xs text-gray-500 mb-1">Equipment</label>
                           <select
                             value={controlEquipmentId}
-                            onChange={(e) => setControlEquipmentId(e.target.value)}
+                            onChange={(e) => {
+                              setControlEquipmentId(e.target.value);
+                              setControlChannel('');
+                              setControlChannelName('');
+                            }}
                             className="px-2 py-1 text-sm border border-gray-300 rounded min-w-[150px]"
                           >
                             <option value="">Select equipment...</option>
@@ -1116,6 +1147,49 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             )}
                           </select>
                         </div>
+                        {/* Channel selector - shown when selected equipment has coil register mappings */}
+                        {(() => {
+                          const selectedEq = equipment.find(eq => eq.id === parseInt(controlEquipmentId));
+                          let relayChannels = [];
+                          if (selectedEq) {
+                            try {
+                              const mappings = typeof selectedEq.register_mappings === 'string'
+                                ? JSON.parse(selectedEq.register_mappings)
+                                : (selectedEq.register_mappings || []);
+                              relayChannels = mappings.filter(m => m.type === 'coil' && m.access === 'readwrite');
+                            } catch (e) {}
+                          }
+                          if (relayChannels.length === 0) return null;
+                          return (
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Channel</label>
+                              <select
+                                value={controlChannel}
+                                onChange={(e) => {
+                                  const addr = e.target.value;
+                                  setControlChannel(addr);
+                                  if (addr) {
+                                    const ch = relayChannels.find(c => String(c.register ?? c.address) === addr);
+                                    setControlChannelName(ch?.name || `Coil ${addr}`);
+                                  } else {
+                                    setControlChannelName('');
+                                  }
+                                }}
+                                className="px-2 py-1 text-sm border border-gray-300 rounded min-w-[120px]"
+                              >
+                                <option value="">All channels</option>
+                                {relayChannels.map(ch => {
+                                  const addr = ch.register ?? ch.address;
+                                  return (
+                                  <option key={addr} value={addr}>
+                                    {ch.name || `Coil ${addr}`}
+                                  </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          );
+                        })()}
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">Action</label>
                           <select
@@ -1138,6 +1212,32 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                               onChange={(e) => setControlValue(e.target.value)}
                               className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
                               placeholder="e.g., 75"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Delay (sec)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={controlDelay}
+                            onChange={(e) => setControlDelay(e.target.value)}
+                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                            placeholder="0"
+                            title="Seconds to wait before executing. 0 or empty = immediate."
+                          />
+                        </div>
+                        {(controlAction === 'on' || controlAction === 'toggle') && (
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Auto-off (sec)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={controlDuration}
+                              onChange={(e) => setControlDuration(e.target.value)}
+                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                              placeholder="0"
+                              title="Seconds until auto-off. 0 or empty = stay on permanently."
                             />
                           </div>
                         )}
@@ -1232,7 +1332,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
             <div className="fixed inset-0 z-60 overflow-y-auto">
               <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
                 <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowTestResults(false)}></div>
-                <div className="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+                <div className="inline-block w-full max-w-2xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
                   <button
                     onClick={() => setShowTestResults(false)}
                     className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
@@ -1263,7 +1363,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   </div>
 
                   {/* Summary Stats */}
-                  <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                     <div className="bg-gray-50 p-3 rounded-lg text-center">
                       <p className="text-2xl font-bold text-gray-900">{testResult.summary?.conditions_evaluated || 0}</p>
                       <p className="text-xs text-gray-500">Conditions</p>
@@ -1542,7 +1642,7 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-4xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-4xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
@@ -2230,27 +2330,28 @@ export default function Automations() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Automations</h1>
         {canEdit && (
-          <div className="flex gap-3">
+          <div className="flex gap-3 w-full sm:w-auto">
             <button
               onClick={() => setShowTemplatesModal(true)}
-              className="bg-white text-primary-600 border border-primary-600 px-4 py-2 rounded-lg hover:bg-primary-50 transition-colors flex items-center"
+              className="bg-white text-primary-600 border border-primary-600 px-3 sm:px-4 py-2 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm sm:text-base flex-1 sm:flex-initial justify-center"
             >
-              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-5 w-5 mr-1 sm:mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
-              New from Template
+              <span className="hidden sm:inline">New from Template</span>
+              <span className="sm:hidden">Template</span>
             </button>
             <button
               onClick={handleNewAutomation}
-              className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center"
+              className="bg-primary-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-sm sm:text-base flex-1 sm:flex-initial justify-center"
             >
-              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-5 w-5 mr-1 sm:mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              New Automation
+              New
             </button>
           </div>
         )}
@@ -2321,6 +2422,7 @@ export default function Automations() {
             )}
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -2480,6 +2582,7 @@ export default function Automations() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -2534,7 +2637,7 @@ export default function Automations() {
             ></div>
 
             {/* Modal */}
-            <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
               {/* Warning Icon */}
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
                 <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">

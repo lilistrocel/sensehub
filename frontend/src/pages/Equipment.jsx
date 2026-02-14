@@ -627,7 +627,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-lg p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
@@ -892,7 +892,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 </div>
 
                 {/* Current calibration values display */}
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <div className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded">
                     <span className="text-gray-500">Offset:</span>
                     <span className="font-mono text-gray-900">{eq?.calibration_offset ?? 0}</span>
@@ -1237,7 +1237,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                   </div>
 
                   {/* Summary Stats */}
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                     <div className="bg-blue-50 rounded-lg p-3 text-center">
                       <div className="text-xs text-blue-600 uppercase font-medium">Readings</div>
                       <div className="text-xl font-bold text-blue-900">{historyData.length}</div>
@@ -1257,7 +1257,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                   </div>
 
                   {/* History Table */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
@@ -1342,7 +1342,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
               ) : (
                 <>
                   {/* Summary Stats */}
-                  <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                     <div className="bg-red-50 rounded-lg p-3 text-center">
                       <div className="text-xs text-red-600 uppercase font-medium">Active</div>
                       <div className="text-xl font-bold text-red-900">
@@ -1787,7 +1787,7 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-lg p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
@@ -2090,7 +2090,7 @@ function SlaveIdScannerModal({
         <div className="p-4 overflow-y-auto max-h-[70vh]">
           <div className="mb-6">
             <h3 className="text-sm font-medium text-gray-700 mb-3">Scan Configuration</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label htmlFor="scan-host" className="block text-xs font-medium text-gray-500 mb-1">Host IP Address</label>
                 <input type="text" id="scan-host" value={config.host} onChange={(e) => handleConfigChange('host', e.target.value)} placeholder="192.168.1.100" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
@@ -2141,7 +2141,7 @@ function SlaveIdScannerModal({
                   <p className="mt-2 text-sm text-gray-500">No responding devices found in the scanned range.</p>
                 </div>
               ) : (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
@@ -2535,7 +2535,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
@@ -2670,7 +2670,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                   Modbus Configuration
                 </h4>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label htmlFor="slave_id" className="block text-sm font-medium text-gray-700 mb-1">
                       Slave ID (1-247)
@@ -3116,7 +3116,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
@@ -3251,7 +3251,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                   Modbus Configuration
                 </h4>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label htmlFor="edit-slave_id" className="block text-sm font-medium text-gray-700 mb-1">
                       Slave ID (1-247)
@@ -4118,59 +4118,63 @@ export default function Equipment() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Equipment</h1>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
           <button
             onClick={handleScan}
             disabled={scanning}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {scanning ? (
               <>
-                <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5 mr-1.5" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Scanning...
+                <span className="hidden sm:inline">Scanning...</span>
+                <span className="sm:hidden">Scan...</span>
               </>
             ) : (
               <>
-                <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                Scan Network for Modbus Devices
+                <span className="hidden sm:inline">Scan Network</span>
+                <span className="sm:hidden">Scan</span>
               </>
             )}
           </button>
           <button
             onClick={() => setShowSlaveScanner(true)}
-            className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors flex items-center"
+            className="bg-amber-600 text-white px-3 py-2 rounded-lg hover:bg-amber-700 transition-colors flex items-center text-sm"
           >
-            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
-            Scan Slave IDs
+            <span className="hidden sm:inline">Scan Slaves</span>
+            <span className="sm:hidden">Slaves</span>
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center"
+            className="bg-primary-600 text-white px-3 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-sm"
           >
-            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add Equipment
+            Add
           </button>
           <button
             onClick={handleExportCSV}
             disabled={equipment.length === 0}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             title="Export equipment to CSV"
           >
-            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            Export CSV
+            <span className="hidden sm:inline">Export</span>
+            <span className="sm:hidden">CSV</span>
           </button>
         </div>
       </div>
@@ -4261,7 +4265,7 @@ export default function Equipment() {
       </div>
 
       {/* Equipment Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-lg shadow overflow-hidden overflow-x-auto">
         {filteredEquipment.length === 0 ? (
           <div className="text-center py-12">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -4627,7 +4631,7 @@ export default function Equipment() {
             ></div>
 
             {/* Modal */}
-            <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
               {/* Warning Icon */}
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
                 <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
