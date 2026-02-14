@@ -15,6 +15,7 @@ services:
       - PORT=3003
       - JWT_SECRET=${JWT_SECRET:-sensehub-production-secret}
       - DB_PATH=/app/data/sensehub.db
+      - TZ=Asia/Dubai
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3003/api/health"]

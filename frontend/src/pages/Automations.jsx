@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getChannelDisplayName } from '../utils/channelUtils';
 
 const API_BASE = '/api';
 
@@ -1170,7 +1171,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                                   setControlChannel(addr);
                                   if (addr) {
                                     const ch = relayChannels.find(c => String(c.register ?? c.address) === addr);
-                                    setControlChannelName(ch?.name || `Coil ${addr}`);
+                                    setControlChannelName(ch ? getChannelDisplayName(ch) : `Coil ${addr}`);
                                   } else {
                                     setControlChannelName('');
                                   }
@@ -1182,7 +1183,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                                   const addr = ch.register ?? ch.address;
                                   return (
                                   <option key={addr} value={addr}>
-                                    {ch.name || `Coil ${addr}`}
+                                    {getChannelDisplayName(ch)}
                                   </option>
                                   );
                                 })}

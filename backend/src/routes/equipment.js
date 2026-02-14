@@ -611,6 +611,7 @@ router.get('/:id/relay/state', (req, res) => {
       const addr = parseInt(m.register, 10) || 0;
       return {
         name: m.name,
+        label: m.label || null,
         address: addr,
         state: relayStates[addr] !== undefined ? relayStates[addr] : false
       };
@@ -778,6 +779,52 @@ router.post('/:id/relay/all', requireRole('admin', 'operator'), async (req, res)
     console.error(`[Relay Control] Error writing all coils on ${equipment.name}:`, err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// PATCH /api/equipment/:id/channels/labels - Update channel labels
+router.patch('/:id/channels/labels', requireRole('admin', 'operator'), (req, res) => {
+  const { labels } = req.body;
+  const equipmentId = req.params.id;
+
+  if (!labels || typeof labels !== 'object') {
+    return res.status(400).json({ error: 'Bad Request', message: 'labels object is required (keyed by register address)' });
+  }
+
+  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+  if (!equipment) {
+    return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
+  }
+
+  let mappings = [];
+  try {
+    mappings = equipment.register_mappings
+      ? (typeof equipment.register_mappings === 'string' ? JSON.parse(equipment.register_mappings) : equipment.register_mappings)
+      : [];
+  } catch (e) {
+    return res.status(500).json({ error: 'Server Error', message: 'Failed to parse register mappings' });
+  }
+
+  // Apply labels to matching registers
+  for (const mapping of mappings) {
+    const addr = String(mapping.register ?? mapping.address);
+    if (labels[addr] !== undefined) {
+      mapping.label = String(labels[addr]).trim() || undefined;
+    }
+  }
+
+  db.prepare(
+    "UPDATE equipment SET register_mappings = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(JSON.stringify(mappings), equipmentId);
+
+  const updated = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+  if (updated.register_mappings) {
+    try { updated.register_mappings = JSON.parse(updated.register_mappings); } catch (e) {}
+  }
+
+  queueForSync('equipment', updated.id, 'update', updated);
+  global.broadcast('equipment_updated', updated);
+
+  res.json(updated);
 });
 
 // POST /api/equipment/scan-slaves - Scan for Modbus slave devices

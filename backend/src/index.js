@@ -25,8 +25,10 @@ const templateRoutes = require('./routes/templates');
 const { authMiddleware } = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
 
-// Import polling service
+// Import services
 const { modbusPollingService } = require('./services/ModbusPollingService');
+const { relayTimerService } = require('./services/RelayTimerService');
+const { automationSchedulerService } = require('./services/AutomationSchedulerService');
 
 const app = express();
 const server = http.createServer(app);
@@ -122,17 +124,29 @@ server.listen(PORT, async () => {
   } catch (error) {
     console.error('Modbus polling service: Failed to start -', error.message);
   }
+
+  // Start automation scheduler
+  try {
+    automationSchedulerService.start();
+    console.log('Automation scheduler: Started');
+  } catch (error) {
+    console.error('Automation scheduler: Failed to start -', error.message);
+  }
 });
 
 // Graceful shutdown handler
 process.on('SIGINT', async () => {
   console.log('\\nGraceful shutdown initiated...');
+  automationSchedulerService.stop();
+  relayTimerService.shutdown();
   await modbusPollingService.stop();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\\nGraceful shutdown initiated...');
+  automationSchedulerService.stop();
+  relayTimerService.shutdown();
   await modbusPollingService.stop();
   process.exit(0);
 });

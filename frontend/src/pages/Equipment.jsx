@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useBreadcrumb } from '../components/Breadcrumb';
 import { getUserFriendlyError } from '../utils/errorHandler';
+import { getChannelDisplayName } from '../utils/channelUtils';
 import ErrorMessage from '../components/ErrorMessage';
 
 const API_BASE = '/api';
@@ -168,6 +169,12 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   const [calibrationMessage, setCalibrationMessage] = useState(null);
   const [testConnectionLoading, setTestConnectionLoading] = useState(false);
   const [testConnectionResult, setTestConnectionResult] = useState(null);
+
+  // Channel labels state
+  const [channelLabels, setChannelLabels] = useState({});
+  const [labelsLoading, setLabelsLoading] = useState(false);
+  const [labelsMessage, setLabelsMessage] = useState(null);
+  const [showChannelLabels, setShowChannelLabels] = useState(false);
 
   // History tab state
   const [activeTab, setActiveTab] = useState('details');
@@ -608,6 +615,48 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
     }
   };
 
+  // Initialize channel labels when details load
+  useEffect(() => {
+    if (details?.register_mappings && Array.isArray(details.register_mappings)) {
+      const labels = {};
+      details.register_mappings.forEach(m => {
+        const addr = String(m.register ?? m.address);
+        labels[addr] = m.label || '';
+      });
+      setChannelLabels(labels);
+    }
+  }, [details]);
+
+  // Handle saving channel labels
+  const handleSaveLabels = async () => {
+    if (!equipment) return;
+    setLabelsLoading(true);
+    setLabelsMessage(null);
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipment.id}/channels/labels`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ labels: channelLabels })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to save labels');
+      }
+      const updated = await response.json();
+      setDetails(prev => ({ ...prev, ...updated }));
+      setLabelsMessage({ type: 'success', text: 'Channel labels saved!' });
+      if (onUpdate) onUpdate();
+      setTimeout(() => setLabelsMessage(null), 2000);
+    } catch (err) {
+      setLabelsMessage({ type: 'error', text: err.message });
+    } finally {
+      setLabelsLoading(false);
+    }
+  };
+
   // Get zones that are not already assigned
   const availableZones = allZones.filter(
     zone => !details?.zones?.some(z => z.id === zone.id)
@@ -995,6 +1044,93 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                   <p className="text-xs text-gray-400 mt-1 italic">Calibration settings require admin permissions</p>
                 )}
               </div>
+
+              {/* Channel Labels Section */}
+              {Array.isArray(eq?.register_mappings) && eq.register_mappings.length > 0 && (
+                <div className="py-3 border-b border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-500">Channel Labels</span>
+                    {canControl && (
+                      <button
+                        onClick={() => setShowChannelLabels(!showChannelLabels)}
+                        className="text-sm text-primary-600 hover:text-primary-800 font-medium"
+                      >
+                        {showChannelLabels ? 'Hide' : 'Edit Labels'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Display current labels (always visible) */}
+                  {!showChannelLabels && (
+                    <div className="space-y-1">
+                      {eq.register_mappings.map(m => {
+                        const addr = String(m.register ?? m.address);
+                        const displayName = getChannelDisplayName(m);
+                        return (
+                          <div key={addr} className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded text-sm">
+                            <span className="text-gray-500">{m.name}</span>
+                            {m.label ? (
+                              <span className="font-medium text-gray-900">{m.label}</span>
+                            ) : (
+                              <span className="text-gray-400 italic">No label</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Editable labels form (admin/operator only) */}
+                  {showChannelLabels && canControl && (
+                    <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      {labelsMessage && (
+                        <div className={`mb-3 p-2 rounded text-sm ${
+                          labelsMessage.type === 'success'
+                            ? 'bg-green-50 text-green-800 border border-green-200'
+                            : 'bg-red-50 text-red-800 border border-red-200'
+                        }`}>
+                          {labelsMessage.text}
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        {eq.register_mappings.map(m => {
+                          const addr = String(m.register ?? m.address);
+                          return (
+                            <div key={addr} className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500 w-24 flex-shrink-0 truncate" title={m.name}>
+                                {m.name}
+                              </span>
+                              <input
+                                type="text"
+                                value={channelLabels[addr] || ''}
+                                onChange={(e) => setChannelLabels(prev => ({ ...prev, [addr]: e.target.value }))}
+                                placeholder="e.g. Water Pump"
+                                className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={() => setShowChannelLabels(false)}
+                          className="flex-1 px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                          disabled={labelsLoading}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveLabels}
+                          disabled={labelsLoading}
+                          className="flex-1 px-3 py-1.5 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center"
+                        >
+                          {labelsLoading ? 'Saving...' : 'Save Labels'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Equipment Control Section */}
               <div className="py-3">
@@ -1634,7 +1770,7 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
       ));
 
       const confirmText = writeOnlyMode ? ' (command sent)' : '';
-      setMessage({ type: 'success', text: `${channel.name} turned ${newState ? 'ON' : 'OFF'}${confirmText}` });
+      setMessage({ type: 'success', text: `${getChannelDisplayName(channel)} turned ${newState ? 'ON' : 'OFF'}${confirmText}` });
       setLastCommunication(new Date());
       setConnectionStatus({ connected: true, lastActivity: Date.now() });
 
@@ -1968,8 +2104,10 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                         channel.state ? 'bg-green-500 shadow-sm shadow-green-500' : 'bg-gray-400'
                       }`}></div>
                       <div>
-                        <div className="font-medium text-gray-900">{channel.name}</div>
-                        <div className="text-xs text-gray-500">Address: {channel.address}</div>
+                        <div className="font-medium text-gray-900">{getChannelDisplayName(channel)}</div>
+                        <div className="text-xs text-gray-500">
+                          {channel.label ? `${channel.name} \u00b7 ` : ''}Address: {channel.address}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -2346,6 +2484,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
       ...prev,
       register_mappings: [...prev.register_mappings, {
         name: '',
+        label: '',
         register: '',
         type: 'holding',
         dataType: 'uint16',
@@ -2799,6 +2938,13 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                               onChange={(e) => handleUpdateRegisterMapping(index, 'register', e.target.value)}
                               className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
                             />
+                            <input
+                              type="text"
+                              placeholder="Label (e.g. Water Pump)"
+                              value={mapping.label || ''}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'label', e.target.value)}
+                              className="col-span-2 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            />
                             <select
                               value={mapping.type}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'type', e.target.value)}
@@ -2940,6 +3086,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
       ...prev,
       register_mappings: [...prev.register_mappings, {
         name: '',
+        label: '',
         register: '',
         type: 'holding',
         dataType: 'uint16',
@@ -3379,6 +3526,13 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                               value={mapping.register}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'register', e.target.value)}
                               className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Label (e.g. Water Pump)"
+                              value={mapping.label || ''}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'label', e.target.value)}
+                              className="col-span-2 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
                             />
                             <select
                               value={mapping.type}
