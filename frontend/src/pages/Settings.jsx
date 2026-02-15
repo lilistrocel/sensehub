@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { formatUtcDate } from '../utils/dateUtils';
 import Users from './settings/Users';
 import Profile from './settings/Profile';
 
@@ -666,7 +667,7 @@ function SystemSettings() {
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <p className="text-xs text-gray-500">Started At</p>
                   <p className="text-sm font-semibold text-gray-900">
-                    {systemInfo.startedAt ? new Date(systemInfo.startedAt).toLocaleString() : 'N/A'}
+                    {systemInfo.startedAt ? formatUtcDate(systemInfo.startedAt) : 'N/A'}
                   </p>
                 </div>
               </div>
@@ -824,7 +825,7 @@ function SystemSettings() {
 
             {/* Last Updated */}
             <p className="text-xs text-gray-400 text-right">
-              Last updated: {new Date(storageInfo.timestamp).toLocaleString()}
+              Last updated: {formatUtcDate(storageInfo.timestamp)}
             </p>
           </div>
         ) : (
@@ -895,7 +896,7 @@ function SystemSettings() {
                 <div key={index} className="flex items-start space-x-3 py-1 border-b border-gray-800 last:border-0">
                   {/* Timestamp */}
                   <span className="text-gray-500 text-xs whitespace-nowrap">
-                    {new Date(log.timestamp).toLocaleString()}
+                    {formatUtcDate(log.timestamp)}
                   </span>
                   {/* Log Level Badge */}
                   <span className={`px-2 py-0.5 text-xs font-medium rounded uppercase ${
@@ -1205,7 +1206,7 @@ function CloudSettings() {
 
       if (!response.ok) throw new Error('Sync failed');
       const data = await response.json();
-      setSyncMessage({ type: 'success', text: `Sync triggered at ${new Date(data.timestamp).toLocaleString()}` });
+      setSyncMessage({ type: 'success', text: `Sync triggered at ${formatUtcDate(data.timestamp)}` });
       fetchCloudStatus();
       fetchSyncHistory(); // Refresh sync history
     } catch (err) {
@@ -1345,7 +1346,7 @@ function CloudSettings() {
             <p className="text-sm text-gray-500">Last Sync</p>
             <p className="font-medium text-gray-900">
               {cloudStatus?.lastSync
-                ? new Date(cloudStatus.lastSync.timestamp).toLocaleString()
+                ? formatUtcDate(cloudStatus.lastSync.timestamp)
                 : 'Never'}
             </p>
           </div>
@@ -1570,7 +1571,7 @@ function CloudSettings() {
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
-                        {new Date(item.created_at).toLocaleString()}
+                        {formatUtcDate(item.created_at)}
                       </td>
                     </tr>
                   );
@@ -1637,7 +1638,7 @@ function CloudSettings() {
                 {syncHistory.map((sync) => (
                   <tr key={sync.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(sync.started_at).toLocaleString()}
+                      {formatUtcDate(sync.started_at)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -1770,7 +1771,7 @@ function CloudSettings() {
                     )}
 
                     <p className="text-xs text-gray-400 mt-2">
-                      Cloud ID: {program.cloud_id} | Received: {new Date(program.created_at).toLocaleString()}
+                      Cloud ID: {program.cloud_id} | Received: {formatUtcDate(program.created_at)}
                     </p>
                   </div>
 

@@ -5,6 +5,7 @@ import { useWebSocket } from '../context/WebSocketContext';
 import { useBreadcrumb } from '../components/Breadcrumb';
 import { getUserFriendlyError } from '../utils/errorHandler';
 import { getChannelDisplayName } from '../utils/channelUtils';
+import { formatUtcDate } from '../utils/dateUtils';
 import ErrorMessage from '../components/ErrorMessage';
 
 const API_BASE = '/api';
@@ -905,7 +906,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
                   <span className="text-sm font-medium text-gray-500">Last Communication</span>
                   <span className="text-sm text-gray-900">
-                    {new Date(eq.last_communication).toLocaleString()}
+                    {formatUtcDate(eq.last_communication)}
                   </span>
                 </div>
               )}
@@ -922,7 +923,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
               <div className="flex items-center justify-between py-3 border-b border-gray-100">
                 <span className="text-sm font-medium text-gray-500">Created</span>
                 <span className="text-sm text-gray-900">
-                  {eq?.created_at ? new Date(eq.created_at).toLocaleString() : '-'}
+                  {eq?.created_at ? formatUtcDate(eq.created_at) : '-'}
                 </span>
               </div>
 
@@ -1235,7 +1236,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     )}
                     {testConnectionResult.last_communication && (
                       <div className="text-xs text-green-700 ml-6">
-                        Last communication: {new Date(testConnectionResult.last_communication).toLocaleString()}
+                        Last communication: {formatUtcDate(testConnectionResult.last_communication)}
                       </div>
                     )}
                   </div>
@@ -1406,7 +1407,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                         {historyData.slice(0, 10).map((reading, idx) => (
                           <tr key={reading.id || idx} className="hover:bg-gray-50">
                             <td className="px-4 py-2 text-sm text-gray-900">
-                              {new Date(reading.timestamp).toLocaleString()}
+                              {formatUtcDate(reading.timestamp)}
                             </td>
                             <td className="px-4 py-2 text-sm font-mono text-gray-900">
                               {reading.value}
@@ -1530,10 +1531,10 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                               <p className="mt-1 text-xs text-gray-500 font-mono">{errorLog.details}</p>
                             )}
                             <p className="mt-1 text-xs text-gray-400">
-                              {new Date(errorLog.created_at).toLocaleString()}
+                              {formatUtcDate(errorLog.created_at)}
                               {errorLog.resolved_at && (
                                 <span className="ml-2">
-                                  • Resolved: {new Date(errorLog.resolved_at).toLocaleString()}
+                                  • Resolved: {formatUtcDate(errorLog.resolved_at)}
                                 </span>
                               )}
                             </p>

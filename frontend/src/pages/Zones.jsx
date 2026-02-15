@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { formatUtcDate } from '../utils/dateUtils';
 
 const API_BASE = '/api';
 
@@ -620,11 +621,11 @@ export default function Zones() {
                   <div className="mt-4 grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500">Created</p>
-                      <p className="text-gray-700">{new Date(zoneDetail.created_at).toLocaleString()}</p>
+                      <p className="text-gray-700">{formatUtcDate(zoneDetail.created_at)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Updated</p>
-                      <p className="text-gray-700">{new Date(zoneDetail.updated_at).toLocaleString()}</p>
+                      <p className="text-gray-700">{formatUtcDate(zoneDetail.updated_at)}</p>
                     </div>
                   </div>
                 </div>

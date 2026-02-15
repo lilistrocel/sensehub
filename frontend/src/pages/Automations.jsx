@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getChannelDisplayName } from '../utils/channelUtils';
+import { formatUtcDate } from '../utils/dateUtils';
 
 const API_BASE = '/api';
 
@@ -1980,7 +1981,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
                   <span className="text-sm font-medium text-gray-500">Last Run</span>
                   <span className="text-sm text-gray-900">
-                    {new Date(automation.last_run).toLocaleString()}
+                    {formatUtcDate(automation.last_run)}
                   </span>
                 </div>
               )}
@@ -1988,7 +1989,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
               <div className="flex items-center justify-between py-3">
                 <span className="text-sm font-medium text-gray-500">Created</span>
                 <span className="text-sm text-gray-900">
-                  {automation.created_at ? new Date(automation.created_at).toLocaleString() : '-'}
+                  {automation.created_at ? formatUtcDate(automation.created_at) : '-'}
                 </span>
               </div>
             </div>
@@ -2023,7 +2024,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
                           <div className="flex items-center gap-2 mb-2">
                             <LogStatusBadge status={log.status} />
                             <span className="text-xs text-gray-500">
-                              {log.triggered_at ? new Date(log.triggered_at).toLocaleString() : '-'}
+                              {log.triggered_at ? formatUtcDate(log.triggered_at) : '-'}
                             </span>
                           </div>
                           <p className="text-sm text-gray-700">{log.message || 'No message'}</p>
@@ -2476,7 +2477,7 @@ export default function Automations() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {auto.last_run ? new Date(auto.last_run).toLocaleString() : 'Never'}
+                        {auto.last_run ? formatUtcDate(auto.last_run) : 'Never'}
                       </div>
                       {auto.run_count > 0 && (
                         <div className="text-xs text-gray-500">

@@ -15,8 +15,10 @@ const { executeAutomation } = require('./AutomationExecutor');
 class AutomationSchedulerService {
   constructor() {
     this.checkIntervalMs = 30000; // Check every 30 seconds
-    this.timerId = null;
+    this.intervalId = null;
+    this.startupTimeoutId = null;
     this.running = false;
+    this._tickInProgress = false;
   }
 
   start() {
@@ -25,20 +27,36 @@ class AutomationSchedulerService {
     console.log(`[Scheduler] Automation scheduler started (checking every ${this.checkIntervalMs / 1000}s)`);
 
     // Run first check after a short delay (let other services initialize)
-    this.timerId = setTimeout(() => {
-      this._tick();
-      this.timerId = setInterval(() => this._tick(), this.checkIntervalMs);
+    this.startupTimeoutId = setTimeout(() => {
+      this.startupTimeoutId = null;
+      this._safeTick();
+      this.intervalId = setInterval(() => this._safeTick(), this.checkIntervalMs);
     }, 5000);
   }
 
   stop() {
-    if (this.timerId) {
-      clearInterval(this.timerId);
-      clearTimeout(this.timerId);
-      this.timerId = null;
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    if (this.startupTimeoutId) {
+      clearTimeout(this.startupTimeoutId);
+      this.startupTimeoutId = null;
     }
     this.running = false;
     console.log('[Scheduler] Automation scheduler stopped');
+  }
+
+  // Guard against overlapping ticks (if a tick takes longer than the interval)
+  _safeTick() {
+    if (this._tickInProgress) {
+      console.log('[Scheduler] Skipping tick — previous tick still in progress');
+      return;
+    }
+    this._tickInProgress = true;
+    this._tick()
+      .catch(err => console.error('[Scheduler] Unhandled tick error:', err.message))
+      .finally(() => { this._tickInProgress = false; });
   }
 
   async _tick() {
@@ -101,6 +119,18 @@ class AutomationSchedulerService {
   }
 
   /**
+   * Parse a SQLite datetime string as UTC.
+   * SQLite's datetime('now') returns UTC without a timezone indicator (e.g., "2026-02-15 14:30:00").
+   * new Date() would parse this as local time, breaking cooldown math on non-UTC systems.
+   */
+  _parseUtcTimestamp(sqliteDateStr) {
+    if (!sqliteDateStr) return null;
+    // Append 'Z' to force UTC interpretation if not already ISO format
+    const str = sqliteDateStr.endsWith('Z') || sqliteDateStr.includes('+') ? sqliteDateStr : sqliteDateStr.replace(' ', 'T') + 'Z';
+    return new Date(str);
+  }
+
+  /**
    * Check if a schedule trigger is due to fire right now.
    */
   _isScheduleDue(triggerConfig, lastRun) {
@@ -108,8 +138,8 @@ class AutomationSchedulerService {
 
     // Prevent double-firing: if last_run is within the last 55 seconds, skip
     if (lastRun) {
-      const lastRunTime = new Date(lastRun);
-      if (now - lastRunTime < 55000) return false;
+      const lastRunTime = this._parseUtcTimestamp(lastRun);
+      if (lastRunTime && (now - lastRunTime) < 55000) return false;
     }
 
     const scheduleType = triggerConfig.schedule_type;
@@ -119,7 +149,9 @@ class AutomationSchedulerService {
       const runAt = new Date(triggerConfig.run_at);
       // Fire if current time is at or past run_at AND we haven't run since run_at
       if (now >= runAt) {
-        if (!lastRun || new Date(lastRun) < runAt) return true;
+        if (!lastRun) return true;
+        const lastRunTime = this._parseUtcTimestamp(lastRun);
+        if (lastRunTime && lastRunTime < runAt) return true;
       }
       return false;
     }
@@ -158,8 +190,8 @@ class AutomationSchedulerService {
 
     // Cooldown: don't re-trigger within 60 seconds of last run
     if (lastRun) {
-      const lastRunTime = new Date(lastRun);
-      if (now - lastRunTime < 60000) return false;
+      const lastRunTime = this._parseUtcTimestamp(lastRun);
+      if (lastRunTime && (now - lastRunTime) < 60000) return false;
     }
 
     if (!triggerConfig.equipment_id) return false;
