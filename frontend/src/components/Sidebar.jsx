@@ -88,7 +88,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
       {/* Logo / Brand */}
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center">
-          <span className="text-xl font-bold text-primary-600 dark:text-primary-400">SenseHub</span>
+          <span className="text-xl font-bold text-primary-600 dark:text-primary-400">A20Core - SenseHub</span>
         </div>
         {/* Close button for mobile */}
         <button

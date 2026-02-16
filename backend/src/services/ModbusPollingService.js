@@ -579,14 +579,14 @@ class ModbusPollingService {
         }
         lastReadingValue = JSON.stringify({ relayStates });
       } else {
-        // Find the primary reading (first one, or one marked as primary)
-        let primaryReading = readings.find(r => r.isPrimary) || readings[0];
-        const calibratedValue = this.applyCalibration(
-          primaryReading.value,
-          equipment,
-          state.registerMappings.find(m => m.name === primaryReading.name) || {}
-        );
-        lastReadingValue = calibratedValue.toString();
+        // Store all calibrated readings as JSON so multi-metric sensors are preserved
+        const values = {};
+        for (const reading of readings) {
+          const mapping = state.registerMappings.find(m => m.name === reading.name) || {};
+          const calibrated = this.applyCalibration(reading.value, equipment, mapping);
+          values[reading.name] = { value: calibrated, unit: reading.unit || '' };
+        }
+        lastReadingValue = JSON.stringify({ values });
       }
 
       // Update equipment status and last_reading
@@ -611,10 +611,11 @@ class ModbusPollingService {
           const calibratedReadingValue = this.applyCalibration(reading.value, equipment, mapping);
 
           db.prepare(`
-            INSERT INTO readings (equipment_id, value, unit, timestamp)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO readings (equipment_id, name, value, unit, timestamp)
+            VALUES (?, ?, ?, ?, ?)
           `).run(
             equipmentId,
+            reading.name || null,
             calibratedReadingValue,
             reading.unit,
             timestamp
@@ -650,13 +651,19 @@ class ModbusPollingService {
             timestamp
           });
         } else {
-          global.broadcast('sensor_reading', {
-            equipment_id: equipmentId,
-            equipment_name: state.name,
-            value: readings[0].value,
-            unit: readings[0].unit,
-            timestamp
-          });
+          // Broadcast individual reading per metric for multi-metric sensors
+          for (const reading of readings) {
+            const mapping = state.registerMappings.find(m => m.name === reading.name) || {};
+            const calibrated = this.applyCalibration(reading.value, equipment, mapping);
+            global.broadcast('sensor_reading', {
+              equipment_id: equipmentId,
+              equipment_name: state.name,
+              name: reading.name || null,
+              value: calibrated,
+              unit: reading.unit,
+              timestamp
+            });
+          }
         }
       }
 

@@ -85,11 +85,11 @@ export default function Alerts() {
 
   const getSeverityBadge = (severity) => {
     const colors = {
-      critical: 'bg-red-100 text-red-800',
-      warning: 'bg-amber-100 text-amber-800',
-      info: 'bg-blue-100 text-blue-800',
+      critical: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+      warning: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+      info: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
     };
-    return colors[severity] || 'bg-gray-100 text-gray-800';
+    return colors[severity] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
   };
 
   const getSeverityIcon = (severity) => {
@@ -170,11 +170,11 @@ export default function Alerts() {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <p className="text-red-800">Error: {error}</p>
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <p className="text-red-800 dark:text-red-200">Error: {error}</p>
         <button
           onClick={fetchAlerts}
-          className="mt-2 text-red-600 hover:text-red-800 underline"
+          className="mt-2 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 underline"
         >
           Try again
         </button>
@@ -185,10 +185,10 @@ export default function Alerts() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Alerts</h1>
         <button
           onClick={fetchAlerts}
-          className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
         >
           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -198,27 +198,27 @@ export default function Alerts() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
         <div className="flex flex-wrap gap-4">
           {/* Search */}
           <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search</label>
             <input
               type="text"
               placeholder="Search alerts..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
             />
           </div>
 
           {/* Severity Filter */}
           <div className="w-full sm:w-40">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Severity</label>
             <select
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
             >
               <option value="all">All Severities</option>
               <option value="critical">Critical</option>
@@ -229,11 +229,11 @@ export default function Alerts() {
 
           {/* Acknowledged Filter */}
           <div className="w-full sm:w-48">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
             <select
               value={acknowledgedFilter}
               onChange={(e) => setAcknowledgedFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
             >
               <option value="all">All Alerts</option>
               <option value="unacknowledged">Unacknowledged</option>
@@ -243,11 +243,11 @@ export default function Alerts() {
 
           {/* Equipment Filter */}
           <div className="w-full sm:w-48">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Equipment</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Equipment</label>
             <select
               value={equipmentFilter}
               onChange={(e) => setEquipmentFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
             >
               <option value="all">All Equipment</option>
               <option value="none">No Equipment</option>
@@ -263,24 +263,24 @@ export default function Alerts() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm font-medium text-gray-500">Total Alerts</p>
-          <p className="text-2xl font-bold text-gray-900">{alerts.length}</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Alerts</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{alerts.length}</p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm font-medium text-gray-500">Critical</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Critical</p>
           <p className="text-2xl font-bold text-red-600">
             {alerts.filter((a) => a.severity === 'critical').length}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm font-medium text-gray-500">Warning</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Warning</p>
           <p className="text-2xl font-bold text-amber-600">
             {alerts.filter((a) => a.severity === 'warning').length}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <p className="text-sm font-medium text-gray-500">Unacknowledged</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Unacknowledged</p>
           <p className="text-2xl font-bold text-blue-600">
             {alerts.filter((a) => !a.acknowledged).length}
           </p>
@@ -288,47 +288,47 @@ export default function Alerts() {
       </div>
 
       {/* Alerts Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Message
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Severity
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Equipment
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Timestamp
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
                 {canAcknowledge && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Actions
                   </th>
                 )}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredAlerts.length === 0 ? (
                 <tr>
-                  <td colSpan={canAcknowledge ? 6 : 5} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={canAcknowledge ? 6 : 5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                     {alerts.length === 0 ? 'No alerts in the system.' : 'No alerts match your filters.'}
                   </td>
                 </tr>
               ) : (
                 filteredAlerts.map((alert) => (
-                  <tr key={alert.id} className={alert.acknowledged ? 'bg-gray-50' : ''}>
+                  <tr key={alert.id} className={alert.acknowledged ? 'bg-gray-50 dark:bg-gray-900' : ''}>
                     <td className="px-6 py-4">
                       <div className="flex items-start">
                         <span className="flex-shrink-0 mr-3">{getSeverityIcon(alert.severity)}</span>
-                        <span className="text-sm text-gray-900">{alert.message}</span>
+                        <span className="text-sm text-gray-900 dark:text-white">{alert.message}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -337,30 +337,30 @@ export default function Alerts() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
                         {alert.equipment_name || alert.zone_name || '-'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" title={formatDateTime(alert.created_at)}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" title={formatDateTime(alert.created_at)}>
                       {formatRelativeTime(alert.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {alert.acknowledged ? (
                         <div className="flex flex-col">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
                             <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                             Acknowledged
                           </span>
                           {alert.acknowledged_by_name && (
-                            <span className="text-xs text-gray-500 mt-1">
+                            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                               by {alert.acknowledged_by_name}
                             </span>
                           )}
                         </div>
                       ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
                           <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                           </svg>
@@ -373,7 +373,7 @@ export default function Alerts() {
                         {!alert.acknowledged && (
                           <button
                             onClick={() => handleAcknowledge(alert.id)}
-                            className="text-blue-600 hover:text-blue-900 font-medium"
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
                           >
                             Acknowledge
                           </button>
@@ -388,8 +388,8 @@ export default function Alerts() {
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
-          <p className="text-sm text-gray-500">
+        <div className="bg-gray-50 dark:bg-gray-900 px-6 py-3 border-t border-gray-200 dark:border-gray-700">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Showing {filteredAlerts.length} of {alerts.length} alerts
           </p>
         </div>

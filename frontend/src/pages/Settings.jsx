@@ -319,16 +319,16 @@ function SystemSettings() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">System Settings</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">System Settings</h2>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-800 dark:text-red-200 text-sm">
           {error}
         </div>
       )}
 
       {successMessage && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm flex items-center">
+        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-800 dark:text-green-200 text-sm flex items-center">
           <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
@@ -337,28 +337,28 @@ function SystemSettings() {
       )}
 
       {/* Timezone Settings */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
           <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           Timezone Configuration
         </h3>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Select the timezone for all system timestamps and scheduled automations.
         </p>
 
         <div className="space-y-4">
           <div>
-            <label htmlFor="timezone" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="timezone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               System Timezone
             </label>
             <select
               id="timezone"
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
             >
               {timezones.map((group) => (
                 <optgroup key={group.group} label={group.group}>
@@ -373,35 +373,35 @@ function SystemSettings() {
           </div>
 
           {/* Time Preview */}
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <p className="text-sm text-gray-500 mb-1">Current time in selected timezone:</p>
-            <p className="text-lg font-medium text-gray-900">{getCurrentTime()}</p>
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Current time in selected timezone:</p>
+            <p className="text-lg font-medium text-gray-900 dark:text-white">{getCurrentTime()}</p>
           </div>
         </div>
       </div>
 
       {/* Locale Settings */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
           <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
           </svg>
           Locale & Language
         </h3>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Select the language and regional format for dates and numbers.
         </p>
 
         <div>
-          <label htmlFor="locale" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="locale" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Language / Locale
           </label>
           <select
             id="locale"
             value={locale}
             onChange={(e) => setLocale(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
           >
             {locales.map((loc) => (
               <option key={loc.value} value={loc.value}>
@@ -413,27 +413,27 @@ function SystemSettings() {
       </div>
 
       {/* Data Retention Settings */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
           <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
           </svg>
           Data Retention
         </h3>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Configure how long sensor readings and historical data are retained locally.
         </p>
 
         <div>
-          <label htmlFor="dataRetention" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="dataRetention" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Retention Period (days)
           </label>
           <select
             id="dataRetention"
             value={dataRetention}
             onChange={(e) => setDataRetention(parseInt(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
           >
             <option value={7}>7 days</option>
             <option value={14}>14 days</option>
@@ -443,16 +443,16 @@ function SystemSettings() {
             <option value={180}>180 days</option>
             <option value={365}>365 days (1 year)</option>
           </select>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Data older than this will be automatically purged to save storage space.
           </p>
         </div>
       </div>
 
       {/* Network Configuration Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900 flex items-center">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
             <svg className="h-5 w-5 mr-2 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
             </svg>
@@ -461,7 +461,7 @@ function SystemSettings() {
           <button
             onClick={fetchNetwork}
             disabled={networkLoading}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Refresh network info"
           >
             <svg className={`h-5 w-5 ${networkLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -470,7 +470,7 @@ function SystemSettings() {
           </button>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           View current network configuration for this SenseHub device.
         </p>
 
@@ -522,27 +522,27 @@ function SystemSettings() {
 
             {/* Network Interfaces */}
             {networkInfo.interfaces && networkInfo.interfaces.length > 0 && (
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Network Interfaces</h4>
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Network Interfaces</h4>
                 <div className="space-y-3">
                   {networkInfo.interfaces.map((iface, index) => (
-                    <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div key={index} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-semibold text-gray-900">{iface.name}</span>
+                        <span className="text-sm font-semibold text-gray-900 dark:text-white">{iface.name}</span>
                         <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">Active</span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
                         <div>
-                          <span className="text-gray-500">IP Address: </span>
-                          <span className="font-mono text-gray-900">{iface.address}</span>
+                          <span className="text-gray-500 dark:text-gray-400">IP Address: </span>
+                          <span className="font-mono text-gray-900 dark:text-white">{iface.address}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Netmask: </span>
-                          <span className="font-mono text-gray-900">{iface.netmask}</span>
+                          <span className="text-gray-500 dark:text-gray-400">Netmask: </span>
+                          <span className="font-mono text-gray-900 dark:text-white">{iface.netmask}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">MAC: </span>
-                          <span className="font-mono text-gray-900">{iface.mac}</span>
+                          <span className="text-gray-500 dark:text-gray-400">MAC: </span>
+                          <span className="font-mono text-gray-900 dark:text-white">{iface.mac}</span>
                         </div>
                       </div>
                     </div>
@@ -552,19 +552,19 @@ function SystemSettings() {
             )}
           </div>
         ) : (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+          <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
             </svg>
-            <p className="mt-2 text-gray-500">Unable to load network information</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">Unable to load network information</p>
           </div>
         )}
       </div>
 
       {/* Firmware/Version Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900 flex items-center">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
             <svg className="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
@@ -573,7 +573,7 @@ function SystemSettings() {
           <button
             onClick={fetchSystemInfo}
             disabled={systemInfoLoading}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Refresh system info"
           >
             <svg className={`h-5 w-5 ${systemInfoLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -582,7 +582,7 @@ function SystemSettings() {
           </button>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           View current firmware version and system information.
         </p>
 
@@ -610,16 +610,16 @@ function SystemSettings() {
                 )}
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <span className="text-sm font-medium text-gray-700">Build Date</span>
-                <p className="text-lg font-semibold text-gray-900 mt-2">
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Build Date</span>
+                <p className="text-lg font-semibold text-gray-900 dark:text-white mt-2">
                   {systemInfo.buildDate ? new Date(systemInfo.buildDate).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
                   }) : 'N/A'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   {systemInfo.buildDate ? new Date(systemInfo.buildDate).toLocaleTimeString('en-US', {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -630,43 +630,43 @@ function SystemSettings() {
             </div>
 
             {/* System Details */}
-            <div className="border-t border-gray-200 pt-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">System Details</h4>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">System Details</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-xs text-gray-500">Platform</p>
-                  <p className="text-sm font-semibold text-gray-900 capitalize">{systemInfo.platform}</p>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Platform</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{systemInfo.platform}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-xs text-gray-500">Architecture</p>
-                  <p className="text-sm font-semibold text-gray-900">{systemInfo.arch}</p>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Architecture</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{systemInfo.arch}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-xs text-gray-500">Node.js</p>
-                  <p className="text-sm font-semibold text-gray-900">{systemInfo.node_version}</p>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Node.js</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{systemInfo.node_version}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-xs text-gray-500">CPUs</p>
-                  <p className="text-sm font-semibold text-gray-900">{systemInfo.cpus} cores</p>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">CPUs</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{systemInfo.cpus} cores</p>
                 </div>
               </div>
             </div>
 
             {/* Runtime Info */}
-            <div className="border-t border-gray-200 pt-4">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Runtime</h4>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Runtime</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-xs text-gray-500">Hostname</p>
-                  <p className="text-sm font-semibold text-gray-900">{systemInfo.hostname}</p>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Hostname</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{systemInfo.hostname}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-xs text-gray-500">Uptime</p>
-                  <p className="text-sm font-semibold text-gray-900">{formatUptime(systemInfo.uptime)}</p>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Uptime</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{formatUptime(systemInfo.uptime)}</p>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-xs text-gray-500">Started At</p>
-                  <p className="text-sm font-semibold text-gray-900">
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Started At</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     {systemInfo.startedAt ? formatUtcDate(systemInfo.startedAt) : 'N/A'}
                   </p>
                 </div>
@@ -675,17 +675,17 @@ function SystemSettings() {
 
             {/* Memory Info */}
             {systemInfo.memory && (
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Memory Usage</h4>
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Memory Usage</h4>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
                     {formatBytes(systemInfo.memory.used)} / {formatBytes(systemInfo.memory.total)}
                   </span>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
                     {((systemInfo.memory.used / systemInfo.memory.total) * 100).toFixed(1)}% used
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                   <div
                     className="h-3 rounded-full bg-indigo-500 transition-all"
                     style={{ width: `${(systemInfo.memory.used / systemInfo.memory.total) * 100}%` }}
@@ -696,34 +696,34 @@ function SystemSettings() {
 
             {/* Database Status */}
             {systemInfo.database && (
-              <div className="border-t border-gray-200 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Database</h4>
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Database</h4>
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center">
                     <div className={`w-3 h-3 rounded-full mr-2 ${systemInfo.database.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                    <span className="text-sm text-gray-900">
+                    <span className="text-sm text-gray-900 dark:text-white">
                       {systemInfo.database.connected ? 'Connected' : 'Disconnected'}
                     </span>
                   </div>
-                  <span className="text-sm text-gray-500">{systemInfo.database.path}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">{systemInfo.database.path}</span>
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+          <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
-            <p className="mt-2 text-gray-500">Unable to load system information</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">Unable to load system information</p>
           </div>
         )}
       </div>
 
       {/* Storage Usage Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900 flex items-center">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
             <svg className="h-5 w-5 mr-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
             </svg>
@@ -732,7 +732,7 @@ function SystemSettings() {
           <button
             onClick={fetchStorage}
             disabled={storageLoading}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Refresh storage info"
           >
             <svg className={`h-5 w-5 ${storageLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -741,7 +741,7 @@ function SystemSettings() {
           </button>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           View system storage usage and database statistics.
         </p>
 
@@ -757,12 +757,12 @@ function SystemSettings() {
             {/* Disk Usage Overview */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Disk Usage</span>
-                <span className="text-sm text-gray-500">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Disk Usage</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
                   {formatBytes(storageInfo.disk.used)} / {formatBytes(storageInfo.disk.total)}
                 </span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
                 <div
                   className={`h-4 rounded-full transition-all ${
                     storageInfo.disk.percentUsed > 90 ? 'bg-red-500' :
@@ -771,7 +771,7 @@ function SystemSettings() {
                   style={{ width: `${storageInfo.disk.percentUsed}%` }}
                 ></div>
               </div>
-              <div className="flex justify-between mt-1 text-xs text-gray-500">
+              <div className="flex justify-between mt-1 text-xs text-gray-500 dark:text-gray-400">
                 <span>{storageInfo.disk.percentUsed}% used</span>
                 <span>{formatBytes(storageInfo.disk.available)} available</span>
               </div>
@@ -779,45 +779,45 @@ function SystemSettings() {
 
             {/* Storage Breakdown */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center mb-2">
                   <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700">Database</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Database</span>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{formatBytes(storageInfo.database.size)}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatBytes(storageInfo.database.size)}</p>
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center mb-2">
                   <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700">Data Directory</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Data Directory</span>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{formatBytes(storageInfo.dataDirectory.size)}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatBytes(storageInfo.dataDirectory.size)}</p>
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center mb-2">
                   <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700">Logs</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Logs</span>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{formatBytes(storageInfo.logsDirectory.size)}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatBytes(storageInfo.logsDirectory.size)}</p>
               </div>
             </div>
 
             {/* Database Table Statistics */}
             <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Database Records</h4>
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Database Records</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {storageInfo.tableStats && Object.entries(storageInfo.tableStats).map(([table, count]) => (
-                  <div key={table} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                    <p className="text-xs text-gray-500 capitalize">{table.replace('_', ' ')}</p>
-                    <p className="text-lg font-semibold text-gray-900">{count.toLocaleString()}</p>
+                  <div key={table} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{table.replace('_', ' ')}</p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{count.toLocaleString()}</p>
                   </div>
                 ))}
               </div>
@@ -829,19 +829,19 @@ function SystemSettings() {
             </p>
           </div>
         ) : (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+          <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
             </svg>
-            <p className="mt-2 text-gray-500">Unable to load storage information</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">Unable to load storage information</p>
           </div>
         )}
       </div>
 
       {/* System Logs Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900 flex items-center">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
             <svg className="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
@@ -855,7 +855,7 @@ function SystemSettings() {
                 setLogsFilter(e.target.value);
                 fetchLogs(e.target.value);
               }}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
+              className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
             >
               <option value="all">All Levels</option>
               <option value="error">Error & Above</option>
@@ -867,7 +867,7 @@ function SystemSettings() {
             <button
               onClick={() => fetchLogs()}
               disabled={logsLoading}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               title="Refresh logs"
             >
               <svg className={`h-5 w-5 ${logsLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -877,7 +877,7 @@ function SystemSettings() {
           </div>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           View system event logs, alerts, and automation activity.
         </p>
 
@@ -930,11 +930,11 @@ function SystemSettings() {
             </p>
           </div>
         ) : (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+          <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="mt-2 text-gray-500">No log entries found</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">No log entries found</p>
           </div>
         )}
       </div>
@@ -1229,21 +1229,21 @@ function CloudSettings() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Cloud Connection</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Cloud Connection</h2>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-800 dark:text-red-200 text-sm">
           {error}
         </div>
       )}
 
       {/* Connection Status Card */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900">Connection Status</h3>
+          <h3 className="text-md font-medium text-gray-900 dark:text-white">Connection Status</h3>
           <button
             onClick={fetchCloudStatus}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Refresh status"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1262,14 +1262,14 @@ function CloudSettings() {
                 : 'bg-gray-400'
           }`}></div>
           <div>
-            <p className="font-medium text-gray-900">
+            <p className="font-medium text-gray-900 dark:text-white">
               {cloudStatus?.connected
                 ? 'Connected'
                 : cloudStatus?.configured
                   ? 'Configured (Disconnected)'
                   : 'Not Configured'}
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               {cloudStatus?.connected
                 ? 'Cloud sync is active'
                 : cloudStatus?.configured
@@ -1342,23 +1342,23 @@ function CloudSettings() {
 
         {/* Status Details */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500">Last Sync</p>
-            <p className="font-medium text-gray-900">
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Last Sync</p>
+            <p className="font-medium text-gray-900 dark:text-white">
               {cloudStatus?.lastSync
                 ? formatUtcDate(cloudStatus.lastSync.timestamp)
                 : 'Never'}
             </p>
           </div>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500">Pending Items</p>
-            <p className="font-medium text-gray-900">
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Pending Items</p>
+            <p className="font-medium text-gray-900 dark:text-white">
               {cloudStatus?.pendingItems || 0} items
             </p>
           </div>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500">Configuration</p>
-            <p className="font-medium text-gray-900">
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Configuration</p>
+            <p className="font-medium text-gray-900 dark:text-white">
               {cloudStatus?.configured ? 'Configured' : 'Not configured'}
             </p>
           </div>
@@ -1368,8 +1368,8 @@ function CloudSettings() {
         {syncMessage && (
           <div className={`mb-4 p-3 rounded text-sm ${
             syncMessage.type === 'success'
-              ? 'bg-green-50 text-green-800 border border-green-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
+              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800'
           }`}>
             {syncMessage.text}
           </div>
@@ -1379,8 +1379,8 @@ function CloudSettings() {
         {testResult && (
           <div className={`mb-4 p-3 rounded text-sm ${
             testResult.success
-              ? 'bg-green-50 text-green-800 border border-green-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
+              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800'
           }`}>
             <div className="flex items-center">
               {testResult.success ? (
@@ -1453,7 +1453,7 @@ function CloudSettings() {
               </button>
               <button
                 onClick={handleDisconnect}
-                className="px-4 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 flex items-center"
+                className="px-4 py-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 flex items-center"
               >
                 <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1476,9 +1476,9 @@ function CloudSettings() {
       </div>
 
       {/* Pending Sync Queue Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900 flex items-center">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
             <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -1492,7 +1492,7 @@ function CloudSettings() {
           <button
             onClick={fetchPendingQueue}
             disabled={queueLoading}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Refresh pending queue"
           >
             <svg className={`h-5 w-5 ${queueLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1501,7 +1501,7 @@ function CloudSettings() {
           </button>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Items waiting to be synchronized with the Cloud. Changes made while offline are queued here.
         </p>
 
@@ -1513,35 +1513,35 @@ function CloudSettings() {
             </svg>
           </div>
         ) : pendingQueue.length === 0 ? (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+          <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
             <svg className="mx-auto h-10 w-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            <p className="mt-2 text-gray-500">No pending items</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">No pending items</p>
             <p className="text-sm text-gray-400">All changes have been synchronized</p>
           </div>
         ) : (
           <div className="overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entity</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Entity</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {pendingQueue.map((item) => {
                   const payload = item.payload ? JSON.parse(item.payload) : {};
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50">
+                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
                           <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded mr-2">
                             {item.entity_type}
                           </span>
-                          <span className="text-sm text-gray-900">
+                          <span className="text-sm text-gray-900 dark:text-white">
                             {payload.name || `#${item.entity_id}`}
                           </span>
                         </div>
@@ -1570,7 +1570,7 @@ function CloudSettings() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                         {formatUtcDate(item.created_at)}
                       </td>
                     </tr>
@@ -1583,9 +1583,9 @@ function CloudSettings() {
       </div>
 
       {/* Sync History Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900 flex items-center">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
             <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -1594,7 +1594,7 @@ function CloudSettings() {
           <button
             onClick={fetchSyncHistory}
             disabled={historyLoading}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Refresh sync history"
           >
             <svg className={`h-5 w-5 ${historyLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1603,7 +1603,7 @@ function CloudSettings() {
           </button>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           View the history of Cloud synchronization operations.
         </p>
 
@@ -1615,29 +1615,29 @@ function CloudSettings() {
             </svg>
           </div>
         ) : syncHistory.length === 0 ? (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+          <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="mt-2 text-gray-500">No sync history yet</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">No sync history yet</p>
             <p className="text-sm text-gray-400">Sync operations will be recorded here</p>
           </div>
         ) : (
           <div className="overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Triggered By</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Items</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Triggered By</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {syncHistory.map((sync) => (
-                  <tr key={sync.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                  <tr key={sync.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {formatUtcDate(sync.started_at)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -1671,13 +1671,13 @@ function CloudSettings() {
                         {sync.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                       {sync.items_synced} synced
                       {sync.items_failed > 0 && (
                         <span className="text-red-500 ml-1">({sync.items_failed} failed)</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                       {sync.triggered_by_name || 'System'}
                     </td>
                   </tr>
@@ -1689,9 +1689,9 @@ function CloudSettings() {
       </div>
 
       {/* Suggested Programs Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900 flex items-center">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
             <svg className="h-5 w-5 mr-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
@@ -1700,7 +1700,7 @@ function CloudSettings() {
           <button
             onClick={fetchSuggestedPrograms}
             disabled={suggestedLoading}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             title="Refresh suggested programs"
           >
             <svg className={`h-5 w-5 ${suggestedLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1709,15 +1709,15 @@ function CloudSettings() {
           </button>
         </div>
 
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           When connected to the Cloud, automation programs may be suggested for your review. You can approve them to add to your local automations or reject them.
         </p>
 
         {programMessage && (
           <div className={`mb-4 p-3 rounded text-sm ${
             programMessage.type === 'success'
-              ? 'bg-green-50 text-green-800 border border-green-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
+              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800'
           }`}>
             {programMessage.text}
           </div>
@@ -1731,30 +1731,30 @@ function CloudSettings() {
             </svg>
           </div>
         ) : suggestedPrograms.length === 0 ? (
-          <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+          <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700">
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
             </svg>
-            <p className="mt-2 text-gray-500">No pending suggested programs</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">No pending suggested programs</p>
             <p className="text-sm text-gray-400">Suggested automations from the Cloud will appear here</p>
           </div>
         ) : (
           <div className="space-y-4">
             {suggestedPrograms.map((program) => (
-              <div key={program.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div key={program.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-medium text-gray-900">{program.name}</h4>
+                      <h4 className="font-medium text-gray-900 dark:text-white">{program.name}</h4>
                       <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
                         Cloud Suggested
                       </span>
                     </div>
-                    <p className="text-sm text-gray-500 mb-2">{program.description || 'No description'}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{program.description || 'No description'}</p>
 
                     {/* Trigger Info */}
                     {program.trigger_config && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mb-1">
                         <span className="font-medium">Trigger:</span>
                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
                           {program.trigger_config.type === 'schedule' ? `Schedule (${program.trigger_config.schedule || 'custom'})` : program.trigger_config.type}
@@ -1764,7 +1764,7 @@ function CloudSettings() {
 
                     {/* Actions Info */}
                     {program.actions && program.actions.length > 0 && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                         <span className="font-medium">Actions:</span>
                         <span>{program.actions.length} action{program.actions.length !== 1 ? 's' : ''}</span>
                       </div>
@@ -1819,39 +1819,39 @@ function CloudSettings() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setShowConnectModal(false)}></div>
-            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
-              <button onClick={() => setShowConnectModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
+              <button onClick={() => setShowConnectModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
 
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Configure Cloud Connection</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Configure Cloud Connection</h3>
 
               {connectError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-800 dark:text-red-200 text-sm">
                   {connectError}
                 </div>
               )}
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cloud Server URL</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cloud Server URL</label>
                   <input
                     type="url"
                     value={connectForm.url}
                     onChange={(e) => setConnectForm({ ...connectForm, url: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                     placeholder="https://cloud.sensehub.io"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">API Key</label>
                   <input
                     type="password"
                     value={connectForm.apiKey}
                     onChange={(e) => setConnectForm({ ...connectForm, apiKey: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                     placeholder="Enter your API key"
                   />
                 </div>
@@ -1860,7 +1860,7 @@ function CloudSettings() {
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   onClick={() => setShowConnectModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                 >
                   Cancel
                 </button>
@@ -2036,20 +2036,20 @@ function BackupSettings() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Backup & Restore</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Backup & Restore</h2>
 
       {/* Backup Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-md font-medium text-gray-900 mb-4">Create Backup</h3>
-        <p className="text-sm text-gray-500 mb-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4">Create Backup</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Create a backup of your system configuration, including equipment, zones, automations, and settings.
         </p>
 
         {backupMessage && (
           <div className={`mb-4 p-3 rounded text-sm ${
             backupMessage.type === 'success'
-              ? 'bg-green-50 text-green-800 border border-green-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
+              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800'
           }`}>
             {backupMessage.text}
           </div>
@@ -2080,14 +2080,14 @@ function BackupSettings() {
       </div>
 
       {/* Restore Section */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6 border-2 border-amber-200">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6 border-2 border-amber-200 dark:border-amber-700">
         <h3 className="text-md font-medium text-amber-700 mb-4 flex items-center">
           <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           Restore from Backup
         </h3>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Restore your system from a previously created backup file. <strong className="text-amber-600">This will replace all current data with the backup data.</strong>
         </p>
         <button
@@ -2102,14 +2102,14 @@ function BackupSettings() {
       </div>
 
       {/* Factory Reset Section */}
-      <div className="bg-white rounded-lg shadow p-6 border-2 border-red-200">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-2 border-red-200 dark:border-red-800">
         <h3 className="text-md font-medium text-red-600 mb-4 flex items-center">
           <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           Factory Reset
         </h3>
-        <p className="text-sm text-gray-500 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Reset the system to factory defaults. <strong className="text-red-600">This will erase all data including equipment, zones, automations, users, and settings.</strong> This action cannot be undone.
         </p>
         <button
@@ -2134,11 +2134,11 @@ function BackupSettings() {
             ></div>
 
             {/* Modal */}
-            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
               {/* Close button */}
               <button
                 onClick={closeFactoryResetModal}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2150,8 +2150,8 @@ function BackupSettings() {
                   <svg className="mx-auto h-12 w-12 text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Factory Reset Initiated</h3>
-                  <p className="text-sm text-gray-500">The system will restart shortly...</p>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Factory Reset Initiated</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">The system will restart shortly...</p>
                 </div>
               ) : (
                 <>
@@ -2161,26 +2161,26 @@ function BackupSettings() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900">Confirm Factory Reset</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm Factory Reset</h3>
                   </div>
 
-                  <p className="text-sm text-gray-500 mb-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                     This will permanently delete all data. Enter your password to confirm.
                   </p>
 
                   {resetError && (
-                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                       <div className="flex items-center">
                         <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span className="text-red-800 text-sm">{resetError}</span>
+                        <span className="text-red-800 dark:text-red-200 text-sm">{resetError}</span>
                       </div>
                     </div>
                   )}
 
                   <div className="mb-4">
-                    <label htmlFor="reset-password" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="reset-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Enter your password to confirm
                     </label>
                     <input
@@ -2188,7 +2188,7 @@ function BackupSettings() {
                       id="reset-password"
                       value={resetPassword}
                       onChange={(e) => setResetPassword(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                       placeholder="Enter your password"
                       autoFocus
                     />
@@ -2197,7 +2197,7 @@ function BackupSettings() {
                   <div className="flex justify-end gap-3">
                     <button
                       onClick={closeFactoryResetModal}
-                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                      className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                       disabled={resetLoading}
                     >
                       Cancel
@@ -2238,11 +2238,11 @@ function BackupSettings() {
             ></div>
 
             {/* Modal */}
-            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
               {/* Close button */}
               <button
                 onClick={closeRestoreModal}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2254,8 +2254,8 @@ function BackupSettings() {
                   <svg className="mx-auto h-12 w-12 text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Restore Initiated</h3>
-                  <p className="text-sm text-gray-500">The system is being restored from backup...</p>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Restore Initiated</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">The system is being restored from backup...</p>
                 </div>
               ) : (
                 <>
@@ -2265,26 +2265,26 @@ function BackupSettings() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900">Restore from Backup</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Restore from Backup</h3>
                   </div>
 
-                  <p className="text-sm text-gray-500 mb-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                     Select a backup file to restore your system. This will replace all current data.
                   </p>
 
                   {restoreError && (
-                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                       <div className="flex items-center">
                         <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span className="text-red-800 text-sm">{restoreError}</span>
+                        <span className="text-red-800 dark:text-red-200 text-sm">{restoreError}</span>
                       </div>
                     </div>
                   )}
 
                   <div className="mb-4">
-                    <label htmlFor="backup-file-input" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="backup-file-input" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Select Backup File
                     </label>
                     <input
@@ -2292,7 +2292,7 @@ function BackupSettings() {
                       id="backup-file-input"
                       accept=".json,.zip,.backup"
                       onChange={handleFileSelect}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-white text-sm"
                     />
                     {restoreFile && (
                       <p className="mt-2 text-sm text-green-600 flex items-center">
@@ -2307,7 +2307,7 @@ function BackupSettings() {
                   <div className="flex justify-end gap-3">
                     <button
                       onClick={closeRestoreModal}
-                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                      className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                       disabled={restoreLoading}
                     >
                       Cancel
@@ -2351,12 +2351,12 @@ export default function Settings() {
   if (!isAdmin) {
     return (
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Settings</h1>
 
         <div className="flex flex-col md:flex-row gap-6">
           {/* Sidebar navigation */}
           <nav className="w-full md:w-48 flex-shrink-0">
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
               {visibleTabs.map((tab) => (
                 <NavLink
                   key={tab.path}
@@ -2364,8 +2364,8 @@ export default function Settings() {
                   className={({ isActive }) =>
                     `flex items-center px-4 py-3 text-sm font-medium border-l-4 transition-colors ${
                       isActive
-                        ? 'bg-primary-50 border-primary-600 text-primary-700'
-                        : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-600 text-primary-700 dark:text-primary-400'
+                        : 'border-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                     }`
                   }
                 >
@@ -2391,12 +2391,12 @@ export default function Settings() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Settings</h1>
 
       <div className="flex flex-col md:flex-row gap-6">
         {/* Sidebar navigation */}
         <nav className="w-full md:w-48 flex-shrink-0">
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
             {visibleTabs.map((tab) => (
               <NavLink
                 key={tab.path}
@@ -2404,8 +2404,8 @@ export default function Settings() {
                 className={({ isActive }) =>
                   `flex items-center px-4 py-3 text-sm font-medium border-l-4 transition-colors ${
                     isActive
-                      ? 'bg-primary-50 border-primary-600 text-primary-700'
-                      : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-600 text-primary-700 dark:text-primary-400'
+                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                   }`
                 }
               >

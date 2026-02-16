@@ -42,6 +42,15 @@ services:
       timeout: 10s
       retries: 3
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: sensehub-cloudflared
+    network_mode: "host"
+    command: tunnel --no-autoupdate run --token eyJhIjoiZmQyY2FhNDIyNzg0MjQwMDVhODg2M2E1MDdiZjhmOWQiLCJ0IjoiMDRmM2ZjOTUtMzE3Ni00YTE2LTk0MjItOTk1ZDMyZTYxY2E1IiwicyI6Ik5EaG1OalF5WkRVdFlXWXdZUzAwWkRJeExXSTNaVGt0TnpOaVltUTBZalE1WW1WaSJ9
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
 networks:
   default:
     name: sensehub-network

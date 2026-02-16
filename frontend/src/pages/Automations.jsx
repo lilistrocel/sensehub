@@ -10,8 +10,8 @@ function EnabledBadge({ enabled }) {
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
       enabled
-        ? 'bg-green-100 text-green-800 border border-green-200'
-        : 'bg-gray-100 text-gray-600 border border-gray-200'
+        ? 'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800'
+        : 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600'
     }`}>
       <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
         enabled ? 'bg-green-500' : 'bg-gray-400'
@@ -25,10 +25,10 @@ function EnabledBadge({ enabled }) {
 function TriggerBadge({ triggerConfig }) {
   const triggerType = triggerConfig?.type || 'manual';
   const triggerStyles = {
-    schedule: 'bg-blue-100 text-blue-800 border-blue-200',
-    threshold: 'bg-amber-100 text-amber-800 border-amber-200',
-    event: 'bg-purple-100 text-purple-800 border-purple-200',
-    manual: 'bg-gray-100 text-gray-800 border-gray-200'
+    schedule: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
+    threshold: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800',
+    event: 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800',
+    manual: 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'
   };
 
   const triggerLabels = {
@@ -409,41 +409,41 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-3xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-3xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             {isNew ? 'Create New Automation' : `Edit: ${automation?.name || 'Automation'}`}
           </h3>
 
           {/* Success Message */}
           {successMessage && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
               <div className="flex items-center">
                 <svg className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-green-800 text-sm">{successMessage}</span>
+                <span className="text-green-800 dark:text-green-400 text-sm">{successMessage}</span>
               </div>
             </div>
           )}
 
           {/* Error Message */}
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-center">
                 <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-red-800 text-sm">{error}</span>
+                <span className="text-red-800 dark:text-red-400 text-sm">{error}</span>
               </div>
             </div>
           )}
@@ -452,7 +452,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
             {/* Basic Info Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -461,14 +461,14 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                   placeholder="e.g., Temperature Alert"
                   required
                 />
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="priority" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Priority
                   </label>
                   <input
@@ -477,7 +477,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     name="priority"
                     value={formData.priority}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                     min="0"
                   />
                 </div>
@@ -488,9 +488,9 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     name="enabled"
                     checked={formData.enabled}
                     onChange={handleChange}
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded"
                   />
-                  <label htmlFor="enabled" className="ml-2 block text-sm text-gray-700">
+                  <label htmlFor="enabled" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
                     Enabled
                   </label>
                 </div>
@@ -498,7 +498,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
             </div>
 
             <div className="mb-6">
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Description
               </label>
               <textarea
@@ -507,13 +507,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                 value={formData.description}
                 onChange={handleChange}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                 placeholder="Describe what this automation does..."
               />
             </div>
 
             {/* Tab Navigation */}
-            <div className="border-b border-gray-200 mb-4">
+            <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
               <nav className="-mb-px flex space-x-8">
                 <button
                   type="button"
@@ -521,7 +521,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   className={`pb-3 px-1 border-b-2 font-medium text-sm ${
                     activeTab === 'trigger'
                       ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                   }`}
                 >
                   Trigger
@@ -532,7 +532,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   className={`pb-3 px-1 border-b-2 font-medium text-sm ${
                     activeTab === 'conditions'
                       ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                   }`}
                 >
                   Conditions ({formData.conditions.length})
@@ -543,7 +543,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   className={`pb-3 px-1 border-b-2 font-medium text-sm ${
                     activeTab === 'actions'
                       ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                   }`}
                 >
                   Actions ({formData.actions.length})
@@ -552,23 +552,23 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
             </div>
 
             {/* Tab Content */}
-            <div className="min-h-[200px] bg-gray-50 rounded-lg p-4">
+            <div className="min-h-[200px] bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
               {/* Trigger Tab */}
               {activeTab === 'trigger' && (
                 <div className="space-y-4">
-                  <h4 className="font-medium text-gray-900">Trigger Configuration</h4>
-                  <p className="text-sm text-gray-500">Define when this automation should run.</p>
+                  <h4 className="font-medium text-gray-900 dark:text-white">Trigger Configuration</h4>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Define when this automation should run.</p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className={formData.trigger_config?.type === 'schedule' ? '' : ''}>
-                      <label htmlFor="trigger-type" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="trigger-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Trigger Type
                       </label>
                       <select
                         id="trigger-type"
                         value={formData.trigger_config?.type || 'manual'}
                         onChange={handleTriggerTypeChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       >
                         <option value="manual">Manual</option>
                         <option value="schedule">Schedule (Timer)</option>
@@ -580,14 +580,14 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     {formData.trigger_config?.type === 'schedule' && (
                       <>
                         <div>
-                          <label htmlFor="schedule-type" className="block text-sm font-medium text-gray-700 mb-1">
+                          <label htmlFor="schedule-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Schedule Type
                           </label>
                           <select
                             id="schedule-type"
                             value={formData.trigger_config?.schedule_type || 'daily'}
                             onChange={(e) => handleTriggerConfigChange('schedule_type', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           >
                             <option value="once">One-time</option>
                             <option value="daily">Daily</option>
@@ -599,7 +599,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
 
                         {formData.trigger_config?.schedule_type === 'once' && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                               Run At (Date & Time)
                             </label>
                             <input
@@ -615,9 +615,9 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                                 }
                                 handleTriggerConfigChange('run_at', e.target.value);
                               }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                             />
-                            <p className="mt-1 text-xs text-gray-500">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               Select a future date and time for this automation to run once.
                             </p>
                             {formData.trigger_config?.run_at && new Date(formData.trigger_config.run_at) < new Date() && (
@@ -630,14 +630,14 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
 
                         {formData.trigger_config?.schedule_type === 'daily' && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                               Time
                             </label>
                             <input
                               type="time"
                               value={formData.trigger_config?.time || '08:00'}
                               onChange={(e) => handleTriggerConfigChange('time', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                             />
                           </div>
                         )}
@@ -645,13 +645,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                         {formData.trigger_config?.schedule_type === 'weekly' && (
                           <>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Day of Week
                               </label>
                               <select
                                 value={formData.trigger_config?.day_of_week || '1'}
                                 onChange={(e) => handleTriggerConfigChange('day_of_week', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                               >
                                 <option value="0">Sunday</option>
                                 <option value="1">Monday</option>
@@ -663,14 +663,14 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                               </select>
                             </div>
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Time
                               </label>
                               <input
                                 type="time"
                                 value={formData.trigger_config?.time || '08:00'}
                                 onChange={(e) => handleTriggerConfigChange('time', e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                               />
                             </div>
                           </>
@@ -678,7 +678,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
 
                         {formData.trigger_config?.schedule_type === 'hourly' && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                               Minutes past the hour
                             </label>
                             <input
@@ -687,7 +687,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                               max="59"
                               value={formData.trigger_config?.minute || '0'}
                               onChange={(e) => handleTriggerConfigChange('minute', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                               placeholder="0"
                             />
                           </div>
@@ -695,17 +695,17 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
 
                         {formData.trigger_config?.schedule_type === 'custom' && (
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                               Cron Expression
                             </label>
                             <input
                               type="text"
                               value={formData.trigger_config?.cron || ''}
                               onChange={(e) => handleTriggerConfigChange('cron', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                               placeholder="0 8 * * * (daily at 8am)"
                             />
-                            <p className="mt-1 text-xs text-gray-500">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               Format: minute hour day month weekday
                             </p>
                           </div>
@@ -713,8 +713,8 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
 
                         {/* Schedule Summary */}
                         <div className="md:col-span-2 mt-2">
-                          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-                            <p className="text-sm text-blue-800">
+                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-3">
+                            <p className="text-sm text-blue-800 dark:text-blue-400">
                               <span className="font-medium">Schedule: </span>
                               {(() => {
                                 const tc = formData.trigger_config;
@@ -754,13 +754,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     {formData.trigger_config?.type === 'threshold' && (
                       <>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Equipment/Sensor
                           </label>
                           <select
                             value={formData.trigger_config?.equipment_id || ''}
                             onChange={(e) => handleTriggerConfigChange('equipment_id', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           >
                             <option value="">Select equipment...</option>
                             {loadingEquipment ? (
@@ -776,13 +776,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Sensor Type
                           </label>
                           <select
                             value={formData.trigger_config?.sensor_type || 'temperature'}
                             onChange={(e) => handleTriggerConfigChange('sensor_type', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           >
                             <option value="temperature">Temperature</option>
                             <option value="humidity">Humidity</option>
@@ -797,13 +797,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Condition
                           </label>
                           <select
                             value={formData.trigger_config?.operator || 'gt'}
                             onChange={(e) => handleTriggerConfigChange('operator', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           >
                             <option value="gt">Greater than (&gt;)</option>
                             <option value="gte">Greater than or equal (&gt;=)</option>
@@ -815,7 +815,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Threshold Value
                           </label>
                           <input
@@ -823,28 +823,28 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             step="0.1"
                             value={formData.trigger_config?.threshold_value || ''}
                             onChange={(e) => handleTriggerConfigChange('threshold_value', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                             placeholder="e.g., 25"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Unit
                           </label>
                           <input
                             type="text"
                             value={formData.trigger_config?.unit || ''}
                             onChange={(e) => handleTriggerConfigChange('unit', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                             placeholder="e.g., °C, %, PSI"
                           />
                         </div>
 
                         {/* Threshold Summary */}
                         <div className="md:col-span-2 mt-2">
-                          <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
-                            <p className="text-sm text-amber-800">
+                          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-lg p-3">
+                            <p className="text-sm text-amber-800 dark:text-amber-400">
                               <span className="font-medium">Trigger: </span>
                               {(() => {
                                 const tc = formData.trigger_config;
@@ -887,13 +887,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
               {/* Conditions Tab */}
               {activeTab === 'conditions' && (
                 <div className="space-y-4">
-                  <h4 className="font-medium text-gray-900">Conditions</h4>
-                  <p className="text-sm text-gray-500">Define conditions that must be met for actions to execute.</p>
+                  <h4 className="font-medium text-gray-900 dark:text-white">Conditions</h4>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Define conditions that must be met for actions to execute.</p>
 
                   {/* Condition Logic Selector */}
                   {formData.conditions.length >= 1 && (
-                    <div className="bg-white p-3 rounded border">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded border dark:border-gray-600">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Condition Logic
                       </label>
                       <div className="flex items-center gap-4">
@@ -906,7 +906,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             onChange={(e) => setFormData(prev => ({ ...prev, condition_logic: e.target.value }))}
                             className="form-radio h-4 w-4 text-primary-600"
                           />
-                          <span className="ml-2 text-sm text-gray-700">
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
                             <strong>AND</strong> - All conditions must be true
                           </span>
                         </label>
@@ -919,7 +919,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             onChange={(e) => setFormData(prev => ({ ...prev, condition_logic: e.target.value }))}
                             className="form-radio h-4 w-4 text-primary-600"
                           />
-                          <span className="ml-2 text-sm text-gray-700">
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
                             <strong>OR</strong> - Any condition can be true
                           </span>
                         </label>
@@ -937,16 +937,16 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             <div className="flex justify-center">
                               <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                                 formData.condition_logic === 'AND'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-purple-100 text-purple-800'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                                  : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
                               }`}>
                                 {formData.condition_logic}
                               </span>
                             </div>
                           )}
-                          <div className="flex items-center gap-2 bg-white p-2 rounded border">
-                            <span className="text-sm font-medium">{cond.field}</span>
-                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                          <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded border dark:border-gray-600">
+                            <span className="text-sm font-medium dark:text-white">{cond.field}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
                               {cond.operator === 'eq' ? '=' :
                                cond.operator === 'neq' ? '!=' :
                                cond.operator === 'gt' ? '>' :
@@ -954,7 +954,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                                cond.operator === 'lt' ? '<' :
                                cond.operator === 'lte' ? '<=' : cond.operator}
                             </span>
-                            <span className="text-sm">{cond.value}</span>
+                            <span className="text-sm dark:text-gray-300">{cond.value}</span>
                             <button
                               type="button"
                               onClick={() => removeCondition(idx)}
@@ -971,23 +971,23 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   )}
 
                   {/* Add Condition Form */}
-                  <div className="flex flex-wrap gap-2 items-end bg-white p-3 rounded border">
+                  <div className="flex flex-wrap gap-2 items-end bg-white dark:bg-gray-800 p-3 rounded border dark:border-gray-600">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Field</label>
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Field</label>
                       <input
                         type="text"
                         value={conditionField}
                         onChange={(e) => setConditionField(e.target.value)}
-                        className="w-32 px-2 py-1 text-sm border border-gray-300 rounded"
+                        className="w-32 px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                         placeholder="value"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Operator</label>
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Operator</label>
                       <select
                         value={conditionOperator}
                         onChange={(e) => setConditionOperator(e.target.value)}
-                        className="px-2 py-1 text-sm border border-gray-300 rounded"
+                        className="px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       >
                         <option value="eq">=</option>
                         <option value="neq">!=</option>
@@ -998,12 +998,12 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Value</label>
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Value</label>
                       <input
                         type="text"
                         value={conditionValue}
                         onChange={(e) => setConditionValue(e.target.value)}
-                        className="w-24 px-2 py-1 text-sm border border-gray-300 rounded"
+                        className="w-24 px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                         placeholder="30"
                       />
                     </div>
@@ -1021,54 +1021,54 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
               {/* Actions Tab */}
               {activeTab === 'actions' && (
                 <div className="space-y-4">
-                  <h4 className="font-medium text-gray-900">Actions</h4>
-                  <p className="text-sm text-gray-500">Define what happens when conditions are met.</p>
+                  <h4 className="font-medium text-gray-900 dark:text-white">Actions</h4>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Define what happens when conditions are met.</p>
 
                   {/* Existing Actions */}
                   {formData.actions.length > 0 && (
                     <div className="space-y-2">
                       {formData.actions.map((action, idx) => (
-                        <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded border">
+                        <div key={idx} className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded border dark:border-gray-600">
                           <span className={`text-xs px-2 py-0.5 rounded ${
-                            action.type === 'alert' ? 'bg-amber-100 text-amber-800' :
-                            action.type === 'control' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
+                            action.type === 'alert' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
+                            action.type === 'control' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                           }`}>
                             {action.type}
                           </span>
                           {action.type === 'control' ? (
-                            <span className="text-sm flex items-center gap-1 flex-wrap">
-                              <span className="font-medium">
+                            <span className="text-sm flex items-center gap-1 flex-wrap dark:text-gray-300">
+                              <span className="font-medium dark:text-white">
                                 {action.action === 'on' ? 'Turn On' :
                                  action.action === 'off' ? 'Turn Off' :
                                  action.action === 'toggle' ? 'Toggle' :
                                  action.action === 'set' ? `Set to ${action.value}` : action.action}
                               </span>
                               {' → '}
-                              <span className="text-gray-600">
+                              <span className="text-gray-600 dark:text-gray-400">
                                 {action.equipment_name || `Equipment #${action.equipment_id}` || 'Unknown'}
                               </span>
                               {action.channel_name && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                                   {action.channel_name}
                                 </span>
                               )}
                               {action.delay_seconds > 0 && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-800">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
                                   {action.delay_seconds}s delay
                                 </span>
                               )}
                               {action.duration_seconds > 0 && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-800">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
                                   {action.duration_seconds}s auto-off
                                 </span>
                               )}
                             </span>
                           ) : (
-                            <span className="text-sm">{action.message || '-'}</span>
+                            <span className="text-sm dark:text-gray-300">{action.message || '-'}</span>
                           )}
                           {action.severity && (
-                            <span className="text-xs text-gray-500">({action.severity})</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">({action.severity})</span>
                           )}
                           <button
                             type="button"
@@ -1085,13 +1085,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   )}
 
                   {/* Add Action Form */}
-                  <div className="flex flex-wrap gap-2 items-end bg-white p-3 rounded border">
+                  <div className="flex flex-wrap gap-2 items-end bg-white dark:bg-gray-800 p-3 rounded border dark:border-gray-600">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Type</label>
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
                       <select
                         value={actionType}
                         onChange={(e) => setActionType(e.target.value)}
-                        className="px-2 py-1 text-sm border border-gray-300 rounded"
+                        className="px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       >
                         <option value="alert">Send Alert</option>
                         <option value="control">Control Equipment</option>
@@ -1101,11 +1101,11 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     {actionType === 'alert' && (
                       <>
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Severity</label>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Severity</label>
                           <select
                             value={actionSeverity}
                             onChange={(e) => setActionSeverity(e.target.value)}
-                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           >
                             <option value="info">Info</option>
                             <option value="warning">Warning</option>
@@ -1113,12 +1113,12 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                           </select>
                         </div>
                         <div className="flex-1">
-                          <label className="block text-xs text-gray-500 mb-1">Message</label>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Message</label>
                           <input
                             type="text"
                             value={actionMessage}
                             onChange={(e) => setActionMessage(e.target.value)}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                             placeholder="Alert message..."
                           />
                         </div>
@@ -1127,7 +1127,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     {actionType === 'control' && (
                       <>
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Equipment</label>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Equipment</label>
                           <select
                             value={controlEquipmentId}
                             onChange={(e) => {
@@ -1135,7 +1135,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                               setControlChannel('');
                               setControlChannelName('');
                             }}
-                            className="px-2 py-1 text-sm border border-gray-300 rounded min-w-[150px]"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded min-w-[150px] dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           >
                             <option value="">Select equipment...</option>
                             {loadingEquipment ? (
@@ -1164,7 +1164,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                           if (relayChannels.length === 0) return null;
                           return (
                             <div>
-                              <label className="block text-xs text-gray-500 mb-1">Channel</label>
+                              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Channel</label>
                               <select
                                 value={controlChannel}
                                 onChange={(e) => {
@@ -1177,7 +1177,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                                     setControlChannelName('');
                                   }
                                 }}
-                                className="px-2 py-1 text-sm border border-gray-300 rounded min-w-[120px]"
+                                className="px-2 py-1 text-sm border border-gray-300 rounded min-w-[120px] dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                               >
                                 <option value="">All channels</option>
                                 {relayChannels.map(ch => {
@@ -1193,11 +1193,11 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                           );
                         })()}
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Action</label>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Action</label>
                           <select
                             value={controlAction}
                             onChange={(e) => setControlAction(e.target.value)}
-                            className="px-2 py-1 text-sm border border-gray-300 rounded"
+                            className="px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                           >
                             <option value="on">Turn On</option>
                             <option value="off">Turn Off</option>
@@ -1207,37 +1207,37 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                         </div>
                         {controlAction === 'set' && (
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1">Value</label>
+                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Value</label>
                             <input
                               type="text"
                               value={controlValue}
                               onChange={(e) => setControlValue(e.target.value)}
-                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                               placeholder="e.g., 75"
                             />
                           </div>
                         )}
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Delay (sec)</label>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Delay (sec)</label>
                           <input
                             type="number"
                             min="0"
                             value={controlDelay}
                             onChange={(e) => setControlDelay(e.target.value)}
-                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                             placeholder="0"
                             title="Seconds to wait before executing. 0 or empty = immediate."
                           />
                         </div>
                         {(controlAction === 'on' || controlAction === 'toggle') && (
                           <div>
-                            <label className="block text-xs text-gray-500 mb-1">Auto-off (sec)</label>
+                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Auto-off (sec)</label>
                             <input
                               type="number"
                               min="0"
                               value={controlDuration}
                               onChange={(e) => setControlDuration(e.target.value)}
-                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                               placeholder="0"
                               title="Seconds until auto-off. 0 or empty = stay on permanently."
                             />
@@ -1247,12 +1247,12 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     )}
                     {actionType === 'log' && (
                       <div className="flex-1">
-                        <label className="block text-xs text-gray-500 mb-1">Message</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Message</label>
                         <input
                           type="text"
                           value={actionMessage}
                           onChange={(e) => setActionMessage(e.target.value)}
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                           placeholder="Log message..."
                         />
                       </div>
@@ -1270,7 +1270,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
             </div>
 
             {/* Buttons */}
-            <div className="flex justify-between gap-3 pt-6 border-t mt-6">
+            <div className="flex justify-between gap-3 pt-6 border-t dark:border-gray-700 mt-6">
               <div>
                 {/* Test Button - only show for existing automations */}
                 {!isNew && automation?.id && (
@@ -1303,7 +1303,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                   disabled={saving}
                 >
                   Cancel
@@ -1334,10 +1334,10 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
             <div className="fixed inset-0 z-60 overflow-y-auto">
               <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
                 <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowTestResults(false)}></div>
-                <div className="inline-block w-full max-w-2xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+                <div className="inline-block w-full max-w-2xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
                   <button
                     onClick={() => setShowTestResults(false)}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   >
                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1346,45 +1346,45 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
 
                   {/* Test Results Header */}
                   <div className="flex items-center mb-4">
-                    <div className={`p-3 rounded-full mr-4 ${testResult.status === 'success' ? 'bg-green-100' : 'bg-amber-100'}`}>
+                    <div className={`p-3 rounded-full mr-4 ${testResult.status === 'success' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-amber-100 dark:bg-amber-900/30'}`}>
                       <svg className={`h-6 w-6 ${testResult.status === 'success' ? 'text-green-600' : 'text-amber-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Test Results</h3>
-                      <p className="text-sm text-gray-500">{testResult.mode}</p>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Test Results</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{testResult.mode}</p>
                     </div>
                   </div>
 
                   {/* Test Summary */}
-                  <div className={`mb-4 p-4 rounded-lg ${testResult.status === 'success' ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
-                    <p className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800' : 'text-amber-800'}`}>
+                  <div className={`mb-4 p-4 rounded-lg ${testResult.status === 'success' ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'}`}>
+                    <p className={`text-sm font-medium ${testResult.status === 'success' ? 'text-green-800 dark:text-green-400' : 'text-amber-800 dark:text-amber-400'}`}>
                       {testResult.message}
                     </p>
                   </div>
 
                   {/* Summary Stats */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                    <div className="bg-gray-50 p-3 rounded-lg text-center">
-                      <p className="text-2xl font-bold text-gray-900">{testResult.summary?.conditions_evaluated || 0}</p>
-                      <p className="text-xs text-gray-500">Conditions</p>
+                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{testResult.summary?.conditions_evaluated || 0}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Conditions</p>
                     </div>
-                    <div className="bg-gray-50 p-3 rounded-lg text-center">
-                      <p className="text-2xl font-bold text-gray-900">{testResult.summary?.total_actions || 0}</p>
-                      <p className="text-xs text-gray-500">Total Actions</p>
+                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg text-center">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{testResult.summary?.total_actions || 0}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Total Actions</p>
                     </div>
-                    <div className="bg-gray-50 p-3 rounded-lg text-center">
+                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg text-center">
                       <p className="text-2xl font-bold text-green-600">{testResult.summary?.actions_to_execute || 0}</p>
-                      <p className="text-xs text-gray-500">Would Execute</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Would Execute</p>
                     </div>
                   </div>
 
                   {/* Trigger Details */}
                   {testResult.trigger && (
                     <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Trigger Evaluation</h4>
-                      <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Trigger Evaluation</h4>
+                      <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg text-sm dark:text-gray-300">
                         <p><span className="font-medium">Type:</span> {testResult.trigger.type}</p>
                         <p><span className="font-medium">Would Fire:</span> {testResult.trigger.would_fire ? 'Yes' : 'No'}</p>
                         {testResult.trigger.details && Object.entries(testResult.trigger.details).map(([key, value]) => (
@@ -1397,10 +1397,10 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   {/* Conditions */}
                   {testResult.conditions && testResult.conditions.length > 0 && (
                     <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Conditions ({testResult.summary?.conditions_logic || 'AND'})</h4>
+                      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Conditions ({testResult.summary?.conditions_logic || 'AND'})</h4>
                       <div className="space-y-2">
                         {testResult.conditions.map((cond) => (
-                          <div key={cond.index} className={`p-2 rounded text-sm ${cond.would_pass ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                          <div key={cond.index} className={`p-2 rounded text-sm ${cond.would_pass ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
                             <span className="font-medium">{cond.field}</span> {cond.operator} <span className="font-mono">{cond.expected_value}</span>
                             <span className={`ml-2 text-xs ${cond.would_pass ? 'text-green-600' : 'text-red-600'}`}>({cond.test_result})</span>
                           </div>
@@ -1412,15 +1412,15 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                   {/* Actions */}
                   {testResult.actions && testResult.actions.length > 0 && (
                     <div className="mb-4">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Actions (Simulated)</h4>
+                      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Actions (Simulated)</h4>
                       <div className="space-y-2">
                         {testResult.actions.map((action) => (
-                          <div key={action.index} className={`p-3 rounded text-sm ${action.would_execute ? 'bg-blue-50 border border-blue-200' : 'bg-gray-100 border border-gray-200'}`}>
+                          <div key={action.index} className={`p-3 rounded text-sm ${action.would_execute ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' : 'bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600'}`}>
                             <div className="flex items-center justify-between mb-1">
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                action.type === 'alert' ? 'bg-amber-100 text-amber-800' :
-                                action.type === 'control' ? 'bg-blue-100 text-blue-800' :
-                                'bg-gray-200 text-gray-800'
+                                action.type === 'alert' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
+                                action.type === 'control' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                                'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-300'
                               }`}>
                                 {action.type}
                               </span>
@@ -1429,7 +1429,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                               </span>
                             </div>
                             {action.details && (
-                              <div className="text-xs text-gray-600 mt-1">
+                              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                 {Object.entries(action.details).map(([key, value]) => (
                                   key !== 'simulation_note' && <p key={key}><span className="font-medium">{key}:</span> {String(value)}</p>
                                 ))}
@@ -1444,7 +1444,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     </div>
                   )}
 
-                  <div className="flex justify-end pt-4 border-t">
+                  <div className="flex justify-end pt-4 border-t dark:border-gray-700">
                     <button
                       onClick={() => setShowTestResults(false)}
                       className="px-4 py-2 text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
@@ -1644,38 +1644,38 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-4xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-4xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
             Choose a Template
           </h3>
-          <p className="text-sm text-gray-500 mb-6">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
             Select a pre-built automation template to get started quickly. You can customize it after creation.
           </p>
 
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-              <span className="ml-3 text-gray-500">Loading templates...</span>
+              <span className="ml-3 text-gray-500 dark:text-gray-400">Loading templates...</span>
             </div>
           )}
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
               <div className="flex items-center">
                 <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-red-800">{error}</span>
+                <span className="text-red-800 dark:text-red-400">{error}</span>
               </div>
             </div>
           )}
@@ -1690,8 +1690,8 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
                       onClick={() => handleSelectTemplate(template)}
                       className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
                         selectedTemplate?.id === template.id
-                          ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 ring-2 ring-primary-200'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                       }`}
                     >
                       <div className="flex items-start">
@@ -1700,17 +1700,17 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-medium text-gray-900 truncate">
+                            <h4 className="text-sm font-medium text-gray-900 dark:text-white truncate">
                               {template.name}
                             </h4>
                             <span className={`text-xs px-2 py-0.5 rounded-full ${categoryColors[category] || categoryColors.Other}`}>
                               {category}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
                             {template.description}
                           </p>
-                          <div className="mt-2 flex items-center text-xs text-gray-400">
+                          <div className="mt-2 flex items-center text-xs text-gray-400 dark:text-gray-500">
                             <TriggerBadge triggerConfig={template.trigger_config} />
                             <span className="mx-2">•</span>
                             <span>{template.actions?.length || 0} action(s)</span>
@@ -1726,13 +1726,13 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
 
           {/* Selected Template Preview & Name Customization */}
           {selectedTemplate && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
                   Customize Your Automation
                 </h4>
                 <div className="mb-4">
-                  <label htmlFor="template-name" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="template-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Automation Name
                   </label>
                   <input
@@ -1740,11 +1740,11 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
                     id="template-name"
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                     placeholder="Enter a name for your automation"
                   />
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   <strong>Template:</strong> {selectedTemplate.name} — {selectedTemplate.description}
                 </p>
               </div>
@@ -1752,10 +1752,10 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
           )}
 
           {/* Buttons */}
-          <div className="flex justify-end gap-3 pt-6 border-t mt-6">
+          <div className="flex justify-end gap-3 pt-6 border-t dark:border-gray-700 mt-6">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               disabled={creating}
             >
               Cancel
@@ -1849,10 +1849,10 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
   // Status badge for logs
   const LogStatusBadge = ({ status }) => {
     const styles = {
-      success: 'bg-green-100 text-green-800 border-green-200',
-      error: 'bg-red-100 text-red-800 border-red-200',
-      warning: 'bg-amber-100 text-amber-800 border-amber-200',
-      pending: 'bg-gray-100 text-gray-800 border-gray-200'
+      success: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800',
+      error: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
+      warning: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800',
+      pending: 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'
     };
     return (
       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${styles[status] || styles.pending}`}>
@@ -1879,10 +1879,10 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
           onClick={onClose}
         ></div>
 
-        <div className="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1896,24 +1896,24 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-gray-900 truncate">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
                 {automation.name}
               </h3>
               {automation.description && (
-                <p className="text-sm text-gray-500 mt-1">{automation.description}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{automation.description}</p>
               )}
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-gray-200 mb-4">
+          <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
             <nav className="-mb-px flex space-x-8">
               <button
                 onClick={() => setActiveTab('details')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'details'
                     ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
               >
                 Details
@@ -1923,7 +1923,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
                 className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
                   activeTab === 'history'
                     ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
                 }`}
               >
                 <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1931,7 +1931,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
                 </svg>
                 Run History
                 {automation.run_count > 0 && (
-                  <span className="ml-2 bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                  <span className="ml-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs px-2 py-0.5 rounded-full">
                     {automation.run_count}
                   </span>
                 )}
@@ -1942,53 +1942,53 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
           {/* Details Tab */}
           {activeTab === 'details' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Status</span>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</span>
                 <EnabledBadge enabled={automation.enabled === 1 || automation.enabled === true} />
               </div>
 
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Trigger</span>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Trigger</span>
                 <div className="flex flex-col items-end">
                   <TriggerBadge triggerConfig={triggerConfig} />
                   {scheduleDesc && (
-                    <span className="text-xs text-gray-500 mt-1">{scheduleDesc}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">{scheduleDesc}</span>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Priority</span>
-                <span className="text-sm text-gray-900">{automation.priority || 0}</span>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Priority</span>
+                <span className="text-sm text-gray-900 dark:text-white">{automation.priority || 0}</span>
               </div>
 
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Run Count</span>
-                <span className="text-sm text-gray-900">{automation.run_count || 0}</span>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Run Count</span>
+                <span className="text-sm text-gray-900 dark:text-white">{automation.run_count || 0}</span>
               </div>
 
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Conditions</span>
-                <span className="text-sm text-gray-900">{conditions.length} condition(s)</span>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Conditions</span>
+                <span className="text-sm text-gray-900 dark:text-white">{conditions.length} condition(s)</span>
               </div>
 
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Actions</span>
-                <span className="text-sm text-gray-900">{actions.length} action(s)</span>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Actions</span>
+                <span className="text-sm text-gray-900 dark:text-white">{actions.length} action(s)</span>
               </div>
 
               {automation.last_run && (
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-sm font-medium text-gray-500">Last Run</span>
-                  <span className="text-sm text-gray-900">
+                <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Run</span>
+                  <span className="text-sm text-gray-900 dark:text-white">
                     {formatUtcDate(automation.last_run)}
                   </span>
                 </div>
               )}
 
               <div className="flex items-center justify-between py-3">
-                <span className="text-sm font-medium text-gray-500">Created</span>
-                <span className="text-sm text-gray-900">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</span>
+                <span className="text-sm text-gray-900 dark:text-white">
                   {automation.created_at ? formatUtcDate(automation.created_at) : '-'}
                 </span>
               </div>
@@ -2007,8 +2007,8 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No run history</h3>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No run history</h3>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     This automation hasn't been executed yet.
                   </p>
                 </div>
@@ -2017,19 +2017,19 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
                   {logs.map((log, index) => (
                     <div
                       key={log.id || index}
-                      className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                      className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <LogStatusBadge status={log.status} />
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
                               {log.triggered_at ? formatUtcDate(log.triggered_at) : '-'}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-700">{log.message || 'No message'}</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">{log.message || 'No message'}</p>
                           {log.completed_at && log.triggered_at && (
-                            <p className="text-xs text-gray-500 mt-2">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                               Duration: {Math.round((new Date(log.completed_at) - new Date(log.triggered_at)) / 1000)}s
                             </p>
                           )}
@@ -2045,7 +2045,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
           <div className="mt-6 flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >
               Close
             </button>
@@ -2306,19 +2306,19 @@ export default function Automations() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        <span className="ml-3 text-gray-500">Loading automations...</span>
+        <span className="ml-3 text-gray-500 dark:text-gray-400">Loading automations...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
         <div className="flex items-center">
           <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="text-red-800">{error}</span>
+          <span className="text-red-800 dark:text-red-400">{error}</span>
         </div>
         <button
           onClick={fetchAutomations}
@@ -2333,12 +2333,12 @@ export default function Automations() {
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Automations</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Automations</h1>
         {canEdit && (
           <div className="flex gap-3 w-full sm:w-auto">
             <button
               onClick={() => setShowTemplatesModal(true)}
-              className="bg-white text-primary-600 border border-primary-600 px-3 sm:px-4 py-2 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm sm:text-base flex-1 sm:flex-initial justify-center"
+              className="bg-white dark:bg-gray-800 text-primary-600 border border-primary-600 px-3 sm:px-4 py-2 rounded-lg hover:bg-primary-50 dark:hover:bg-gray-700 transition-colors flex items-center text-sm sm:text-base flex-1 sm:flex-initial justify-center"
             >
               <svg className="h-5 w-5 mr-1 sm:mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -2360,7 +2360,7 @@ export default function Automations() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow mb-6 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <label htmlFor="search" className="sr-only">Search automations</label>
@@ -2373,7 +2373,7 @@ export default function Automations() {
               <input
                 type="text"
                 id="search"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                 placeholder="Search by name or description..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -2384,7 +2384,7 @@ export default function Automations() {
             <label htmlFor="status-filter" className="sr-only">Filter by status</label>
             <select
               id="status-filter"
-              className="block w-full py-2 px-3 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              className="block w-full py-2 px-3 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -2397,14 +2397,14 @@ export default function Automations() {
       </div>
 
       {/* Automations Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         {filteredAutomations.length === 0 ? (
           <div className="text-center py-12">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No automations</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No automations</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {automations.length === 0
                 ? 'Get started by creating your first automation program.'
                 : 'No automations match your current filters.'}
@@ -2425,16 +2425,16 @@ export default function Automations() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Name
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Last Run
                 </th>
                 <th scope="col" className="relative px-6 py-3">
@@ -2442,7 +2442,7 @@ export default function Automations() {
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredAutomations.map((auto) => {
                 const triggerConfig = typeof auto.trigger_config === 'string'
                   ? JSON.parse(auto.trigger_config || '{}')
@@ -2451,7 +2451,7 @@ export default function Automations() {
                 return (
                   <tr
                     key={auto.id}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                     onClick={() => handleViewAutomation(auto)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -2462,9 +2462,9 @@ export default function Automations() {
                           </svg>
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{auto.name}</div>
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">{auto.name}</div>
                           {auto.description && (
-                            <div className="text-sm text-gray-500 truncate max-w-xs">{auto.description}</div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{auto.description}</div>
                           )}
                           <div className="mt-1">
                             <TriggerBadge triggerConfig={triggerConfig} />
@@ -2476,11 +2476,11 @@ export default function Automations() {
                       <EnabledBadge enabled={auto.enabled === 1 || auto.enabled === true} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                      <div className="text-sm text-gray-900 dark:text-white">
                         {auto.last_run ? formatUtcDate(auto.last_run) : 'Never'}
                       </div>
                       {auto.run_count > 0 && (
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
                           {auto.run_count} run{auto.run_count !== 1 ? 's' : ''}
                         </div>
                       )}
@@ -2530,7 +2530,7 @@ export default function Automations() {
                           )}
                           <button
                             onClick={(e) => handleToggleEnabled(auto, e)}
-                            className="text-gray-600 hover:text-gray-900 mr-3"
+                            className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mr-3"
                           >
                             {auto.enabled ? 'Disable' : 'Enable'}
                           </button>
@@ -2590,7 +2590,7 @@ export default function Automations() {
 
       {/* Automation count */}
       {automations.length > 0 && (
-        <div className="mt-4 text-sm text-gray-500">
+        <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
           Showing {filteredAutomations.length} of {automations.length} automation{automations.length !== 1 ? 's' : ''}
         </div>
       )}
@@ -2639,25 +2639,25 @@ export default function Automations() {
             ></div>
 
             {/* Modal */}
-            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
               {/* Warning Icon */}
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
                 <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
 
-              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-center mb-2">
                 Delete Automation
               </h3>
-              <p className="text-sm text-gray-500 text-center mb-6">
-                Are you sure you want to delete <span className="font-medium text-gray-900">"{automationToDelete.name}"</span>? This action cannot be undone.
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-6">
+                Are you sure you want to delete <span className="font-medium text-gray-900 dark:text-white">"{automationToDelete.name}"</span>? This action cannot be undone.
               </p>
 
               <div className="flex justify-center gap-3">
                 <button
                   onClick={closeDeleteConfirmation}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                   disabled={deleteLoading}
                 >
                   Cancel

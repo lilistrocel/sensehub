@@ -57,16 +57,20 @@ router.get('/overview', (req, res) => {
     LIMIT 5
   `).all();
 
-  // Latest sensor readings - get latest reading per equipment
+  // Latest sensor readings - get latest reading per equipment per metric name
+  // Exclude stale unnamed readings for devices that now have named readings
   const latestReadings = db.prepare(`
     SELECT r.*, e.name as equipment_name, e.status as equipment_status, e.enabled as equipment_enabled
     FROM readings r
     INNER JOIN equipment e ON r.equipment_id = e.id
     WHERE r.id IN (
-      SELECT MAX(id) FROM readings GROUP BY equipment_id
+      SELECT MAX(id) FROM readings GROUP BY equipment_id, COALESCE(name, '')
     )
-    ORDER BY r.timestamp DESC
-    LIMIT 10
+    AND NOT (r.name IS NULL AND EXISTS (
+      SELECT 1 FROM readings r2 WHERE r2.equipment_id = r.equipment_id AND r2.name IS NOT NULL
+    ))
+    ORDER BY e.name ASC, r.name ASC
+    LIMIT 50
   `).all();
 
   // Equipment list for direct control (enabled equipment only)

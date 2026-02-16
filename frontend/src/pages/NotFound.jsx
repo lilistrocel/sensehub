@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
  */
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center">
         {/* 404 Icon */}
         <div className="mb-6">
@@ -27,15 +27,15 @@ export default function NotFound() {
         </div>
 
         {/* Error Code */}
-        <h1 className="text-6xl font-bold text-gray-900 mb-4">404</h1>
+        <h1 className="text-6xl font-bold text-gray-900 dark:text-white mb-4">404</h1>
 
         {/* Error Title */}
-        <h2 className="text-2xl font-semibold text-gray-700 mb-2">
+        <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
           Page Not Found
         </h2>
 
         {/* Helpful Message */}
-        <p className="text-gray-500 mb-8">
+        <p className="text-gray-500 dark:text-gray-400 mb-8">
           Oops! The page you're looking for doesn't exist or has been moved.
           Please check the URL or navigate back to the dashboard.
         </p>
@@ -66,7 +66,7 @@ export default function NotFound() {
           {/* Go Back Button */}
           <button
             onClick={() => window.history.back()}
-            className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 text-base font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+            className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 dark:border-gray-600 text-base font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
           >
             <svg
               className="h-5 w-5 mr-2"
@@ -86,9 +86,9 @@ export default function NotFound() {
         </div>
 
         {/* SenseHub Branding */}
-        <div className="mt-12 pt-8 border-t border-gray-200">
+        <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
           <p className="text-sm text-gray-400">
-            SenseHub - Edge Computing Platform for Industrial IoT
+            A20Core - SenseHub - Edge Computing Platform for Industrial IoT
           </p>
         </div>
       </div>

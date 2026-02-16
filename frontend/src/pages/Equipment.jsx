@@ -116,11 +116,11 @@ const REGISTER_PRESETS = {
 // Status badge component with color coding
 function StatusBadge({ status, large = false }) {
   const statusStyles = {
-    online: 'bg-green-100 text-green-800 border-green-200',
-    offline: 'bg-gray-100 text-gray-800 border-gray-200',
-    error: 'bg-red-100 text-red-800 border-red-200',
-    warning: 'bg-amber-100 text-amber-800 border-amber-200',
-    disabled: 'bg-slate-100 text-slate-500 border-slate-200',
+    online: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800',
+    offline: 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600',
+    error: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
+    warning: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800',
+    disabled: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
   };
 
   const statusLabels = {
@@ -677,11 +677,11 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-lg p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-lg p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -690,30 +690,30 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
           {/* Header */}
           <div className="flex items-start mb-6">
-            <div className="flex-shrink-0 h-12 w-12 bg-primary-100 rounded-lg flex items-center justify-center mr-4">
+            <div className="flex-shrink-0 h-12 w-12 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center mr-4">
               <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-gray-900 truncate">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
                 {eq?.name || 'Equipment Details'}
               </h3>
               {eq?.description && (
-                <p className="text-sm text-gray-500 mt-1">{eq.description}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{eq.description}</p>
               )}
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-gray-200 mb-4">
+          <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
             <nav className="-mb-px flex space-x-8">
               <button
                 onClick={() => setActiveTab('details')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'details'
                     ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 Details
@@ -723,7 +723,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'history'
                     ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 History
@@ -733,7 +733,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'errors'
                     ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 Error Logs
@@ -744,57 +744,57 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-              <span className="ml-3 text-gray-500">Loading details...</span>
+              <span className="ml-3 text-gray-500 dark:text-gray-400">Loading details...</span>
             </div>
           ) : error ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
               <div className="flex items-center">
                 <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-red-800 text-sm">{error}</span>
+                <span className="text-red-800 dark:text-red-400 text-sm">{error}</span>
               </div>
             </div>
           ) : activeTab === 'details' ? (
             <div className="space-y-4">
               {/* Status */}
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Status</span>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</span>
                 <StatusBadge status={eq?.status} large />
               </div>
 
               {/* Type/Category */}
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Type / Category</span>
-                <span className="text-sm text-gray-900">{eq?.type || '-'}</span>
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Type / Category</span>
+                <span className="text-sm text-gray-900 dark:text-white">{eq?.type || '-'}</span>
               </div>
 
               {/* Protocol */}
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Protocol</span>
-                <span className="text-sm text-gray-900 uppercase font-mono bg-gray-100 px-2 py-0.5 rounded">
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Protocol</span>
+                <span className="text-sm text-gray-900 dark:text-white uppercase font-mono bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
                   {eq?.protocol || '-'}
                 </span>
               </div>
 
               {/* Connection Address */}
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Connection Address</span>
-                <span className="text-sm text-gray-900 font-mono">
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Connection Address</span>
+                <span className="text-sm text-gray-900 dark:text-white font-mono">
                   {eq?.address || '-'}
                 </span>
               </div>
 
               {/* Enabled Toggle */}
-              <div className="py-3 border-b border-gray-100">
+              <div className="py-3 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-500">Enabled</span>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Enabled</span>
                   {canControl ? (
                     <button
                       onClick={handleToggleEnabled}
                       disabled={enableLoading}
                       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 ${
-                        eq?.enabled ? 'bg-green-500' : 'bg-gray-200'
+                        eq?.enabled ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-600'
                       }`}
                       role="switch"
                       aria-checked={eq?.enabled}
@@ -815,8 +815,8 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 {enableMessage && (
                   <div className={`mt-2 p-2 rounded text-sm ${
                     enableMessage.type === 'success'
-                      ? 'bg-green-50 text-green-800 border border-green-200'
-                      : 'bg-red-50 text-red-800 border border-red-200'
+                      ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
+                      : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
                   }`}>
                     {enableMessage.text}
                   </div>
@@ -824,15 +824,15 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
               </div>
 
               {/* Zone Assignment Section */}
-              <div className="py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500 block mb-2">Zone Assignment</span>
+              <div className="py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-2">Zone Assignment</span>
 
                 {/* Zone Message */}
                 {zoneMessage && (
                   <div className={`mb-3 p-2 rounded text-sm ${
                     zoneMessage.type === 'success'
-                      ? 'bg-green-50 text-green-800 border border-green-200'
-                      : 'bg-red-50 text-red-800 border border-red-200'
+                      ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
+                      : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
                   }`}>
                     {zoneMessage.text}
                   </div>
@@ -844,7 +844,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     {eq.zones.map((zone, idx) => (
                       <span
                         key={zone.id || idx}
-                        className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                        className="inline-flex items-center px-2.5 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
                       >
                         {zone.name}
                         <button
@@ -860,7 +860,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400 mb-3">No zones assigned</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mb-3">No zones assigned</p>
                 )}
 
                 {/* Add Zone Section */}
@@ -869,7 +869,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     <select
                       value={selectedZone}
                       onChange={(e) => setSelectedZone(e.target.value)}
-                      className="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
+                      className="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
                     >
                       <option value="">Select a zone...</option>
                       {availableZones.map(zone => (
@@ -903,9 +903,9 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
               {/* Last Communication */}
               {eq?.last_communication && (
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-sm font-medium text-gray-500">Last Communication</span>
-                  <span className="text-sm text-gray-900">
+                <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Communication</span>
+                  <span className="text-sm text-gray-900 dark:text-white">
                     {formatUtcDate(eq.last_communication)}
                   </span>
                 </div>
@@ -913,24 +913,24 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
               {/* Last Reading */}
               {eq?.last_reading && (
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-sm font-medium text-gray-500">Last Reading</span>
-                  <span className="text-sm text-gray-900 font-mono">{eq.last_reading}</span>
+                <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Reading</span>
+                  <span className="text-sm text-gray-900 dark:text-white font-mono">{eq.last_reading}</span>
                 </div>
               )}
 
               {/* Created At */}
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-500">Created</span>
-                <span className="text-sm text-gray-900">
+              <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</span>
+                <span className="text-sm text-gray-900 dark:text-white">
                   {eq?.created_at ? formatUtcDate(eq.created_at) : '-'}
                 </span>
               </div>
 
               {/* Equipment Calibration Section */}
-              <div className="py-3 border-b border-gray-100">
+              <div className="py-3 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-500">Calibration</span>
+                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Calibration</span>
                   {user?.role === 'admin' && (
                     <button
                       onClick={() => setShowCalibration(!showCalibration)}
@@ -943,20 +943,20 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
                 {/* Current calibration values display */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded">
-                    <span className="text-gray-500">Offset:</span>
-                    <span className="font-mono text-gray-900">{eq?.calibration_offset ?? 0}</span>
+                  <div className="flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded">
+                    <span className="text-gray-500 dark:text-gray-400">Offset:</span>
+                    <span className="font-mono text-gray-900 dark:text-white">{eq?.calibration_offset ?? 0}</span>
                   </div>
-                  <div className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded">
-                    <span className="text-gray-500">Scale:</span>
-                    <span className="font-mono text-gray-900">{eq?.calibration_scale ?? 1}</span>
+                  <div className="flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded">
+                    <span className="text-gray-500 dark:text-gray-400">Scale:</span>
+                    <span className="font-mono text-gray-900 dark:text-white">{eq?.calibration_scale ?? 1}</span>
                   </div>
                 </div>
 
                 {/* Calibration form (admin only) */}
                 {showCalibration && user?.role === 'admin' && (
-                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center">
+                  <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-3 flex items-center">
                       <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -968,8 +968,8 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     {calibrationMessage && (
                       <div className={`mb-3 p-2 rounded text-sm ${
                         calibrationMessage.type === 'success'
-                          ? 'bg-green-50 text-green-800 border border-green-200'
-                          : 'bg-red-50 text-red-800 border border-red-200'
+                          ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
+                          : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
                       }`}>
                         {calibrationMessage.text}
                       </div>
@@ -977,7 +977,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
                     <div className="space-y-3">
                       <div>
-                        <label htmlFor="calibration-offset" className="block text-xs font-medium text-blue-800 mb-1">
+                        <label htmlFor="calibration-offset" className="block text-xs font-medium text-blue-800 dark:text-blue-300 mb-1">
                           Offset (added to raw value)
                         </label>
                         <input
@@ -986,13 +986,13 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                           value={calibrationOffset}
                           onChange={(e) => setCalibrationOffset(e.target.value)}
                           step="0.01"
-                          className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full px-3 py-2 text-sm border border-blue-300 dark:border-blue-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                           placeholder="0"
                         />
                       </div>
 
                       <div>
-                        <label htmlFor="calibration-scale" className="block text-xs font-medium text-blue-800 mb-1">
+                        <label htmlFor="calibration-scale" className="block text-xs font-medium text-blue-800 dark:text-blue-300 mb-1">
                           Scale (multiplied by raw value)
                         </label>
                         <input
@@ -1001,19 +1001,19 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                           value={calibrationScale}
                           onChange={(e) => setCalibrationScale(e.target.value)}
                           step="0.01"
-                          className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full px-3 py-2 text-sm border border-blue-300 dark:border-blue-700 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                           placeholder="1"
                         />
                       </div>
 
-                      <p className="text-xs text-blue-700">
-                        Formula: <span className="font-mono bg-blue-100 px-1 py-0.5 rounded">calibrated = (raw × scale) + offset</span>
+                      <p className="text-xs text-blue-700 dark:text-blue-400">
+                        Formula: <span className="font-mono bg-blue-100 dark:bg-blue-900/40 px-1 py-0.5 rounded">calibrated = (raw × scale) + offset</span>
                       </p>
 
                       <div className="flex gap-2 pt-2">
                         <button
                           onClick={() => setShowCalibration(false)}
-                          className="flex-1 px-3 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          className="flex-1 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                           disabled={calibrationLoading}
                         >
                           Cancel
@@ -1048,9 +1048,9 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
               {/* Channel Labels Section */}
               {Array.isArray(eq?.register_mappings) && eq.register_mappings.length > 0 && (
-                <div className="py-3 border-b border-gray-100">
+                <div className="py-3 border-b border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-500">Channel Labels</span>
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Channel Labels</span>
                     {canControl && (
                       <button
                         onClick={() => setShowChannelLabels(!showChannelLabels)}
@@ -1068,12 +1068,12 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                         const addr = String(m.register ?? m.address);
                         const displayName = getChannelDisplayName(m);
                         return (
-                          <div key={addr} className="flex items-center justify-between px-2 py-1 bg-gray-50 rounded text-sm">
-                            <span className="text-gray-500">{m.name}</span>
+                          <div key={addr} className="flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded text-sm">
+                            <span className="text-gray-500 dark:text-gray-400">{m.name}</span>
                             {m.label ? (
-                              <span className="font-medium text-gray-900">{m.label}</span>
+                              <span className="font-medium text-gray-900 dark:text-white">{m.label}</span>
                             ) : (
-                              <span className="text-gray-400 italic">No label</span>
+                              <span className="text-gray-400 dark:text-gray-500 italic">No label</span>
                             )}
                           </div>
                         );
@@ -1083,12 +1083,12 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
                   {/* Editable labels form (admin/operator only) */}
                   {showChannelLabels && canControl && (
-                    <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       {labelsMessage && (
                         <div className={`mb-3 p-2 rounded text-sm ${
                           labelsMessage.type === 'success'
-                            ? 'bg-green-50 text-green-800 border border-green-200'
-                            : 'bg-red-50 text-red-800 border border-red-200'
+                            ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
+                            : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
                         }`}>
                           {labelsMessage.text}
                         </div>
@@ -1098,7 +1098,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                           const addr = String(m.register ?? m.address);
                           return (
                             <div key={addr} className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500 w-24 flex-shrink-0 truncate" title={m.name}>
+                              <span className="text-xs text-gray-500 dark:text-gray-400 w-24 flex-shrink-0 truncate" title={m.name}>
                                 {m.name}
                               </span>
                               <input
@@ -1106,7 +1106,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                                 value={channelLabels[addr] || ''}
                                 onChange={(e) => setChannelLabels(prev => ({ ...prev, [addr]: e.target.value }))}
                                 placeholder="e.g. Water Pump"
-                                className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                                className="flex-1 px-2 py-1 text-sm border border-blue-300 dark:border-blue-700 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                               />
                             </div>
                           );
@@ -1115,7 +1115,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                       <div className="flex gap-2 mt-3">
                         <button
                           onClick={() => setShowChannelLabels(false)}
-                          className="flex-1 px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                          className="flex-1 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600"
                           disabled={labelsLoading}
                         >
                           Cancel
@@ -1135,14 +1135,14 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
               {/* Equipment Control Section */}
               <div className="py-3">
-                <span className="text-sm font-medium text-gray-500 block mb-3">Equipment Control</span>
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-3">Equipment Control</span>
 
                 {/* Control Message */}
                 {controlMessage && (
                   <div className={`mb-3 p-2 rounded text-sm ${
                     controlMessage.type === 'success'
-                      ? 'bg-green-50 text-green-800 border border-green-200'
-                      : 'bg-red-50 text-red-800 border border-red-200'
+                      ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
+                      : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
                   }`}>
                     {controlMessage.text}
                   </div>
@@ -1190,8 +1190,8 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     </button>
                   </div>
                 ) : (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                    <div className="flex items-center text-gray-500">
+                  <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                    <div className="flex items-center text-gray-500 dark:text-gray-400">
                       <svg className="h-5 w-5 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
@@ -1202,15 +1202,15 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
               </div>
 
               {/* Test Connection Section */}
-              <div className="py-3 border-t border-gray-200">
-                <span className="text-sm font-medium text-gray-500 block mb-3">Connection Test</span>
+              <div className="py-3 border-t border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 block mb-3">Connection Test</span>
 
                 {/* Test Connection Result */}
                 {testConnectionResult && (
                   <div className={`mb-3 p-3 rounded-lg text-sm ${
                     testConnectionResult.success
-                      ? 'bg-green-50 text-green-800 border border-green-200'
-                      : 'bg-red-50 text-red-800 border border-red-200'
+                      ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
+                      : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
                   }`}>
                     <div className="flex items-center mb-1">
                       {testConnectionResult.success ? (
@@ -1225,17 +1225,17 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                       <span className="font-medium">{testConnectionResult.message}</span>
                     </div>
                     {testConnectionResult.success && testConnectionResult.latency_ms && (
-                      <div className="text-xs text-green-700 ml-6">
+                      <div className="text-xs text-green-700 dark:text-green-400 ml-6">
                         Latency: {testConnectionResult.latency_ms}ms
                       </div>
                     )}
                     {!testConnectionResult.success && testConnectionResult.error && (
-                      <div className="text-xs text-red-700 ml-6">
+                      <div className="text-xs text-red-700 dark:text-red-400 ml-6">
                         Error: {testConnectionResult.error}
                       </div>
                     )}
                     {testConnectionResult.last_communication && (
-                      <div className="text-xs text-green-700 ml-6">
+                      <div className="text-xs text-green-700 dark:text-green-400 ml-6">
                         Last communication: {formatUtcDate(testConnectionResult.last_communication)}
                       </div>
                     )}
@@ -1266,8 +1266,8 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     )}
                   </button>
                 ) : (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                    <div className="flex items-center text-gray-500">
+                  <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                    <div className="flex items-center text-gray-500 dark:text-gray-400">
                       <svg className="h-5 w-5 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
@@ -1282,11 +1282,11 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
             <div className="space-y-4">
               {/* Time Range Selector */}
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Time Range</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Time Range</span>
                 <select
                   value={timeRange}
                   onChange={(e) => setTimeRange(e.target.value)}
-                  className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500"
+                  className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
                 >
                   <option value="1h">Last Hour</option>
                   <option value="24h">Last 24 Hours</option>
@@ -1299,15 +1299,15 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
               {historyLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
-                  <span className="ml-3 text-gray-500 text-sm">Loading history...</span>
+                  <span className="ml-3 text-gray-500 dark:text-gray-400 text-sm">Loading history...</span>
                 </div>
               ) : historyError ? (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                   <div className="flex items-center">
                     <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-red-800 text-sm">{historyError}</span>
+                    <span className="text-red-800 dark:text-red-400 text-sm">{historyError}</span>
                   </div>
                   <button
                     onClick={fetchHistory}
@@ -1321,8 +1321,8 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                   <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No readings</h3>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No readings</h3>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     No historical data available for the selected time range.
                   </p>
                 </div>
@@ -1375,44 +1375,44 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 
                   {/* Summary Stats */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                    <div className="bg-blue-50 rounded-lg p-3 text-center">
-                      <div className="text-xs text-blue-600 uppercase font-medium">Readings</div>
-                      <div className="text-xl font-bold text-blue-900">{historyData.length}</div>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-blue-600 dark:text-blue-400 uppercase font-medium">Readings</div>
+                      <div className="text-xl font-bold text-blue-900 dark:text-blue-300">{historyData.length}</div>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-3 text-center">
-                      <div className="text-xs text-green-600 uppercase font-medium">Avg Value</div>
-                      <div className="text-xl font-bold text-green-900">
+                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-green-600 dark:text-green-400 uppercase font-medium">Avg Value</div>
+                      <div className="text-xl font-bold text-green-900 dark:text-green-300">
                         {(historyData.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0) / historyData.length).toFixed(2)}
                       </div>
                     </div>
-                    <div className="bg-purple-50 rounded-lg p-3 text-center">
-                      <div className="text-xs text-purple-600 uppercase font-medium">Range</div>
-                      <div className="text-sm font-bold text-purple-900">
+                    <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-purple-600 dark:text-purple-400 uppercase font-medium">Range</div>
+                      <div className="text-sm font-bold text-purple-900 dark:text-purple-300">
                         {Math.min(...historyData.map(r => parseFloat(r.value) || 0)).toFixed(1)} - {Math.max(...historyData.map(r => parseFloat(r.value) || 0)).toFixed(1)}
                       </div>
                     </div>
                   </div>
 
                   {/* History Table */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-900">
                         <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Timestamp</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Value</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unit</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {historyData.slice(0, 10).map((reading, idx) => (
-                          <tr key={reading.id || idx} className="hover:bg-gray-50">
-                            <td className="px-4 py-2 text-sm text-gray-900">
+                          <tr key={reading.id || idx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">
                               {formatUtcDate(reading.timestamp)}
                             </td>
-                            <td className="px-4 py-2 text-sm font-mono text-gray-900">
+                            <td className="px-4 py-2 text-sm font-mono text-gray-900 dark:text-white">
                               {reading.value}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-500">
+                            <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
                               {reading.unit || '-'}
                             </td>
                           </tr>
@@ -1420,7 +1420,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                       </tbody>
                     </table>
                     {historyData.length > 10 && (
-                      <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500 text-center border-t">
+                      <div className="bg-gray-50 dark:bg-gray-900 px-4 py-2 text-xs text-gray-500 dark:text-gray-400 text-center border-t dark:border-gray-700">
                         Showing 10 of {historyData.length} readings
                       </div>
                     )}
@@ -1433,15 +1433,15 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
             <div className="space-y-4">
               {/* Filter Toggle */}
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Error History</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Error History</span>
                 <label className="flex items-center cursor-pointer">
                   <input
                     type="checkbox"
                     checked={showResolved}
                     onChange={(e) => setShowResolved(e.target.checked)}
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700"
                   />
-                  <span className="ml-2 text-sm text-gray-600">Show resolved</span>
+                  <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Show resolved</span>
                 </label>
               </div>
 
@@ -1449,15 +1449,15 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
               {errorLogsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
-                  <span className="ml-3 text-gray-500 text-sm">Loading error logs...</span>
+                  <span className="ml-3 text-gray-500 dark:text-gray-400 text-sm">Loading error logs...</span>
                 </div>
               ) : errorLogsError ? (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
                   <div className="flex items-center">
                     <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-red-800 text-sm">{errorLogsError}</span>
+                    <span className="text-red-800 dark:text-red-400 text-sm">{errorLogsError}</span>
                   </div>
                   <button
                     onClick={fetchErrorLogs}
@@ -1471,8 +1471,8 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                   <svg className="mx-auto h-12 w-12 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No errors</h3>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No errors</h3>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     {showResolved ? 'No error logs found for this equipment.' : 'No active errors for this equipment.'}
                   </p>
                 </div>
@@ -1480,15 +1480,15 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 <>
                   {/* Summary Stats */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                    <div className="bg-red-50 rounded-lg p-3 text-center">
-                      <div className="text-xs text-red-600 uppercase font-medium">Active</div>
-                      <div className="text-xl font-bold text-red-900">
+                    <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-red-600 dark:text-red-400 uppercase font-medium">Active</div>
+                      <div className="text-xl font-bold text-red-900 dark:text-red-300">
                         {errorLogs.filter(e => !e.resolved).length}
                       </div>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-3 text-center">
-                      <div className="text-xs text-green-600 uppercase font-medium">Resolved</div>
-                      <div className="text-xl font-bold text-green-900">
+                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-green-600 dark:text-green-400 uppercase font-medium">Resolved</div>
+                      <div className="text-xl font-bold text-green-900 dark:text-green-300">
                         {errorLogs.filter(e => e.resolved).length}
                       </div>
                     </div>
@@ -1501,19 +1501,19 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                         key={errorLog.id}
                         className={`border rounded-lg p-3 ${
                           errorLog.resolved
-                            ? 'bg-gray-50 border-gray-200'
-                            : 'bg-red-50 border-red-200'
+                            ? 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
+                            : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
                         }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                errorLog.error_type === 'connection' ? 'bg-orange-100 text-orange-800' :
-                                errorLog.error_type === 'timeout' ? 'bg-yellow-100 text-yellow-800' :
-                                errorLog.error_type === 'protocol' ? 'bg-blue-100 text-blue-800' :
-                                errorLog.error_type === 'validation' ? 'bg-purple-100 text-purple-800' :
-                                errorLog.error_type === 'hardware' ? 'bg-red-100 text-red-800' :
+                                errorLog.error_type === 'connection' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' :
+                                errorLog.error_type === 'timeout' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                errorLog.error_type === 'protocol' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                                errorLog.error_type === 'validation' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' :
+                                errorLog.error_type === 'hardware' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
                                 'bg-gray-100 text-gray-800'
                               }`}>
                                 {errorLog.error_type || 'other'}
@@ -1524,13 +1524,13 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                                 </span>
                               )}
                             </div>
-                            <p className={`mt-1 text-sm ${errorLog.resolved ? 'text-gray-600' : 'text-gray-900'}`}>
+                            <p className={`mt-1 text-sm ${errorLog.resolved ? 'text-gray-600 dark:text-gray-400' : 'text-gray-900 dark:text-white'}`}>
                               {errorLog.message}
                             </p>
                             {errorLog.details && (
-                              <p className="mt-1 text-xs text-gray-500 font-mono">{errorLog.details}</p>
+                              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono">{errorLog.details}</p>
                             )}
-                            <p className="mt-1 text-xs text-gray-400">
+                            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                               {formatUtcDate(errorLog.created_at)}
                               {errorLog.resolved_at && (
                                 <span className="ml-2">
@@ -1554,7 +1554,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                   </div>
 
                   {errorLogs.length >= 50 && (
-                    <div className="text-center text-xs text-gray-500 pt-2">
+                    <div className="text-center text-xs text-gray-500 dark:text-gray-400 pt-2">
                       Showing most recent 50 errors
                     </div>
                   )}
@@ -1924,11 +1924,11 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-lg p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-lg p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1937,21 +1937,21 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
 
           {/* Header */}
           <div className="flex items-start mb-6">
-            <div className="flex-shrink-0 h-12 w-12 bg-amber-100 rounded-lg flex items-center justify-center mr-4">
+            <div className="flex-shrink-0 h-12 w-12 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center mr-4">
               <svg className="h-7 w-7 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-gray-900 truncate">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
                 Relay Control
               </h3>
-              <p className="text-sm text-gray-500">{equipment?.name || 'Modbus Relay Device'}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{equipment?.name || 'Modbus Relay Device'}</p>
             </div>
           </div>
 
           {/* Connection Status */}
-          <div className="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
+          <div className="mb-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${connectionStatus.connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
@@ -1996,8 +1996,8 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
           {message && (
             <div className={`mb-4 p-3 rounded-lg text-sm ${
               message.type === 'success'
-                ? 'bg-green-50 text-green-800 border border-green-200'
-                : 'bg-red-50 text-red-800 border border-red-200'
+                ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
+                : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
             }`}>
               <div className="flex items-center">
                 {message.type === 'success' ? (
@@ -2030,15 +2030,15 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-              <span className="ml-3 text-gray-500">Reading relay states...</span>
+              <span className="ml-3 text-gray-500 dark:text-gray-400">Reading relay states...</span>
             </div>
           ) : relayChannels.length === 0 ? (
             <div className="text-center py-8">
               <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No relay channels configured</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No relay channels configured</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 This device doesn't have any coil mappings configured for relay control.
               </p>
             </div>
@@ -2095,8 +2095,8 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                     key={channel.address}
                     className={`flex items-center justify-between p-3 rounded-lg border ${
                       channel.state
-                        ? 'bg-green-50 border-green-200'
-                        : 'bg-gray-50 border-gray-200'
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -2105,8 +2105,8 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                         channel.state ? 'bg-green-500 shadow-sm shadow-green-500' : 'bg-gray-400'
                       }`}></div>
                       <div>
-                        <div className="font-medium text-gray-900">{getChannelDisplayName(channel)}</div>
-                        <div className="text-xs text-gray-500">
+                        <div className="font-medium text-gray-900 dark:text-white">{getChannelDisplayName(channel)}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
                           {channel.label ? `${channel.name} \u00b7 ` : ''}Address: {channel.address}
                         </div>
                       </div>
@@ -2114,8 +2114,8 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                     <div className="flex items-center gap-3">
                       <span className={`text-sm font-medium px-2 py-0.5 rounded ${
                         channel.state
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-200 text-gray-600'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
                       }`}>
                         {channel.state ? 'ON' : 'OFF'}
                       </span>
@@ -2124,7 +2124,7 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                           onClick={() => handleToggleRelay(channel)}
                           disabled={actionLoading[channel.address]}
                           className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 ${
-                            channel.state ? 'bg-green-500' : 'bg-gray-300'
+                            channel.state ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
                           }`}
                           role="switch"
                           aria-checked={channel.state}
@@ -2210,15 +2210,15 @@ function SlaveIdScannerModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             Modbus Slave ID Scanner
           </h2>
           <button
             onClick={onClose}
             disabled={isScanning}
-            className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 disabled:opacity-50"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2228,39 +2228,39 @@ function SlaveIdScannerModal({
 
         <div className="p-4 overflow-y-auto max-h-[70vh]">
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Scan Configuration</h3>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Scan Configuration</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <label htmlFor="scan-host" className="block text-xs font-medium text-gray-500 mb-1">Host IP Address</label>
-                <input type="text" id="scan-host" value={config.host} onChange={(e) => handleConfigChange('host', e.target.value)} placeholder="192.168.1.100" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+                <label htmlFor="scan-host" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Host IP Address</label>
+                <input type="text" id="scan-host" value={config.host} onChange={(e) => handleConfigChange('host', e.target.value)} placeholder="192.168.1.100" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:disabled:bg-gray-800" />
               </div>
               <div>
-                <label htmlFor="scan-port" className="block text-xs font-medium text-gray-500 mb-1">TCP Port</label>
-                <input type="number" id="scan-port" value={config.port} onChange={(e) => handleConfigChange('port', e.target.value)} placeholder="502" min="1" max="65535" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+                <label htmlFor="scan-port" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">TCP Port</label>
+                <input type="number" id="scan-port" value={config.port} onChange={(e) => handleConfigChange('port', e.target.value)} placeholder="502" min="1" max="65535" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:disabled:bg-gray-800" />
               </div>
               <div>
-                <label htmlFor="scan-timeout" className="block text-xs font-medium text-gray-500 mb-1">Timeout (ms)</label>
-                <input type="number" id="scan-timeout" value={config.timeout} onChange={(e) => handleConfigChange('timeout', e.target.value)} placeholder="500" min="100" max="5000" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+                <label htmlFor="scan-timeout" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Timeout (ms)</label>
+                <input type="number" id="scan-timeout" value={config.timeout} onChange={(e) => handleConfigChange('timeout', e.target.value)} placeholder="500" min="100" max="5000" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:disabled:bg-gray-800" />
               </div>
               <div>
-                <label htmlFor="scan-start" className="block text-xs font-medium text-gray-500 mb-1">Start Slave ID</label>
-                <input type="number" id="scan-start" value={config.startSlaveId} onChange={(e) => handleConfigChange('startSlaveId', e.target.value)} placeholder="1" min="1" max="247" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+                <label htmlFor="scan-start" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Start Slave ID</label>
+                <input type="number" id="scan-start" value={config.startSlaveId} onChange={(e) => handleConfigChange('startSlaveId', e.target.value)} placeholder="1" min="1" max="247" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:disabled:bg-gray-800" />
               </div>
               <div>
-                <label htmlFor="scan-end" className="block text-xs font-medium text-gray-500 mb-1">End Slave ID</label>
-                <input type="number" id="scan-end" value={config.endSlaveId} onChange={(e) => handleConfigChange('endSlaveId', e.target.value)} placeholder="247" min="1" max="247" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100" />
+                <label htmlFor="scan-end" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">End Slave ID</label>
+                <input type="number" id="scan-end" value={config.endSlaveId} onChange={(e) => handleConfigChange('endSlaveId', e.target.value)} placeholder="247" min="1" max="247" disabled={isScanning} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:disabled:bg-gray-800" />
               </div>
             </div>
-            <p className="mt-2 text-xs text-gray-500">Scans for Modbus RTU devices connected to a TCP gateway (e.g., USR-DR134).</p>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Scans for Modbus RTU devices connected to a TCP gateway (e.g., USR-DR134).</p>
           </div>
 
           {progress !== null && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">{isScanning ? 'Scanning...' : 'Scan Complete'}</span>
-                <span className="text-sm text-gray-500">{Math.round(progress)}%</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{isScanning ? 'Scanning...' : 'Scan Complete'}</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">{Math.round(progress)}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                 <div className={`h-2 rounded-full transition-all duration-300 ${isScanning ? 'bg-primary-600' : 'bg-green-600'}`} style={{ width: `${progress}%` }}></div>
               </div>
             </div>
@@ -2269,34 +2269,34 @@ function SlaveIdScannerModal({
           {results && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-gray-700">Discovered Devices ({results.discovered?.length || 0})</h3>
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Discovered Devices ({results.discovered?.length || 0})</h3>
                 {results.discovered?.length > 0 && (
                   <button onClick={handleSelectAll} className="text-sm text-primary-600 hover:text-primary-700">{selectedSlaves.length === results.discovered.length ? 'Deselect All' : 'Select All'}</button>
                 )}
               </div>
               {results.discovered?.length === 0 ? (
-                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                <div className="text-center py-8 bg-gray-50 dark:bg-gray-900 rounded-lg">
                   <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  <p className="mt-2 text-sm text-gray-500">No responding devices found in the scanned range.</p>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No responding devices found in the scanned range.</p>
                 </div>
               ) : (
-                <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-900">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Select</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Slave ID</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Response Time</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sample Data</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Select</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Slave ID</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Response Time</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sample Data</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {results.discovered.map((device) => (
-                        <tr key={device.slaveId} className={`hover:bg-gray-50 cursor-pointer ${selectedSlaves.includes(device.slaveId) ? 'bg-primary-50' : ''}`} onClick={() => handleSlaveToggle(device.slaveId)}>
-                          <td className="px-4 py-3"><input type="checkbox" checked={selectedSlaves.includes(device.slaveId)} onChange={() => {}} className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded" /></td>
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{device.slaveId}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{device.responseTime}ms</td>
-                          <td className="px-4 py-3 text-sm text-gray-500 font-mono">{device.sampleData ? `[${device.sampleData.slice(0, 3).join(', ')}...]` : '-'}</td>
+                        <tr key={device.slaveId} className={`hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer ${selectedSlaves.includes(device.slaveId) ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`} onClick={() => handleSlaveToggle(device.slaveId)}>
+                          <td className="px-4 py-3"><input type="checkbox" checked={selectedSlaves.includes(device.slaveId)} onChange={() => {}} className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700" /></td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{device.slaveId}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{device.responseTime}ms</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 font-mono">{device.sampleData ? `[${device.sampleData.slice(0, 3).join(', ')}...]` : '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2307,8 +2307,8 @@ function SlaveIdScannerModal({
           )}
         </div>
 
-        <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-gray-50">
-          <button onClick={onClose} disabled={isScanning} className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50">Close</button>
+        <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+          <button onClick={onClose} disabled={isScanning} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors disabled:opacity-50">Close</button>
           <div className="flex gap-3">
             {results?.discovered?.length > 0 && selectedSlaves.length > 0 && (
               <button onClick={onCreateEquipment} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center">
@@ -2336,14 +2336,14 @@ function DiscoveredDevicesModal({ isOpen, onClose, devices, onAddDevice, addingD
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             Discovered Modbus TCP Devices
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2353,30 +2353,30 @@ function DiscoveredDevicesModal({ isOpen, onClose, devices, onAddDevice, addingD
 
         <div className="p-4 overflow-y-auto max-h-[60vh]">
           {devices.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">
+            <p className="text-center text-gray-500 dark:text-gray-400 py-8">
               No new Modbus devices discovered on the network.
             </p>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 Found {devices.length} Modbus TCP device(s) on the network. Click "Add" to add them to your equipment list.
               </p>
 
               {devices.map((device) => (
                 <div
                   key={device.address}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-primary-300 transition-colors"
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-primary-300 transition-colors"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">
+                      <h3 className="font-medium text-gray-900 dark:text-white">
                         {device.suggestedName}
                       </h3>
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                         Address: <span className="font-mono">{device.address}</span>
                       </p>
                       {device.deviceInfo && Object.keys(device.deviceInfo).length > 0 && (
-                        <div className="mt-2 text-xs text-gray-500">
+                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                           {device.deviceInfo.VendorName && (
                             <p>Vendor: {device.deviceInfo.VendorName}</p>
                           )}
@@ -2394,7 +2394,7 @@ function DiscoveredDevicesModal({ isOpen, onClose, devices, onAddDevice, addingD
                         }`}>
                           {device.responsive ? 'Responsive' : 'Detected'}
                         </span>
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                           Port {device.port}
                         </span>
                       </div>
@@ -2428,10 +2428,10 @@ function DiscoveredDevicesModal({ isOpen, onClose, devices, onAddDevice, addingD
           )}
         </div>
 
-        <div className="flex justify-end p-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex justify-end p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
           >
             Close
           </button>
@@ -2675,29 +2675,29 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Add New Equipment
           </h3>
 
           {/* Success Message */}
           {successMessage && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
               <div className="flex items-center">
                 <svg className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-green-800 text-sm">{successMessage}</span>
+                <span className="text-green-800 dark:text-green-400 text-sm">{successMessage}</span>
               </div>
             </div>
           )}
@@ -2716,7 +2716,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name */}
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -2725,7 +2725,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="e.g., Temperature Sensor 001"
                 required
               />
@@ -2733,7 +2733,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
 
             {/* Description */}
             <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Description
               </label>
               <textarea
@@ -2742,14 +2742,14 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                 value={formData.description}
                 onChange={handleChange}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="Optional description"
               />
             </div>
 
             {/* Type */}
             <div>
-              <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Type
               </label>
               <input
@@ -2758,14 +2758,14 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                 name="type"
                 value={formData.type}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="e.g., Temperature Sensor, Relay, Controller"
               />
             </div>
 
             {/* Protocol */}
             <div>
-              <label htmlFor="protocol" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="protocol" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Protocol
               </label>
               <select
@@ -2773,7 +2773,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                 name="protocol"
                 value={formData.protocol}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
               >
                 <option value="modbus">Modbus</option>
                 <option value="mqtt">MQTT</option>
@@ -2785,7 +2785,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
 
             {/* Connection Address */}
             <div>
-              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Connection Address
               </label>
               <input
@@ -2794,15 +2794,15 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                 name="address"
                 value={formData.address}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="e.g., 192.168.1.100:502 or /dev/ttyUSB0"
               />
             </div>
 
             {/* Modbus Configuration Section */}
             {showModbusConfig && (
-              <div className="border-t border-gray-200 pt-4 mt-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
                   <svg className="w-4 h-4 mr-2 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -2812,7 +2812,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="slave_id" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="slave_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Slave ID (1-247)
                     </label>
                     <input
@@ -2823,13 +2823,13 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                       max="247"
                       value={formData.slave_id}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                       placeholder="e.g., 1"
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="polling_interval_ms" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="polling_interval_ms" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Polling Interval (ms)
                     </label>
                     <input
@@ -2841,7 +2841,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                       step="100"
                       value={formData.polling_interval_ms}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                       placeholder="1000"
                     />
                   </div>
@@ -2849,7 +2849,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
 
                 <div className="mt-4">
                   <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Register Mappings
                     </label>
                     <div className="flex items-center gap-2">
@@ -2859,7 +2859,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                           handleLoadPreset(e.target.value);
                           e.target.value = '';
                         }}
-                        className="text-xs px-2 py-1 border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                        className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
                       >
                         <option value="">Load Preset...</option>
                         {Object.entries(REGISTER_PRESETS).map(([key, preset]) => (
@@ -2877,7 +2877,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                         title="Import from JSON"
                       >
                         Import
@@ -2887,7 +2887,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                         type="button"
                         onClick={handleExportMappings}
                         disabled={formData.register_mappings.length === 0}
-                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Export to JSON"
                       >
                         Export
@@ -2907,13 +2907,13 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                   </div>
 
                   {formData.register_mappings.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic">No register mappings defined. Use a preset template, import from JSON, or click "Add" to configure manually.</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">No register mappings defined. Use a preset template, import from JSON, or click "Add" to configure manually.</p>
                   ) : (
                     <div className="space-y-3 max-h-48 overflow-y-auto">
                       {formData.register_mappings.map((mapping, index) => (
-                        <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <div key={index} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                           <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs font-medium text-gray-500">Register #{index + 1}</span>
+                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Register #{index + 1}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveRegisterMapping(index)}
@@ -2930,26 +2930,26 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                               placeholder="Name"
                               value={mapping.name}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'name', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             />
                             <input
                               type="number"
                               placeholder="Register #"
                               value={mapping.register}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'register', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             />
                             <input
                               type="text"
                               placeholder="Label (e.g. Water Pump)"
                               value={mapping.label || ''}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'label', e.target.value)}
-                              className="col-span-2 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="col-span-2 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             />
                             <select
                               value={mapping.type}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'type', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             >
                               <option value="holding">Holding Register</option>
                               <option value="input">Input Register</option>
@@ -2959,7 +2959,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                             <select
                               value={mapping.dataType}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'dataType', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             >
                               <option value="uint16">UInt16</option>
                               <option value="int16">Int16</option>
@@ -2973,7 +2973,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                             <select
                               value={mapping.access}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'access', e.target.value)}
-                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             >
                               <option value="read">Read Only</option>
                               <option value="write">Write Only</option>
@@ -2993,7 +2993,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 disabled={saving}
               >
                 Cancel
@@ -3001,7 +3001,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 disabled={saving}
               >
                 Reset
@@ -3264,29 +3264,29 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Edit Equipment
           </h3>
 
           {/* Success Message */}
           {successMessage && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
               <div className="flex items-center">
                 <svg className="h-5 w-5 text-green-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-green-800 text-sm">{successMessage}</span>
+                <span className="text-green-800 dark:text-green-400 text-sm">{successMessage}</span>
               </div>
             </div>
           )}
@@ -3305,7 +3305,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name */}
             <div>
-              <label htmlFor="edit-name" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="edit-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -3314,7 +3314,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="e.g., Temperature Sensor 001"
                 required
               />
@@ -3322,7 +3322,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 
             {/* Description */}
             <div>
-              <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Description
               </label>
               <textarea
@@ -3331,14 +3331,14 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                 value={formData.description}
                 onChange={handleChange}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="Optional description"
               />
             </div>
 
             {/* Type */}
             <div>
-              <label htmlFor="edit-type" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="edit-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Type
               </label>
               <input
@@ -3347,14 +3347,14 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                 name="type"
                 value={formData.type}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="e.g., Temperature Sensor, Relay, Controller"
               />
             </div>
 
             {/* Protocol */}
             <div>
-              <label htmlFor="edit-protocol" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="edit-protocol" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Protocol
               </label>
               <select
@@ -3362,7 +3362,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                 name="protocol"
                 value={formData.protocol}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
               >
                 <option value="modbus">Modbus</option>
                 <option value="mqtt">MQTT</option>
@@ -3374,7 +3374,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 
             {/* Connection Address */}
             <div>
-              <label htmlFor="edit-address" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="edit-address" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Connection Address
               </label>
               <input
@@ -3383,15 +3383,15 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                 name="address"
                 value={formData.address}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="e.g., 192.168.1.100:502 or /dev/ttyUSB0"
               />
             </div>
 
             {/* Modbus Configuration Section */}
             {showModbusConfig && (
-              <div className="border-t border-gray-200 pt-4 mt-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
                   <svg className="w-4 h-4 mr-2 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -3401,7 +3401,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="edit-slave_id" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="edit-slave_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Slave ID (1-247)
                     </label>
                     <input
@@ -3412,13 +3412,13 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                       max="247"
                       value={formData.slave_id}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                       placeholder="e.g., 1"
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="edit-polling_interval_ms" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="edit-polling_interval_ms" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Polling Interval (ms)
                     </label>
                     <input
@@ -3430,7 +3430,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                       step="100"
                       value={formData.polling_interval_ms}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                       placeholder="1000"
                     />
                   </div>
@@ -3438,7 +3438,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 
                 <div className="mt-4">
                   <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Register Mappings
                     </label>
                     <div className="flex items-center gap-2">
@@ -3448,7 +3448,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                           handleLoadPreset(e.target.value);
                           e.target.value = '';
                         }}
-                        className="text-xs px-2 py-1 border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                        className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
                       >
                         <option value="">Load Preset...</option>
                         {Object.entries(REGISTER_PRESETS).map(([key, preset]) => (
@@ -3466,7 +3466,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                         title="Import from JSON"
                       >
                         Import
@@ -3476,7 +3476,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                         type="button"
                         onClick={handleExportMappings}
                         disabled={formData.register_mappings.length === 0}
-                        className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Export to JSON"
                       >
                         Export
@@ -3496,13 +3496,13 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                   </div>
 
                   {formData.register_mappings.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic">No register mappings defined. Use a preset template, import from JSON, or click "Add" to configure manually.</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">No register mappings defined. Use a preset template, import from JSON, or click "Add" to configure manually.</p>
                   ) : (
                     <div className="space-y-3 max-h-48 overflow-y-auto">
                       {formData.register_mappings.map((mapping, index) => (
-                        <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <div key={index} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                           <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs font-medium text-gray-500">Register #{index + 1}</span>
+                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Register #{index + 1}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveRegisterMapping(index)}
@@ -3519,26 +3519,26 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                               placeholder="Name"
                               value={mapping.name}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'name', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             />
                             <input
                               type="number"
                               placeholder="Register #"
                               value={mapping.register}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'register', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             />
                             <input
                               type="text"
                               placeholder="Label (e.g. Water Pump)"
                               value={mapping.label || ''}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'label', e.target.value)}
-                              className="col-span-2 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="col-span-2 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             />
                             <select
                               value={mapping.type}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'type', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             >
                               <option value="holding">Holding Register</option>
                               <option value="input">Input Register</option>
@@ -3548,7 +3548,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                             <select
                               value={mapping.dataType}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'dataType', e.target.value)}
-                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             >
                               <option value="uint16">UInt16</option>
                               <option value="int16">Int16</option>
@@ -3562,7 +3562,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                             <select
                               value={mapping.access}
                               onChange={(e) => handleUpdateRegisterMapping(index, 'access', e.target.value)}
-                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-primary-500 focus:border-primary-500"
+                              className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                             >
                               <option value="read">Read Only</option>
                               <option value="write">Write Only</option>
@@ -3582,7 +3582,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 disabled={saving}
               >
                 Cancel
@@ -4221,19 +4221,19 @@ export default function Equipment() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        <span className="ml-3 text-gray-500">Loading equipment...</span>
+        <span className="ml-3 text-gray-500 dark:text-gray-400">Loading equipment...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
         <div className="flex items-center">
           <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <span className="text-red-800">{error}</span>
+          <span className="text-red-800 dark:text-red-400">{error}</span>
         </div>
         <button
           onClick={fetchData}
@@ -4249,12 +4249,12 @@ export default function Equipment() {
   if (equipmentNotFound) {
     return (
       <div className="max-w-lg mx-auto mt-12">
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-6 text-center">
           <svg className="h-12 w-12 text-amber-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          <h2 className="text-xl font-semibold text-amber-800 mb-2">Equipment Not Found</h2>
-          <p className="text-amber-700 mb-4">
+          <h2 className="text-xl font-semibold text-amber-800 dark:text-amber-400 mb-2">Equipment Not Found</h2>
+          <p className="text-amber-700 dark:text-amber-500 mb-4">
             The equipment with ID "{urlEquipmentId}" does not exist or may have been deleted.
           </p>
           <button
@@ -4274,7 +4274,7 @@ export default function Equipment() {
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Equipment</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Equipment</h1>
         <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
           <button
             onClick={handleScan}
@@ -4338,8 +4338,8 @@ export default function Equipment() {
       {scanResult && (
         <div className={`mb-6 p-4 rounded-lg ${
           scanResult.type === 'success'
-            ? 'bg-green-50 border border-green-200'
-            : 'bg-red-50 border border-red-200'
+            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+            : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
         }`}>
           <div className="flex items-center">
             {scanResult.type === 'success' ? (
@@ -4351,7 +4351,7 @@ export default function Equipment() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             )}
-            <span className={scanResult.type === 'success' ? 'text-green-800' : 'text-red-800'}>
+            <span className={scanResult.type === 'success' ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}>
               {scanResult.message}
               {scanResult.discovered && scanResult.discovered.length > 0 && (
                 <span className="ml-2">({scanResult.discovered.length} devices found)</span>
@@ -4365,7 +4365,7 @@ export default function Equipment() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow mb-6 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <label htmlFor="search" className="sr-only">Search equipment</label>
@@ -4378,7 +4378,7 @@ export default function Equipment() {
               <input
                 type="text"
                 id="search"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 placeholder="Search by name, type, or description..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -4389,7 +4389,7 @@ export default function Equipment() {
             <label htmlFor="status-filter" className="sr-only">Filter by status</label>
             <select
               id="status-filter"
-              className="block w-full py-2 px-3 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              className="block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
@@ -4408,7 +4408,7 @@ export default function Equipment() {
                 setSearchTerm('');
                 setStatusFilter('');
               }}
-              className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center whitespace-nowrap"
+              className="px-4 py-2 text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center whitespace-nowrap"
             >
               <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -4420,14 +4420,14 @@ export default function Equipment() {
       </div>
 
       {/* Equipment Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden overflow-x-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden overflow-x-auto">
         {filteredEquipment.length === 0 ? (
           <div className="text-center py-12">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No equipment</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No equipment</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {equipment.length === 0
                 ? 'Get started by adding your first piece of equipment.'
                 : 'No equipment matches your current filters.'}
@@ -4447,12 +4447,12 @@ export default function Equipment() {
             )}
           </div>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th
                   scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('name')}
                 >
                   <div className="flex items-center gap-1">
@@ -4466,7 +4466,7 @@ export default function Equipment() {
                 </th>
                 <th
                   scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('type')}
                 >
                   <div className="flex items-center gap-1">
@@ -4480,7 +4480,7 @@ export default function Equipment() {
                 </th>
                 <th
                   scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('status')}
                 >
                   <div className="flex items-center gap-1">
@@ -4494,7 +4494,7 @@ export default function Equipment() {
                 </th>
                 <th
                   scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none"
                   onClick={() => handleSort('zone')}
                 >
                   <div className="flex items-center gap-1">
@@ -4511,37 +4511,37 @@ export default function Equipment() {
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {paginatedEquipment.map((eq) => {
                 const isDisabled = eq.enabled === 0 || eq.enabled === false;
                 return (
                 <tr
                   key={eq.id}
-                  className={`hover:bg-gray-50 transition-colors cursor-pointer ${isDisabled ? 'opacity-60 bg-gray-50' : ''}`}
+                  className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${isDisabled ? 'opacity-60 bg-gray-50 dark:bg-gray-900' : ''}`}
                   onClick={() => handleViewEquipment(eq)}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className={`flex-shrink-0 h-10 w-10 rounded-lg flex items-center justify-center ${isDisabled ? 'bg-gray-200' : 'bg-gray-100'}`}>
+                      <div className={`flex-shrink-0 h-10 w-10 rounded-lg flex items-center justify-center ${isDisabled ? 'bg-gray-200 dark:bg-gray-700' : 'bg-gray-100 dark:bg-gray-700'}`}>
                         <svg className={`h-6 w-6 ${isDisabled ? 'text-gray-400' : 'text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                         </svg>
                       </div>
                       <div className="ml-4">
-                        <div className={`text-sm font-medium ${isDisabled ? 'text-gray-500' : 'text-gray-900'}`}>
+                        <div className={`text-sm font-medium ${isDisabled ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'}`}>
                           {eq.name}
                           {isDisabled && <span className="ml-2 text-xs text-gray-400">(Disabled)</span>}
                         </div>
                         {eq.description && (
-                          <div className="text-sm text-gray-500 truncate max-w-xs">{eq.description}</div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{eq.description}</div>
                         )}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className={`text-sm ${isDisabled ? 'text-gray-500' : 'text-gray-900'}`}>{eq.type || '-'}</div>
+                    <div className={`text-sm ${isDisabled ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-white'}`}>{eq.type || '-'}</div>
                     {eq.protocol && (
-                      <div className="text-xs text-gray-500 uppercase">{eq.protocol}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">{eq.protocol}</div>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -4553,7 +4553,7 @@ export default function Equipment() {
                         {eq.zones.map((zone, idx) => (
                           <span
                             key={zone.id || idx}
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
                           >
                             {zone.name}
                           </span>
@@ -4620,10 +4620,10 @@ export default function Equipment() {
 
       {/* Pagination Controls */}
       {filteredEquipment.length > 0 && (
-        <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4">
+        <div className="mt-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Items per page selector */}
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
               <label htmlFor="items-per-page">Show</label>
               <select
                 id="items-per-page"
@@ -4632,7 +4632,7 @@ export default function Equipment() {
                   setItemsPerPage(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="border border-gray-300 rounded px-2 py-1 focus:ring-primary-500 focus:border-primary-500"
+                className="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -4643,7 +4643,7 @@ export default function Equipment() {
             </div>
 
             {/* Page info */}
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
               Showing {startIndex + 1} to {Math.min(endIndex, filteredEquipment.length)} of {filteredEquipment.length} equipment
               {equipment.length !== filteredEquipment.length && (
                 <span className="text-gray-400"> (filtered from {equipment.length} total)</span>
@@ -4655,7 +4655,7 @@ export default function Equipment() {
               <button
                 onClick={goToFirstPage}
                 disabled={currentPage === 1}
-                className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
                 title="First page"
               >
                 «
@@ -4663,7 +4663,7 @@ export default function Equipment() {
               <button
                 onClick={goToPrevPage}
                 disabled={currentPage === 1}
-                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
                 title="Previous page"
               >
                 ‹ Prev
@@ -4693,7 +4693,7 @@ export default function Equipment() {
                       className={`px-3 py-1 text-sm border rounded ${
                         currentPage === pageNum
                           ? 'bg-primary-600 text-white border-primary-600'
-                          : 'border-gray-300 hover:bg-gray-50'
+                          : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300'
                       }`}
                     >
                       {pageNum}
@@ -4705,7 +4705,7 @@ export default function Equipment() {
               <button
                 onClick={goToNextPage}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
                 title="Next page"
               >
                 Next ›
@@ -4713,7 +4713,7 @@ export default function Equipment() {
               <button
                 onClick={goToLastPage}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
                 title="Last page"
               >
                 »
@@ -4722,7 +4722,7 @@ export default function Equipment() {
           </div>
 
           {/* Connection status */}
-          <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-sm">
+          <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-sm">
             <span className="flex items-center gap-2">
               {connected ? (
                 <>
@@ -4786,20 +4786,20 @@ export default function Equipment() {
             ></div>
 
             {/* Modal */}
-            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg relative">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
               {/* Warning Icon */}
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
                 <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
 
-              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-center mb-2">
                 Delete Equipment
               </h3>
 
-              <p className="text-sm text-gray-500 text-center mb-4">
-                Are you sure you want to delete <span className="font-semibold text-gray-900">{equipmentToDelete?.name}</span>?
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-4">
+                Are you sure you want to delete <span className="font-semibold text-gray-900 dark:text-white">{equipmentToDelete?.name}</span>?
                 This action cannot be undone.
               </p>
 
@@ -4807,8 +4807,8 @@ export default function Equipment() {
               {deleteMessage && (
                 <div className={`mb-4 p-3 rounded-lg text-sm ${
                   deleteMessage.type === 'success'
-                    ? 'bg-green-50 text-green-800 border border-green-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800'
                 }`}>
                   <div className="flex items-center justify-center">
                     {deleteMessage.type === 'success' ? (
@@ -4830,7 +4830,7 @@ export default function Equipment() {
                 <button
                   type="button"
                   onClick={closeDeleteConfirmation}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                   disabled={deleteLoading}
                 >
                   Cancel

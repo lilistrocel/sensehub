@@ -310,6 +310,17 @@ const initSchema = () => {
     console.log('write_only column already exists or migration skipped');
   }
 
+  // Add name column to readings table for multi-metric sensors (e.g., 7-in-1 soil meter)
+  try {
+    const readingsCols = db.pragma("table_info(readings)").map(col => col.name);
+    if (!readingsCols.includes('name')) {
+      db.exec("ALTER TABLE readings ADD COLUMN name TEXT");
+      console.log('Added name column to readings table');
+    }
+  } catch (err) {
+    console.log('readings name column already exists or migration skipped');
+  }
+
   console.log('Database schema initialized');
   return true;
 };

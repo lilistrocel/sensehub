@@ -10,7 +10,7 @@ const API_BASE = '/api';
 function ReadingsChart({ readings }) {
   if (!readings || readings.length === 0) {
     return (
-      <div className="text-center text-gray-500 py-8">
+      <div className="text-center text-gray-500 dark:text-gray-400 py-8">
         No readings data available for this time range
       </div>
     );
@@ -145,7 +145,7 @@ function ReadingsChart({ readings }) {
             x={label.x}
             y={height - padding.bottom + 20}
             textAnchor="middle"
-            className="text-xs fill-gray-500"
+            className="text-xs fill-gray-500 dark:fill-gray-400"
           >
             {label.label}
           </text>
@@ -158,7 +158,7 @@ function ReadingsChart({ readings }) {
             x={padding.left - 10}
             y={label.y + 4}
             textAnchor="end"
-            className="text-xs fill-gray-500"
+            className="text-xs fill-gray-500 dark:fill-gray-400"
           >
             {label.label}
           </text>
@@ -186,7 +186,7 @@ function ReadingsChart({ readings }) {
               className="w-3 h-3 rounded-full"
               style={{ backgroundColor: color }}
             ></div>
-            <span className="text-sm text-gray-600">{name}</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">{name}</span>
           </div>
         ))}
       </div>
@@ -298,13 +298,13 @@ export default function Dashboard() {
       // Update the specific sensor reading in state
       setSensorReadings(prev => {
         const updated = prev.map(reading =>
-          reading.equipment_id === data.equipment_id
+          reading.equipment_id === data.equipment_id && (reading.name || '') === (data.name || '')
             ? { ...reading, value: data.value, unit: data.unit, timestamp: data.timestamp }
             : reading
         );
-        // If it's a new equipment, add it
-        if (!prev.some(r => r.equipment_id === data.equipment_id)) {
-          updated.push(data);
+        // If it's a new equipment+metric combo, add it
+        if (!prev.some(r => r.equipment_id === data.equipment_id && (r.name || '') === (data.name || ''))) {
+          updated.push({ ...data, equipment_name: data.equipment_name });
         }
         return updated;
       });
@@ -520,19 +520,19 @@ export default function Dashboard() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
 
         {/* Zone Filter */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <label htmlFor="zone-filter" className="text-sm font-medium text-gray-700">
+            <label htmlFor="zone-filter" className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Zone:
             </label>
             <select
               id="zone-filter"
               value={selectedZoneId}
               onChange={handleZoneChange}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px] dark:bg-gray-700 dark:text-white"
             >
               <option value="">All Zones</option>
               {zones.map((zone) => (
@@ -545,14 +545,14 @@ export default function Dashboard() {
 
           {/* Time Range Selector */}
           <div className="flex items-center gap-2">
-            <label htmlFor="time-range" className="text-sm font-medium text-gray-700">
+            <label htmlFor="time-range" className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Time Range:
             </label>
             <select
               id="time-range"
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px]"
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px] dark:bg-gray-700 dark:text-white"
             >
               {timeRangeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -568,7 +568,7 @@ export default function Dashboard() {
             disabled={isRefreshing || loading}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
               isRefreshing || loading
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
             title={lastRefreshTime ? `Last refreshed: ${lastRefreshTime.toLocaleTimeString()}` : 'Click to refresh data'}
@@ -593,17 +593,17 @@ export default function Dashboard() {
 
       {/* Zone indicator */}
       {selectedZone && (
-        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 flex items-center gap-2">
+        <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 flex items-center gap-2">
           <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          <span className="text-blue-800 font-medium">
+          <span className="text-blue-800 dark:text-blue-300 font-medium">
             Viewing: {selectedZone.name}
           </span>
           <button
             onClick={() => setSelectedZoneId('')}
-            className="ml-auto text-blue-600 hover:text-blue-800 text-sm underline focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
+            className="ml-auto text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm underline focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
           >
             Clear filter
           </button>
@@ -615,43 +615,43 @@ export default function Dashboard() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600">{error}</p>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-red-600 dark:text-red-400">{error}</p>
         </div>
       ) : (
         <>
           {/* Statistics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-sm font-medium text-gray-500">Equipment Online</h3>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Equipment Online</h3>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
                 {stats.equipmentOnline}
                 {stats.totalEquipment > 0 && (
-                  <span className="text-sm font-normal text-gray-500 ml-2">
+                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">
                     / {stats.totalEquipment}
                   </span>
                 )}
               </p>
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-sm font-medium text-gray-500">Active Zones</h3>
-              <p className="text-3xl font-bold text-gray-900 mt-2">{stats.activeZones}</p>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Active Zones</h3>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{stats.activeZones}</p>
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-sm font-medium text-gray-500">Automations Running</h3>
-              <p className="text-3xl font-bold text-gray-900 mt-2">{stats.automationsRunning}</p>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Automations Running</h3>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{stats.automationsRunning}</p>
             </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-sm font-medium text-gray-500">Active Alerts</h3>
-              <p className="text-3xl font-bold text-gray-900 mt-2">{stats.activeAlerts}</p>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Active Alerts</h3>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{stats.activeAlerts}</p>
             </div>
           </div>
 
           {/* Quick Actions Panel */}
           {!selectedZoneId && canControl && (
-            <div className="bg-white rounded-lg shadow mb-6">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Quick Actions</h2>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -673,48 +673,48 @@ export default function Dashboard() {
 
           {/* Zone Equipment List */}
           {zoneData && zoneData.equipment && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                   Equipment in {selectedZone?.name || 'Zone'}
                 </h2>
               </div>
               {zoneData.equipment.length === 0 ? (
-                <div className="px-6 py-8 text-center text-gray-500">
+                <div className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                   No equipment assigned to this zone
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-900">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Communication</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Last Communication</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {zoneData.equipment.map((equip) => (
-                        <tr key={equip.id} className="hover:bg-gray-50">
+                        <tr key={equip.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{equip.name}</div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">{equip.name}</div>
                             {equip.description && (
-                              <div className="text-sm text-gray-500">{equip.description}</div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">{equip.description}</div>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{equip.type}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{equip.type}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2 py-1 text-xs rounded-full ${
-                              equip.status === 'online' ? 'bg-green-100 text-green-800' :
-                              equip.status === 'offline' ? 'bg-gray-100 text-gray-800' :
-                              equip.status === 'warning' ? 'bg-amber-100 text-amber-800' :
-                              'bg-red-100 text-red-800'
+                              equip.status === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                              equip.status === 'offline' ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' :
+                              equip.status === 'warning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
+                              'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                             }`}>
                               {equip.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                             {equip.last_communication
                               ? formatDateTime(equip.last_communication)
                               : 'Never'}
@@ -730,13 +730,13 @@ export default function Dashboard() {
 
           {/* Recent Alerts for Zone View */}
           {zoneData && zoneData.alerts && zoneData.alerts.length > 0 && (
-            <div className="mt-6 bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">
+            <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                   Recent Alerts in {selectedZone?.name || 'Zone'}
                 </h2>
               </div>
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {zoneData.alerts.map((alert) => (
                   <div key={alert.id} className="px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -746,14 +746,14 @@ export default function Dashboard() {
                         'bg-blue-500'
                       }`}></span>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{alert.message}</p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{alert.message}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                           {formatDateTime(alert.created_at)}
                         </p>
                       </div>
                     </div>
                     {alert.acknowledged && (
-                      <span className="text-xs text-green-600">Acknowledged</span>
+                      <span className="text-xs text-green-600 dark:text-green-400">Acknowledged</span>
                     )}
                   </div>
                 ))}
@@ -763,9 +763,9 @@ export default function Dashboard() {
 
           {/* Sensor Readings Widget */}
           {!selectedZoneId && sensorReadings && sensorReadings.length > 0 && (
-            <div className="bg-white rounded-lg shadow mb-6">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Live Sensor Readings</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Live Sensor Readings</h2>
                 <div className="flex items-center gap-2">
                   {connected && (
                     <span className="flex items-center gap-1 text-xs text-green-600">
@@ -774,7 +774,7 @@ export default function Dashboard() {
                     </span>
                   )}
                   {lastReadingUpdate && (
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
                       Updated: {formatTime(lastReadingUpdate)}
                     </span>
                   )}
@@ -783,13 +783,18 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
                 {sensorReadings.map((reading) => (
                   <div
-                    key={reading.id || reading.equipment_id}
-                    className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                    key={reading.id || `${reading.equipment_id}-${reading.name || ''}`}
+                    className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-700">
-                        {reading.equipment_name || `Equipment #${reading.equipment_id}`}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {reading.equipment_name || `Equipment #${reading.equipment_id}`}
+                        </span>
+                        {reading.name && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{reading.name}</span>
+                        )}
+                      </div>
                       <span className={`w-2 h-2 rounded-full ${
                         reading.equipment_status === 'online' ? 'bg-green-500' :
                         reading.equipment_status === 'warning' ? 'bg-amber-500' :
@@ -798,12 +803,12 @@ export default function Dashboard() {
                       }`}></span>
                     </div>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-bold text-gray-900">
+                      <span className="text-3xl font-bold text-gray-900 dark:text-white">
                         {typeof reading.value === 'number' ? reading.value.toFixed(1) : reading.value}
                       </span>
-                      <span className="text-lg text-gray-500">{reading.unit || ''}</span>
+                      <span className="text-lg text-gray-500 dark:text-gray-400">{reading.unit || ''}</span>
                     </div>
-                    <div className="text-xs text-gray-400 mt-2">
+                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-2">
                       {reading.timestamp
                         ? formatDateTime(reading.timestamp)
                         : 'No timestamp'}
@@ -816,11 +821,11 @@ export default function Dashboard() {
 
           {/* Historical Readings Chart */}
           {!selectedZoneId && overview && overview.chartReadings && overview.chartReadings.length > 0 && (
-            <div className="bg-white rounded-lg shadow mb-6">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Sensor Readings Chart</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Sensor Readings Chart</h2>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
                     {timeRangeOptions.find(o => o.value === timeRange)?.label || 'Last 24 hours'}
                   </span>
                   <button
@@ -875,10 +880,10 @@ export default function Dashboard() {
 
           {/* Equipment Control Widget */}
           {!selectedZoneId && equipmentList && equipmentList.length > 0 && (
-            <div className="bg-white rounded-lg shadow mb-6">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Equipment Control</h2>
-                <span className="text-sm text-gray-500">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Equipment Control</h2>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
                   {equipmentList.filter(e => e.status === 'online').length} / {equipmentList.length} online
                 </span>
               </div>
@@ -887,14 +892,14 @@ export default function Dashboard() {
               {controlMessage && (
                 <div className={`mx-6 mt-4 p-3 rounded-lg text-sm ${
                   controlMessage.type === 'success'
-                    ? 'bg-green-50 text-green-800 border border-green-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800'
                 }`}>
                   {controlMessage.text}
                 </div>
               )}
 
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {equipmentList.map((equipment) => (
                   <div key={equipment.id} className="px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -907,15 +912,15 @@ export default function Dashboard() {
                         'bg-gray-400'
                       }`}></span>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{equipment.name}</p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{equipment.name}</p>
+                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                           {equipment.type && <span>{equipment.type}</span>}
                           <span className={`px-1.5 py-0.5 rounded ${
-                            equipment.status === 'online' ? 'bg-green-100 text-green-700' :
-                            equipment.status === 'offline' ? 'bg-gray-100 text-gray-600' :
-                            equipment.status === 'warning' ? 'bg-amber-100 text-amber-700' :
-                            equipment.status === 'error' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-600'
+                            equipment.status === 'online' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                            equipment.status === 'offline' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
+                            equipment.status === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                            equipment.status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                            'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
                           }`}>
                             {equipment.status || 'unknown'}
                           </span>
@@ -930,7 +935,7 @@ export default function Dashboard() {
                             disabled={controlLoading[equipment.id] || equipment.status === 'online'}
                             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
                               equipment.status === 'online'
-                                ? 'bg-green-100 text-green-700 cursor-default'
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default'
                                 : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'
                             }`}
                           >
@@ -951,7 +956,7 @@ export default function Dashboard() {
                             disabled={controlLoading[equipment.id] || equipment.status === 'offline'}
                             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 ${
                               equipment.status === 'offline'
-                                ? 'bg-gray-100 text-gray-500 cursor-default'
+                                ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-default'
                                 : 'bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50'
                             }`}
                           >
@@ -969,7 +974,7 @@ export default function Dashboard() {
                           </button>
                         </>
                       ) : (
-                        <span className="text-xs text-gray-400 italic">View only</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 italic">View only</span>
                       )}
                     </div>
                   </div>
@@ -980,14 +985,14 @@ export default function Dashboard() {
 
           {/* Active Automations Panel */}
           {!selectedZoneId && overview && overview.activeAutomations && overview.activeAutomations.length > 0 && (
-            <div className="bg-white rounded-lg shadow mb-6">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Active Automations</h2>
-                <span className="text-sm text-gray-500">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Active Automations</h2>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
                   {overview.activeAutomations.length} enabled
                 </span>
               </div>
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {overview.activeAutomations.map((automation) => {
                   // Parse trigger config to get trigger type
                   let triggerType = 'Unknown';
@@ -1011,9 +1016,9 @@ export default function Dashboard() {
                           'bg-gray-400'
                         }`}></span>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{automation.name}</p>
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span className="px-1.5 py-0.5 bg-gray-100 rounded">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">{automation.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
                               {triggerType}
                             </span>
                             {automation.run_count > 0 && (
@@ -1023,15 +1028,15 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
                           {automation.last_run
                             ? `Last run: ${formatDateTime(automation.last_run)}`
                             : 'Never run'}
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           automation.enabled
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-600'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
                         }`}>
                           {automation.enabled ? 'Enabled' : 'Disabled'}
                         </span>
@@ -1045,15 +1050,15 @@ export default function Dashboard() {
 
           {/* Overview Recent Alerts */}
           {overview && overview.recentAlerts && overview.recentAlerts.length > 0 && (
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Recent Alerts</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Alerts</h2>
               </div>
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {overview.recentAlerts.map((alert) => (
                   <div
                     key={alert.id}
-                    className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
                     onClick={() => setSelectedAlert(alert)}
                     role="button"
                     tabIndex={0}
@@ -1066,17 +1071,17 @@ export default function Dashboard() {
                         'bg-blue-500'
                       }`}></span>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{alert.message}</p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{alert.message}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                           {alert.equipment_name && `${alert.equipment_name} • `}
                           {formatDateTime(alert.created_at)}
                         </p>
                       </div>
                     </div>
                     {alert.acknowledged ? (
-                      <span className="text-xs text-green-600">Acknowledged</span>
+                      <span className="text-xs text-green-600 dark:text-green-400">Acknowledged</span>
                     ) : (
-                      <span className="text-xs text-gray-400">0</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">0</span>
                     )}
                   </div>
                 ))}
@@ -1087,12 +1092,12 @@ export default function Dashboard() {
           {/* Alert Details Modal */}
           {selectedAlert && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setSelectedAlert(null)}>
-              <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900">Alert Details</h3>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Alert Details</h3>
                   <button
                     onClick={() => setSelectedAlert(null)}
-                    className="text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
+                    className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1102,11 +1107,11 @@ export default function Dashboard() {
                 <div className="px-6 py-4 space-y-4">
                   {/* Severity Badge */}
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500">Severity:</span>
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Severity:</span>
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      selectedAlert.severity === 'critical' ? 'bg-red-100 text-red-800' :
-                      selectedAlert.severity === 'warning' ? 'bg-amber-100 text-amber-800' :
-                      'bg-blue-100 text-blue-800'
+                      selectedAlert.severity === 'critical' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                      selectedAlert.severity === 'warning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
+                      'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
                     }`}>
                       {selectedAlert.severity?.toUpperCase() || 'INFO'}
                     </span>
@@ -1114,37 +1119,37 @@ export default function Dashboard() {
 
                   {/* Message */}
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Message:</span>
-                    <p className="mt-1 text-sm text-gray-900">{selectedAlert.message}</p>
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Message:</span>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedAlert.message}</p>
                   </div>
 
                   {/* Equipment */}
                   {selectedAlert.equipment_name && (
                     <div>
-                      <span className="text-sm font-medium text-gray-500">Equipment:</span>
-                      <p className="mt-1 text-sm text-gray-900">{selectedAlert.equipment_name}</p>
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Equipment:</span>
+                      <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedAlert.equipment_name}</p>
                     </div>
                   )}
 
                   {/* Zone */}
                   {selectedAlert.zone_name && (
                     <div>
-                      <span className="text-sm font-medium text-gray-500">Zone:</span>
-                      <p className="mt-1 text-sm text-gray-900">{selectedAlert.zone_name}</p>
+                      <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Zone:</span>
+                      <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedAlert.zone_name}</p>
                     </div>
                   )}
 
                   {/* Timestamp */}
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Created:</span>
-                    <p className="mt-1 text-sm text-gray-900">
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Created:</span>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-white">
                       {formatDateTime(selectedAlert.created_at)}
                     </p>
                   </div>
 
                   {/* Acknowledged Status */}
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Status:</span>
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Status:</span>
                     <p className="mt-1 text-sm">
                       {selectedAlert.acknowledged ? (
                         <span className="text-green-600">
@@ -1159,14 +1164,14 @@ export default function Dashboard() {
 
                   {/* Alert ID */}
                   <div>
-                    <span className="text-sm font-medium text-gray-500">Alert ID:</span>
-                    <p className="mt-1 text-sm text-gray-400">#{selectedAlert.id}</p>
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Alert ID:</span>
+                    <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">#{selectedAlert.id}</p>
                   </div>
                 </div>
-                <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
                   <button
                     onClick={() => setSelectedAlert(null)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
                   >
                     Close
                   </button>

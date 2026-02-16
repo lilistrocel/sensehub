@@ -169,7 +169,7 @@ export default function Layout({ children }) {
         {/* Footer with system status */}
         <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-between">
-            <span>SenseHub v1.0.0</span>
+            <span>A20Core - SenseHub v1.0.0</span>
             <div className="flex items-center space-x-4">
               <span className="flex items-center">
                 <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
