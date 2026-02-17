@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useSettings } from '../context/SettingsContext';
+import { getChannelDisplayName } from '../utils/channelUtils';
 
 const API_BASE = '/api';
 
@@ -335,9 +336,22 @@ export default function Dashboard() {
       ));
     });
 
+    const unsubscribeRelay = subscribe('relay_state_changed', (data) => {
+      setEquipmentList(prev => prev.map(eq => {
+        if (eq.id === data.equipmentId && eq.last_reading) {
+          const updated = { ...eq, last_reading: { ...eq.last_reading } };
+          if (!updated.last_reading.relayStates) updated.last_reading.relayStates = {};
+          updated.last_reading.relayStates[data.channel] = data.state;
+          return updated;
+        }
+        return eq;
+      }));
+    });
+
     return () => {
       unsubscribeControl();
       unsubscribeStatus();
+      unsubscribeRelay();
     };
   }, [subscribe]);
 
@@ -376,6 +390,49 @@ export default function Dashboard() {
       setControlMessage({ type: 'error', text: err.message });
     } finally {
       setControlLoading(prev => ({ ...prev, [equipmentId]: false }));
+    }
+  };
+
+  // Handle per-channel relay control
+  const handleRelayChannelControl = async (equipmentId, channelAddress, newState) => {
+    if (!canControl) return;
+
+    const loadingKey = `${equipmentId}_${channelAddress}`;
+    setControlLoading(prev => ({ ...prev, [loadingKey]: true }));
+    setControlMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipmentId}/relay/control`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ channel: channelAddress, state: newState })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to control relay channel');
+      }
+
+      // Update local state
+      setEquipmentList(prev => prev.map(eq => {
+        if (eq.id === equipmentId) {
+          const updated = { ...eq, last_reading: { ...(eq.last_reading || {}) } };
+          if (!updated.last_reading.relayStates) updated.last_reading.relayStates = {};
+          updated.last_reading.relayStates[channelAddress] = newState;
+          return updated;
+        }
+        return eq;
+      }));
+
+      setControlMessage({ type: 'success', text: `Channel ${channelAddress} turned ${newState ? 'on' : 'off'}` });
+      setTimeout(() => setControlMessage(null), 3000);
+    } catch (err) {
+      setControlMessage({ type: 'error', text: err.message });
+    } finally {
+      setControlLoading(prev => ({ ...prev, [loadingKey]: false }));
     }
   };
 
@@ -900,85 +957,112 @@ export default function Dashboard() {
               )}
 
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {equipmentList.map((equipment) => (
-                  <div key={equipment.id} className="px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {/* Status indicator */}
-                      <span className={`w-3 h-3 rounded-full ${
-                        equipment.status === 'online' ? 'bg-green-500' :
-                        equipment.status === 'offline' ? 'bg-gray-400' :
-                        equipment.status === 'warning' ? 'bg-amber-500' :
-                        equipment.status === 'error' ? 'bg-red-500' :
-                        'bg-gray-400'
-                      }`}></span>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">{equipment.name}</p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                          {equipment.type && <span>{equipment.type}</span>}
-                          <span className={`px-1.5 py-0.5 rounded ${
-                            equipment.status === 'online' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                            equipment.status === 'offline' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
-                            equipment.status === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                            equipment.status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                            'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                          }`}>
-                            {equipment.status || 'unknown'}
-                          </span>
+                {equipmentList.map((equipment) => {
+                  // Detect relay channels from register_mappings
+                  const relayChannels = (equipment.register_mappings || [])
+                    .filter(m => m.type === 'coil' && m.access === 'readwrite')
+                    .map(m => ({
+                      ...m,
+                      address: parseInt(m.register ?? m.address, 10),
+                      displayName: getChannelDisplayName(m)
+                    }));
+                  const relayStates = equipment.last_reading?.relayStates || {};
+                  const isRelayBoard = relayChannels.length > 0;
+
+                  return (
+                    <div key={equipment.id} className="px-6 py-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                            equipment.status === 'online' ? 'bg-green-500' :
+                            equipment.status === 'offline' ? 'bg-gray-400' :
+                            equipment.status === 'warning' ? 'bg-amber-500' :
+                            equipment.status === 'error' ? 'bg-red-500' :
+                            'bg-gray-400'
+                          }`}></span>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{equipment.name}</p>
+                            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                              {equipment.type && <span>{equipment.type}</span>}
+                              <span className={`px-1.5 py-0.5 rounded ${
+                                equipment.status === 'online' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                equipment.status === 'offline' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
+                                equipment.status === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                                equipment.status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                              }`}>
+                                {equipment.status || 'unknown'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
+                        {!isRelayBoard && (
+                          <div className="flex items-center gap-2">
+                            {canControl ? (
+                              <>
+                                <button
+                                  onClick={() => handleEquipmentControl(equipment.id, 'on')}
+                                  disabled={controlLoading[equipment.id] || equipment.status === 'online'}
+                                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+                                    equipment.status === 'online'
+                                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default'
+                                      : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'
+                                  }`}
+                                >
+                                  On
+                                </button>
+                                <button
+                                  onClick={() => handleEquipmentControl(equipment.id, 'off')}
+                                  disabled={controlLoading[equipment.id] || equipment.status === 'offline'}
+                                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${
+                                    equipment.status === 'offline'
+                                      ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-default'
+                                      : 'bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50'
+                                  }`}
+                                >
+                                  Off
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-gray-400 dark:text-gray-500 italic">View only</span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {canControl ? (
-                        <>
-                          <button
-                            onClick={() => handleEquipmentControl(equipment.id, 'on')}
-                            disabled={controlLoading[equipment.id] || equipment.status === 'online'}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
-                              equipment.status === 'online'
-                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 cursor-default'
-                                : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'
-                            }`}
-                          >
-                            {controlLoading[equipment.id] ? (
-                              <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                            ) : (
-                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                              </svg>
-                            )}
-                            On
-                          </button>
-                          <button
-                            onClick={() => handleEquipmentControl(equipment.id, 'off')}
-                            disabled={controlLoading[equipment.id] || equipment.status === 'offline'}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 ${
-                              equipment.status === 'offline'
-                                ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-default'
-                                : 'bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50'
-                            }`}
-                          >
-                            {controlLoading[equipment.id] ? (
-                              <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                            ) : (
-                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                              </svg>
-                            )}
-                            Off
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-xs text-gray-400 dark:text-gray-500 italic">View only</span>
+                      {isRelayBoard && (
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {relayChannels.map(ch => {
+                            const isOn = !!relayStates[ch.address];
+                            const loadingKey = `${equipment.id}_${ch.address}`;
+                            const isLoading = controlLoading[loadingKey];
+                            return (
+                              <button
+                                key={ch.address}
+                                onClick={() => canControl && handleRelayChannelControl(equipment.id, ch.address, !isOn)}
+                                disabled={isLoading || !canControl}
+                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                                  isOn
+                                    ? 'bg-green-100 text-green-800 border border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700'
+                                    : 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600'
+                                } ${canControl ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'} disabled:opacity-50`}
+                              >
+                                <span className="truncate mr-2">{ch.displayName}</span>
+                                {isLoading ? (
+                                  <svg className="animate-spin h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                ) : (
+                                  <span className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ${isOn ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

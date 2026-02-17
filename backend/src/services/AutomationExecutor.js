@@ -8,6 +8,8 @@ const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { relayTimerService } = require('./RelayTimerService');
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Execute all actions for an automation.
  *
@@ -190,18 +192,27 @@ async function executeControlAction(action, automation) {
       return { type: 'control', status: 'executed', action: action.action, note: 'No coil mappings found on equipment' };
     }
 
-    // Execute each coil as a separate per-channel action
+    // Execute each coil as a separate per-channel action with optional stagger
+    const staggerMs = (action.stagger_delay_seconds && action.stagger_delay_seconds > 0)
+      ? action.stagger_delay_seconds * 1000
+      : 0;
     const results = [];
-    for (const coil of coils) {
+    for (let i = 0; i < coils.length; i++) {
+      if (staggerMs > 0 && i > 0) {
+        console.log(`[Automation] Stagger delay: waiting ${action.stagger_delay_seconds}s before channel ${coils[i].register ?? coils[i].address}`);
+        await sleep(staggerMs);
+      }
       const channelAction = {
         ...action,
-        channel: parseInt(coil.register ?? coil.address, 10),
-        channel_name: coil.label || coil.name || `Coil ${coil.register ?? coil.address}`
+        channel: parseInt(coils[i].register ?? coils[i].address, 10),
+        channel_name: coils[i].label || coils[i].name || `Coil ${coils[i].register ?? coils[i].address}`,
+        stagger_delay_seconds: null,  // prevent sub-action from re-processing
+        delay_seconds: i === 0 ? action.delay_seconds : null  // only first channel gets the initial delay
       };
       const result = await executeControlAction(channelAction, automation);
       results.push(result);
     }
-    return { type: 'control', status: 'executed', action: action.action, equipment: targetEquipment.name, all_channels: true, channels: results };
+    return { type: 'control', status: 'executed', action: action.action, equipment: targetEquipment.name, all_channels: true, stagger_delay_seconds: action.stagger_delay_seconds || null, channels: results };
   } else {
     return { type: 'control', status: 'executed', action: action.action, note: 'Equipment not found' };
   }

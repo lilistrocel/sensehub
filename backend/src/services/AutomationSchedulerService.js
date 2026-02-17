@@ -212,45 +212,61 @@ class AutomationSchedulerService {
     const sensorType = triggerConfig.sensor_type || 'temperature';
     let currentValue = null;
 
+    // Helper: extract numeric value — handles both raw numbers and {value, unit} objects
+    const extractNumber = (v) => {
+      if (v != null && typeof v === 'object' && v.value !== undefined) return parseFloat(v.value);
+      return parseFloat(v);
+    };
+
     // Check direct sensor value keys
     if (reading[sensorType] !== undefined) {
-      currentValue = parseFloat(reading[sensorType]);
+      currentValue = extractNumber(reading[sensorType]);
     }
     // Check in registers object
     if (currentValue === null && reading.registers) {
       for (const [key, val] of Object.entries(reading.registers)) {
         if (key.toLowerCase().includes(sensorType.toLowerCase())) {
-          currentValue = parseFloat(val);
+          currentValue = extractNumber(val);
           break;
         }
       }
     }
-    // Check in values object
+    // Check in values object (ModbusPollingService stores {value, unit} objects here)
     if (currentValue === null && reading.values) {
       for (const [key, val] of Object.entries(reading.values)) {
         if (key.toLowerCase().includes(sensorType.toLowerCase())) {
-          currentValue = parseFloat(val);
+          currentValue = extractNumber(val);
           break;
         }
       }
     }
 
-    if (currentValue === null || isNaN(currentValue)) return false;
+    if (currentValue === null || isNaN(currentValue)) {
+      console.log(`[Scheduler] Threshold check: could not resolve sensor_type="${sensorType}" for equipment ${triggerConfig.equipment_id}`);
+      return false;
+    }
 
     const threshold = parseFloat(triggerConfig.threshold_value);
     if (isNaN(threshold)) return false;
 
     const operator = triggerConfig.operator || 'gt';
 
-    switch (operator) {
-      case 'gt':  return currentValue > threshold;
-      case 'gte': return currentValue >= threshold;
-      case 'lt':  return currentValue < threshold;
-      case 'lte': return currentValue <= threshold;
-      case 'eq':  return currentValue === threshold;
-      case 'neq': return currentValue !== threshold;
-      default:    return false;
+    const result = (() => {
+      switch (operator) {
+        case 'gt':  return currentValue > threshold;
+        case 'gte': return currentValue >= threshold;
+        case 'lt':  return currentValue < threshold;
+        case 'lte': return currentValue <= threshold;
+        case 'eq':  return currentValue === threshold;
+        case 'neq': return currentValue !== threshold;
+        default:    return false;
+      }
+    })();
+
+    if (result) {
+      console.log(`[Scheduler] Threshold met: ${sensorType}=${currentValue} ${operator} ${threshold} → firing`);
     }
+    return result;
   }
 
   /**

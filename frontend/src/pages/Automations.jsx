@@ -89,6 +89,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   const [controlChannelName, setControlChannelName] = useState('');
   const [controlDuration, setControlDuration] = useState('');
   const [controlDelay, setControlDelay] = useState('');
+  const [controlStaggerDelay, setControlStaggerDelay] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -266,6 +267,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     } else if (actionType === 'control') {
       if (!controlEquipmentId) return;
       const selectedEq = equipment.find(eq => eq.id === parseInt(controlEquipmentId));
+      const isAllChannels = !controlChannel;
       newAction = {
         type: 'control',
         action: controlAction,
@@ -275,7 +277,8 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
         channel: controlChannel ? parseInt(controlChannel) : null,
         channel_name: controlChannelName || null,
         delay_seconds: controlDelay ? parseInt(controlDelay) : null,
-        duration_seconds: controlDuration ? parseInt(controlDuration) : null
+        duration_seconds: controlDuration ? parseInt(controlDuration) : null,
+        ...(isAllChannels && controlStaggerDelay ? { stagger_delay_seconds: parseFloat(controlStaggerDelay) } : {})
       };
     } else if (actionType === 'log') {
       newAction = {
@@ -299,6 +302,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     setControlChannelName('');
     setControlDuration('');
     setControlDelay('');
+    setControlStaggerDelay('');
   };
 
   const removeAction = (index) => {
@@ -1048,9 +1052,18 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                               <span className="text-gray-600 dark:text-gray-400">
                                 {action.equipment_name || `Equipment #${action.equipment_id}` || 'Unknown'}
                               </span>
-                              {action.channel_name && (
+                              {action.channel_name ? (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                                   {action.channel_name}
+                                </span>
+                              ) : action.type === 'control' && action.channel == null && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                                  All channels
+                                </span>
+                              )}
+                              {action.stagger_delay_seconds > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400">
+                                  {action.stagger_delay_seconds}s stagger
                                 </span>
                               )}
                               {action.delay_seconds > 0 && (
@@ -1229,6 +1242,21 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             title="Seconds to wait before executing. 0 or empty = immediate."
                           />
                         </div>
+                        {!controlChannel && (
+                          <div>
+                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Stagger (sec)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={controlStaggerDelay}
+                              onChange={(e) => setControlStaggerDelay(e.target.value)}
+                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
+                              placeholder="0"
+                              title="Seconds between each channel firing. 0 or empty = all at once."
+                            />
+                          </div>
+                        )}
                         {(controlAction === 'on' || controlAction === 'toggle') && (
                           <div>
                             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Auto-off (sec)</label>
@@ -2466,8 +2494,46 @@ export default function Automations() {
                           {auto.description && (
                             <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{auto.description}</div>
                           )}
-                          <div className="mt-1">
+                          <div className="mt-1 flex items-center gap-2">
                             <TriggerBadge triggerConfig={triggerConfig} />
+                            {canEdit && triggerConfig?.type === 'manual' && (auto.enabled === 1 || auto.enabled === true) && (
+                              <button
+                                onClick={(e) => handleTriggerAutomation(auto, e)}
+                                disabled={triggerLoading === auto.id}
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
+                                  triggerLoading === auto.id
+                                    ? 'bg-gray-100 text-gray-400 cursor-wait dark:bg-gray-700 dark:text-gray-500'
+                                    : triggerResult?.id === auto.id && triggerResult?.success
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                    : 'bg-green-600 text-white hover:bg-green-700'
+                                }`}
+                                title="Run this automation now"
+                              >
+                                {triggerLoading === auto.id ? (
+                                  <>
+                                    <svg className="animate-spin -ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Running...
+                                  </>
+                                ) : triggerResult?.id === auto.id && triggerResult?.success ? (
+                                  <>
+                                    <svg className="-ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Done
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="-ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    </svg>
+                                    Run
+                                  </>
+                                )}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2488,46 +2554,6 @@ export default function Automations() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {canEdit && (
                         <>
-                          {/* Run/Trigger button for manual automations */}
-                          {triggerConfig?.type === 'manual' && (auto.enabled === 1 || auto.enabled === true) && (
-                            <button
-                              onClick={(e) => handleTriggerAutomation(auto, e)}
-                              disabled={triggerLoading === auto.id}
-                              className={`mr-3 inline-flex items-center px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                                triggerLoading === auto.id
-                                  ? 'bg-gray-100 text-gray-400 cursor-wait'
-                                  : triggerResult?.id === auto.id && triggerResult?.success
-                                  ? 'bg-green-100 text-green-800'
-                                  : 'bg-green-600 text-white hover:bg-green-700'
-                              }`}
-                              title="Run this automation now"
-                            >
-                              {triggerLoading === auto.id ? (
-                                <>
-                                  <svg className="animate-spin -ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                  </svg>
-                                  Running...
-                                </>
-                              ) : triggerResult?.id === auto.id && triggerResult?.success ? (
-                                <>
-                                  <svg className="-ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Done
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="-ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  Run
-                                </>
-                              )}
-                            </button>
-                          )}
                           <button
                             onClick={(e) => handleToggleEnabled(auto, e)}
                             className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mr-3"

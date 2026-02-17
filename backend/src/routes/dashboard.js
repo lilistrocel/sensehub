@@ -75,12 +75,17 @@ router.get('/overview', (req, res) => {
 
   // Equipment list for direct control (enabled equipment only)
   const equipmentList = db.prepare(`
-    SELECT id, name, description, type, status, enabled
+    SELECT id, name, description, type, status, enabled, register_mappings, last_reading, write_only, slave_id, address
     FROM equipment
     WHERE enabled = 1
     ORDER BY status DESC, name ASC
     LIMIT 20
-  `).all();
+  `).all().map(eq => {
+    // Parse JSON fields for the frontend
+    try { eq.register_mappings = eq.register_mappings ? JSON.parse(eq.register_mappings) : []; } catch (e) { eq.register_mappings = []; }
+    try { eq.last_reading = eq.last_reading ? JSON.parse(eq.last_reading) : null; } catch (e) { eq.last_reading = null; }
+    return eq;
+  });
 
   // Historical readings for chart (filtered by time range)
   const chartReadings = db.prepare(`
