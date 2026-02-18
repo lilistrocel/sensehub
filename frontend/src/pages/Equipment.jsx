@@ -5,7 +5,7 @@ import { useWebSocket } from '../context/WebSocketContext';
 import { useBreadcrumb } from '../components/Breadcrumb';
 import { getUserFriendlyError } from '../utils/errorHandler';
 import { getChannelDisplayName } from '../utils/channelUtils';
-import { formatUtcDate } from '../utils/dateUtils';
+import { useSettings } from '../context/SettingsContext';
 import ErrorMessage from '../components/ErrorMessage';
 
 const API_BASE = '/api';
@@ -152,6 +152,7 @@ function StatusBadge({ status, large = false }) {
 
 // Equipment Detail Modal
 function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, user }) {
+  const { formatDateTime } = useSettings();
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState(null);
   const [error, setError] = useState(null);
@@ -183,6 +184,11 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
   const [timeRange, setTimeRange] = useState('1h');
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyStats, setHistoryStats] = useState({ avg: null, min: null, max: null });
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [chartData, setChartData] = useState([]);
 
   // Error Logs tab state
   const [errorLogs, setErrorLogs] = useState([]);
@@ -266,52 +272,78 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
     }
   };
 
+  const getFromDate = () => {
+    const now = new Date();
+    switch (timeRange) {
+      case '1h': return new Date(now.getTime() - 60 * 60 * 1000);
+      case '24h': return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      case '7d': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case '30d': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      default: return new Date(now.getTime() - 60 * 60 * 1000);
+    }
+  };
+
   const fetchHistory = async () => {
     if (!equipment) return;
 
     setHistoryLoading(true);
     setHistoryError(null);
+    setHistoryOffset(0);
+
+    const from = getFromDate();
 
     try {
-      const now = new Date();
-      let from;
-      switch (timeRange) {
-        case '1h':
-          from = new Date(now.getTime() - 60 * 60 * 1000);
-          break;
-        case '24h':
-          from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-          break;
-        case '7d':
-          from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case '30d':
-          from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          from = new Date(now.getTime() - 60 * 60 * 1000);
+      const [historyRes, chartRes] = await Promise.all([
+        fetch(
+          `${API_BASE}/equipment/${equipment.id}/history?from=${from.toISOString()}&limit=25&offset=0`,
+          { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
+        ),
+        fetch(
+          `${API_BASE}/equipment/${equipment.id}/history/chart?from=${from.toISOString()}`,
+          { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
+        )
+      ]);
+
+      if (!historyRes.ok) throw new Error('Failed to fetch history');
+
+      const data = await historyRes.json();
+      setHistoryData(data.readings);
+      setHistoryTotal(data.total);
+      setHistoryStats(data.stats);
+
+      if (chartRes.ok) {
+        const cData = await chartRes.json();
+        setChartData(cData);
       }
-
-      const response = await fetch(
-        `${API_BASE}/equipment/${equipment.id}/history?from=${from.toISOString()}&limit=100`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch history');
-      }
-
-      const data = await response.json();
-      setHistoryData(data);
     } catch (err) {
       setHistoryError(err.message);
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  const loadMoreHistory = async () => {
+    if (!equipment) return;
+
+    setLoadingMore(true);
+    const newOffset = historyOffset + 25;
+    const from = getFromDate();
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/equipment/${equipment.id}/history?from=${from.toISOString()}&limit=25&offset=${newOffset}`,
+        { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
+      );
+
+      if (!response.ok) throw new Error('Failed to fetch more history');
+
+      const data = await response.json();
+      setHistoryData(prev => [...prev, ...data.readings]);
+      setHistoryOffset(newOffset);
+    } catch (err) {
+      setHistoryError(err.message);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -906,7 +938,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                 <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Communication</span>
                   <span className="text-sm text-gray-900 dark:text-white">
-                    {formatUtcDate(eq.last_communication)}
+                    {formatDateTime(eq.last_communication)}
                   </span>
                 </div>
               )}
@@ -923,7 +955,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
               <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
                 <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</span>
                 <span className="text-sm text-gray-900 dark:text-white">
-                  {eq?.created_at ? formatUtcDate(eq.created_at) : '-'}
+                  {eq?.created_at ? formatDateTime(eq.created_at) : '-'}
                 </span>
               </div>
 
@@ -1236,7 +1268,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     )}
                     {testConnectionResult.last_communication && (
                       <div className="text-xs text-green-700 dark:text-green-400 ml-6">
-                        Last communication: {formatUtcDate(testConnectionResult.last_communication)}
+                        Last communication: {formatDateTime(testConnectionResult.last_communication)}
                       </div>
                     )}
                   </div>
@@ -1373,42 +1405,132 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     </button>
                   </div>
 
-                  {/* Summary Stats */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
-                      <div className="text-xs text-blue-600 dark:text-blue-400 uppercase font-medium">Readings</div>
-                      <div className="text-xl font-bold text-blue-900 dark:text-blue-300">{historyData.length}</div>
-                    </div>
-                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center">
-                      <div className="text-xs text-green-600 dark:text-green-400 uppercase font-medium">Avg Value</div>
-                      <div className="text-xl font-bold text-green-900 dark:text-green-300">
-                        {(historyData.reduce((sum, r) => sum + (parseFloat(r.value) || 0), 0) / historyData.length).toFixed(2)}
+                  {/* Mini Chart — one line per metric */}
+                  {chartData.length > 1 && (() => {
+                    const metricColors = ['#2563EB', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'];
+                    // Group chart data by metric name
+                    const grouped = {};
+                    chartData.forEach(d => {
+                      const key = d.name || '_default';
+                      if (!grouped[key]) grouped[key] = [];
+                      grouped[key].push(d);
+                    });
+                    const metricNames = Object.keys(grouped);
+                    const isSingleMetric = metricNames.length === 1;
+                    const chartHeight = isSingleMetric ? 120 : 160;
+
+                    return (
+                      <div className="mb-4 border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-900">
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium uppercase">Trend</div>
+                        {metricNames.length > 1 && (
+                          <div className="flex flex-wrap gap-3 mb-2">
+                            {metricNames.map((name, i) => (
+                              <span key={name} className="flex items-center text-xs text-gray-600 dark:text-gray-400">
+                                <span className="inline-block w-3 h-1 rounded mr-1.5" style={{ backgroundColor: metricColors[i % metricColors.length] }}></span>
+                                {name === '_default' ? 'Value' : name}
+                                {grouped[name][0]?.unit ? ` (${grouped[name][0].unit})` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <svg viewBox={`0 0 600 ${chartHeight}`} className="w-full h-auto">
+                          <defs>
+                            {metricNames.map((_, i) => (
+                              <linearGradient key={i} id={`chartGrad${i}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={metricColors[i % metricColors.length]} />
+                                <stop offset="100%" stopColor={metricColors[i % metricColors.length]} stopOpacity="0" />
+                              </linearGradient>
+                            ))}
+                          </defs>
+                          {metricNames.map((name, metricIdx) => {
+                            const series = grouped[name];
+                            const values = series.map(d => parseFloat(d.avg_value)).filter(v => !isNaN(v));
+                            if (values.length < 2) return null;
+                            const minV = Math.min(...values);
+                            const maxV = Math.max(...values);
+                            const range = maxV - minV || 1;
+                            const pad = 10;
+                            const w = 600 - pad * 2;
+                            const h = chartHeight - pad * 2;
+                            const points = values.map((v, i) => {
+                              const x = pad + (i / (values.length - 1)) * w;
+                              const y = pad + h - ((v - minV) / range) * h;
+                              return `${x.toFixed(1)},${y.toFixed(1)}`;
+                            });
+                            const color = metricColors[metricIdx % metricColors.length];
+                            const areaPoints = [...points, `${(pad + w).toFixed(1)},${(pad + h).toFixed(1)}`, `${pad.toFixed(1)},${(pad + h).toFixed(1)}`];
+                            return (
+                              <g key={name}>
+                                {isSingleMetric && <polygon points={areaPoints.join(' ')} fill={`url(#chartGrad${metricIdx})`} opacity="0.3" />}
+                                <polyline points={points.join(' ')} fill="none" stroke={color} strokeWidth="2" opacity={isSingleMetric ? 1 : 0.8} />
+                              </g>
+                            );
+                          })}
+                        </svg>
                       </div>
-                    </div>
-                    <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 text-center">
-                      <div className="text-xs text-purple-600 dark:text-purple-400 uppercase font-medium">Range</div>
-                      <div className="text-sm font-bold text-purple-900 dark:text-purple-300">
-                        {Math.min(...historyData.map(r => parseFloat(r.value) || 0)).toFixed(1)} - {Math.max(...historyData.map(r => parseFloat(r.value) || 0)).toFixed(1)}
+                    );
+                  })()}
+
+                  {/* Per-Metric Summary Stats */}
+                  {(() => {
+                    const metricKeys = Object.keys(historyStats);
+                    if (metricKeys.length === 0) return null;
+                    const isSingle = metricKeys.length === 1;
+                    return (
+                      <div className="mb-4 space-y-3">
+                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
+                          <div className="text-xs text-blue-600 dark:text-blue-400 uppercase font-medium">Total Readings</div>
+                          <div className="text-xl font-bold text-blue-900 dark:text-blue-300">{historyTotal}</div>
+                        </div>
+                        <div className={`grid gap-3 ${isSingle ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+                          {metricKeys.map(key => {
+                            const s = historyStats[key];
+                            const label = key === '_default' ? 'Value' : key;
+                            const unit = s.unit ? ` ${s.unit}` : '';
+                            return (
+                              <div key={key} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                                <div className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1 truncate" title={label}>{label}</div>
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-gray-600 dark:text-gray-400">Avg</span>
+                                  <span className="font-mono font-medium text-gray-900 dark:text-white">{s.avg != null ? Number(s.avg).toFixed(2) : '-'}{unit}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-gray-600 dark:text-gray-400">Range</span>
+                                  <span className="font-mono font-medium text-gray-900 dark:text-white">{s.min != null ? Number(s.min).toFixed(1) : '-'} — {s.max != null ? Number(s.max).toFixed(1) : '-'}{unit}</span>
+                                </div>
+                                <div className="flex justify-between text-xs mt-1">
+                                  <span className="text-gray-400 dark:text-gray-500">Count</span>
+                                  <span className="text-gray-500 dark:text-gray-400">{s.count}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* History Table */}
+                  {(() => {
+                    const hasNames = historyData.some(r => r.name);
+                    return (
                   <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                       <thead className="bg-gray-50 dark:bg-gray-900">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Timestamp</th>
+                          {hasNames && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Metric</th>}
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Value</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unit</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        {historyData.slice(0, 10).map((reading, idx) => (
+                        {historyData.map((reading, idx) => (
                           <tr key={reading.id || idx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">
-                              {formatUtcDate(reading.timestamp)}
+                              {formatDateTime(reading.timestamp)}
                             </td>
+                            {hasNames && <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">{reading.name || '-'}</td>}
                             <td className="px-4 py-2 text-sm font-mono text-gray-900 dark:text-white">
                               {reading.value}
                             </td>
@@ -1419,12 +1541,32 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                         ))}
                       </tbody>
                     </table>
-                    {historyData.length > 10 && (
+                    {historyData.length < historyTotal && (
+                      <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 text-center border-t dark:border-gray-700">
+                        <button
+                          onClick={loadMoreHistory}
+                          disabled={loadingMore}
+                          className="inline-flex items-center px-4 py-2 text-sm font-medium text-primary-700 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors disabled:opacity-50"
+                        >
+                          {loadingMore ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600 mr-2"></div>
+                              Loading...
+                            </>
+                          ) : (
+                            `Load More (showing ${historyData.length} of ${historyTotal})`
+                          )}
+                        </button>
+                      </div>
+                    )}
+                    {historyData.length >= historyTotal && historyTotal > 0 && (
                       <div className="bg-gray-50 dark:bg-gray-900 px-4 py-2 text-xs text-gray-500 dark:text-gray-400 text-center border-t dark:border-gray-700">
-                        Showing 10 of {historyData.length} readings
+                        All {historyTotal} readings loaded
                       </div>
                     )}
                   </div>
+                    );
+                  })()}
                 </>
               )}
             </div>
@@ -1531,10 +1673,10 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono">{errorLog.details}</p>
                             )}
                             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                              {formatUtcDate(errorLog.created_at)}
+                              {formatDateTime(errorLog.created_at)}
                               {errorLog.resolved_at && (
                                 <span className="ml-2">
-                                  • Resolved: {formatUtcDate(errorLog.resolved_at)}
+                                  • Resolved: {formatDateTime(errorLog.resolved_at)}
                                 </span>
                               )}
                             </p>
@@ -1581,6 +1723,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 // Relay Control Modal - Controls Modbus relay devices using coil read/write operations
 // Supports write-only mode for devices that can't send Modbus responses (e.g. RS485 DE/RE pin issue)
 function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }) {
+  const { formatDateTime } = useSettings();
   const [loading, setLoading] = useState(false);
   const [coilStates, setCoilStates] = useState([]);
   const [error, setError] = useState(null);
@@ -1982,7 +2125,7 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
             )}
             {lastCommunication && (
               <p className="text-xs text-gray-500 mt-1">
-                Last communication: {lastCommunication.toLocaleString()}
+                Last communication: {formatDateTime(lastCommunication)}
               </p>
             )}
             {modbusConfig && (
@@ -3615,6 +3758,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 export default function Equipment() {
   const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
+  const { formatDateTime } = useSettings();
   const { id: urlEquipmentId } = useParams();
   const navigate = useNavigate();
   const { setCustomSegment } = useBreadcrumb();
@@ -4738,7 +4882,7 @@ export default function Equipment() {
             </span>
             {lastUpdate && (
               <span className="text-gray-400">
-                Last update: {new Date(lastUpdate).toLocaleTimeString()}
+                Last update: {formatDateTime(lastUpdate)}
               </span>
             )}
           </div>

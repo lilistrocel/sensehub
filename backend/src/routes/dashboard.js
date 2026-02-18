@@ -87,14 +87,54 @@ router.get('/overview', (req, res) => {
     return eq;
   });
 
-  // Historical readings for chart (filtered by time range)
-  const chartReadings = db.prepare(`
-    SELECT r.*, e.name as equipment_name
-    FROM readings r
-    INNER JOIN equipment e ON r.equipment_id = e.id
-    WHERE r.timestamp >= ?
-    ORDER BY r.timestamp ASC
-  `).all(startTime);
+  // Historical readings for chart (filtered by time range, downsampled)
+  let chartQuery;
+  if (hoursAgo <= 1) {
+    // Raw data for <= 1 hour
+    chartQuery = `
+      SELECT r.equipment_id, r.value, r.unit, r.timestamp, r.name, e.name as equipment_name
+      FROM readings r
+      INNER JOIN equipment e ON r.equipment_id = e.id
+      WHERE r.timestamp >= ?
+      ORDER BY r.timestamp ASC`;
+  } else if (hoursAgo <= 24) {
+    // 5-minute buckets
+    chartQuery = `
+      SELECT r.equipment_id,
+        AVG(r.value) as value, r.unit, r.name,
+        strftime('%Y-%m-%d %H:', r.timestamp) || printf('%02d', (CAST(strftime('%M', r.timestamp) AS INTEGER) / 5) * 5) || ':00' as timestamp,
+        e.name as equipment_name
+      FROM readings r
+      INNER JOIN equipment e ON r.equipment_id = e.id
+      WHERE r.timestamp >= ?
+      GROUP BY r.equipment_id, COALESCE(r.name, ''), strftime('%Y-%m-%d %H:', r.timestamp) || printf('%02d', (CAST(strftime('%M', r.timestamp) AS INTEGER) / 5) * 5)
+      ORDER BY timestamp ASC`;
+  } else if (hoursAgo <= 168) {
+    // 1-hour buckets for <= 7 days
+    chartQuery = `
+      SELECT r.equipment_id,
+        AVG(r.value) as value, r.unit, r.name,
+        strftime('%Y-%m-%d %H:00:00', r.timestamp) as timestamp,
+        e.name as equipment_name
+      FROM readings r
+      INNER JOIN equipment e ON r.equipment_id = e.id
+      WHERE r.timestamp >= ?
+      GROUP BY r.equipment_id, COALESCE(r.name, ''), strftime('%Y-%m-%d %H', r.timestamp)
+      ORDER BY timestamp ASC`;
+  } else {
+    // 6-hour buckets for > 7 days
+    chartQuery = `
+      SELECT r.equipment_id,
+        AVG(r.value) as value, r.unit, r.name,
+        strftime('%Y-%m-%d ', r.timestamp) || printf('%02d', (CAST(strftime('%H', r.timestamp) AS INTEGER) / 6) * 6) || ':00:00' as timestamp,
+        e.name as equipment_name
+      FROM readings r
+      INNER JOIN equipment e ON r.equipment_id = e.id
+      WHERE r.timestamp >= ?
+      GROUP BY r.equipment_id, COALESCE(r.name, ''), strftime('%Y-%m-%d', r.timestamp) || (CAST(strftime('%H', r.timestamp) AS INTEGER) / 6)
+      ORDER BY timestamp ASC`;
+  }
+  const chartReadings = db.prepare(chartQuery).all(startTime);
 
   // Active automations list with last run info
   const activeAutomations = db.prepare(`

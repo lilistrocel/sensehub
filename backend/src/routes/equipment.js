@@ -446,33 +446,115 @@ router.post('/:id/readings', requireRole('admin', 'operator'), (req, res) => {
   res.status(201).json(reading);
 });
 
-// GET /api/equipment/:id/history - Get equipment history
+// GET /api/equipment/:id/history - Get equipment history (paginated with stats)
 router.get('/:id/history', (req, res) => {
-  const { from, to, limit } = req.query;
+  const { from, to } = req.query;
   const equipmentId = req.params.id;
+  const limit = parseInt(req.query.limit) || 25;
+  const offset = parseInt(req.query.offset) || 0;
 
-  let query = 'SELECT * FROM readings WHERE equipment_id = ?';
-  const params = [equipmentId];
+  // Build WHERE clause
+  let where = 'WHERE equipment_id = ?';
+  const whereParams = [equipmentId];
 
   if (from) {
-    query += ' AND timestamp >= ?';
-    params.push(from);
+    where += ' AND timestamp >= ?';
+    whereParams.push(from);
   }
 
   if (to) {
-    query += ' AND timestamp <= ?';
-    params.push(to);
+    where += ' AND timestamp <= ?';
+    whereParams.push(to);
   }
 
-  query += ' ORDER BY timestamp DESC';
+  // Per-metric stats computed from ALL readings in range (not just the page)
+  const statsRows = db.prepare(
+    `SELECT COALESCE(name, '') as metric, unit, COUNT(*) as count, AVG(value) as avg, MIN(value) as min, MAX(value) as max
+     FROM readings ${where} GROUP BY COALESCE(name, ''), unit`
+  ).all(...whereParams);
 
-  if (limit) {
-    query += ' LIMIT ?';
-    params.push(parseInt(limit));
+  // Total count across all metrics
+  const total = statsRows.reduce((sum, r) => sum + r.count, 0);
+
+  // Build stats object keyed by metric name
+  const stats = {};
+  for (const row of statsRows) {
+    const key = row.metric || '_default';
+    stats[key] = { avg: row.avg, min: row.min, max: row.max, unit: row.unit, count: row.count };
   }
 
-  const readings = db.prepare(query).all(...params);
-  res.json(readings);
+  // Page query
+  const readings = db.prepare(
+    `SELECT * FROM readings ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`
+  ).all(...whereParams, limit, offset);
+
+  res.json({
+    readings,
+    total,
+    stats,
+    limit,
+    offset
+  });
+});
+
+// GET /api/equipment/:id/history/chart - Get downsampled chart data
+router.get('/:id/history/chart', (req, res) => {
+  const { from } = req.query;
+  const equipmentId = req.params.id;
+
+  if (!from) {
+    return res.status(400).json({ error: 'Bad Request', message: '"from" query param is required' });
+  }
+
+  const fromDate = new Date(from);
+  const now = new Date();
+  const rangeMs = now.getTime() - fromDate.getTime();
+  const rangeHours = rangeMs / (1000 * 60 * 60);
+
+  let bucketQuery;
+
+  if (rangeHours <= 1) {
+    // Raw data for <= 1 hour
+    const readings = db.prepare(
+      `SELECT timestamp, COALESCE(name, '') as name, unit, value as avg_value, value as min_value, value as max_value, 1 as count
+       FROM readings WHERE equipment_id = ? AND timestamp >= ?
+       ORDER BY timestamp ASC`
+    ).all(equipmentId, from);
+    return res.json(readings);
+  } else if (rangeHours <= 24) {
+    // 5-minute buckets
+    bucketQuery = `
+      SELECT
+        strftime('%Y-%m-%d %H:', timestamp) || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5) || ':00' as timestamp,
+        COALESCE(name, '') as name, unit,
+        AVG(value) as avg_value, MIN(value) as min_value, MAX(value) as max_value, COUNT(*) as count
+      FROM readings WHERE equipment_id = ? AND timestamp >= ?
+      GROUP BY COALESCE(name, ''), strftime('%Y-%m-%d %H:', timestamp) || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5)
+      ORDER BY timestamp ASC`;
+  } else if (rangeHours <= 168) {
+    // 1-hour buckets for <= 7 days
+    bucketQuery = `
+      SELECT
+        strftime('%Y-%m-%d %H:00:00', timestamp) as timestamp,
+        COALESCE(name, '') as name, unit,
+        AVG(value) as avg_value, MIN(value) as min_value, MAX(value) as max_value, COUNT(*) as count
+      FROM readings WHERE equipment_id = ? AND timestamp >= ?
+      GROUP BY COALESCE(name, ''), strftime('%Y-%m-%d %H', timestamp)
+      ORDER BY timestamp ASC`;
+  } else {
+    // 6-hour buckets for <= 30 days
+    bucketQuery = `
+      SELECT
+        strftime('%Y-%m-%d ', timestamp) || printf('%02d', (CAST(strftime('%H', timestamp) AS INTEGER) / 6) * 6) || ':00:00' as timestamp,
+        COALESCE(name, '') as name, unit,
+        AVG(value) as avg_value, MIN(value) as min_value, MAX(value) as max_value, COUNT(*) as count
+      FROM readings WHERE equipment_id = ? AND timestamp >= ?
+      GROUP BY COALESCE(name, ''), strftime('%Y-%m-%d', timestamp) || (CAST(strftime('%H', timestamp) AS INTEGER) / 6)
+      ORDER BY timestamp ASC`;
+  }
+
+  const chartData = db.prepare(bucketQuery).all(equipmentId, from);
+  res.json(chartData);
 });
 
 // GET /api/equipment/:id/errors - Get equipment error logs

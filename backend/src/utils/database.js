@@ -243,6 +243,7 @@ const initSchema = () => {
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_readings_equip_time ON readings(equipment_id, timestamp);
     CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged);
     CREATE INDEX IF NOT EXISTS idx_automation_logs_automation ON automation_logs(automation_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
