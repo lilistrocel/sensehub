@@ -1,0 +1,14 @@
+{
+  "name": "sensehub-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for SenseHub - bridges AI assistants to farm hardware",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "express": "^4.21.2",
+    "zod": "^3.24.2"
+  }
+}
