@@ -15,7 +15,8 @@ export function SettingsProvider({ children }) {
     }
 
     try {
-      const response = await fetch('/api/settings', {
+      // Use the public timezone endpoint (accessible to all authenticated users)
+      const response = await fetch('/api/auth/setup/timezone', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -23,9 +24,8 @@ export function SettingsProvider({ children }) {
 
       if (response.ok) {
         const data = await response.json();
-        // Extract timezone from settings
-        if (data.timezone?.timezone) {
-          setTimezone(data.timezone.timezone);
+        if (data.timezone) {
+          setTimezone(data.timezone);
         }
       }
     } catch (error) {
@@ -53,7 +53,13 @@ export function SettingsProvider({ children }) {
     if (!dateValue) return '-';
 
     try {
-      const date = new Date(dateValue);
+      // Normalize SQLite timestamps: datetime('now') returns "YYYY-MM-DD HH:MM:SS"
+      // without timezone indicator. Append 'Z' so JS parses them as UTC.
+      let normalized = dateValue;
+      if (typeof dateValue === 'string' && !dateValue.endsWith('Z') && !dateValue.includes('+')) {
+        normalized = dateValue.replace(' ', 'T') + 'Z';
+      }
+      const date = new Date(normalized);
       if (isNaN(date.getTime())) return '-';
 
       const defaultOptions = {

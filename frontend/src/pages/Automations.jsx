@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getChannelDisplayName } from '../utils/channelUtils';
-import { formatUtcDate } from '../utils/dateUtils';
+import { useSettings } from '../context/SettingsContext';
 
 const API_BASE = '/api';
 
@@ -1819,6 +1819,7 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
 
 // Automation Detail Modal
 function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
+  const { formatDateTime } = useSettings();
   const [activeTab, setActiveTab] = useState('details');
   const [logs, setLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -2009,7 +2010,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
                 <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Run</span>
                   <span className="text-sm text-gray-900 dark:text-white">
-                    {formatUtcDate(automation.last_run)}
+                    {formatDateTime(automation.last_run)}
                   </span>
                 </div>
               )}
@@ -2017,7 +2018,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
               <div className="flex items-center justify-between py-3">
                 <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Created</span>
                 <span className="text-sm text-gray-900 dark:text-white">
-                  {automation.created_at ? formatUtcDate(automation.created_at) : '-'}
+                  {automation.created_at ? formatDateTime(automation.created_at) : '-'}
                 </span>
               </div>
             </div>
@@ -2052,7 +2053,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
                           <div className="flex items-center gap-2 mb-2">
                             <LogStatusBadge status={log.status} />
                             <span className="text-xs text-gray-500 dark:text-gray-400">
-                              {log.triggered_at ? formatUtcDate(log.triggered_at) : '-'}
+                              {log.triggered_at ? formatDateTime(log.triggered_at) : '-'}
                             </span>
                           </div>
                           <p className="text-sm text-gray-700 dark:text-gray-300">{log.message || 'No message'}</p>
@@ -2095,6 +2096,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
 
 export default function Automations() {
   const { token, user } = useAuth();
+  const { formatDateTime } = useSettings();
   const [automations, setAutomations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2543,7 +2545,7 @@ export default function Automations() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900 dark:text-white">
-                        {auto.last_run ? formatUtcDate(auto.last_run) : 'Never'}
+                        {auto.last_run ? formatDateTime(auto.last_run) : 'Never'}
                       </div>
                       {auto.run_count > 0 && (
                         <div className="text-xs text-gray-500 dark:text-gray-400">

@@ -3,6 +3,7 @@ import Sidebar from './Sidebar';
 import Breadcrumb from './Breadcrumb';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useSettings } from '../context/SettingsContext';
 
 const API_BASE = '/api';
 
@@ -10,6 +11,7 @@ export default function Layout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, token } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
+  const { formatDateTime } = useSettings();
   const [cloudStatus, setCloudStatus] = useState({
     configured: false,
     connected: false,
@@ -77,7 +79,7 @@ export default function Layout({ children }) {
         text: cloudStatus.pendingItems > 0
           ? `Connected (${cloudStatus.pendingItems} pending)`
           : 'Connected',
-        title: `Cloud: Connected${cloudStatus.lastSync ? ` - Last sync: ${new Date(cloudStatus.lastSync).toLocaleString()}` : ''}`
+        title: `Cloud: Connected${cloudStatus.lastSync ? ` - Last sync: ${formatDateTime(cloudStatus.lastSync)}` : ''}`
       };
     }
     return {

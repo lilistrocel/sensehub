@@ -8,7 +8,7 @@ import { getChannelDisplayName } from '../utils/channelUtils';
 const API_BASE = '/api';
 
 // Simple readings chart component
-function ReadingsChart({ readings }) {
+function ReadingsChart({ readings, timezone }) {
   if (!readings || readings.length === 0) {
     return (
       <div className="text-center text-gray-500 dark:text-gray-400 py-8">
@@ -74,12 +74,13 @@ function ReadingsChart({ readings }) {
   const formatTime = (ms) => {
     const date = new Date(ms);
     const diff = maxTime - minTime;
+    const opts = { timeZone: timezone || 'UTC' };
     if (diff > 48 * 60 * 60 * 1000) {
       // More than 48 hours - show date
-      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('en-US', { ...opts, month: 'short', day: 'numeric' });
     } else {
       // Less than 48 hours - show time
-      return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString('en-US', { ...opts, hour: '2-digit', minute: '2-digit' });
     }
   };
 
@@ -199,7 +200,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
-  const { formatDateTime, formatTime } = useSettings();
+  const { formatDateTime, formatTime, timezone } = useSettings();
   const [zones, setZones] = useState([]);
   const [selectedZoneId, setSelectedZoneId] = useState('');
   const [overview, setOverview] = useState(null);
@@ -628,7 +629,7 @@ export default function Dashboard() {
                 ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
-            title={lastRefreshTime ? `Last refreshed: ${lastRefreshTime.toLocaleTimeString()}` : 'Click to refresh data'}
+            title={lastRefreshTime ? `Last refreshed: ${formatTime(lastRefreshTime)}` : 'Click to refresh data'}
           >
             <svg
               className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
@@ -930,7 +931,7 @@ export default function Dashboard() {
               </div>
               <div className="p-6">
                 {/* Simple SVG-based line chart */}
-                <ReadingsChart readings={overview.chartReadings} />
+                <ReadingsChart readings={overview.chartReadings} timezone={timezone} />
               </div>
             </div>
           )}

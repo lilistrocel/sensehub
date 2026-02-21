@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { formatUtcDate } from '../utils/dateUtils';
+import { useSettings } from '../context/SettingsContext';
 import Users from './settings/Users';
 import Profile from './settings/Profile';
 
@@ -39,6 +39,7 @@ const settingsTabs = [
 
 function SystemSettings() {
   const { token } = useAuth();
+  const { formatDateTime } = useSettings();
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -613,16 +614,23 @@ function SystemSettings() {
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Build Date</span>
                 <p className="text-lg font-semibold text-gray-900 dark:text-white mt-2">
-                  {systemInfo.buildDate ? new Date(systemInfo.buildDate).toLocaleDateString('en-US', {
+                  {systemInfo.buildDate ? formatDateTime(systemInfo.buildDate, {
                     year: 'numeric',
                     month: 'long',
-                    day: 'numeric'
+                    day: 'numeric',
+                    hour: undefined,
+                    minute: undefined,
+                    second: undefined
                   }) : 'N/A'}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {systemInfo.buildDate ? new Date(systemInfo.buildDate).toLocaleTimeString('en-US', {
+                  {systemInfo.buildDate ? formatDateTime(systemInfo.buildDate, {
+                    year: undefined,
+                    month: undefined,
+                    day: undefined,
                     hour: '2-digit',
                     minute: '2-digit',
+                    second: undefined,
                     timeZoneName: 'short'
                   }) : ''}
                 </p>
@@ -667,7 +675,7 @@ function SystemSettings() {
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Started At</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {systemInfo.startedAt ? formatUtcDate(systemInfo.startedAt) : 'N/A'}
+                    {systemInfo.startedAt ? formatDateTime(systemInfo.startedAt) : 'N/A'}
                   </p>
                 </div>
               </div>
@@ -825,7 +833,7 @@ function SystemSettings() {
 
             {/* Last Updated */}
             <p className="text-xs text-gray-400 text-right">
-              Last updated: {formatUtcDate(storageInfo.timestamp)}
+              Last updated: {formatDateTime(storageInfo.timestamp)}
             </p>
           </div>
         ) : (
@@ -896,7 +904,7 @@ function SystemSettings() {
                 <div key={index} className="flex items-start space-x-3 py-1 border-b border-gray-800 last:border-0">
                   {/* Timestamp */}
                   <span className="text-gray-500 text-xs whitespace-nowrap">
-                    {formatUtcDate(log.timestamp)}
+                    {formatDateTime(log.timestamp)}
                   </span>
                   {/* Log Level Badge */}
                   <span className={`px-2 py-0.5 text-xs font-medium rounded uppercase ${
@@ -970,6 +978,7 @@ function SystemSettings() {
 
 function CloudSettings() {
   const { token } = useAuth();
+  const { formatDateTime } = useSettings();
   const [cloudStatus, setCloudStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1206,7 +1215,7 @@ function CloudSettings() {
 
       if (!response.ok) throw new Error('Sync failed');
       const data = await response.json();
-      setSyncMessage({ type: 'success', text: `Sync triggered at ${formatUtcDate(data.timestamp)}` });
+      setSyncMessage({ type: 'success', text: `Sync triggered at ${formatDateTime(data.timestamp)}` });
       fetchCloudStatus();
       fetchSyncHistory(); // Refresh sync history
     } catch (err) {
@@ -1346,7 +1355,7 @@ function CloudSettings() {
             <p className="text-sm text-gray-500 dark:text-gray-400">Last Sync</p>
             <p className="font-medium text-gray-900 dark:text-white">
               {cloudStatus?.lastSync
-                ? formatUtcDate(cloudStatus.lastSync.timestamp)
+                ? formatDateTime(cloudStatus.lastSync.timestamp)
                 : 'Never'}
             </p>
           </div>
@@ -1571,7 +1580,7 @@ function CloudSettings() {
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                        {formatUtcDate(item.created_at)}
+                        {formatDateTime(item.created_at)}
                       </td>
                     </tr>
                   );
@@ -1638,7 +1647,7 @@ function CloudSettings() {
                 {syncHistory.map((sync) => (
                   <tr key={sync.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {formatUtcDate(sync.started_at)}
+                      {formatDateTime(sync.started_at)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -1771,7 +1780,7 @@ function CloudSettings() {
                     )}
 
                     <p className="text-xs text-gray-400 mt-2">
-                      Cloud ID: {program.cloud_id} | Received: {formatUtcDate(program.created_at)}
+                      Cloud ID: {program.cloud_id} | Received: {formatDateTime(program.created_at)}
                     </p>
                   </div>
 

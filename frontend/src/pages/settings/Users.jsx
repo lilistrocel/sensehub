@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useSettings } from '../../context/SettingsContext';
 
 const API_BASE = '/api';
 
 export default function Users() {
   const { token, user } = useAuth();
+  const { formatDateTime } = useSettings();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -320,14 +322,7 @@ export default function Users() {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Never';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return formatDateTime(dateString);
   };
 
   const getRoleBadgeColor = (role) => {
