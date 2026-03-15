@@ -15,6 +15,12 @@ const EquipmentIcon = () => (
   </svg>
 );
 
+const CameraIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+  </svg>
+);
+
 const ZonesIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -28,6 +34,12 @@ const AutomationsIcon = () => (
   </svg>
 );
 
+const LabIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 5h6M9 5H7.5A1.5 1.5 0 006 6.5V7m12-2h-1.5A1.5 1.5 0 0015 6.5V7M6 7v0a1 1 0 00-.293.707L4.2 18.6A2 2 0 006.172 21h11.656a2 2 0 001.972-2.4l-1.507-10.893A1 1 0 0018 7v0M6 7h12" />
+  </svg>
+);
+
 const AlertsIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -37,6 +49,12 @@ const AlertsIcon = () => (
 const SettingsIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+  </svg>
+);
+
+const DebugIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM10 10l1.5 1.5L10 13m4-3l-1.5 1.5L14 13" />
   </svg>
 );
 
@@ -61,10 +79,13 @@ const LogoutIcon = () => (
 const navItems = [
   { name: 'Dashboard', path: '/', icon: DashboardIcon },
   { name: 'Equipment', path: '/equipment', icon: EquipmentIcon },
+  { name: 'Cameras', path: '/cameras', icon: CameraIcon },
   { name: 'Zones', path: '/zones', icon: ZonesIcon },
   { name: 'Automations', path: '/automations', icon: AutomationsIcon },
+  { name: 'Lab Analysis', path: '/lab-analysis', icon: LabIcon },
   { name: 'Alerts', path: '/alerts', icon: AlertsIcon },
   { name: 'Settings', path: '/settings', icon: SettingsIcon },
+  { name: 'Debug', path: '/debug', icon: DebugIcon },
 ];
 
 export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {

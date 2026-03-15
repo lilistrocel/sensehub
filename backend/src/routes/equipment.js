@@ -5,6 +5,17 @@ const { modbusTcpClient } = require('../services/ModbusTcpClient');
 
 const router = express.Router();
 
+// Helper: get disabled register names for a specific equipment
+function getDisabledNamesForEquipment(equipmentId) {
+  try {
+    const row = db.prepare('SELECT register_mappings FROM equipment WHERE id = ?').get(equipmentId);
+    if (!row || !row.register_mappings) return null;
+    const mappings = JSON.parse(row.register_mappings);
+    const disabled = mappings.filter(m => m.enabled === false).map(m => m.name);
+    return disabled.length > 0 ? disabled : null;
+  } catch { return null; }
+}
+
 // Helper function to add item to sync queue
 const queueForSync = (entityType, entityId, action, payload = null) => {
   try {
@@ -483,15 +494,32 @@ router.get('/:id/history', (req, res) => {
     stats[key] = { avg: row.avg, min: row.min, max: row.max, unit: row.unit, count: row.count };
   }
 
+  // Filter out disabled registers
+  const disabledNames = getDisabledNamesForEquipment(equipmentId);
+  const filteredStats = {};
+  let filteredTotal = 0;
+  for (const [key, val] of Object.entries(stats)) {
+    const metricName = key === '_default' ? '' : key;
+    if (!disabledNames || !disabledNames.includes(metricName)) {
+      filteredStats[key] = val;
+      filteredTotal += val.count;
+    }
+  }
+
   // Page query
-  const readings = db.prepare(
-    `SELECT * FROM readings ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`
-  ).all(...whereParams, limit, offset);
+  let readingsQuery = `SELECT * FROM readings ${where}`;
+  if (disabledNames && disabledNames.length > 0) {
+    const placeholders = disabledNames.map(() => '?').join(',');
+    readingsQuery += ` AND (name IS NULL OR name NOT IN (${placeholders}))`;
+    whereParams.push(...disabledNames);
+  }
+  readingsQuery += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+  const readings = db.prepare(readingsQuery).all(...whereParams, limit, offset);
 
   res.json({
     readings,
-    total,
-    stats,
+    total: filteredTotal,
+    stats: filteredStats,
     limit,
     offset
   });
@@ -511,15 +539,22 @@ router.get('/:id/history/chart', (req, res) => {
   const rangeMs = now.getTime() - fromDate.getTime();
   const rangeHours = rangeMs / (1000 * 60 * 60);
 
+  // Get disabled registers for filtering
+  const disabledNames = getDisabledNamesForEquipment(equipmentId);
+  const disabledFilter = disabledNames && disabledNames.length > 0
+    ? ` AND (name IS NULL OR name NOT IN (${disabledNames.map(() => '?').join(',')}))`
+    : '';
+  const disabledParams = disabledNames || [];
+
   let bucketQuery;
 
   if (rangeHours <= 1) {
     // Raw data for <= 1 hour
     const readings = db.prepare(
       `SELECT timestamp, COALESCE(name, '') as name, unit, value as avg_value, value as min_value, value as max_value, 1 as count
-       FROM readings WHERE equipment_id = ? AND timestamp >= ?
+       FROM readings WHERE equipment_id = ? AND timestamp >= ?${disabledFilter}
        ORDER BY timestamp ASC`
-    ).all(equipmentId, from);
+    ).all(equipmentId, from, ...disabledParams);
     return res.json(readings);
   } else if (rangeHours <= 24) {
     // 5-minute buckets
@@ -528,7 +563,7 @@ router.get('/:id/history/chart', (req, res) => {
         strftime('%Y-%m-%d %H:', timestamp) || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5) || ':00' as timestamp,
         COALESCE(name, '') as name, unit,
         AVG(value) as avg_value, MIN(value) as min_value, MAX(value) as max_value, COUNT(*) as count
-      FROM readings WHERE equipment_id = ? AND timestamp >= ?
+      FROM readings WHERE equipment_id = ? AND timestamp >= ?${disabledFilter}
       GROUP BY COALESCE(name, ''), strftime('%Y-%m-%d %H:', timestamp) || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5)
       ORDER BY timestamp ASC`;
   } else if (rangeHours <= 168) {
@@ -538,7 +573,7 @@ router.get('/:id/history/chart', (req, res) => {
         strftime('%Y-%m-%d %H:00:00', timestamp) as timestamp,
         COALESCE(name, '') as name, unit,
         AVG(value) as avg_value, MIN(value) as min_value, MAX(value) as max_value, COUNT(*) as count
-      FROM readings WHERE equipment_id = ? AND timestamp >= ?
+      FROM readings WHERE equipment_id = ? AND timestamp >= ?${disabledFilter}
       GROUP BY COALESCE(name, ''), strftime('%Y-%m-%d %H', timestamp)
       ORDER BY timestamp ASC`;
   } else {
@@ -548,12 +583,12 @@ router.get('/:id/history/chart', (req, res) => {
         strftime('%Y-%m-%d ', timestamp) || printf('%02d', (CAST(strftime('%H', timestamp) AS INTEGER) / 6) * 6) || ':00:00' as timestamp,
         COALESCE(name, '') as name, unit,
         AVG(value) as avg_value, MIN(value) as min_value, MAX(value) as max_value, COUNT(*) as count
-      FROM readings WHERE equipment_id = ? AND timestamp >= ?
+      FROM readings WHERE equipment_id = ? AND timestamp >= ?${disabledFilter}
       GROUP BY COALESCE(name, ''), strftime('%Y-%m-%d', timestamp) || (CAST(strftime('%H', timestamp) AS INTEGER) / 6)
       ORDER BY timestamp ASC`;
   }
 
-  const chartData = db.prepare(bucketQuery).all(equipmentId, from);
+  const chartData = db.prepare(bucketQuery).all(equipmentId, from, ...disabledParams);
   res.json(chartData);
 });
 
@@ -891,6 +926,52 @@ router.patch('/:id/channels/labels', requireRole('admin', 'operator'), (req, res
     const addr = String(mapping.register ?? mapping.address);
     if (labels[addr] !== undefined) {
       mapping.label = String(labels[addr]).trim() || undefined;
+    }
+  }
+
+  db.prepare(
+    "UPDATE equipment SET register_mappings = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(JSON.stringify(mappings), equipmentId);
+
+  const updated = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+  if (updated.register_mappings) {
+    try { updated.register_mappings = JSON.parse(updated.register_mappings); } catch (e) {}
+  }
+
+  queueForSync('equipment', updated.id, 'update', updated);
+  global.broadcast('equipment_updated', updated);
+
+  res.json(updated);
+});
+
+// PATCH /api/equipment/:id/channels/toggle - Enable/disable individual register readings
+router.patch('/:id/channels/toggle', requireRole('admin', 'operator'), (req, res) => {
+  const { toggles } = req.body;
+  const equipmentId = req.params.id;
+
+  if (!toggles || typeof toggles !== 'object') {
+    return res.status(400).json({ error: 'Bad Request', message: 'toggles object is required (keyed by register address, values are booleans)' });
+  }
+
+  const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
+  if (!equipment) {
+    return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
+  }
+
+  let mappings = [];
+  try {
+    mappings = equipment.register_mappings
+      ? (typeof equipment.register_mappings === 'string' ? JSON.parse(equipment.register_mappings) : equipment.register_mappings)
+      : [];
+  } catch (e) {
+    return res.status(500).json({ error: 'Server Error', message: 'Failed to parse register mappings' });
+  }
+
+  // Apply enabled/disabled state to matching registers
+  for (const mapping of mappings) {
+    const addr = String(mapping.register ?? mapping.address);
+    if (toggles[addr] !== undefined) {
+      mapping.enabled = !!toggles[addr];
     }
   }
 

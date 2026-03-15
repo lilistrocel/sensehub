@@ -30,6 +30,11 @@ const settingsTabs = [
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
     </svg>
   )},
+  { name: 'Notifications', path: 'notifications', adminOnly: true, icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+    </svg>
+  )},
   { name: 'Backup', path: 'backup', adminOnly: true, icon: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
@@ -1899,6 +1904,307 @@ function CloudSettings() {
   );
 }
 
+function NotificationSettings() {
+  const { token } = useAuth();
+  const { formatDateTime } = useSettings();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
+
+  const [botToken, setBotToken] = useState('');
+  const [chatId, setChatId] = useState('');
+  const [enabled, setEnabled] = useState(false);
+  const [hasToken, setHasToken] = useState(false);
+
+  const [watchdogStatus, setWatchdogStatus] = useState(null);
+
+  React.useEffect(() => {
+    fetchConfig();
+    fetchWatchdogStatus();
+  }, []);
+
+  const fetchConfig = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/notifications/telegram`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch config');
+      const data = await response.json();
+      setBotToken(data.has_token ? '***configured***' : '');
+      setChatId(data.chat_id || '');
+      setEnabled(data.enabled);
+      setHasToken(data.has_token);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchWatchdogStatus = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/notifications/watchdog`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        setWatchdogStatus(await response.json());
+      }
+    } catch (err) {
+      // Non-critical
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const body = { enabled };
+      if (botToken && botToken !== '***configured***') body.bot_token = botToken;
+      if (chatId) body.chat_id = chatId;
+
+      const response = await fetch(`${API_BASE}/notifications/telegram`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) throw new Error('Failed to save configuration');
+      setSuccessMessage('Configuration saved successfully');
+      if (botToken && botToken !== '***configured***') {
+        setHasToken(true);
+        setBotToken('***configured***');
+      }
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const body = {};
+      if (botToken && botToken !== '***configured***') body.bot_token = botToken;
+      if (chatId) body.chat_id = chatId;
+
+      const response = await fetch(`${API_BASE}/notifications/telegram/test`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Test failed');
+      }
+      setSuccessMessage('Test message sent! Check your Telegram.');
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Notifications</h2>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4 text-sm text-red-800 dark:text-red-400">
+          {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 mb-4 text-sm text-green-800 dark:text-green-400 flex items-center">
+          <svg className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          {successMessage}
+        </div>
+      )}
+
+      {/* Telegram Configuration */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <div className="flex items-center mb-4">
+          <svg className="h-6 w-6 mr-2 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+          </svg>
+          <h3 className="text-md font-medium text-gray-900 dark:text-white">Telegram Bot</h3>
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Receive instant alerts on your phone when automations miss their schedule or equipment goes offline.
+        </p>
+
+        {/* Setup instructions */}
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+          <h4 className="text-sm font-medium text-blue-800 dark:text-blue-400 mb-2">Setup Instructions</h4>
+          <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
+            <li>Open Telegram and search for <strong>@BotFather</strong></li>
+            <li>Send <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">/newbot</code> and follow the prompts to create a bot</li>
+            <li>Copy the <strong>bot token</strong> and paste it below</li>
+            <li>Add your bot to a group chat (or message it directly)</li>
+            <li>Send a message in the chat, then visit:<br/>
+              <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded text-xs">https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code><br/>
+              to find your <strong>chat ID</strong> (look for <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"chat":{"{"}"id":</code>)</li>
+            <li>Paste the chat ID below and click <strong>Test Connection</strong></li>
+          </ol>
+        </div>
+
+        <div className="space-y-4">
+          {/* Enable toggle */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Telegram Alerts</label>
+            <button
+              onClick={() => setEnabled(!enabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                enabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                enabled ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          {/* Bot Token */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bot Token</label>
+            <input
+              type={botToken === '***configured***' ? 'text' : 'password'}
+              value={botToken}
+              onChange={(e) => setBotToken(e.target.value)}
+              onFocus={() => { if (botToken === '***configured***') setBotToken(''); }}
+              placeholder="123456789:ABCdefGhIjKlMnOpQrStUvWxYz"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono"
+            />
+            {hasToken && botToken === '***configured***' && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Token is configured. Click the field to change it.</p>
+            )}
+          </div>
+
+          {/* Chat ID */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Chat ID</label>
+            <input
+              type="text"
+              value={chatId}
+              onChange={(e) => setChatId(e.target.value)}
+              placeholder="-1001234567890"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Group chat IDs start with a dash (-). Individual chats are just numbers.</p>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Configuration'}
+            </button>
+            <button
+              onClick={handleTest}
+              disabled={testing || (!hasToken && !botToken) || !chatId}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {testing ? 'Sending...' : 'Test Connection'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Watchdog Status */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
+          <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          Watchdog Monitor
+        </h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          The watchdog automatically monitors all enabled automations and equipment. It sends Telegram alerts when:
+        </p>
+        <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-4 list-disc list-inside">
+          <li>A scheduled automation misses its fire window</li>
+          <li>A threshold condition is met but the automation doesn't execute</li>
+          <li>Equipment goes offline or reports errors</li>
+        </ul>
+
+        {watchdogStatus && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Monitored Automations</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white">{watchdogStatus.monitored_automations}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Offline Equipment</p>
+              <p className={`text-xl font-bold ${watchdogStatus.offline_equipment > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                {watchdogStatus.offline_equipment}
+              </p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Equipment Errors</p>
+              <p className={`text-xl font-bold ${watchdogStatus.error_equipment > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {watchdogStatus.error_equipment}
+              </p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Telegram</p>
+              <p className={`text-xl font-bold ${watchdogStatus.telegram_configured ? 'text-green-600' : 'text-gray-400'}`}>
+                {watchdogStatus.telegram_configured ? 'Active' : 'Off'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Recent watchdog alerts */}
+        {watchdogStatus?.recent_alerts?.length > 0 && (
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recent Watchdog Alerts</h4>
+            <div className="max-h-60 overflow-y-auto space-y-2">
+              {watchdogStatus.recent_alerts.map((alert) => (
+                <div key={alert.id} className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded p-2 text-sm">
+                  <div className="flex justify-between items-start">
+                    <span className="text-amber-800 dark:text-amber-400">{alert.message?.replace('Watchdog: ', '')}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0">{formatDateTime(alert.created_at)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {watchdogStatus?.recent_alerts?.length === 0 && (
+          <p className="text-sm text-green-600 dark:text-green-400 flex items-center">
+            <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            No watchdog alerts. All systems running normally.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BackupSettings() {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -2433,6 +2739,7 @@ export default function Settings() {
             <Route path="users" element={<Users />} />
             <Route path="system" element={<SystemSettings />} />
             <Route path="cloud" element={<CloudSettings />} />
+            <Route path="notifications" element={<NotificationSettings />} />
             <Route path="backup" element={<BackupSettings />} />
           </Routes>
         </div>

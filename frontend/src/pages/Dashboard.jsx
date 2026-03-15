@@ -1133,6 +1133,44 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Latest Lab Readings - grouped by zone */}
+          {overview && overview.latestLabReadings && overview.latestLabReadings.length > 0 && (() => {
+            const byZone = {};
+            overview.latestLabReadings.forEach(lr => {
+              const key = lr.zone_name || 'Unassigned';
+              if (!byZone[key]) byZone[key] = [];
+              byZone[key].push(lr);
+            });
+            return Object.entries(byZone).map(([zoneName, readings]) => (
+              <div key={zoneName} className="bg-white dark:bg-gray-800 rounded-lg shadow">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Lab Analysis
+                    <span className="ml-2 text-sm font-normal text-primary-600 dark:text-primary-400">{zoneName}</span>
+                  </h2>
+                  <button
+                    onClick={() => navigate('/lab-analysis')}
+                    className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
+                  >
+                    View All
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 p-4">
+                  {readings.map((lr) => (
+                    <div key={lr.id} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate">{lr.nutrient.replace(/_/g, ' ')}</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white mt-1">
+                        {typeof lr.value === 'number' ? lr.value.toFixed(2) : lr.value}
+                        <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">{lr.unit}</span>
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{lr.sample_date}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ));
+          })()}
+
           {/* Overview Recent Alerts */}
           {overview && overview.recentAlerts && overview.recentAlerts.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow">

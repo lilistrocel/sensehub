@@ -3,6 +3,34 @@ const { db } = require('../utils/database');
 
 const router = express.Router();
 
+/**
+ * Build a map of equipment_id -> Set of disabled register names.
+ * Used to filter out readings for registers the user has disabled.
+ */
+function getDisabledRegisterNames() {
+  const disabledMap = new Map();
+  try {
+    const rows = db.prepare("SELECT id, register_mappings FROM equipment WHERE register_mappings IS NOT NULL").all();
+    for (const row of rows) {
+      let mappings;
+      try { mappings = JSON.parse(row.register_mappings); } catch { continue; }
+      if (!Array.isArray(mappings)) continue;
+      const disabledNames = new Set();
+      for (const m of mappings) {
+        if (m.enabled === false) {
+          disabledNames.add(m.name);
+        }
+      }
+      if (disabledNames.size > 0) {
+        disabledMap.set(row.id, disabledNames);
+      }
+    }
+  } catch (err) {
+    console.error('Error building disabled register map:', err.message);
+  }
+  return disabledMap;
+}
+
 // GET /api/dashboard/overview - Get dashboard overview
 router.get('/overview', (req, res) => {
   // Parse time range from query params (in hours, default 24)
@@ -153,6 +181,23 @@ router.get('/overview', (req, res) => {
     LIMIT 10
   `).all();
 
+  // Latest lab readings (one per nutrient per zone)
+  const latestLabReadings = db.prepare(`
+    SELECT lr.*, z.name as zone_name
+    FROM lab_readings lr
+    LEFT JOIN zones z ON lr.zone_id = z.id
+    WHERE lr.id IN (SELECT MAX(id) FROM lab_readings GROUP BY nutrient, COALESCE(zone_id, 0))
+    ORDER BY lr.zone_id ASC, lr.nutrient ASC
+  `).all();
+
+  // Filter out readings for disabled registers
+  const disabledMap = getDisabledRegisterNames();
+  const filterReading = (r) => {
+    if (!r.name) return true;
+    const disabled = disabledMap.get(r.equipment_id);
+    return !disabled || !disabled.has(r.name);
+  };
+
   res.json({
     equipment: equipmentStats,
     zones: { total: zoneCount.count },
@@ -160,10 +205,11 @@ router.get('/overview', (req, res) => {
     alerts: alertStats,
     recentAlerts,
     recentAutomations,
-    latestReadings,
+    latestReadings: latestReadings.filter(filterReading),
     activeAutomations,
-    chartReadings,
+    chartReadings: chartReadings.filter(filterReading),
     equipmentList,
+    latestLabReadings,
     timeRange: { hours: hoursAgo, startTime }
   });
 });
@@ -224,9 +270,16 @@ router.get('/equipment/:id', (req, res) => {
     WHERE ez.equipment_id = ?
   `).all(equipmentId);
 
+  // Filter out readings for disabled registers
+  const eqDisabledMap = getDisabledRegisterNames();
+  const eqDisabled = eqDisabledMap.get(parseInt(equipmentId));
+  const filteredReadings = eqDisabled
+    ? readings.filter(r => !r.name || !eqDisabled.has(r.name))
+    : readings;
+
   res.json({
     equipment,
-    readings,
+    readings: filteredReadings,
     alerts,
     zones
   });

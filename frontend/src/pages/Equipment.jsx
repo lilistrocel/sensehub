@@ -1098,10 +1098,41 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                     <div className="space-y-1">
                       {eq.register_mappings.map(m => {
                         const addr = String(m.register ?? m.address);
-                        const displayName = getChannelDisplayName(m);
+                        const isDisabled = m.enabled === false;
                         return (
-                          <div key={addr} className="flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded text-sm">
-                            <span className="text-gray-500 dark:text-gray-400">{m.name}</span>
+                          <div key={addr} className={`flex items-center justify-between px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded text-sm ${isDisabled ? 'opacity-50' : ''}`}>
+                            <div className="flex items-center gap-2">
+                              {canControl && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      const response = await fetch(`${API_BASE}/equipment/${equipment.id}/channels/toggle`, {
+                                        method: 'PATCH',
+                                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ toggles: { [addr]: isDisabled } })
+                                      });
+                                      if (response.ok) {
+                                        const updated = await response.json();
+                                        setDetails(prev => ({ ...prev, ...updated }));
+                                        if (onUpdate) onUpdate();
+                                      }
+                                    } catch (err) {
+                                      console.error('Toggle error:', err);
+                                    }
+                                  }}
+                                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors flex-shrink-0 ${
+                                    !isDisabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                                  }`}
+                                  title={isDisabled ? 'Enable this reading' : 'Disable this reading'}
+                                >
+                                  <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                                    !isDisabled ? 'translate-x-4' : 'translate-x-0.5'
+                                  }`} />
+                                </button>
+                              )}
+                              <span className="text-gray-500 dark:text-gray-400">{m.name}</span>
+                            </div>
                             {m.label ? (
                               <span className="font-medium text-gray-900 dark:text-white">{m.label}</span>
                             ) : (
@@ -3055,8 +3086,22 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                     <div className="space-y-3 max-h-48 overflow-y-auto">
                       {formData.register_mappings.map((mapping, index) => (
                         <div key={index} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Register #{index + 1}</span>
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Register #{index + 1}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateRegisterMapping(index, 'enabled', mapping.enabled === false ? true : false)}
+                                className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${
+                                  mapping.enabled !== false ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                                }`}
+                                title={mapping.enabled !== false ? 'Reading enabled' : 'Reading disabled'}
+                              >
+                                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                                  mapping.enabled !== false ? 'translate-x-4' : 'translate-x-0.5'
+                                }`} />
+                              </button>
+                            </div>
                             <button
                               type="button"
                               onClick={() => handleRemoveRegisterMapping(index)}
@@ -3644,8 +3689,22 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                     <div className="space-y-3 max-h-48 overflow-y-auto">
                       {formData.register_mappings.map((mapping, index) => (
                         <div key={index} className="bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Register #{index + 1}</span>
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Register #{index + 1}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateRegisterMapping(index, 'enabled', mapping.enabled === false ? true : false)}
+                                className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${
+                                  mapping.enabled !== false ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+                                }`}
+                                title={mapping.enabled !== false ? 'Reading enabled' : 'Reading disabled'}
+                              >
+                                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                                  mapping.enabled !== false ? 'translate-x-4' : 'translate-x-0.5'
+                                }`} />
+                              </button>
+                            </div>
                             <button
                               type="button"
                               onClick={() => handleRemoveRegisterMapping(index)}

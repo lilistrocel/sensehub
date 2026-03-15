@@ -1,6 +1,22 @@
 version: '3.8'
 
 services:
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    container_name: sensehub-go2rtc
+    network_mode: "host"
+    volumes:
+      - ./go2rtc/config:/config
+    environment:
+      - TZ=Asia/Dubai
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:1984/api"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
   backend:
     build:
       context: ./backend
@@ -15,10 +31,14 @@ services:
       - PORT=3003
       - JWT_SECRET=${JWT_SECRET:-sensehub-production-secret}
       - DB_PATH=/app/data/sensehub.db
+      - GO2RTC_URL=http://localhost:1984
       - TZ=Asia/Dubai
+    depends_on:
+      go2rtc:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

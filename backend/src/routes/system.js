@@ -212,4 +212,137 @@ router.get('/logs', requireRole('admin'), (req, res) => {
   }
 });
 
+// GET /api/system/services - Get status of all services and Docker containers
+router.get('/services', requireRole('admin'), async (req, res) => {
+  const services = [];
+
+  // 1. Backend (self)
+  services.push({
+    name: 'Backend API',
+    container: 'sensehub-backend',
+    type: 'core',
+    status: 'online',
+    port: process.env.PORT || 3003,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    details: { pid: process.pid, nodeVersion: process.version }
+  });
+
+  // 2. Database
+  services.push({
+    name: 'Database (SQLite)',
+    type: 'core',
+    status: db ? 'online' : 'offline',
+    details: { path: process.env.DB_PATH || 'data/sensehub.db' }
+  });
+
+  // 3. go2rtc
+  try {
+    const r = await fetch('http://127.0.0.1:1984/api', { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      const info = await r.json();
+      services.push({
+        name: 'go2rtc (Camera Streams)',
+        container: 'sensehub-go2rtc',
+        type: 'sidecar',
+        status: 'online',
+        port: 1984,
+        details: { version: info.version, revision: info.revision }
+      });
+    } else {
+      services.push({ name: 'go2rtc (Camera Streams)', container: 'sensehub-go2rtc', type: 'sidecar', status: 'error', details: { httpStatus: r.status } });
+    }
+  } catch (e) {
+    services.push({ name: 'go2rtc (Camera Streams)', container: 'sensehub-go2rtc', type: 'sidecar', status: 'offline', error: e.message });
+  }
+
+  // 4. MCP Server
+  try {
+    const r = await fetch('http://127.0.0.1:3001/health', { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      const info = await r.json();
+      services.push({
+        name: 'MCP Server',
+        container: 'sensehub-mcp',
+        type: 'sidecar',
+        status: 'online',
+        port: 3001,
+        details: info
+      });
+    } else {
+      services.push({ name: 'MCP Server', container: 'sensehub-mcp', type: 'sidecar', status: 'error', details: { httpStatus: r.status } });
+    }
+  } catch (e) {
+    services.push({ name: 'MCP Server', container: 'sensehub-mcp', type: 'sidecar', status: 'offline', error: e.message });
+  }
+
+  // 5. Frontend/Nginx (check from backend side)
+  try {
+    const r = await fetch('http://127.0.0.1:3002/', { signal: AbortSignal.timeout(3000) });
+    services.push({
+      name: 'Frontend (Nginx)',
+      container: 'sensehub-frontend',
+      type: 'core',
+      status: r.ok ? 'online' : 'error',
+      port: 3002,
+      details: { httpStatus: r.status }
+    });
+  } catch (e) {
+    services.push({ name: 'Frontend (Nginx)', container: 'sensehub-frontend', type: 'core', status: 'offline', error: e.message });
+  }
+
+  // 6. Cloudflared tunnel
+  try {
+    // Cloudflared doesn't have a health endpoint; check if the metrics endpoint is reachable
+    const r = await fetch('http://127.0.0.1:45705/metrics', { signal: AbortSignal.timeout(3000) });
+    services.push({
+      name: 'Cloudflare Tunnel',
+      container: 'sensehub-cloudflared',
+      type: 'sidecar',
+      status: r.ok ? 'online' : 'error',
+      details: { metricsAvailable: r.ok }
+    });
+  } catch (e) {
+    // Cloudflared may not expose metrics - just report unknown
+    services.push({ name: 'Cloudflare Tunnel', container: 'sensehub-cloudflared', type: 'sidecar', status: 'unknown', error: 'Metrics endpoint not reachable' });
+  }
+
+  // 7. Internal services (Modbus, Automation, Camera)
+  const { modbusPollingService } = require('../services/ModbusPollingService');
+  const { automationSchedulerService } = require('../services/AutomationSchedulerService');
+  const { cameraStreamService } = require('../services/CameraStreamService');
+
+  services.push({
+    name: 'Modbus Polling',
+    type: 'internal',
+    status: modbusPollingService.isRunning ? 'online' : 'offline',
+    details: { deviceCount: modbusPollingService.devices ? modbusPollingService.devices.size : 0 }
+  });
+
+  services.push({
+    name: 'Automation Scheduler',
+    type: 'internal',
+    status: automationSchedulerService.intervalId ? 'online' : 'offline'
+  });
+
+  services.push({
+    name: 'Camera Stream Service',
+    type: 'internal',
+    status: cameraStreamService.ready ? 'online' : 'offline',
+    details: { go2rtcConnected: cameraStreamService.ready }
+  });
+
+  // System info
+  const systemInfo = {
+    hostname: os.hostname(),
+    platform: `${os.platform()} ${os.arch()}`,
+    cpus: os.cpus().length,
+    memory: { total: os.totalmem(), free: os.freemem(), used: os.totalmem() - os.freemem() },
+    loadAvg: os.loadavg(),
+    uptime: os.uptime()
+  };
+
+  res.json({ services, system: systemInfo, timestamp: new Date().toISOString() });
+});
+
 module.exports = router;

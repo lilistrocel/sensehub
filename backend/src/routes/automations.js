@@ -11,178 +11,64 @@ router.get('/', (req, res) => {
   res.json(automations);
 });
 
-// POST /api/automations - Create automation
+// POST /api/automations - Create automation (optionally from a template)
 router.post('/', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, trigger_config, conditions, condition_logic, actions, priority } = req.body;
+  const { name, description, trigger_config, conditions, condition_logic, actions, priority, template_id } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Bad Request', message: 'Name is required' });
   }
 
+  // If template_id is provided, pull actions/conditions from the template
+  let finalConditions = conditions || [];
+  let finalConditionLogic = condition_logic || 'AND';
+  let finalActions = actions || [];
+
+  if (template_id) {
+    const template = db.prepare('SELECT * FROM automation_templates WHERE id = ?').get(template_id);
+    if (!template) {
+      return res.status(400).json({ error: 'Bad Request', message: 'Template not found' });
+    }
+    try {
+      finalConditions = JSON.parse(template.conditions || '[]');
+      finalConditionLogic = template.condition_logic || 'AND';
+      finalActions = JSON.parse(template.actions || '[]');
+    } catch (e) {
+      // fallback to request body values
+    }
+  }
+
   const result = db.prepare(
-    'INSERT INTO automations (name, description, trigger_config, conditions, condition_logic, actions, priority) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO automations (name, description, trigger_config, conditions, condition_logic, actions, priority, template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     name,
     description,
     JSON.stringify(trigger_config || {}),
-    JSON.stringify(conditions || []),
-    condition_logic || 'AND',
-    JSON.stringify(actions || []),
-    priority || 0
+    JSON.stringify(finalConditions),
+    finalConditionLogic,
+    JSON.stringify(finalActions),
+    priority || 0,
+    template_id || null
   );
 
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(automation);
 });
 
-// GET /api/automations/templates - Get automation templates
+// GET /api/automations/templates - Get automation templates (from DB)
 router.get('/templates', (req, res) => {
-  const templates = [
-    {
-      id: 'temperature_alert',
-      name: 'Temperature Alert',
-      description: 'Send alert when temperature exceeds a threshold value',
-      category: 'Monitoring',
-      trigger_config: {
-        type: 'threshold',
-        sensor_type: 'temperature',
-        operator: 'gt',
-        threshold_value: 30,
-        unit: '°C'
-      },
-      conditions: [],
-      actions: [{ type: 'alert', severity: 'warning', message: 'High temperature detected - exceeds threshold' }]
-    },
-    {
-      id: 'humidity_alert',
-      name: 'Humidity Alert',
-      description: 'Send alert when humidity goes outside normal range',
-      category: 'Monitoring',
-      trigger_config: {
-        type: 'threshold',
-        sensor_type: 'humidity',
-        operator: 'gt',
-        threshold_value: 80,
-        unit: '%'
-      },
-      conditions: [],
-      actions: [{ type: 'alert', severity: 'warning', message: 'High humidity detected - check ventilation' }]
-    },
-    {
-      id: 'scheduled_on',
-      name: 'Daily Equipment Start',
-      description: 'Turn equipment on at a scheduled time each day',
-      category: 'Scheduling',
-      trigger_config: {
-        type: 'schedule',
-        schedule_type: 'daily',
-        time: '08:00'
-      },
-      conditions: [],
-      actions: [{ type: 'control', action: 'on' }]
-    },
-    {
-      id: 'scheduled_off',
-      name: 'Daily Equipment Shutdown',
-      description: 'Turn equipment off at a scheduled time each day',
-      category: 'Scheduling',
-      trigger_config: {
-        type: 'schedule',
-        schedule_type: 'daily',
-        time: '18:00'
-      },
-      conditions: [],
-      actions: [{ type: 'control', action: 'off' }]
-    },
-    {
-      id: 'weekly_maintenance',
-      name: 'Weekly Maintenance Alert',
-      description: 'Send maintenance reminder every week',
-      category: 'Maintenance',
-      trigger_config: {
-        type: 'schedule',
-        schedule_type: 'weekly',
-        day_of_week: '1',
-        time: '09:00'
-      },
-      conditions: [],
-      actions: [{ type: 'alert', severity: 'info', message: 'Weekly maintenance check reminder' }]
-    },
-    {
-      id: 'low_temperature_alert',
-      name: 'Low Temperature Alert',
-      description: 'Send critical alert when temperature drops below threshold',
-      category: 'Monitoring',
-      trigger_config: {
-        type: 'threshold',
-        sensor_type: 'temperature',
-        operator: 'lt',
-        threshold_value: 5,
-        unit: '°C'
-      },
-      conditions: [],
-      actions: [{ type: 'alert', severity: 'critical', message: 'Critical: Low temperature detected - risk of freezing' }]
-    },
-    {
-      id: 'pressure_alert',
-      name: 'Pressure Alert',
-      description: 'Alert when pressure exceeds safe operating limit',
-      category: 'Safety',
-      trigger_config: {
-        type: 'threshold',
-        sensor_type: 'pressure',
-        operator: 'gt',
-        threshold_value: 100,
-        unit: 'PSI'
-      },
-      conditions: [],
-      actions: [{ type: 'alert', severity: 'critical', message: 'Critical: High pressure detected - check equipment immediately' }]
-    },
-    {
-      id: 'manual_inspection',
-      name: 'Manual Inspection Trigger',
-      description: 'Manually triggered inspection with logging',
-      category: 'Manual',
-      trigger_config: {
-        type: 'manual'
-      },
-      conditions: [],
-      actions: [
-        { type: 'log', message: 'Manual inspection initiated' },
-        { type: 'alert', severity: 'info', message: 'Manual inspection in progress' }
-      ]
-    },
-    {
-      id: 'power_monitor',
-      name: 'Power Consumption Alert',
-      description: 'Alert when power consumption exceeds limit',
-      category: 'Monitoring',
-      trigger_config: {
-        type: 'threshold',
-        sensor_type: 'power',
-        operator: 'gt',
-        threshold_value: 5000,
-        unit: 'W'
-      },
-      conditions: [],
-      actions: [{ type: 'alert', severity: 'warning', message: 'High power consumption detected' }]
-    },
-    {
-      id: 'hourly_log',
-      name: 'Hourly Status Log',
-      description: 'Log system status every hour',
-      category: 'Logging',
-      trigger_config: {
-        type: 'schedule',
-        schedule_type: 'hourly',
-        minute: '0'
-      },
-      conditions: [],
-      actions: [{ type: 'log', message: 'Hourly status check completed' }]
-    }
-  ];
-
-  res.json(templates);
+  try {
+    const templates = db.prepare('SELECT * FROM automation_templates ORDER BY is_system DESC, category, name').all();
+    const parsed = templates.map(t => ({
+      ...t,
+      conditions: JSON.parse(t.conditions || '[]'),
+      actions: JSON.parse(t.actions || '[]')
+    }));
+    res.json(parsed);
+  } catch (err) {
+    console.error('Error fetching automation templates:', err);
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
 });
 
 // GET /api/automations/:id - Get automation details
@@ -203,7 +89,7 @@ router.get('/:id', (req, res) => {
 
 // PUT /api/automations/:id - Update automation
 router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, trigger_config, conditions, condition_logic, actions, priority, enabled } = req.body;
+  const { name, description, trigger_config, conditions, condition_logic, actions, priority, enabled, template_id } = req.body;
   const automationId = req.params.id;
 
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(automationId);
@@ -212,17 +98,33 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
     return res.status(404).json({ error: 'Not Found', message: 'Automation not found' });
   }
 
+  // If linking to a template, pull actions/conditions from it
+  let finalConditions = conditions ? JSON.stringify(conditions) : automation.conditions;
+  let finalConditionLogic = condition_logic ?? automation.condition_logic ?? 'AND';
+  let finalActions = actions ? JSON.stringify(actions) : automation.actions;
+  let finalTemplateId = template_id !== undefined ? template_id : automation.template_id;
+
+  if (template_id) {
+    const template = db.prepare('SELECT * FROM automation_templates WHERE id = ?').get(template_id);
+    if (template) {
+      finalConditions = template.conditions;
+      finalConditionLogic = template.condition_logic || 'AND';
+      finalActions = template.actions;
+    }
+  }
+
   db.prepare(
-    "UPDATE automations SET name = ?, description = ?, trigger_config = ?, conditions = ?, condition_logic = ?, actions = ?, priority = ?, enabled = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE automations SET name = ?, description = ?, trigger_config = ?, conditions = ?, condition_logic = ?, actions = ?, priority = ?, enabled = ?, template_id = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(
     name ?? automation.name,
     description ?? automation.description,
     trigger_config ? JSON.stringify(trigger_config) : automation.trigger_config,
-    conditions ? JSON.stringify(conditions) : automation.conditions,
-    condition_logic ?? automation.condition_logic ?? 'AND',
-    actions ? JSON.stringify(actions) : automation.actions,
+    finalConditions,
+    finalConditionLogic,
+    finalActions,
     priority ?? automation.priority,
     enabled !== undefined ? (enabled ? 1 : 0) : automation.enabled,
+    finalTemplateId,
     automationId
   );
 

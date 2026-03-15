@@ -17,6 +17,9 @@ import Zones from './pages/Zones';
 import Automations from './pages/Automations';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
+import Cameras from './pages/Cameras';
+import Debug from './pages/Debug';
+import LabAnalysis from './pages/LabAnalysis';
 import NotFound from './pages/NotFound';
 
 // Loading spinner component
@@ -138,6 +141,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/cameras"
+        element={
+          <ProtectedRoute>
+            <Cameras />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/zones"
         element={
           <ProtectedRoute>
@@ -162,6 +173,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/lab-analysis"
+        element={
+          <ProtectedRoute>
+            <LabAnalysis />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/alerts"
         element={
           <ProtectedRoute>
@@ -174,6 +193,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/debug"
+        element={
+          <ProtectedRoute>
+            <Debug />
           </ProtectedRoute>
         }
       />

@@ -90,6 +90,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   const [controlDuration, setControlDuration] = useState('');
   const [controlDelay, setControlDelay] = useState('');
   const [controlStaggerDelay, setControlStaggerDelay] = useState('');
+  const [editingActionIndex, setEditingActionIndex] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -287,12 +288,60 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
       };
     }
 
-    setFormData(prev => ({
-      ...prev,
-      actions: [...prev.actions, newAction]
-    }));
+    if (editingActionIndex !== null) {
+      // Replace the action being edited
+      setFormData(prev => ({
+        ...prev,
+        actions: prev.actions.map((a, i) => i === editingActionIndex ? newAction : a)
+      }));
+      setEditingActionIndex(null);
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        actions: [...prev.actions, newAction]
+      }));
+    }
 
     // Reset
+    setActionMessage('');
+    setActionSeverity('info');
+    setControlEquipmentId('');
+    setControlAction('on');
+    setControlValue('');
+    setControlChannel('');
+    setControlChannelName('');
+    setControlDuration('');
+    setControlDelay('');
+    setControlStaggerDelay('');
+  };
+
+  const editAction = (index) => {
+    const action = formData.actions[index];
+    setEditingActionIndex(index);
+    setActionType(action.type || 'alert');
+    if (action.type === 'control') {
+      setControlEquipmentId(String(action.equipment_id || ''));
+      setControlAction(action.action || 'on');
+      setControlValue(action.value != null ? String(action.value) : '');
+      setControlChannel(action.channel != null ? String(action.channel) : '');
+      setControlChannelName(action.channel_name || '');
+      setControlDuration(action.duration_seconds ? String(action.duration_seconds) : '');
+      setControlDelay(action.delay_seconds ? String(action.delay_seconds) : '');
+      setControlStaggerDelay(action.stagger_delay_seconds ? String(action.stagger_delay_seconds) : '');
+      setActionMessage('');
+      setActionSeverity('info');
+    } else if (action.type === 'alert') {
+      setActionMessage(action.message || '');
+      setActionSeverity(action.severity || 'info');
+      setControlEquipmentId('');
+    } else if (action.type === 'log') {
+      setActionMessage(action.message || '');
+      setControlEquipmentId('');
+    }
+  };
+
+  const cancelEditAction = () => {
+    setEditingActionIndex(null);
     setActionMessage('');
     setActionSeverity('info');
     setControlEquipmentId('');
@@ -1083,15 +1132,28 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                           {action.severity && (
                             <span className="text-xs text-gray-500 dark:text-gray-400">({action.severity})</span>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => removeAction(idx)}
-                            className="ml-auto text-red-500 hover:text-red-700"
-                          >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
+                          <div className="ml-auto flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => editAction(idx)}
+                              className={`p-1 rounded ${editingActionIndex === idx ? 'text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400' : 'text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                              title="Edit action"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeAction(idx)}
+                              className="p-1 text-red-500 hover:text-red-700"
+                              title="Remove action"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1288,10 +1350,19 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     <button
                       type="button"
                       onClick={addAction}
-                      className="px-3 py-1 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
+                      className={`px-3 py-1 text-sm text-white rounded ${editingActionIndex !== null ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'}`}
                     >
-                      Add
+                      {editingActionIndex !== null ? 'Save' : 'Add'}
                     </button>
+                    {editingActionIndex !== null && (
+                      <button
+                        type="button"
+                        onClick={cancelEditAction}
+                        className="px-3 py-1 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1522,6 +1593,350 @@ function getScheduleDescription(tc) {
   return 'Schedule configured';
 }
 
+// Template Manager Modal - CRUD for automation templates
+function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [successMsg, setSuccessMsg] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+
+  // Form state
+  const [formName, setFormName] = useState('');
+  const [formDescription, setFormDescription] = useState('');
+  const [formCategory, setFormCategory] = useState('General');
+  const [formActions, setFormActions] = useState([]);
+
+  // Action builder state
+  const [newActionType, setNewActionType] = useState('alert');
+  const [newActionMessage, setNewActionMessage] = useState('');
+  const [newActionSeverity, setNewActionSeverity] = useState('info');
+  const [newControlAction, setNewControlAction] = useState('on');
+
+  useEffect(() => {
+    if (isOpen && token) fetchTemplates();
+  }, [isOpen, token]);
+
+  const fetchTemplates = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch(`${API_BASE}/automation-templates`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to fetch templates');
+      const data = await response.json();
+      setTemplates(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormName('');
+    setFormDescription('');
+    setFormCategory('General');
+    setFormActions([]);
+    setEditingTemplate(null);
+  };
+
+  const startEdit = (template) => {
+    setEditingTemplate(template);
+    setFormName(template.name);
+    setFormDescription(template.description || '');
+    setFormCategory(template.category || 'General');
+    setFormActions(template.actions || []);
+    setSuccessMsg(null);
+  };
+
+  const startCreate = () => {
+    resetForm();
+    setEditingTemplate({ id: 'new' });
+    setSuccessMsg(null);
+  };
+
+  const addAction = () => {
+    const action = { type: newActionType };
+    if (newActionType === 'alert') {
+      action.severity = newActionSeverity;
+      action.message = newActionMessage || 'Alert triggered';
+    } else if (newActionType === 'log') {
+      action.message = newActionMessage || 'Event logged';
+    } else if (newActionType === 'control') {
+      action.action = newControlAction;
+    }
+    setFormActions([...formActions, action]);
+    setNewActionMessage('');
+  };
+
+  const removeAction = (idx) => {
+    setFormActions(formActions.filter((_, i) => i !== idx));
+  };
+
+  const handleSave = async () => {
+    if (!formName.trim()) return;
+    if (formActions.length === 0) {
+      setError('At least one action is required');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const isNew = editingTemplate.id === 'new';
+      const url = isNew ? `${API_BASE}/automation-templates` : `${API_BASE}/automation-templates/${editingTemplate.id}`;
+      const response = await fetch(url, {
+        method: isNew ? 'POST' : 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formName,
+          description: formDescription,
+          category: formCategory,
+          actions: formActions,
+          conditions: [],
+          condition_logic: 'AND'
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save template');
+      const result = await response.json();
+
+      if (!isNew && result.propagated_to > 0) {
+        setSuccessMsg(`Template saved. Updated ${result.propagated_to} linked automation(s).`);
+      } else {
+        setSuccessMsg(isNew ? 'Template created.' : 'Template saved.');
+      }
+
+      await fetchTemplates();
+      if (onTemplateUpdated) onTemplateUpdated();
+      resetForm();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (templateId) => {
+    try {
+      const response = await fetch(`${API_BASE}/automation-templates/${templateId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to delete template');
+      const result = await response.json();
+      setSuccessMsg(`Template deleted. ${result.unlinked_automations} automation(s) unlinked.`);
+      setShowDeleteConfirm(null);
+      await fetchTemplates();
+      if (onTemplateUpdated) onTemplateUpdated();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose}></div>
+        <div className="inline-block w-full max-w-4xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
+          <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Manage Automation Templates</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Templates define reusable actions. Automations linked to a template inherit its actions — edit a template to update all linked automations at once.
+          </p>
+
+          {successMsg && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 mb-4 text-sm text-green-800 dark:text-green-400 flex items-center">
+              <svg className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {successMsg}
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4 text-sm text-red-800 dark:text-red-400">
+              {error}
+            </div>
+          )}
+
+          {/* Edit / Create Form */}
+          {editingTemplate && (
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 mb-4 border border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                {editingTemplate.id === 'new' ? 'Create New Template' : `Edit: ${editingTemplate.name}`}
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
+                  <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="Template name" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Category</label>
+                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    {['General', 'Monitoring', 'Control', 'Safety', 'Maintenance', 'Logging', 'Manual'].map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Description</label>
+                  <input type="text" value={formDescription} onChange={(e) => setFormDescription(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="What does this template do?" />
+                </div>
+              </div>
+
+              {/* Actions list */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Actions ({formActions.length})</label>
+                {formActions.length > 0 && (
+                  <div className="space-y-1 mb-2">
+                    {formActions.map((action, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-white dark:bg-gray-800 rounded px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600">
+                        <span>
+                          <span className="font-medium capitalize">{action.type}</span>
+                          {action.type === 'alert' && <span className="ml-1 text-gray-500">({action.severity}) {action.message}</span>}
+                          {action.type === 'log' && <span className="ml-1 text-gray-500">{action.message}</span>}
+                          {action.type === 'control' && <span className="ml-1 text-gray-500">{action.action}</span>}
+                        </span>
+                        <button onClick={() => removeAction(idx)} className="text-red-500 hover:text-red-700 ml-2">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add action row */}
+                <div className="flex items-end gap-2">
+                  <div>
+                    <select value={newActionType} onChange={(e) => setNewActionType(e.target.value)}
+                      className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                      <option value="alert">Alert</option>
+                      <option value="control">Control</option>
+                      <option value="log">Log</option>
+                    </select>
+                  </div>
+                  {newActionType === 'alert' && (
+                    <>
+                      <select value={newActionSeverity} onChange={(e) => setNewActionSeverity(e.target.value)}
+                        className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                      <input type="text" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
+                        placeholder="Alert message" className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                    </>
+                  )}
+                  {newActionType === 'log' && (
+                    <input type="text" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
+                      placeholder="Log message" className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                  )}
+                  {newActionType === 'control' && (
+                    <select value={newControlAction} onChange={(e) => setNewControlAction(e.target.value)}
+                      className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                      <option value="on">On</option>
+                      <option value="off">Off</option>
+                    </select>
+                  )}
+                  <button onClick={addAction} className="px-3 py-1.5 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 flex-shrink-0">
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button onClick={resetForm} className="px-3 py-1.5 text-gray-600 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 rounded text-sm hover:bg-gray-300 dark:hover:bg-gray-600">
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving || !formName.trim() || formActions.length === 0}
+                  className="px-3 py-1.5 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 disabled:opacity-50">
+                  {saving ? 'Saving...' : editingTemplate.id === 'new' ? 'Create Template' : 'Save & Propagate'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Template list */}
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            </div>
+          ) : (
+            <>
+              {!editingTemplate && (
+                <button onClick={startCreate}
+                  className="mb-4 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 flex items-center">
+                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New Template
+                </button>
+              )}
+
+              <div className="max-h-[400px] overflow-y-auto space-y-2">
+                {templates.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{t.name}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{t.category}</span>
+                        {t.is_system ? <span className="text-xs text-blue-500">System</span> : null}
+                      </div>
+                      {t.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{t.description}</p>}
+                      <div className="text-xs text-gray-400 mt-1">{t.actions?.length || 0} action(s)</div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-3">
+                      <button onClick={() => startEdit(t)}
+                        className="text-primary-600 hover:text-primary-800 text-sm">
+                        Edit
+                      </button>
+                      {!t.is_system && (
+                        showDeleteConfirm === t.id ? (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleDelete(t.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">Confirm</button>
+                            <button onClick={() => setShowDeleteConfirm(null)} className="text-gray-500 text-xs">Cancel</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setShowDeleteConfirm(t.id)}
+                            className="text-red-500 hover:text-red-700 text-sm">
+                            Delete
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {templates.length === 0 && (
+                  <p className="text-center text-gray-500 dark:text-gray-400 py-8 text-sm">No templates yet. Create one to get started.</p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Template Selection Modal
 function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
   const [templates, setTemplates] = useState([]);
@@ -1581,11 +1996,10 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
         body: JSON.stringify({
           name: customName || selectedTemplate.name,
           description: selectedTemplate.description,
-          trigger_config: selectedTemplate.trigger_config,
-          conditions: selectedTemplate.conditions || [],
-          actions: selectedTemplate.actions || [],
+          trigger_config: { type: 'manual' },
+          template_id: selectedTemplate.id,
           priority: 0,
-          enabled: false // Start disabled so user can customize
+          enabled: false // Start disabled so user can customize trigger
         })
       });
 
@@ -1687,7 +2101,7 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
             Choose a Template
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-            Select a pre-built automation template to get started quickly. You can customize it after creation.
+            Select a template to define the actions. You'll configure the trigger (schedule, threshold, or manual) after creation.
           </p>
 
           {loading && (
@@ -1739,9 +2153,13 @@ function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
                             {template.description}
                           </p>
                           <div className="mt-2 flex items-center text-xs text-gray-400 dark:text-gray-500">
-                            <TriggerBadge triggerConfig={template.trigger_config} />
-                            <span className="mx-2">•</span>
                             <span>{template.actions?.length || 0} action(s)</span>
+                            {template.is_system ? (
+                              <>
+                                <span className="mx-2">•</span>
+                                <span className="text-blue-500">System</span>
+                              </>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -2106,6 +2524,7 @@ export default function Automations() {
   const [showBuilderModal, setShowBuilderModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [selectedAutomation, setSelectedAutomation] = useState(null);
   const [isNewAutomation, setIsNewAutomation] = useState(false);
 
@@ -2365,7 +2784,18 @@ export default function Automations() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Automations</h1>
         {canEdit && (
-          <div className="flex gap-3 w-full sm:w-auto">
+          <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+            <button
+              onClick={() => setShowTemplateManager(true)}
+              className="text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center text-sm flex-shrink-0"
+              title="Manage Templates"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="hidden sm:inline ml-1">Templates</span>
+            </button>
             <button
               onClick={() => setShowTemplatesModal(true)}
               className="bg-white dark:bg-gray-800 text-primary-600 border border-primary-600 px-3 sm:px-4 py-2 rounded-lg hover:bg-primary-50 dark:hover:bg-gray-700 transition-colors flex items-center text-sm sm:text-base flex-1 sm:flex-initial justify-center"
@@ -2498,6 +2928,14 @@ export default function Automations() {
                           )}
                           <div className="mt-1 flex items-center gap-2">
                             <TriggerBadge triggerConfig={triggerConfig} />
+                            {auto.template_id && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800" title="Linked to a template - actions managed by template">
+                                <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                </svg>
+                                Template
+                              </span>
+                            )}
                             {canEdit && triggerConfig?.type === 'manual' && (auto.enabled === 1 || auto.enabled === true) && (
                               <button
                                 onClick={(e) => handleTriggerAutomation(auto, e)}
@@ -2654,6 +3092,14 @@ export default function Automations() {
         onClose={() => setShowTemplatesModal(false)}
         token={token}
         onSelectTemplate={handleTemplateCreated}
+      />
+
+      {/* Template Manager Modal */}
+      <TemplateManagerModal
+        isOpen={showTemplateManager}
+        onClose={() => setShowTemplateManager(false)}
+        token={token}
+        onTemplateUpdated={fetchAutomations}
       />
 
       {/* Delete Confirmation Modal */}

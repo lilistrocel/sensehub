@@ -20,6 +20,10 @@ const settingsRoutes = require('./routes/settings');
 const systemRoutes = require('./routes/system');
 const modbusRoutes = require('./routes/modbus');
 const templateRoutes = require('./routes/templates');
+const automationTemplateRoutes = require('./routes/automationTemplates');
+const notificationRoutes = require('./routes/notifications');
+const cameraRoutes = require('./routes/cameras');
+const labReadingRoutes = require('./routes/labReadings');
 
 // Import middleware
 const { authMiddleware } = require('./middleware/auth');
@@ -29,6 +33,8 @@ const { errorHandler } = require('./middleware/errorHandler');
 const { modbusPollingService } = require('./services/ModbusPollingService');
 const { relayTimerService } = require('./services/RelayTimerService');
 const { automationSchedulerService } = require('./services/AutomationSchedulerService');
+const { cameraStreamService } = require('./services/CameraStreamService');
+const { watchdogService } = require('./services/WatchdogService');
 
 const app = express();
 const server = http.createServer(app);
@@ -64,6 +70,10 @@ app.use('/api/settings', authMiddleware, settingsRoutes);
 app.use('/api/system', authMiddleware, systemRoutes);
 app.use('/api/modbus', authMiddleware, modbusRoutes);
 app.use('/api/templates', authMiddleware, templateRoutes);
+app.use('/api/automation-templates', authMiddleware, automationTemplateRoutes);
+app.use('/api/notifications', authMiddleware, notificationRoutes);
+app.use('/api/cameras', authMiddleware, cameraRoutes);
+app.use('/api/lab-readings', authMiddleware, labReadingRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
@@ -132,11 +142,29 @@ server.listen(PORT, async () => {
   } catch (error) {
     console.error('Automation scheduler: Failed to start -', error.message);
   }
+
+  // Start camera stream service (connects to go2rtc)
+  try {
+    await cameraStreamService.start();
+    console.log('Camera stream service: Started');
+  } catch (error) {
+    console.error('Camera stream service: Failed to start -', error.message);
+  }
+
+  // Start watchdog service (monitors automations & equipment health)
+  try {
+    watchdogService.start();
+    console.log('Watchdog service: Started');
+  } catch (error) {
+    console.error('Watchdog service: Failed to start -', error.message);
+  }
 });
 
 // Graceful shutdown handler
 process.on('SIGINT', async () => {
   console.log('\\nGraceful shutdown initiated...');
+  watchdogService.stop();
+  cameraStreamService.stop();
   automationSchedulerService.stop();
   relayTimerService.shutdown();
   await modbusPollingService.stop();
@@ -145,6 +173,8 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\\nGraceful shutdown initiated...');
+  watchdogService.stop();
+  cameraStreamService.stop();
   automationSchedulerService.stop();
   relayTimerService.shutdown();
   await modbusPollingService.stop();

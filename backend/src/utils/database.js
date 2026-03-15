@@ -240,6 +240,66 @@ const initSchema = () => {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Cameras table
+    CREATE TABLE IF NOT EXISTS cameras (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      stream_url TEXT NOT NULL,
+      snapshot_url TEXT,
+      username TEXT,
+      password TEXT,
+      manufacturer TEXT,
+      model TEXT,
+      ip_address TEXT,
+      rtsp_port INTEGER DEFAULT 554,
+      http_port INTEGER DEFAULT 80,
+      go2rtc_name TEXT UNIQUE NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      status TEXT CHECK(status IN ('online', 'offline', 'error')) DEFAULT 'offline',
+      error_message TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Camera-Zones junction table
+    CREATE TABLE IF NOT EXISTS camera_zones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      camera_id INTEGER NOT NULL,
+      zone_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (camera_id) REFERENCES cameras(id) ON DELETE CASCADE,
+      FOREIGN KEY (zone_id) REFERENCES zones(id) ON DELETE CASCADE,
+      UNIQUE(camera_id, zone_id)
+    );
+
+    -- Automation templates table for reusable automation blueprints
+    CREATE TABLE IF NOT EXISTS automation_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      category TEXT DEFAULT 'General',
+      conditions TEXT DEFAULT '[]',
+      condition_logic TEXT DEFAULT 'AND',
+      actions TEXT DEFAULT '[]',
+      is_system INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Lab readings table for manual nutrient analysis entries
+    CREATE TABLE IF NOT EXISTS lab_readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sample_date TEXT NOT NULL,
+      nutrient TEXT NOT NULL,
+      value REAL NOT NULL,
+      unit TEXT DEFAULT '',
+      zone_id INTEGER REFERENCES zones(id) ON DELETE SET NULL,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
@@ -253,6 +313,14 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_user_preferences_user ON user_preferences(user_id);
     CREATE INDEX IF NOT EXISTS idx_cloud_suggested_programs_status ON cloud_suggested_programs(status);
     CREATE INDEX IF NOT EXISTS idx_device_templates_category ON device_templates(category);
+    CREATE INDEX IF NOT EXISTS idx_cameras_go2rtc_name ON cameras(go2rtc_name);
+    CREATE INDEX IF NOT EXISTS idx_cameras_status ON cameras(status);
+    CREATE INDEX IF NOT EXISTS idx_camera_zones_camera ON camera_zones(camera_id);
+    CREATE INDEX IF NOT EXISTS idx_camera_zones_zone ON camera_zones(zone_id);
+    CREATE INDEX IF NOT EXISTS idx_automation_templates_category ON automation_templates(category);
+    CREATE INDEX IF NOT EXISTS idx_lab_readings_nutrient ON lab_readings(nutrient);
+    CREATE INDEX IF NOT EXISTS idx_lab_readings_sample_date ON lab_readings(sample_date);
+    CREATE INDEX IF NOT EXISTS idx_lab_readings_zone ON lab_readings(zone_id);
   `);
 
   // Add calibration columns to existing equipment table if they don't exist
@@ -309,6 +377,41 @@ const initSchema = () => {
     }
   } catch (err) {
     console.log('write_only column already exists or migration skipped');
+  }
+
+  // Add template_id column to automations table if it doesn't exist
+  try {
+    const autoCols = db.pragma("table_info(automations)").map(col => col.name);
+    if (!autoCols.includes('template_id')) {
+      db.exec('ALTER TABLE automations ADD COLUMN template_id INTEGER REFERENCES automation_templates(id) ON DELETE SET NULL');
+      console.log('Added template_id column to automations table');
+    }
+    // Create index after column exists
+    db.exec('CREATE INDEX IF NOT EXISTS idx_automations_template_id ON automations(template_id)');
+  } catch (err) {
+    console.log('template_id column already exists or migration skipped');
+  }
+
+  // Add last_watchdog_alert column to automations table
+  try {
+    const autoCols2 = db.pragma("table_info(automations)").map(col => col.name);
+    if (!autoCols2.includes('last_watchdog_alert')) {
+      db.exec('ALTER TABLE automations ADD COLUMN last_watchdog_alert TEXT');
+      console.log('Added last_watchdog_alert column to automations table');
+    }
+  } catch (err) {
+    console.log('last_watchdog_alert column on automations already exists or migration skipped');
+  }
+
+  // Add last_watchdog_alert column to equipment table
+  try {
+    const eqCols2 = db.pragma("table_info(equipment)").map(col => col.name);
+    if (!eqCols2.includes('last_watchdog_alert')) {
+      db.exec('ALTER TABLE equipment ADD COLUMN last_watchdog_alert TEXT');
+      console.log('Added last_watchdog_alert column to equipment table');
+    }
+  } catch (err) {
+    console.log('last_watchdog_alert column on equipment already exists or migration skipped');
   }
 
   // Add name column to readings table for multi-metric sensors (e.g., 7-in-1 soil meter)

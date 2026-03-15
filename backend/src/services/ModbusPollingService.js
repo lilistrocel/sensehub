@@ -345,8 +345,9 @@ class ModbusPollingService {
       const readings = [];
       const { host, port } = addressInfo;
 
-      // Read each configured register mapping
+      // Read each configured register mapping (skip disabled ones)
       for (const mapping of state.registerMappings) {
+        if (mapping.enabled === false) continue;
         try {
           const regAddress = mapping.address ?? mapping.register;
           const value = await this.readRegister(host, port, state.slaveId, mapping);
