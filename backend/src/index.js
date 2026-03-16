@@ -24,6 +24,7 @@ const automationTemplateRoutes = require('./routes/automationTemplates');
 const notificationRoutes = require('./routes/notifications');
 const cameraRoutes = require('./routes/cameras');
 const labReadingRoutes = require('./routes/labReadings');
+const fertigationRoutes = require('./routes/fertigation');
 
 // Import middleware
 const { authMiddleware } = require('./middleware/auth');
@@ -74,6 +75,7 @@ app.use('/api/automation-templates', authMiddleware, automationTemplateRoutes);
 app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/cameras', authMiddleware, cameraRoutes);
 app.use('/api/lab-readings', authMiddleware, labReadingRoutes);
+app.use('/api/fertigation', authMiddleware, fertigationRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

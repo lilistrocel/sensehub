@@ -347,31 +347,46 @@ export default function LabAnalysis() {
         </div>
       )}
 
-      {/* Stats Summary */}
-      {stats.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Nutrient Summary</h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 p-4">
-            {stats.map((s, i) => (
-              <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate" title={getNutrientName(s.nutrient)}>
-                  {getNutrientName(s.nutrient)}
-                </p>
-                <p className="text-lg font-bold text-gray-900 dark:text-white mt-1">
-                  {typeof s.avg === 'number' ? s.avg.toFixed(2) : s.avg}
-                  <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">{s.unit}</span>
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  {typeof s.min === 'number' ? s.min.toFixed(1) : s.min} - {typeof s.max === 'number' ? s.max.toFixed(1) : s.max}
-                </p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">{s.count} reading{s.count !== 1 ? 's' : ''}</p>
+      {/* Stats Summary — grouped by zone */}
+      {stats.length > 0 && (() => {
+        // Group stats by zone
+        const byZone = {};
+        stats.forEach(s => {
+          const zoneName = s.zone_name || 'No Zone';
+          if (!byZone[zoneName]) byZone[zoneName] = [];
+          byZone[zoneName].push(s);
+        });
+        const zoneNames = Object.keys(byZone).sort();
+
+        return (
+          <div className="space-y-4">
+            {zoneNames.map(zoneName => (
+              <div key={zoneName} className="bg-white dark:bg-gray-800 rounded-lg shadow">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{zoneName}</h2>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 p-4">
+                  {byZone[zoneName].map((s, i) => (
+                    <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate" title={getNutrientName(s.nutrient)}>
+                        {getNutrientName(s.nutrient)}
+                      </p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white mt-1">
+                        {typeof s.avg === 'number' ? s.avg.toFixed(2) : s.avg}
+                        <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">{s.unit}</span>
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        {typeof s.min === 'number' ? s.min.toFixed(1) : s.min} - {typeof s.max === 'number' ? s.max.toFixed(1) : s.max}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{s.count} reading{s.count !== 1 ? 's' : ''}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">

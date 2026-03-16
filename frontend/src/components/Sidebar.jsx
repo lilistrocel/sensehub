@@ -34,6 +34,12 @@ const AutomationsIcon = () => (
   </svg>
 );
 
+const FertigationIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+  </svg>
+);
+
 const LabIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 5h6M9 5H7.5A1.5 1.5 0 006 6.5V7m12-2h-1.5A1.5 1.5 0 0015 6.5V7M6 7v0a1 1 0 00-.293.707L4.2 18.6A2 2 0 006.172 21h11.656a2 2 0 001.972-2.4l-1.507-10.893A1 1 0 0018 7v0M6 7h12" />
@@ -82,6 +88,7 @@ const navItems = [
   { name: 'Cameras', path: '/cameras', icon: CameraIcon },
   { name: 'Zones', path: '/zones', icon: ZonesIcon },
   { name: 'Automations', path: '/automations', icon: AutomationsIcon },
+  { name: 'Fertigation', path: '/fertigation', icon: FertigationIcon },
   { name: 'Lab Analysis', path: '/lab-analysis', icon: LabIcon },
   { name: 'Alerts', path: '/alerts', icon: AlertsIcon },
   { name: 'Settings', path: '/settings', icon: SettingsIcon },

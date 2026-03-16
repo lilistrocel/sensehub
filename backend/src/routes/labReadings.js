@@ -121,10 +121,13 @@ router.get('/stats', (req, res) => {
   if (to) { where += ' AND sample_date <= ?'; params.push(to); }
 
   const stats = db.prepare(
-    `SELECT nutrient, unit, COUNT(*) as count, AVG(value) as avg, MIN(value) as min, MAX(value) as max
-     FROM lab_readings ${where}
-     GROUP BY nutrient, unit
-     ORDER BY nutrient ASC`
+    `SELECT lr.nutrient, lr.unit, lr.zone_id, z.name as zone_name,
+            COUNT(*) as count, AVG(lr.value) as avg, MIN(lr.value) as min, MAX(lr.value) as max
+     FROM lab_readings lr
+     LEFT JOIN zones z ON lr.zone_id = z.id
+     ${where.replace(/\bzone_id\b/g, 'lr.zone_id').replace(/\bsample_date\b/g, 'lr.sample_date')}
+     GROUP BY lr.nutrient, lr.unit, lr.zone_id
+     ORDER BY z.name ASC, lr.nutrient ASC`
   ).all(...params);
 
   res.json(stats);

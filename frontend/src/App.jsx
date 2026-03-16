@@ -19,6 +19,7 @@ import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
 import Cameras from './pages/Cameras';
 import Debug from './pages/Debug';
+import Fertigation from './pages/Fertigation';
 import LabAnalysis from './pages/LabAnalysis';
 import NotFound from './pages/NotFound';
 
@@ -169,6 +170,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Automations />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/fertigation"
+        element={
+          <ProtectedRoute>
+            <Fertigation />
           </ProtectedRoute>
         }
       />

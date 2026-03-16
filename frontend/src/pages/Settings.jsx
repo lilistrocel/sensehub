@@ -40,6 +40,16 @@ const settingsTabs = [
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
     </svg>
   )},
+  { name: 'Watchdog', path: 'watchdog', adminOnly: true, icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+    </svg>
+  )},
+  { name: 'Data', path: 'data', adminOnly: true, icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  )},
 ];
 
 function SystemSettings() {
@@ -2655,6 +2665,333 @@ function BackupSettings() {
   );
 }
 
+function WatchdogHistory() {
+  const { token } = useAuth();
+  const { formatDateTime } = useSettings();
+  const [connectivity, setConnectivity] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
+
+  const headers = { 'Authorization': `Bearer ${token}` };
+
+  const fetchData = () => {
+    setLoading(true);
+    const params = new URLSearchParams({ limit: pageSize, offset: page * pageSize });
+    if (filter) params.set('event_type', filter);
+
+    Promise.all([
+      fetch(`${API_BASE}/system/connectivity`, { headers }).then(r => r.json()),
+      fetch(`${API_BASE}/system/watchdog-history?${params}`, { headers }).then(r => r.json()),
+    ]).then(([conn, hist]) => {
+      setConnectivity(conn);
+      setEvents(hist.events);
+      setTotal(hist.total);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  React.useEffect(fetchData, [page, filter]);
+
+  // Auto-refresh every 30 seconds
+  React.useEffect(() => {
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [page, filter]);
+
+  const totalPages = Math.ceil(total / pageSize);
+
+  const statusColor = (status) => {
+    if (status === 'up' || status === 'online') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+    if (status === 'down' || status === 'offline' || status === 'error') return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+    return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400';
+  };
+
+  const statusDot = (status) => {
+    if (status === 'up') return 'bg-green-500';
+    if (status === 'down') return 'bg-red-500';
+    return 'bg-gray-400';
+  };
+
+  const eventTypeLabel = (type) => {
+    switch (type) {
+      case 'connectivity': return 'Connectivity';
+      case 'automation': return 'Automation';
+      case 'equipment': return 'Equipment';
+      default: return type;
+    }
+  };
+
+  const formatDuration = (seconds) => {
+    if (!seconds) return null;
+    if (seconds < 60) return `${seconds}s`;
+    const m = Math.floor(seconds / 60);
+    if (m < 60) return `${m}m ${seconds % 60}s`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ${m % 60}m`;
+    const d = Math.floor(h / 24);
+    return `${d}d ${h % 24}h`;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Watchdog Monitor</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Connectivity status, watchdog alerts, and system health history</p>
+      </div>
+
+      {/* Live Connectivity Status */}
+      {connectivity?.current && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Live Status</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {Object.entries(connectivity.current).filter(([k]) => k !== 'pendingNotifications').map(([target, info]) => (
+              <div key={target} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${statusDot(info.status)} ${info.status === 'up' ? 'animate-pulse' : ''}`} />
+                    <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{target === 'go2rtc' ? 'go2rtc' : target === 'mcp' ? 'MCP Server' : 'Internet'}</span>
+                  </div>
+                  <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${statusColor(info.status)}`}>
+                    {info.status}
+                  </span>
+                </div>
+                {info.downSince && (
+                  <p className="text-xs text-red-500 dark:text-red-400 mt-2">Down since {formatDateTime(info.downSince)}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          {connectivity.current.pendingNotifications > 0 && (
+            <div className="mt-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+              <p className="text-sm text-amber-800 dark:text-amber-400">
+                {connectivity.current.pendingNotifications} notification{connectivity.current.pendingNotifications !== 1 ? 's' : ''} queued — will be sent when internet is restored
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Connectivity Timeline (last outages) */}
+      {connectivity?.history && (() => {
+        const outages = connectivity.history.filter(e => (e.status === 'up' || e.status === 'restart') && e.duration_seconds);
+        if (outages.length === 0) return null;
+        return (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Recent Outages</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Service</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Recovered At</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Downtime</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {outages.slice(0, 20).map(e => (
+                    <tr key={e.id}>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white capitalize">{e.event_type === 'system' ? 'System Restart' : e.target === 'go2rtc' ? 'go2rtc' : e.target === 'mcp' ? 'MCP Server' : e.target}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{formatDateTime(e.created_at)}</td>
+                      <td className="px-4 py-3 text-sm text-right">
+                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                          {formatDuration(e.duration_seconds)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Full Event History */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Event History</h3>
+          <div className="flex gap-2">
+            <select value={filter} onChange={e => { setFilter(e.target.value); setPage(0); }}
+              className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
+              <option value="">All Types</option>
+              <option value="connectivity">Connectivity</option>
+              <option value="automation">Automation</option>
+              <option value="equipment">Equipment</option>
+            </select>
+            <button onClick={fetchData} className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2" />
+            Loading events...
+          </div>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">No watchdog events recorded yet. Events will appear here after the first check cycle (~30s after startup).</p>
+        ) : (
+          <>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Time</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Target</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Message</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Duration</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {events.map(e => (
+                    <tr key={e.id}>
+                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatDateTime(e.created_at)}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                          {eventTypeLabel(e.event_type)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white capitalize">{e.target || '-'}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${statusColor(e.status)}`}>
+                          {e.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate" title={e.message}>{e.message}</td>
+                      <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">{e.duration_seconds ? formatDuration(e.duration_seconds) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-3">
+                <p className="text-sm text-gray-500 dark:text-gray-400">{total} total events</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                    className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">Previous</button>
+                  <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">Page {page + 1} of {totalPages}</span>
+                  <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                    className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">Next</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DataManagement() {
+  const { token } = useAuth();
+  const [counts, setCounts] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState({});
+  const [message, setMessage] = useState(null);
+
+  const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  const fetchCounts = () => {
+    setLoading(true);
+    fetch(`${API_BASE}/system/data-counts`, { headers })
+      .then(r => r.json())
+      .then(data => { setCounts(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  React.useEffect(() => { fetchCounts(); }, []);
+
+  const clearData = async (target, label) => {
+    if (!confirm(`Are you sure you want to delete ALL ${label}? This cannot be undone.`)) return;
+    setClearing(prev => ({ ...prev, [target]: true }));
+    setMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/system/clear/${target}`, { method: 'DELETE', headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to clear');
+      setMessage({ type: 'success', text: `Cleared ${data.deleted} ${label} record(s)` });
+      fetchCounts();
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setClearing(prev => ({ ...prev, [target]: false }));
+    }
+  };
+
+  const dataTargets = [
+    { key: 'alerts', label: 'Alerts', countKey: 'alerts', description: 'All alert history (info, warning, critical, watchdog)' },
+    { key: 'automation-logs', label: 'Automation Logs', countKey: 'automation_logs', description: 'Automation execution history and run logs' },
+    { key: 'equipment-errors', label: 'Equipment Errors', countKey: 'equipment_errors', description: 'Equipment error and fault history' },
+    { key: 'readings', label: 'Sensor Readings', countKey: 'readings', description: 'All sensor/Modbus polling data history' },
+    { key: 'lab-readings', label: 'Lab Readings', countKey: 'lab_readings', description: 'Manual lab analysis nutrient entries' },
+    { key: 'relay-events', label: 'Relay Events', countKey: 'relay_events', description: 'Relay on/off event history for fertigation tracking' },
+    { key: 'watchdog-events', label: 'Watchdog Events', countKey: 'watchdog_events', description: 'Watchdog and connectivity monitoring history' },
+    { key: 'sync-queue', label: 'Sync Queue', countKey: 'sync_queue', description: 'Cloud sync queue entries' },
+    { key: 'watchdog-cooldowns', label: 'Watchdog Cooldowns', countKey: null, description: 'Reset watchdog alert cooldowns so alerts can fire again immediately' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Data Management</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Clear history and log data from the system database</p>
+      </div>
+
+      {message && (
+        <div className={`p-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-50 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-50 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}>
+          {message.text}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
+          Loading data counts...
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {dataTargets.map(({ key, label, countKey, description }) => (
+            <div key={key} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{label}</h3>
+                  {countKey && counts && (
+                    <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                      {counts[countKey]?.toLocaleString() || 0} records
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+              </div>
+              <button
+                onClick={() => clearData(key, label)}
+                disabled={clearing[key] || (countKey && counts && counts[countKey] === 0)}
+                className="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              >
+                {clearing[key] ? 'Clearing...' : `Clear ${label}`}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+        <p className="text-sm text-amber-800 dark:text-amber-400">
+          <strong>Warning:</strong> Clearing data is permanent and cannot be undone. Sensor readings and lab data will be lost. Consider creating a backup first.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -2741,6 +3078,8 @@ export default function Settings() {
             <Route path="cloud" element={<CloudSettings />} />
             <Route path="notifications" element={<NotificationSettings />} />
             <Route path="backup" element={<BackupSettings />} />
+            <Route path="watchdog" element={<WatchdogHistory />} />
+            <Route path="data" element={<DataManagement />} />
           </Routes>
         </div>
       </div>

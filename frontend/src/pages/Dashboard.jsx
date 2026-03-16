@@ -437,6 +437,51 @@ export default function Dashboard() {
     }
   };
 
+  // Handle all-channels relay control
+  const handleRelayAllControl = async (equipmentId, newState, relayChannels) => {
+    if (!canControl) return;
+
+    const loadingKey = `${equipmentId}_all`;
+    setControlLoading(prev => ({ ...prev, [loadingKey]: true }));
+    setControlMessage(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/equipment/${equipmentId}/relay/all`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ state: newState })
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to control all channels');
+      }
+
+      // Update local state for all channels
+      setEquipmentList(prev => prev.map(eq => {
+        if (eq.id === equipmentId) {
+          const updated = { ...eq, last_reading: { ...(eq.last_reading || {}) } };
+          if (!updated.last_reading.relayStates) updated.last_reading.relayStates = {};
+          relayChannels.forEach(ch => {
+            updated.last_reading.relayStates[ch.address] = newState;
+          });
+          return updated;
+        }
+        return eq;
+      }));
+
+      setControlMessage({ type: 'success', text: `All channels turned ${newState ? 'on' : 'off'}` });
+      setTimeout(() => setControlMessage(null), 3000);
+    } catch (err) {
+      setControlMessage({ type: 'error', text: err.message });
+    } finally {
+      setControlLoading(prev => ({ ...prev, [loadingKey]: false }));
+    }
+  };
+
   // Fetch zones for the dropdown
   useEffect(() => {
     const fetchZones = async () => {
@@ -1031,7 +1076,26 @@ export default function Dashboard() {
                         )}
                       </div>
                       {isRelayBoard && (
-                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <div className="mt-3">
+                          {canControl && relayChannels.length > 1 && (
+                            <div className="flex gap-2 mb-2">
+                              <button
+                                onClick={() => handleRelayAllControl(equipment.id, true, relayChannels)}
+                                disabled={controlLoading[`${equipment.id}_all`]}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                              >
+                                {controlLoading[`${equipment.id}_all`] ? 'Working...' : 'All On'}
+                              </button>
+                              <button
+                                onClick={() => handleRelayAllControl(equipment.id, false, relayChannels)}
+                                disabled={controlLoading[`${equipment.id}_all`]}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                              >
+                                {controlLoading[`${equipment.id}_all`] ? 'Working...' : 'All Off'}
+                              </button>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {relayChannels.map(ch => {
                             const isOn = !!relayStates[ch.address];
                             const loadingKey = `${equipment.id}_${ch.address}`;
@@ -1059,6 +1123,7 @@ export default function Dashboard() {
                               </button>
                             );
                           })}
+                          </div>
                         </div>
                       )}
                     </div>

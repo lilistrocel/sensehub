@@ -2,6 +2,7 @@ const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
 const { modbusTcpClient } = require('../services/ModbusTcpClient');
+const { logRelayEvent } = require('../services/RelayEventLogger');
 
 const router = express.Router();
 
@@ -799,6 +800,9 @@ router.post('/:id/relay/control', requireRole('admin', 'operator'), async (req, 
       confirmed: result.confirmed !== false
     });
 
+    // Log relay event for fertigation tracking
+    logRelayEvent(equipment.id, address, value, 'manual');
+
     res.json({
       success: true,
       channel: address,
@@ -883,6 +887,11 @@ router.post('/:id/relay/all', requireRole('admin', 'operator'), async (req, res)
       state: value,
       writeOnly: !!equipment.write_only,
       confirmed: result.confirmed !== false
+    });
+
+    // Log relay events for fertigation tracking
+    coilMappings.forEach(m => {
+      logRelayEvent(equipment.id, parseInt(m.register, 10) || 0, value, 'all_channels');
     });
 
     res.json({

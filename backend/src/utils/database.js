@@ -300,6 +300,74 @@ const initSchema = () => {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Relay events table — logs every relay on/off transition
+    CREATE TABLE IF NOT EXISTS relay_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      equipment_id INTEGER NOT NULL,
+      channel INTEGER NOT NULL,
+      state INTEGER NOT NULL,
+      source TEXT CHECK(source IN ('manual', 'automation', 'automation_auto_off', 'all_channels')) NOT NULL,
+      automation_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
+      FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE SET NULL
+    );
+
+    -- Fertigation ingredients — predefined dropdown list
+    CREATE TABLE IF NOT EXISTS fertigation_ingredients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Fertigation mixtures — reusable named recipes
+    CREATE TABLE IF NOT EXISTS fertigation_mixtures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Fertigation mixture items — ingredients in a mixture with parts ratios
+    CREATE TABLE IF NOT EXISTS fertigation_mixture_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mixture_id INTEGER NOT NULL,
+      ingredient_id INTEGER NOT NULL,
+      parts REAL NOT NULL DEFAULT 1,
+      FOREIGN KEY (mixture_id) REFERENCES fertigation_mixtures(id) ON DELETE CASCADE,
+      FOREIGN KEY (ingredient_id) REFERENCES fertigation_ingredients(id) ON DELETE CASCADE,
+      UNIQUE(mixture_id, ingredient_id)
+    );
+
+    -- Relay channel config — tags relay channels with dispensing info
+    CREATE TABLE IF NOT EXISTS relay_channel_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      equipment_id INTEGER NOT NULL,
+      channel INTEGER NOT NULL,
+      ingredient_name TEXT,
+      mixture_id INTEGER,
+      flow_rate REAL NOT NULL,
+      flow_unit TEXT DEFAULT 'L/min',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
+      FOREIGN KEY (mixture_id) REFERENCES fertigation_mixtures(id) ON DELETE SET NULL,
+      UNIQUE(equipment_id, channel)
+    );
+
+    -- Watchdog events — persistent log of all watchdog detections and connectivity changes
+    CREATE TABLE IF NOT EXISTS watchdog_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      target TEXT,
+      status TEXT NOT NULL,
+      message TEXT,
+      detail TEXT,
+      duration_seconds INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
@@ -321,6 +389,14 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_lab_readings_nutrient ON lab_readings(nutrient);
     CREATE INDEX IF NOT EXISTS idx_lab_readings_sample_date ON lab_readings(sample_date);
     CREATE INDEX IF NOT EXISTS idx_lab_readings_zone ON lab_readings(zone_id);
+    CREATE INDEX IF NOT EXISTS idx_relay_events_equipment ON relay_events(equipment_id);
+    CREATE INDEX IF NOT EXISTS idx_relay_events_created ON relay_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_relay_events_equip_channel ON relay_events(equipment_id, channel, created_at);
+    CREATE INDEX IF NOT EXISTS idx_relay_channel_config_equipment ON relay_channel_config(equipment_id);
+    CREATE INDEX IF NOT EXISTS idx_fertigation_mixture_items_mixture ON fertigation_mixture_items(mixture_id);
+    CREATE INDEX IF NOT EXISTS idx_watchdog_events_type ON watchdog_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_watchdog_events_created ON watchdog_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_watchdog_events_target ON watchdog_events(target, created_at);
   `);
 
   // Add calibration columns to existing equipment table if they don't exist
@@ -423,6 +499,53 @@ const initSchema = () => {
     }
   } catch (err) {
     console.log('readings name column already exists or migration skipped');
+  }
+
+  // Migrate relay_channel_config: add mixture_id and make ingredient_name nullable
+  try {
+    const rccColInfo = db.pragma("table_info(relay_channel_config)");
+    const ingCol = rccColInfo.find(c => c.name === 'ingredient_name');
+    // Need migration if ingredient_name is NOT NULL (old schema) or mixture_id is missing
+    if ((ingCol && ingCol.notnull === 1) || !rccColInfo.find(c => c.name === 'mixture_id')) {
+      // Recreate table with correct schema (ingredient_name nullable, mixture_id added)
+      db.exec(`
+        ALTER TABLE relay_channel_config RENAME TO relay_channel_config_old;
+        CREATE TABLE relay_channel_config (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          equipment_id INTEGER NOT NULL,
+          channel INTEGER NOT NULL,
+          ingredient_name TEXT,
+          mixture_id INTEGER,
+          flow_rate REAL NOT NULL,
+          flow_unit TEXT DEFAULT 'L/min',
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
+          FOREIGN KEY (mixture_id) REFERENCES fertigation_mixtures(id) ON DELETE SET NULL,
+          UNIQUE(equipment_id, channel)
+        );
+        INSERT INTO relay_channel_config (id, equipment_id, channel, ingredient_name, mixture_id, flow_rate, flow_unit, created_at, updated_at)
+          SELECT id, equipment_id, channel, ingredient_name, mixture_id, flow_rate, flow_unit, created_at, updated_at FROM relay_channel_config_old;
+        DROP TABLE relay_channel_config_old;
+        CREATE INDEX IF NOT EXISTS idx_relay_channel_config_equipment ON relay_channel_config(equipment_id);
+      `);
+      console.log('Migrated relay_channel_config table (added mixture_id, made ingredient_name nullable)');
+    }
+  } catch (err) {
+    console.log('relay_channel_config migration skipped:', err.message);
+  }
+
+  // Seed default fertigation ingredients
+  try {
+    const count = db.prepare('SELECT COUNT(*) as count FROM fertigation_ingredients').get().count;
+    if (count === 0) {
+      const defaults = ['Water', 'Nutrient A', 'Nutrient B', 'CalMag', 'pH Up', 'pH Down', 'Humic Acid', 'Silica', 'Root Stimulator', 'Bloom Booster'];
+      const insert = db.prepare('INSERT OR IGNORE INTO fertigation_ingredients (name) VALUES (?)');
+      for (const name of defaults) insert.run(name);
+      console.log('Seeded default fertigation ingredients');
+    }
+  } catch (err) {
+    console.log('Fertigation ingredients seed skipped:', err.message);
   }
 
   console.log('Database schema initialized');

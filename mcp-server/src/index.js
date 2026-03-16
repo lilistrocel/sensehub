@@ -157,6 +157,73 @@ function createMcpServer() {
     }
   );
 
+  server.tool(
+    'get_lab_readings',
+    'Get lab analysis readings (manual nutrient measurements). Filter by nutrient, zone, or date range. Returns paginated results with value, unit, sample date, zone, and notes.',
+    {
+      nutrient: z.string().optional().describe('Filter by nutrient ID (e.g., nitrogen_N, pH, EC, potassium_K)'),
+      zone_id: z.number().int().optional().describe('Filter by zone ID'),
+      from: z.string().optional().describe('Start date (YYYY-MM-DD)'),
+      to: z.string().optional().describe('End date (YYYY-MM-DD)'),
+      limit: z.number().int().optional().describe('Max readings to return (default 25)'),
+    },
+    async ({ nutrient, zone_id, from, to, limit }) => {
+      const params = new URLSearchParams();
+      if (nutrient) params.set('nutrient', nutrient);
+      if (zone_id) params.set('zone_id', String(zone_id));
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      if (limit) params.set('limit', String(limit));
+      const qs = params.toString();
+      const data = await api.get(`/api/lab-readings${qs ? '?' + qs : ''}`);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'get_lab_latest',
+    'Get the latest lab reading for each nutrient, optionally filtered by zone. Useful for a quick snapshot of current nutrient levels.',
+    {
+      zone_id: z.number().int().optional().describe('Filter by zone ID to see readings for a specific zone (e.g., fertigation vs drain)'),
+    },
+    async ({ zone_id }) => {
+      const params = new URLSearchParams();
+      if (zone_id) params.set('zone_id', String(zone_id));
+      const qs = params.toString();
+      const data = await api.get(`/api/lab-readings/latest${qs ? '?' + qs : ''}`);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'get_lab_stats',
+    'Get statistical summary (avg, min, max, count) per nutrient from lab readings. Filter by zone or date range.',
+    {
+      zone_id: z.number().int().optional().describe('Filter by zone ID'),
+      from: z.string().optional().describe('Start date (YYYY-MM-DD)'),
+      to: z.string().optional().describe('End date (YYYY-MM-DD)'),
+    },
+    async ({ zone_id, from, to }) => {
+      const params = new URLSearchParams();
+      if (zone_id) params.set('zone_id', String(zone_id));
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      const qs = params.toString();
+      const data = await api.get(`/api/lab-readings/stats${qs ? '?' + qs : ''}`);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'get_lab_nutrients',
+    'Get the list of available nutrient types that can be used in lab readings. Returns IDs, names, categories, and default units.',
+    {},
+    async () => {
+      const data = await api.get('/api/lab-readings/nutrients');
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
   // ========== RESOURCES ==========
 
   server.resource(
@@ -186,6 +253,16 @@ function createMcpServer() {
     async () => {
       const data = await api.get('/api/alerts?acknowledged=false');
       return { contents: [{ uri: 'sensehub://alerts', mimeType: 'application/json', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.resource(
+    'lab-readings',
+    'sensehub://lab-readings',
+    { description: 'Latest lab analysis readings per nutrient per zone' },
+    async () => {
+      const data = await api.get('/api/lab-readings/latest');
+      return { contents: [{ uri: 'sensehub://lab-readings', mimeType: 'application/json', text: JSON.stringify(data, null, 2) }] };
     }
   );
 

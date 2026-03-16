@@ -7,6 +7,7 @@
 const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { relayTimerService } = require('./RelayTimerService');
+const { logRelayEvent } = require('./RelayEventLogger');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -114,6 +115,9 @@ async function executeControlAction(action, automation) {
         automationId: automation.id
       });
 
+      // Log relay event for fertigation tracking
+      logRelayEvent(targetEquipment.id, address, value, 'automation', automation.id);
+
       // Schedule auto-off if duration_seconds is set and action is "on"
       if (action.duration_seconds && action.duration_seconds > 0 && value === true) {
         relayTimerService.scheduleOff(targetEquipment.id, address, action.duration_seconds, async () => {
@@ -143,6 +147,9 @@ async function executeControlAction(action, automation) {
               source: 'automation_auto_off',
               automationId: automation.id
             });
+
+            // Log relay event for fertigation tracking
+            logRelayEvent(targetEquipment.id, address, false, 'automation_auto_off', automation.id);
 
             console.log(`[Automation] Auto-off completed for equipment ${targetEquipment.id} channel ${address}`);
           } catch (err) {

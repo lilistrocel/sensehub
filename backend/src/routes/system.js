@@ -345,4 +345,151 @@ router.get('/services', requireRole('admin'), async (req, res) => {
   res.json({ services, system: systemInfo, timestamp: new Date().toISOString() });
 });
 
+// DELETE /api/system/clear/:target - Clear history data
+router.delete('/clear/:target', requireRole('admin'), (req, res) => {
+  const { target } = req.params;
+  const { before } = req.query; // optional ISO date to only clear older records
+
+  const results = {};
+
+  try {
+    const whereDate = before ? ` AND created_at < ?` : '';
+    const params = before ? [before] : [];
+
+    switch (target) {
+      case 'alerts': {
+        const r = db.prepare(`DELETE FROM alerts WHERE 1=1${whereDate}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'alerts';
+        break;
+      }
+      case 'automation-logs': {
+        const dateCol = before ? ' AND triggered_at < ?' : '';
+        const r = db.prepare(`DELETE FROM automation_logs WHERE 1=1${dateCol}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'automation_logs';
+        break;
+      }
+      case 'equipment-errors': {
+        const r = db.prepare(`DELETE FROM equipment_errors WHERE 1=1${whereDate}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'equipment_errors';
+        // Reset equipment error_log field
+        db.prepare("UPDATE equipment SET error_log = NULL WHERE error_log IS NOT NULL").run();
+        break;
+      }
+      case 'readings': {
+        const dateCol = before ? ' AND timestamp < ?' : '';
+        const r = db.prepare(`DELETE FROM readings WHERE 1=1${dateCol}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'readings';
+        break;
+      }
+      case 'lab-readings': {
+        const dateCol = before ? ' AND sample_date < ?' : '';
+        const r = db.prepare(`DELETE FROM lab_readings WHERE 1=1${dateCol}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'lab_readings';
+        break;
+      }
+      case 'sync-queue': {
+        const r = db.prepare(`DELETE FROM sync_queue WHERE 1=1${whereDate}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'sync_queue';
+        break;
+      }
+      case 'relay-events': {
+        const r = db.prepare(`DELETE FROM relay_events WHERE 1=1${whereDate}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'relay_events';
+        break;
+      }
+      case 'watchdog-events': {
+        const r = db.prepare(`DELETE FROM watchdog_events WHERE 1=1${whereDate}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'watchdog_events';
+        break;
+      }
+      case 'watchdog-cooldowns': {
+        const r1 = db.prepare("UPDATE automations SET last_watchdog_alert = NULL WHERE last_watchdog_alert IS NOT NULL").run();
+        const r2 = db.prepare("UPDATE equipment SET last_watchdog_alert = NULL WHERE last_watchdog_alert IS NOT NULL").run();
+        results.deleted = r1.changes + r2.changes;
+        results.target = 'watchdog_cooldowns';
+        break;
+      }
+      default:
+        return res.status(400).json({ error: 'Bad Request', message: `Unknown target: ${target}. Valid: alerts, automation-logs, equipment-errors, readings, lab-readings, relay-events, watchdog-events, sync-queue, watchdog-cooldowns` });
+    }
+
+    console.log(`[System] Cleared ${results.deleted} records from ${results.target}${before ? ` (before ${before})` : ''}`);
+    res.json({ message: `Cleared ${results.deleted} record(s) from ${results.target}`, ...results });
+  } catch (err) {
+    console.error('[System] Clear error:', err.message);
+    res.status(500).json({ error: 'Server Error', message: err.message });
+  }
+});
+
+// GET /api/system/data-counts - Get record counts for data management
+router.get('/data-counts', requireRole('admin'), (req, res) => {
+  try {
+    const counts = {
+      alerts: db.prepare('SELECT COUNT(*) as count FROM alerts').get().count,
+      automation_logs: db.prepare('SELECT COUNT(*) as count FROM automation_logs').get().count,
+      equipment_errors: db.prepare('SELECT COUNT(*) as count FROM equipment_errors').get().count,
+      readings: db.prepare('SELECT COUNT(*) as count FROM readings').get().count,
+      lab_readings: db.prepare('SELECT COUNT(*) as count FROM lab_readings').get().count,
+      relay_events: db.prepare('SELECT COUNT(*) as count FROM relay_events').get().count,
+      watchdog_events: db.prepare('SELECT COUNT(*) as count FROM watchdog_events').get().count,
+      sync_queue: db.prepare('SELECT COUNT(*) as count FROM sync_queue').get().count,
+    };
+    res.json(counts);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/system/connectivity - Current connectivity status + recent history
+router.get('/connectivity', (req, res) => {
+  try {
+    const { watchdogService } = require('../services/WatchdogService');
+    const current = watchdogService.getConnectivityStatus();
+
+    const history = db.prepare(`
+      SELECT * FROM watchdog_events
+      WHERE event_type IN ('connectivity', 'system')
+      ORDER BY created_at DESC
+      LIMIT 200
+    `).all();
+
+    res.json({ current, history });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/system/watchdog-history - All watchdog events with optional filters
+router.get('/watchdog-history', (req, res) => {
+  const { event_type, target, limit = 100, offset = 0 } = req.query;
+
+  let where = '1=1';
+  const params = [];
+
+  if (event_type) { where += ' AND event_type = ?'; params.push(event_type); }
+  if (target) { where += ' AND target = ?'; params.push(target); }
+
+  try {
+    const total = db.prepare(`SELECT COUNT(*) as count FROM watchdog_events WHERE ${where}`).get(...params).count;
+    const events = db.prepare(`
+      SELECT * FROM watchdog_events
+      WHERE ${where}
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, parseInt(limit), parseInt(offset));
+
+    res.json({ events, total, limit: parseInt(limit), offset: parseInt(offset) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
