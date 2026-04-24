@@ -79,6 +79,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   const [conditionValue, setConditionValue] = useState('');
 
   // Action editing
+  const [editingDepsForAction, setEditingDepsForAction] = useState(null); // index of action whose deps are being edited
   const [actionType, setActionType] = useState('alert');
   const [actionMessage, setActionMessage] = useState('');
   const [actionSeverity, setActionSeverity] = useState('info');
@@ -91,6 +92,12 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   const [controlDelay, setControlDelay] = useState('');
   const [controlStaggerDelay, setControlStaggerDelay] = useState('');
   const [editingActionIndex, setEditingActionIndex] = useState(null);
+
+  // Transition action state (atomic FC15 multi-coil)
+  const [transitionEquipmentId, setTransitionEquipmentId] = useState('');
+  const [transitionStates, setTransitionStates] = useState({}); // { channelAddress: true/false/null (skip) }
+  const [transitionDelay, setTransitionDelay] = useState('');
+  const [transitionDuration, setTransitionDuration] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -286,6 +293,30 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
         type: 'log',
         message: actionMessage || 'Event logged'
       };
+    } else if (actionType === 'transition') {
+      if (!transitionEquipmentId) return;
+      const selectedEq = equipment.find(eq => eq.id === parseInt(transitionEquipmentId));
+      const transitions = Object.entries(transitionStates)
+        .filter(([_, v]) => v === true || v === false)
+        .map(([ch, v]) => {
+          let mapping = null;
+          try {
+            const mappings = typeof selectedEq?.register_mappings === 'string'
+              ? JSON.parse(selectedEq.register_mappings)
+              : (selectedEq?.register_mappings || []);
+            mapping = mappings.find(m => String(m.register ?? m.address) === ch);
+          } catch {}
+          return { channel: parseInt(ch), state: v, name: mapping ? getChannelDisplayName(mapping) : `Coil ${ch}` };
+        });
+      if (transitions.length === 0) return;
+      newAction = {
+        type: 'transition',
+        equipment_id: parseInt(transitionEquipmentId),
+        equipment_name: selectedEq?.name || 'Unknown Equipment',
+        delay_seconds: transitionDelay ? parseInt(transitionDelay) : null,
+        duration_seconds: transitionDuration ? parseInt(transitionDuration) : null,
+        transitions
+      };
     }
 
     if (editingActionIndex !== null) {
@@ -313,6 +344,10 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     setControlDuration('');
     setControlDelay('');
     setControlStaggerDelay('');
+    setTransitionEquipmentId('');
+    setTransitionStates({});
+    setTransitionDelay('');
+    setTransitionDuration('');
   };
 
   const editAction = (index) => {
@@ -337,6 +372,13 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     } else if (action.type === 'log') {
       setActionMessage(action.message || '');
       setControlEquipmentId('');
+    } else if (action.type === 'transition') {
+      setTransitionEquipmentId(String(action.equipment_id || ''));
+      setTransitionDelay(action.delay_seconds ? String(action.delay_seconds) : '');
+      setTransitionDuration(action.duration_seconds ? String(action.duration_seconds) : '');
+      const states = {};
+      (action.transitions || []).forEach(t => { states[t.channel] = t.state; });
+      setTransitionStates(states);
     }
   };
 
@@ -352,6 +394,10 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     setControlDuration('');
     setControlDelay('');
     setControlStaggerDelay('');
+    setTransitionEquipmentId('');
+    setTransitionStates({});
+    setTransitionDelay('');
+    setTransitionDuration('');
   };
 
   const removeAction = (index) => {
@@ -1085,11 +1131,38 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                           <span className={`text-xs px-2 py-0.5 rounded ${
                             action.type === 'alert' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' :
                             action.type === 'control' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                            action.type === 'transition' ? 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400' :
                             'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                           }`}>
-                            {action.type}
+                            {action.type === 'transition' ? '⚡ atomic' : action.type}
                           </span>
-                          {action.type === 'control' ? (
+                          {action.type === 'transition' ? (
+                            <span className="text-sm flex items-center gap-1 flex-wrap dark:text-gray-300">
+                              <span className="text-gray-600 dark:text-gray-400">{action.equipment_name || `Equipment #${action.equipment_id}`}</span>
+                              <span className="font-mono text-xs">
+                                {(action.transitions || []).map(t => (
+                                  <span key={t.channel} className={`inline-block px-1 mx-0.5 rounded ${t.state ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                    {t.name || `ch${t.channel}`}={t.state ? 'ON' : 'OFF'}
+                                  </span>
+                                ))}
+                              </span>
+                              {action.delay_seconds > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
+                                  {action.delay_seconds}s delay
+                                </span>
+                              )}
+                              {action.duration_seconds > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                                  {action.duration_seconds}s auto-revert
+                                </span>
+                              )}
+                              {Array.isArray(action.dependencies) && action.dependencies.length > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                  🔒 {action.dependencies.length} dep{action.dependencies.length > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </span>
+                          ) : action.type === 'control' ? (
                             <span className="text-sm flex items-center gap-1 flex-wrap dark:text-gray-300">
                               <span className="font-medium dark:text-white">
                                 {action.action === 'on' ? 'Turn On' :
@@ -1125,6 +1198,12 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                                   {action.duration_seconds}s auto-off
                                 </span>
                               )}
+                              {Array.isArray(action.dependencies) && action.dependencies.length > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                  title={action.dependencies.map(d => `${d.type}: ${d.metric || d.nutrient || ''} ${d.operator} ${d.value}`).join('\n')}>
+                                  🔒 {action.dependencies.length} dep{action.dependencies.length > 1 ? 's' : ''}
+                                </span>
+                              )}
                             </span>
                           ) : (
                             <span className="text-sm dark:text-gray-300">{action.message || '-'}</span>
@@ -1133,6 +1212,14 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             <span className="text-xs text-gray-500 dark:text-gray-400">({action.severity})</span>
                           )}
                           <div className="ml-auto flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingDepsForAction(editingDepsForAction === idx ? null : idx)}
+                              className={`px-2 py-1 text-xs rounded ${editingDepsForAction === idx ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}
+                              title="Edit dependencies"
+                            >
+                              🔒 Deps
+                            </button>
                             <button
                               type="button"
                               onClick={() => editAction(idx)}
@@ -1156,6 +1243,21 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                           </div>
                         </div>
                       ))}
+
+                      {/* Dependency editor for selected action */}
+                      {editingDepsForAction !== null && formData.actions[editingDepsForAction] && (
+                        <DependencyEditor
+                          action={formData.actions[editingDepsForAction]}
+                          equipmentList={equipment}
+                          onChange={(newDeps) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              actions: prev.actions.map((a, i) => i === editingDepsForAction ? { ...a, dependencies: newDeps } : a)
+                            }));
+                          }}
+                          onClose={() => setEditingDepsForAction(null)}
+                        />
+                      )}
                     </div>
                   )}
 
@@ -1170,9 +1272,23 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                       >
                         <option value="alert">Send Alert</option>
                         <option value="control">Control Equipment</option>
+                        <option value="transition">Atomic Transition (FC15)</option>
                         <option value="log">Log Event</option>
                       </select>
                     </div>
+                    {actionType === 'transition' && (
+                      <TransitionEditor
+                        equipment={equipment}
+                        equipmentId={transitionEquipmentId}
+                        setEquipmentId={setTransitionEquipmentId}
+                        states={transitionStates}
+                        setStates={setTransitionStates}
+                        delay={transitionDelay}
+                        setDelay={setTransitionDelay}
+                        duration={transitionDuration}
+                        setDuration={setTransitionDuration}
+                      />
+                    )}
                     {actionType === 'alert' && (
                       <>
                         <div>
@@ -1561,6 +1677,251 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   );
 }
 
+// Inline editor for atomic transition actions (FC15 - Write Multiple Coils)
+function TransitionEditor({ equipment, equipmentId, setEquipmentId, states, setStates, delay, setDelay, duration, setDuration }) {
+  const sensors = equipment.filter(e => {
+    try {
+      const m = typeof e.register_mappings === 'string' ? JSON.parse(e.register_mappings) : (e.register_mappings || []);
+      return m.some(x => x.type === 'coil' && x.access === 'readwrite');
+    } catch { return false; }
+  });
+
+  const selectedEq = sensors.find(eq => eq.id === parseInt(equipmentId));
+  let coils = [];
+  if (selectedEq) {
+    try {
+      const mappings = typeof selectedEq.register_mappings === 'string'
+        ? JSON.parse(selectedEq.register_mappings)
+        : (selectedEq.register_mappings || []);
+      coils = mappings.filter(m => m.type === 'coil' && m.access === 'readwrite').sort((a, b) => (a.register ?? a.address) - (b.register ?? b.address));
+    } catch {}
+  }
+
+  const setCoil = (addr, val) => {
+    setStates({ ...states, [addr]: val });
+  };
+  const clearCoil = (addr) => {
+    const next = { ...states };
+    delete next[addr];
+    setStates(next);
+  };
+
+  return (
+    <div className="w-full bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded p-3 mt-2">
+      <div className="mb-2">
+        <h5 className="text-sm font-semibold text-violet-900 dark:text-violet-300">⚡ Atomic Transition (FC15)</h5>
+        <p className="text-xs text-violet-700 dark:text-violet-400">All selected coils flip in a single Modbus frame — no timing drift between channels.</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+        <div>
+          <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Equipment</label>
+          <select value={equipmentId} onChange={e => { setEquipmentId(e.target.value); setStates({}); }}
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white">
+            <option value="">Select relay equipment...</option>
+            {sensors.map(eq => <option key={eq.id} value={eq.id}>{eq.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Delay (sec, optional)</label>
+          <input type="number" min="0" value={delay} onChange={e => setDelay(e.target.value)}
+            placeholder="0" className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Auto-revert OFF (sec, optional)</label>
+          <input type="number" min="0" value={duration} onChange={e => setDuration(e.target.value)}
+            placeholder="0" className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" />
+        </div>
+      </div>
+
+      {coils.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Channels — pick the target state for each (skip = leave alone)</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {coils.map(c => {
+              const addr = c.register ?? c.address;
+              const current = states[addr];
+              return (
+                <div key={addr} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded p-2">
+                  <p className="text-xs font-medium text-gray-900 dark:text-white truncate" title={getChannelDisplayName(c)}>
+                    {getChannelDisplayName(c)}
+                  </p>
+                  <p className="text-[10px] text-gray-400">addr {addr}</p>
+                  <div className="flex gap-1 mt-1">
+                    <button type="button" onClick={() => setCoil(addr, true)}
+                      className={`flex-1 px-2 py-1 text-xs rounded ${current === true ? 'bg-green-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-green-100 dark:hover:bg-green-900/30'}`}>
+                      ON
+                    </button>
+                    <button type="button" onClick={() => setCoil(addr, false)}
+                      className={`flex-1 px-2 py-1 text-xs rounded ${current === false ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-red-100 dark:hover:bg-red-900/30'}`}>
+                      OFF
+                    </button>
+                    <button type="button" onClick={() => clearCoil(addr)}
+                      className={`flex-1 px-2 py-1 text-xs rounded ${current === undefined ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
+                      —
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Inline editor for action dependencies (calibrated sensor / lab reading conditions)
+function DependencyEditor({ action, equipmentList, onChange, onClose }) {
+  const deps = Array.isArray(action.dependencies) ? action.dependencies : [];
+  const [newDep, setNewDep] = useState({
+    type: 'calibrated_sensor',
+    equipment_id: '',
+    metric: '',
+    nutrient: 'EC',
+    operator: 'lt',
+    value: '',
+    max_age_minutes: 30,
+    zone_id: ''
+  });
+
+  const sensors = equipmentList.filter(e => e.type !== 'relay');
+  const selectedEq = sensors.find(e => e.id === parseInt(newDep.equipment_id));
+  let availableMetrics = [];
+  if (selectedEq) {
+    try {
+      const m = typeof selectedEq.register_mappings === 'string'
+        ? JSON.parse(selectedEq.register_mappings)
+        : (selectedEq.register_mappings || []);
+      availableMetrics = m.filter(x => x.type !== 'coil').map(x => x.name);
+    } catch {}
+  }
+
+  const addDep = () => {
+    if (newDep.type === 'lab_reading') {
+      if (!newDep.nutrient || newDep.value === '') return;
+    } else {
+      if (!newDep.equipment_id || !newDep.metric || newDep.value === '') return;
+    }
+    const dep = { ...newDep, value: parseFloat(newDep.value), max_age_minutes: parseInt(newDep.max_age_minutes) || null };
+    if (dep.equipment_id) dep.equipment_id = parseInt(dep.equipment_id);
+    if (dep.zone_id) dep.zone_id = parseInt(dep.zone_id); else delete dep.zone_id;
+    onChange([...deps, dep]);
+    setNewDep({ ...newDep, value: '' });
+  };
+
+  const removeDep = (i) => onChange(deps.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded p-3 mt-2">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h5 className="text-sm font-semibold text-emerald-900 dark:text-emerald-300">Action Dependencies</h5>
+          <p className="text-xs text-emerald-700 dark:text-emerald-400">Action only fires when ALL conditions pass. Use "calibrated sensor" for EC.</p>
+        </div>
+        <button type="button" onClick={onClose} className="text-emerald-600 hover:text-emerald-800">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Existing deps */}
+      {deps.length > 0 && (
+        <div className="space-y-1 mb-3">
+          {deps.map((d, i) => (
+            <div key={i} className="flex items-center gap-2 bg-white dark:bg-gray-800 px-2 py-1 rounded text-xs border border-emerald-200 dark:border-emerald-700">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-medium">{d.type.replace('_', ' ')}</span>
+              <span className="text-gray-700 dark:text-gray-300">
+                {d.equipment_id ? sensors.find(s => s.id === d.equipment_id)?.name + ' / ' : ''}{d.metric || d.nutrient}
+              </span>
+              <span className="font-mono text-gray-600 dark:text-gray-400">{{gt:'>',gte:'≥',lt:'<',lte:'≤',eq:'=',neq:'≠'}[d.operator]} {d.value}</span>
+              {d.max_age_minutes && <span className="text-gray-400">(≤{d.max_age_minutes}min old)</span>}
+              <button type="button" onClick={() => removeDep(i)} className="ml-auto text-red-500 hover:text-red-700">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add new dep form */}
+      <div className="flex flex-wrap items-end gap-2 bg-white dark:bg-gray-800 p-2 rounded border border-emerald-200 dark:border-emerald-700">
+        <div>
+          <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">Source</label>
+          <select value={newDep.type} onChange={e => setNewDep({ ...newDep, type: e.target.value })}
+            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white">
+            <option value="calibrated_sensor">Calibrated sensor</option>
+            <option value="sensor">Raw sensor</option>
+            <option value="lab_reading">Latest lab reading</option>
+          </select>
+        </div>
+        {(newDep.type === 'sensor' || newDep.type === 'calibrated_sensor') && (
+          <>
+            <div>
+              <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">Equipment</label>
+              <select value={newDep.equipment_id} onChange={e => setNewDep({ ...newDep, equipment_id: e.target.value, metric: '' })}
+                className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white min-w-[140px]">
+                <option value="">Select...</option>
+                {sensors.map(eq => <option key={eq.id} value={eq.id}>{eq.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">Metric</label>
+              <select value={newDep.metric} onChange={e => setNewDep({ ...newDep, metric: e.target.value })}
+                className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white min-w-[140px]">
+                <option value="">Select...</option>
+                {availableMetrics.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+          </>
+        )}
+        {newDep.type === 'lab_reading' && (
+          <div>
+            <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">Nutrient</label>
+            <select value={newDep.nutrient} onChange={e => setNewDep({ ...newDep, nutrient: e.target.value })}
+              className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white">
+              <option value="EC">EC</option>
+              <option value="pH">pH</option>
+              <option value="nitrate_NO3">Nitrate</option>
+              <option value="phosphate_PO4">Phosphate</option>
+              <option value="potassium_K">Potassium</option>
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">Op</label>
+          <select value={newDep.operator} onChange={e => setNewDep({ ...newDep, operator: e.target.value })}
+            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white">
+            <option value="lt">&lt;</option>
+            <option value="lte">≤</option>
+            <option value="gt">&gt;</option>
+            <option value="gte">≥</option>
+            <option value="eq">=</option>
+            <option value="neq">≠</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">Value</label>
+          <input type="number" step="any" value={newDep.value} onChange={e => setNewDep({ ...newDep, value: e.target.value })}
+            placeholder="2500" className="w-20 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" />
+        </div>
+        <div>
+          <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">Max age (min)</label>
+          <input type="number" min="1" value={newDep.max_age_minutes} onChange={e => setNewDep({ ...newDep, max_age_minutes: e.target.value })}
+            className="w-16 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" />
+        </div>
+        <button type="button" onClick={addDep}
+          className="px-3 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700">
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Helper to format schedule description
 function getScheduleDescription(tc) {
   if (!tc || tc.type !== 'schedule') return null;
@@ -1614,10 +1975,46 @@ function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
   const [newActionMessage, setNewActionMessage] = useState('');
   const [newActionSeverity, setNewActionSeverity] = useState('info');
   const [newControlAction, setNewControlAction] = useState('on');
+  const [newControlEquipmentId, setNewControlEquipmentId] = useState('');
+  const [newControlChannel, setNewControlChannel] = useState('');
+  const [newControlChannelName, setNewControlChannelName] = useState('');
+  const [newControlValue, setNewControlValue] = useState('');
+  const [newControlDelay, setNewControlDelay] = useState('');
+  const [newControlDuration, setNewControlDuration] = useState('');
+  const [newControlStaggerDelay, setNewControlStaggerDelay] = useState('');
+  const [editingActionIdx, setEditingActionIdx] = useState(null);
+  const [editingDepsIdx, setEditingDepsIdx] = useState(null);
+
+  // Transition action state
+  const [newTransitionEquipmentId, setNewTransitionEquipmentId] = useState('');
+  const [newTransitionStates, setNewTransitionStates] = useState({});
+  const [newTransitionDelay, setNewTransitionDelay] = useState('');
+  const [newTransitionDuration, setNewTransitionDuration] = useState('');
+
+  // Equipment list for control actions
+  const [equipment, setEquipment] = useState([]);
+  const [loadingEquipment, setLoadingEquipment] = useState(false);
 
   useEffect(() => {
-    if (isOpen && token) fetchTemplates();
+    if (isOpen && token) {
+      fetchTemplates();
+      fetchEquipmentList();
+    }
   }, [isOpen, token]);
+
+  const fetchEquipmentList = async () => {
+    try {
+      setLoadingEquipment(true);
+      const response = await fetch(`${API_BASE}/equipment`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) setEquipment(await response.json());
+    } catch (err) {
+      console.error('Failed to fetch equipment:', err);
+    } finally {
+      setLoadingEquipment(false);
+    }
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -1659,22 +2056,113 @@ function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
     setSuccessMsg(null);
   };
 
-  const addAction = () => {
-    const action = { type: newActionType };
-    if (newActionType === 'alert') {
-      action.severity = newActionSeverity;
-      action.message = newActionMessage || 'Alert triggered';
-    } else if (newActionType === 'log') {
-      action.message = newActionMessage || 'Event logged';
-    } else if (newActionType === 'control') {
-      action.action = newControlAction;
-    }
-    setFormActions([...formActions, action]);
+  const resetActionForm = () => {
+    setNewActionType('alert');
     setNewActionMessage('');
+    setNewActionSeverity('info');
+    setNewControlAction('on');
+    setNewControlEquipmentId('');
+    setNewControlChannel('');
+    setNewControlChannelName('');
+    setNewControlValue('');
+    setNewControlDelay('');
+    setNewControlDuration('');
+    setNewControlStaggerDelay('');
+    setNewTransitionEquipmentId('');
+    setNewTransitionStates({});
+    setNewTransitionDelay('');
+    setNewTransitionDuration('');
+    setEditingActionIdx(null);
+  };
+
+  const addAction = () => {
+    let action;
+    if (newActionType === 'alert') {
+      action = { type: 'alert', severity: newActionSeverity, message: newActionMessage || 'Alert triggered' };
+    } else if (newActionType === 'log') {
+      action = { type: 'log', message: newActionMessage || 'Event logged' };
+    } else if (newActionType === 'control') {
+      if (!newControlEquipmentId) return;
+      const selectedEq = equipment.find(eq => eq.id === parseInt(newControlEquipmentId));
+      const isAllChannels = !newControlChannel;
+      action = {
+        type: 'control',
+        action: newControlAction,
+        equipment_id: parseInt(newControlEquipmentId),
+        equipment_name: selectedEq?.name || 'Unknown Equipment',
+        value: newControlAction === 'set' ? newControlValue : null,
+        channel: newControlChannel ? parseInt(newControlChannel) : null,
+        channel_name: newControlChannelName || null,
+        delay_seconds: newControlDelay ? parseInt(newControlDelay) : null,
+        duration_seconds: newControlDuration ? parseInt(newControlDuration) : null,
+        ...(isAllChannels && newControlStaggerDelay ? { stagger_delay_seconds: parseFloat(newControlStaggerDelay) } : {})
+      };
+    } else if (newActionType === 'transition') {
+      if (!newTransitionEquipmentId) return;
+      const selectedEq = equipment.find(eq => eq.id === parseInt(newTransitionEquipmentId));
+      const transitions = Object.entries(newTransitionStates)
+        .filter(([_, v]) => v === true || v === false)
+        .map(([ch, v]) => {
+          let mapping = null;
+          try {
+            const mappings = typeof selectedEq?.register_mappings === 'string'
+              ? JSON.parse(selectedEq.register_mappings)
+              : (selectedEq?.register_mappings || []);
+            mapping = mappings.find(m => String(m.register ?? m.address) === ch);
+          } catch {}
+          return { channel: parseInt(ch), state: v, name: mapping ? getChannelDisplayName(mapping) : `Coil ${ch}` };
+        });
+      if (transitions.length === 0) return;
+      action = {
+        type: 'transition',
+        equipment_id: parseInt(newTransitionEquipmentId),
+        equipment_name: selectedEq?.name || 'Unknown Equipment',
+        delay_seconds: newTransitionDelay ? parseInt(newTransitionDelay) : null,
+        duration_seconds: newTransitionDuration ? parseInt(newTransitionDuration) : null,
+        transitions
+      };
+    }
+    if (!action) return;
+
+    if (editingActionIdx !== null) {
+      setFormActions(formActions.map((a, i) => i === editingActionIdx ? action : a));
+    } else {
+      setFormActions([...formActions, action]);
+    }
+    resetActionForm();
+  };
+
+  const editAction = (idx) => {
+    const action = formActions[idx];
+    setEditingActionIdx(idx);
+    setNewActionType(action.type || 'alert');
+    if (action.type === 'control') {
+      setNewControlEquipmentId(String(action.equipment_id || ''));
+      setNewControlAction(action.action || 'on');
+      setNewControlValue(action.value != null ? String(action.value) : '');
+      setNewControlChannel(action.channel != null ? String(action.channel) : '');
+      setNewControlChannelName(action.channel_name || '');
+      setNewControlDelay(action.delay_seconds ? String(action.delay_seconds) : '');
+      setNewControlDuration(action.duration_seconds ? String(action.duration_seconds) : '');
+      setNewControlStaggerDelay(action.stagger_delay_seconds ? String(action.stagger_delay_seconds) : '');
+    } else if (action.type === 'alert') {
+      setNewActionMessage(action.message || '');
+      setNewActionSeverity(action.severity || 'info');
+    } else if (action.type === 'log') {
+      setNewActionMessage(action.message || '');
+    } else if (action.type === 'transition') {
+      setNewTransitionEquipmentId(String(action.equipment_id || ''));
+      setNewTransitionDelay(action.delay_seconds ? String(action.delay_seconds) : '');
+      setNewTransitionDuration(action.duration_seconds ? String(action.duration_seconds) : '');
+      const states = {};
+      (action.transitions || []).forEach(t => { states[t.channel] = t.state; });
+      setNewTransitionStates(states);
+    }
   };
 
   const removeAction = (idx) => {
     setFormActions(formActions.filter((_, i) => i !== idx));
+    if (editingActionIdx === idx) resetActionForm();
   };
 
   const handleSave = async () => {
@@ -1808,58 +2296,223 @@ function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
                   <div className="space-y-1 mb-2">
                     {formActions.map((action, idx) => (
                       <div key={idx} className="flex items-center justify-between bg-white dark:bg-gray-800 rounded px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600">
-                        <span>
-                          <span className="font-medium capitalize">{action.type}</span>
+                        <span className="truncate">
+                          <span className={`font-medium capitalize ${action.type === 'transition' ? 'text-violet-700 dark:text-violet-400' : ''}`}>
+                            {action.type === 'transition' ? '⚡ atomic' : action.type}
+                          </span>
                           {action.type === 'alert' && <span className="ml-1 text-gray-500">({action.severity}) {action.message}</span>}
                           {action.type === 'log' && <span className="ml-1 text-gray-500">{action.message}</span>}
-                          {action.type === 'control' && <span className="ml-1 text-gray-500">{action.action}</span>}
+                          {action.type === 'control' && (
+                            <span className="ml-1 text-gray-500">
+                              {action.action} {action.equipment_name || `Equipment #${action.equipment_id}`}
+                              {action.channel_name ? ` → ${action.channel_name}` : action.channel ? ` → Ch ${action.channel}` : ' → All channels'}
+                              {action.delay_seconds ? ` (delay ${action.delay_seconds}s)` : ''}
+                              {action.duration_seconds ? ` (auto-off ${action.duration_seconds}s)` : ''}
+                              {action.stagger_delay_seconds ? ` (stagger ${action.stagger_delay_seconds}s)` : ''}
+                            </span>
+                          )}
+                          {action.type === 'transition' && (
+                            <span className="ml-1 text-gray-500">
+                              {action.equipment_name || `Equipment #${action.equipment_id}`}
+                              {' '}
+                              {(action.transitions || []).map(t => (
+                                <span key={t.channel} className={`inline-block px-1 mx-0.5 rounded text-xs ${t.state ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                  {t.name || `ch${t.channel}`}={t.state ? 'ON' : 'OFF'}
+                                </span>
+                              ))}
+                              {action.delay_seconds ? ` (delay ${action.delay_seconds}s)` : ''}
+                              {action.duration_seconds ? ` (auto-revert ${action.duration_seconds}s)` : ''}
+                            </span>
+                          )}
+                          {Array.isArray(action.dependencies) && action.dependencies.length > 0 && (
+                            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                              🔒 {action.dependencies.length} dep{action.dependencies.length > 1 ? 's' : ''}
+                            </span>
+                          )}
                         </span>
-                        <button onClick={() => removeAction(idx)} className="text-red-500 hover:text-red-700 ml-2">
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                        <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                          <button onClick={() => setEditingDepsIdx(editingDepsIdx === idx ? null : idx)}
+                            className={`px-2 py-0.5 text-xs rounded ${editingDepsIdx === idx ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}
+                            title="Edit dependencies">
+                            🔒
+                          </button>
+                          <button onClick={() => editAction(idx)} className="text-primary-500 hover:text-primary-700">
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button onClick={() => removeAction(idx)} className="text-red-500 hover:text-red-700">
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     ))}
+                    {editingDepsIdx !== null && formActions[editingDepsIdx] && (
+                      <DependencyEditor
+                        action={formActions[editingDepsIdx]}
+                        equipmentList={equipment}
+                        onChange={(newDeps) => {
+                          setFormActions(formActions.map((a, i) => i === editingDepsIdx ? { ...a, dependencies: newDeps } : a));
+                        }}
+                        onClose={() => setEditingDepsIdx(null)}
+                      />
+                    )}
                   </div>
                 )}
 
-                {/* Add action row */}
-                <div className="flex items-end gap-2">
+                {/* Add/Edit action form */}
+                <div className="flex flex-wrap gap-2 items-end bg-white dark:bg-gray-800 p-3 rounded border dark:border-gray-600">
                   <div>
-                    <select value={newActionType} onChange={(e) => setNewActionType(e.target.value)}
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
+                    <select value={newActionType} onChange={(e) => { setNewActionType(e.target.value); setEditingActionIdx(null); }}
                       className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                      <option value="alert">Alert</option>
-                      <option value="control">Control</option>
-                      <option value="log">Log</option>
+                      <option value="alert">Send Alert</option>
+                      <option value="control">Control Equipment</option>
+                      <option value="transition">Atomic Transition (FC15)</option>
+                      <option value="log">Log Event</option>
                     </select>
                   </div>
+                  {newActionType === 'transition' && (
+                    <TransitionEditor
+                      equipment={equipment}
+                      equipmentId={newTransitionEquipmentId}
+                      setEquipmentId={setNewTransitionEquipmentId}
+                      states={newTransitionStates}
+                      setStates={setNewTransitionStates}
+                      delay={newTransitionDelay}
+                      setDelay={setNewTransitionDelay}
+                      duration={newTransitionDuration}
+                      setDuration={setNewTransitionDuration}
+                    />
+                  )}
                   {newActionType === 'alert' && (
                     <>
-                      <select value={newActionSeverity} onChange={(e) => setNewActionSeverity(e.target.value)}
-                        className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                        <option value="info">Info</option>
-                        <option value="warning">Warning</option>
-                        <option value="critical">Critical</option>
-                      </select>
-                      <input type="text" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
-                        placeholder="Alert message" className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Severity</label>
+                        <select value={newActionSeverity} onChange={(e) => setNewActionSeverity(e.target.value)}
+                          className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                          <option value="info">Info</option>
+                          <option value="warning">Warning</option>
+                          <option value="critical">Critical</option>
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Message</label>
+                        <input type="text" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
+                          placeholder="Alert message..." className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                      </div>
+                    </>
+                  )}
+                  {newActionType === 'control' && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Equipment</label>
+                        <select value={newControlEquipmentId}
+                          onChange={(e) => { setNewControlEquipmentId(e.target.value); setNewControlChannel(''); setNewControlChannelName(''); }}
+                          className="px-2 py-1.5 border border-gray-300 rounded text-sm min-w-[150px] dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                          <option value="">Select equipment...</option>
+                          {loadingEquipment ? <option disabled>Loading...</option> : equipment.map(eq => (
+                            <option key={eq.id} value={eq.id}>{eq.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {/* Channel selector */}
+                      {(() => {
+                        const selectedEq = equipment.find(eq => eq.id === parseInt(newControlEquipmentId));
+                        let relayChannels = [];
+                        if (selectedEq) {
+                          try {
+                            const mappings = typeof selectedEq.register_mappings === 'string'
+                              ? JSON.parse(selectedEq.register_mappings) : (selectedEq.register_mappings || []);
+                            relayChannels = mappings.filter(m => m.type === 'coil' && m.access === 'readwrite');
+                          } catch (e) {}
+                        }
+                        if (relayChannels.length === 0) return null;
+                        return (
+                          <div>
+                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Channel</label>
+                            <select value={newControlChannel}
+                              onChange={(e) => {
+                                const addr = e.target.value;
+                                setNewControlChannel(addr);
+                                if (addr) {
+                                  const ch = relayChannels.find(c => String(c.register ?? c.address) === addr);
+                                  setNewControlChannelName(ch ? getChannelDisplayName(ch) : `Coil ${addr}`);
+                                } else {
+                                  setNewControlChannelName('');
+                                }
+                              }}
+                              className="px-2 py-1.5 border border-gray-300 rounded text-sm min-w-[120px] dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                              <option value="">All channels</option>
+                              {relayChannels.map(ch => {
+                                const addr = ch.register ?? ch.address;
+                                return <option key={addr} value={addr}>{getChannelDisplayName(ch)}</option>;
+                              })}
+                            </select>
+                          </div>
+                        );
+                      })()}
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Action</label>
+                        <select value={newControlAction} onChange={(e) => setNewControlAction(e.target.value)}
+                          className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                          <option value="on">Turn On</option>
+                          <option value="off">Turn Off</option>
+                          <option value="toggle">Toggle</option>
+                          <option value="set">Set Value</option>
+                        </select>
+                      </div>
+                      {newControlAction === 'set' && (
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Value</label>
+                          <input type="text" value={newControlValue} onChange={(e) => setNewControlValue(e.target.value)}
+                            className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="e.g., 75" />
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Delay (sec)</label>
+                        <input type="number" min="0" value={newControlDelay} onChange={(e) => setNewControlDelay(e.target.value)}
+                          className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0"
+                          title="Seconds to wait before executing" />
+                      </div>
+                      {!newControlChannel && (
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Stagger (sec)</label>
+                          <input type="number" min="0" step="0.5" value={newControlStaggerDelay} onChange={(e) => setNewControlStaggerDelay(e.target.value)}
+                            className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0"
+                            title="Seconds between each channel firing" />
+                        </div>
+                      )}
+                      {(newControlAction === 'on' || newControlAction === 'toggle') && (
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Auto-off (sec)</label>
+                          <input type="number" min="0" value={newControlDuration} onChange={(e) => setNewControlDuration(e.target.value)}
+                            className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0"
+                            title="Seconds until auto-off. 0 = stay on" />
+                        </div>
+                      )}
                     </>
                   )}
                   {newActionType === 'log' && (
-                    <input type="text" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
-                      placeholder="Log message" className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Message</label>
+                      <input type="text" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
+                        placeholder="Log message..." className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                    </div>
                   )}
-                  {newActionType === 'control' && (
-                    <select value={newControlAction} onChange={(e) => setNewControlAction(e.target.value)}
-                      className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                      <option value="on">On</option>
-                      <option value="off">Off</option>
-                    </select>
-                  )}
-                  <button onClick={addAction} className="px-3 py-1.5 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 flex-shrink-0">
-                    Add
-                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={addAction}
+                      className={`px-3 py-1.5 text-white rounded text-sm flex-shrink-0 ${editingActionIdx !== null ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'}`}>
+                      {editingActionIdx !== null ? 'Update' : 'Add'}
+                    </button>
+                    {editingActionIdx !== null && (
+                      <button onClick={resetActionForm} className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-sm hover:bg-gray-300 dark:hover:bg-gray-600">
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 

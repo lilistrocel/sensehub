@@ -370,6 +370,7 @@ class WatchdogService {
           });
         }
       } else if (triggerType === 'threshold') {
+        triggerConfig._automation_id = auto.id;
         const missedInfo = this._isThresholdMissedButMet(triggerConfig, lastRun, graceMinutes, now);
         if (missedInfo.missed) {
           if (lastAlert && (now - lastAlert) < 3600000) continue;
@@ -555,13 +556,67 @@ class WatchdogService {
     })();
 
     if (!conditionMet) return { missed: false };
-    const graceMs = graceMinutes * 60000;
-    if (lastRun && (now - lastRun) < graceMs) return { missed: false };
+
+    // Check how long the threshold has been continuously exceeded by looking
+    // at recent readings. If the threshold was just crossed, the scheduler
+    // (30s cycle + 60s cooldown) needs time to react — don't alert yet.
+    // Only alert if the condition has been met for at least 5 minutes AND
+    // the scheduler still hasn't fired.
+    const sustainedMinutes = 5;
+    const sustainedMs = sustainedMinutes * 60 * 1000;
+
+    try {
+      // Find the most recent reading that did NOT meet the threshold
+      // (i.e., the last time the condition was false). If it was less than
+      // sustainedMs ago, the threshold was freshly crossed — give the
+      // scheduler time.
+      const compareFn = (op) => {
+        switch (op) {
+          case 'gt':  return `value <= ${threshold}`;
+          case 'gte': return `value < ${threshold}`;
+          case 'lt':  return `value >= ${threshold}`;
+          case 'lte': return `value > ${threshold}`;
+          case 'eq':  return `value != ${threshold}`;
+          case 'neq': return `value = ${threshold}`;
+          default:    return null;
+        }
+      };
+      const invertedCond = compareFn(operator);
+      if (invertedCond) {
+        // Look for a reading where the condition was NOT met in the last N minutes
+        const lookbackCutoff = new Date(now.getTime() - sustainedMs).toISOString();
+        const sensorLike = `%${sensorType.toLowerCase()}%`;
+        const lastFalse = db.prepare(`
+          SELECT timestamp FROM readings
+          WHERE equipment_id = ? AND LOWER(name) LIKE ? AND ${invertedCond}
+            AND timestamp > ?
+          ORDER BY timestamp DESC LIMIT 1
+        `).get(parseInt(triggerConfig.equipment_id), sensorLike, lookbackCutoff);
+
+        if (lastFalse) {
+          // Condition was false within the sustained window — freshly crossed
+          return { missed: false };
+        }
+      }
+    } catch (err) {
+      // If readings check fails, fall through to automation_logs check
+    }
+
+    // Also check if the automation has actually fired recently
+    try {
+      const cutoff = new Date(now.getTime() - sustainedMs).toISOString();
+      const recentLog = db.prepare(
+        "SELECT id FROM automation_logs WHERE automation_id = ? AND status = 'success' AND triggered_at > ? LIMIT 1"
+      ).get(triggerConfig._automation_id, cutoff);
+      if (recentLog) return { missed: false };
+    } catch { /* fall through */ }
+
+    if (lastRun && (now - lastRun) < sustainedMs) return { missed: false };
 
     const opSymbols = { gt: '>', gte: '>=', lt: '<', lte: '<=', eq: '==', neq: '!=' };
     return {
       missed: true,
-      detail: `Threshold condition met (${sensorType}: ${currentValue} ${opSymbols[operator] || operator} ${threshold}${triggerConfig.unit || ''}) but automation hasn't fired.${lastRun ? ` Last run: ${lastRun.toISOString()}` : ' Never run.'}\nEquipment: ${equipment.name}`
+      detail: `Threshold condition met for ${sustainedMinutes}+ minutes (${sensorType}: ${currentValue} ${opSymbols[operator] || operator} ${threshold}${triggerConfig.unit || ''}) but automation hasn't fired.${lastRun ? ` Last run: ${lastRun.toISOString()}` : ' Never run.'}\nEquipment: ${equipment.name}`
     };
   }
 

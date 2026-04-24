@@ -21,10 +21,19 @@ class RelayTimerService {
    */
   scheduleDelayedStart(equipmentId, channel, delaySeconds, executeFn) {
     const key = `delay:${equipmentId}:${channel}`;
+    const offKey = `off:${equipmentId}:${channel}`;
 
     if (this.timers.has(key)) {
       clearTimeout(this.timers.get(key).timer);
       console.log(`[RelayTimer] Cancelled existing delayed start for ${key}`);
+    }
+
+    // Also cancel any pending auto-off for this channel — a new delayed start
+    // means the previous cycle's auto-off is stale and could conflict.
+    if (this.timers.has(offKey)) {
+      clearTimeout(this.timers.get(offKey).timer);
+      this.timers.delete(offKey);
+      console.log(`[RelayTimer] Cancelled stale auto-off for ${offKey} (new delayed start takes over)`);
     }
 
     const firesAt = new Date(Date.now() + delaySeconds * 1000);
@@ -72,6 +81,49 @@ class RelayTimerService {
 
     this.timers.set(key, { timer, equipmentId, channel, firesAt, type: 'off' });
     console.log(`[RelayTimer] Scheduled auto-off for equipment ${equipmentId} ch ${channel} in ${durationSeconds}s`);
+  }
+
+  /**
+   * Schedule an arbitrary delayed callback under a custom key.
+   * Used for transitions where multiple delayed actions share channels and
+   * need unique keys to avoid cancelling each other.
+   */
+  scheduleDelayedRaw(key, delaySeconds, executeFn) {
+    if (this.timers.has(key)) {
+      clearTimeout(this.timers.get(key).timer);
+      console.log(`[RelayTimer] Cancelled existing raw timer for ${key}`);
+    }
+
+    const firesAt = new Date(Date.now() + delaySeconds * 1000);
+    const timer = setTimeout(async () => {
+      console.log(`[RelayTimer] Raw timer firing for ${key}`);
+      this.timers.delete(key);
+      try {
+        await executeFn();
+      } catch (err) {
+        console.error(`[RelayTimer] Raw timer ${key} failed:`, err.message);
+      }
+    }, delaySeconds * 1000);
+
+    this.timers.set(key, { timer, firesAt, type: 'raw', equipmentId: 0, channel: 0 });
+    console.log(`[RelayTimer] Scheduled raw timer ${key} in ${delaySeconds}s`);
+  }
+
+  /**
+   * Cancel all pending timers whose key starts with the given prefix.
+   * Returns the number of timers cancelled.
+   */
+  cancelTimersByPrefix(prefix) {
+    let count = 0;
+    for (const [key, entry] of this.timers.entries()) {
+      if (key.startsWith(prefix)) {
+        clearTimeout(entry.timer);
+        this.timers.delete(key);
+        count++;
+        console.log(`[RelayTimer] Cancelled ${key}`);
+      }
+    }
+    return count;
   }
 
   /**

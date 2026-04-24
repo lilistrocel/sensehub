@@ -356,6 +356,88 @@ const initSchema = () => {
       UNIQUE(equipment_id, channel)
     );
 
+    -- Crop assignments — synced from A64Core, one active crop per block
+    CREATE TABLE IF NOT EXISTS crop_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      block_id TEXT NOT NULL,
+      zone_id INTEGER,
+      a64core_planting_id TEXT,
+      crop_name TEXT NOT NULL,
+      variety TEXT,
+      scientific_name TEXT,
+      plant_data_id TEXT,
+      planted_date TEXT,
+      expected_harvest_date TEXT,
+      growth_cycle_days INTEGER,
+      plant_count INTEGER,
+      max_capacity INTEGER,
+      current_stage TEXT DEFAULT 'seedling',
+      optimal_ranges TEXT,
+      stage_durations TEXT,
+      transitioned_at TEXT,
+      days_since_planting INTEGER,
+      harvested_at TEXT,
+      total_yield_kg REAL,
+      average_quality_grade TEXT,
+      harvest_count INTEGER,
+      active INTEGER DEFAULT 1,
+      received_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      last_stage_update_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (zone_id) REFERENCES zones(id) ON DELETE SET NULL
+    );
+
+    -- Sensor calibrations — per equipment+metric linear calibration to map raw sensor → real value
+    CREATE TABLE IF NOT EXISTS sensor_calibrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      equipment_id INTEGER NOT NULL,
+      metric_name TEXT NOT NULL,
+      lab_nutrient TEXT NOT NULL,
+      slope REAL NOT NULL DEFAULT 1.0,
+      intercept REAL NOT NULL DEFAULT 0.0,
+      r_squared REAL DEFAULT NULL,
+      n_pairs INTEGER DEFAULT 0,
+      last_computed TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
+      UNIQUE(equipment_id, metric_name)
+    );
+
+    -- Relay state drift log — records when polled hardware state doesn't match expected state
+    CREATE TABLE IF NOT EXISTS relay_drift_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      equipment_id INTEGER NOT NULL,
+      equipment_name TEXT,
+      channel INTEGER NOT NULL,
+      expected_state INTEGER,
+      actual_state INTEGER NOT NULL,
+      context TEXT,
+      detail TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
+    );
+
+    -- Camera snapshots — periodic captured images
+    CREATE TABLE IF NOT EXISTS camera_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      camera_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      file_size INTEGER DEFAULT 0,
+      captured_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (camera_id) REFERENCES cameras(id) ON DELETE CASCADE
+    );
+
+    -- Network usage snapshots — periodic rx/tx byte deltas per interface
+    CREATE TABLE IF NOT EXISTS network_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      interface TEXT NOT NULL,
+      rx_bytes INTEGER NOT NULL DEFAULT 0,
+      tx_bytes INTEGER NOT NULL DEFAULT 0,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Watchdog events — persistent log of all watchdog detections and connectivity changes
     CREATE TABLE IF NOT EXISTS watchdog_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -394,6 +476,12 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_relay_events_equip_channel ON relay_events(equipment_id, channel, created_at);
     CREATE INDEX IF NOT EXISTS idx_relay_channel_config_equipment ON relay_channel_config(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_fertigation_mixture_items_mixture ON fertigation_mixture_items(mixture_id);
+    CREATE INDEX IF NOT EXISTS idx_camera_snapshots_camera ON camera_snapshots(camera_id, captured_at);
+    CREATE INDEX IF NOT EXISTS idx_sensor_calibrations_equip ON sensor_calibrations(equipment_id, metric_name);
+    CREATE INDEX IF NOT EXISTS idx_relay_drift_equipment ON relay_drift_log(equipment_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_relay_drift_created ON relay_drift_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_network_usage_interface ON network_usage(interface, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_network_usage_timestamp ON network_usage(timestamp);
     CREATE INDEX IF NOT EXISTS idx_watchdog_events_type ON watchdog_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_watchdog_events_created ON watchdog_events(created_at);
     CREATE INDEX IF NOT EXISTS idx_watchdog_events_target ON watchdog_events(target, created_at);
@@ -546,6 +634,76 @@ const initSchema = () => {
     }
   } catch (err) {
     console.log('Fertigation ingredients seed skipped:', err.message);
+  }
+
+  // Add block_id column to zones for A64Core block mapping
+  try {
+    const zoneCols = db.pragma("table_info(zones)").map(col => col.name);
+    if (!zoneCols.includes('block_id')) {
+      db.exec("ALTER TABLE zones ADD COLUMN block_id TEXT");
+      console.log('Added block_id column to zones table');
+    }
+    if (!zoneCols.includes('block_code')) {
+      db.exec("ALTER TABLE zones ADD COLUMN block_code TEXT");
+      console.log('Added block_code column to zones table');
+    }
+    if (!zoneCols.includes('block_configured_at')) {
+      db.exec("ALTER TABLE zones ADD COLUMN block_configured_at TEXT");
+      console.log('Added block_configured_at column to zones table');
+    }
+    if (!zoneCols.includes('is_crop_zone')) {
+      db.exec("ALTER TABLE zones ADD COLUMN is_crop_zone INTEGER DEFAULT 0");
+      console.log('Added is_crop_zone column to zones table');
+    }
+  } catch (err) {
+    console.log('zones block_id column already exists or migration skipped');
+  }
+
+  // Migrate crop_assignments: drop old schema and let CREATE TABLE IF NOT EXISTS rebuild it
+  try {
+    const cropCols = db.pragma("table_info(crop_assignments)").map(col => col.name);
+    if (!cropCols.includes('scientific_name') || !cropCols.includes('max_capacity')) {
+      db.exec("DROP TABLE IF EXISTS crop_assignments");
+      // Re-run the CREATE TABLE by calling initSchema again would recurse; instead just create inline
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS crop_assignments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          block_id TEXT NOT NULL,
+          zone_id INTEGER,
+          a64core_planting_id TEXT,
+          crop_name TEXT NOT NULL,
+          variety TEXT,
+          scientific_name TEXT,
+          plant_data_id TEXT,
+          planted_date TEXT,
+          expected_harvest_date TEXT,
+          growth_cycle_days INTEGER,
+          plant_count INTEGER,
+          max_capacity INTEGER,
+          current_stage TEXT DEFAULT 'seedling',
+          optimal_ranges TEXT,
+          stage_durations TEXT,
+          transitioned_at TEXT,
+          days_since_planting INTEGER,
+          harvested_at TEXT,
+          total_yield_kg REAL,
+          average_quality_grade TEXT,
+          harvest_count INTEGER,
+          active INTEGER DEFAULT 1,
+          received_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          last_stage_update_at TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (zone_id) REFERENCES zones(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_crop_assignments_block ON crop_assignments(block_id, active);
+        CREATE INDEX IF NOT EXISTS idx_crop_assignments_zone ON crop_assignments(zone_id, active);
+        CREATE INDEX IF NOT EXISTS idx_crop_assignments_active ON crop_assignments(active);
+      `);
+      console.log('Migrated crop_assignments table to A64Core contract schema');
+    }
+  } catch (err) {
+    console.log('crop_assignments migration skipped:', err.message);
   }
 
   console.log('Database schema initialized');

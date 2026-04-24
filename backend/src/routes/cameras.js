@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
 const { cameraStreamService } = require('../services/CameraStreamService');
@@ -43,6 +45,28 @@ router.get('/', (req, res) => {
   });
 
   res.json(cameras);
+});
+
+// GET /api/cameras/snapshots/latest - Get latest snapshot for each camera
+// NOTE: Must be before /:id to avoid being caught by the wildcard
+router.get('/snapshots/latest', (req, res) => {
+  const { snapshotService } = require('../services/SnapshotService');
+  res.json(snapshotService.getLatestAll());
+});
+
+// GET /api/cameras/snapshots/file/:filename - Serve a stored snapshot image
+router.get('/snapshots/file/:filename', (req, res) => {
+  const { SNAPSHOT_DIR } = require('../services/SnapshotService');
+  const filepath = path.join(SNAPSHOT_DIR, req.params.filename);
+  if (!filepath.startsWith(SNAPSHOT_DIR)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  if (!fs.existsSync(filepath)) {
+    return res.status(404).json({ error: 'Snapshot not found' });
+  }
+  res.set('Content-Type', 'image/jpeg');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(filepath);
 });
 
 // GET /api/cameras/:id - Get camera detail + stream URLs
@@ -268,6 +292,25 @@ router.get('/:id/snapshot', async (req, res) => {
     res.send(buffer);
   } catch (err) {
     res.status(502).json({ error: 'Bad Gateway', message: `Snapshot failed: ${err.message}` });
+  }
+});
+
+// GET /api/cameras/:id/snapshots - Get stored snapshot history for a camera
+router.get('/:id/snapshots', (req, res) => {
+  const { limit = 42 } = req.query;
+  const { snapshotService } = require('../services/SnapshotService');
+  const snapshots = snapshotService.getSnapshots(parseInt(req.params.id), parseInt(limit));
+  res.json(snapshots);
+});
+
+// POST /api/cameras/:id/capture - Force capture a snapshot now
+router.post('/:id/capture', requireRole('admin', 'operator'), async (req, res) => {
+  try {
+    const { snapshotService } = require('../services/SnapshotService');
+    await snapshotService.captureNow(parseInt(req.params.id));
+    res.json({ success: true, message: 'Snapshot captured' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

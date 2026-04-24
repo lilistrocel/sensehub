@@ -193,6 +193,32 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
 
   global.broadcast('lab_reading_created', { count: created.length });
 
+  // Auto-recompute sensor calibrations for any nutrient that was added
+  try {
+    const { calibrationService } = require('../services/CalibrationService');
+    const nutrients = [...new Set(created.map(r => r.nutrient))];
+    for (const nut of nutrients) {
+      // Find equipment with a metric matching this nutrient name (case insensitive)
+      const equipment = db.prepare("SELECT id, register_mappings FROM equipment WHERE register_mappings IS NOT NULL").all();
+      for (const eq of equipment) {
+        try {
+          const mappings = JSON.parse(eq.register_mappings || '[]');
+          for (const m of mappings) {
+            if (!m.name) continue;
+            const lowerName = m.name.toLowerCase();
+            const lowerNut = nut.toLowerCase();
+            // Match EC sensor with EC nutrient, etc.
+            if (lowerName.includes(lowerNut) || lowerNut.includes(lowerName.replace(/\s*\(.*?\)/g, ''))) {
+              calibrationService.recompute(eq.id, m.name, nut, null);
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {
+    console.error('[LabReadings] Calibration auto-recompute failed:', e.message);
+  }
+
   res.status(201).json({
     created,
     count: created.length,
@@ -224,16 +250,48 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   );
 
   const updated = db.prepare('SELECT * FROM lab_readings WHERE id = ?').get(id);
+
+  // Auto-recompute calibrations for the affected nutrient
+  recomputeCalibrationsForNutrient(updated.nutrient);
+
   res.json(updated);
 });
 
 // DELETE /api/lab-readings/:id - Delete a lab reading
 router.delete('/:id', requireRole('admin', 'operator'), (req, res) => {
+  const existing = db.prepare('SELECT nutrient FROM lab_readings WHERE id = ?').get(req.params.id);
   const result = db.prepare('DELETE FROM lab_readings WHERE id = ?').run(req.params.id);
   if (result.changes === 0) {
     return res.status(404).json({ error: 'Not Found', message: 'Lab reading not found' });
   }
+
+  // Auto-recompute calibrations for the affected nutrient
+  if (existing) recomputeCalibrationsForNutrient(existing.nutrient);
+
   res.json({ message: 'Lab reading deleted successfully' });
 });
+
+// Helper: recompute all sensor calibrations whose lab_nutrient matches
+function recomputeCalibrationsForNutrient(nutrient) {
+  try {
+    const { calibrationService } = require('../services/CalibrationService');
+    const equipment = db.prepare("SELECT id, register_mappings FROM equipment WHERE register_mappings IS NOT NULL").all();
+    for (const eq of equipment) {
+      try {
+        const mappings = JSON.parse(eq.register_mappings || '[]');
+        for (const m of mappings) {
+          if (!m.name) continue;
+          const lowerName = m.name.toLowerCase();
+          const lowerNut = nutrient.toLowerCase();
+          if (lowerName.includes(lowerNut) || lowerNut.includes(lowerName.replace(/\s*\(.*?\)/g, ''))) {
+            calibrationService.recompute(eq.id, m.name, nutrient, null);
+          }
+        }
+      } catch {}
+    }
+  } catch (e) {
+    console.error('[LabReadings] Calibration recompute failed:', e.message);
+  }
+}
 
 module.exports = router;

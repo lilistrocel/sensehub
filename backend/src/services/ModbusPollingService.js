@@ -579,6 +579,50 @@ class ModbusPollingService {
           relayStates[addr] = reading.value === 1;
         }
         lastReadingValue = JSON.stringify({ relayStates });
+
+        // Drift detection: compare with previous cached state
+        // If a coil is ON now but the last relay_event said OFF (or vice versa),
+        // and there's been no recent ON command, log it for debugging.
+        try {
+          let prevStates = {};
+          if (equipment.last_reading) {
+            const prev = JSON.parse(equipment.last_reading);
+            prevStates = prev.relayStates || {};
+          }
+
+          for (const [addr, nowOn] of Object.entries(relayStates)) {
+            const prevOn = prevStates[addr] === true;
+            if (prevOn !== nowOn) {
+              // State changed — check if this matches a known software command
+              const recentEvent = db.prepare(`
+                SELECT state, source, automation_id, created_at FROM relay_events
+                WHERE equipment_id = ? AND channel = ?
+                ORDER BY created_at DESC LIMIT 1
+              `).get(equipmentId, parseInt(addr));
+
+              const expectedState = recentEvent ? recentEvent.state : null;
+              const actualStateInt = nowOn ? 1 : 0;
+
+              // Drift = hardware state doesn't match the last known commanded state
+              if (recentEvent && expectedState !== actualStateInt) {
+                const gapSec = Math.round((Date.now() - new Date(recentEvent.created_at + 'Z').getTime()) / 1000);
+                const detail = JSON.stringify({
+                  last_event: recentEvent,
+                  prev_polled: prevOn,
+                  now_polled: nowOn,
+                  seconds_since_last_event: gapSec
+                });
+                try {
+                  db.prepare(`
+                    INSERT INTO relay_drift_log (equipment_id, equipment_name, channel, expected_state, actual_state, context, detail, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                  `).run(equipmentId, equipment.name, parseInt(addr), expectedState, actualStateInt, 'polling_drift', detail);
+                  console.warn(`[Drift] ${equipment.name} ch${addr}: expected ${expectedState?'ON':'OFF'} but hardware is ${nowOn?'ON':'OFF'} (last event ${gapSec}s ago: ${recentEvent.source})`);
+                } catch (e) { /* ignore */ }
+              }
+            }
+          }
+        } catch (e) { /* drift detection failure shouldn't break polling */ }
       } else {
         // Store all calibrated readings as JSON so multi-metric sensors are preserved
         const values = {};

@@ -417,8 +417,20 @@ router.delete('/clear/:target', requireRole('admin'), (req, res) => {
         results.target = 'watchdog_cooldowns';
         break;
       }
+      case 'request-log': {
+        const r = db.prepare(`DELETE FROM request_log WHERE 1=1${whereDate}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'request_log';
+        break;
+      }
+      case 'network-usage': {
+        const r = db.prepare(`DELETE FROM network_usage WHERE 1=1${whereDate}`).run(...params);
+        results.deleted = r.changes;
+        results.target = 'network_usage';
+        break;
+      }
       default:
-        return res.status(400).json({ error: 'Bad Request', message: `Unknown target: ${target}. Valid: alerts, automation-logs, equipment-errors, readings, lab-readings, relay-events, watchdog-events, sync-queue, watchdog-cooldowns` });
+        return res.status(400).json({ error: 'Bad Request', message: `Unknown target: ${target}` });
     }
 
     console.log(`[System] Cleared ${results.deleted} records from ${results.target}${before ? ` (before ${before})` : ''}`);
@@ -441,6 +453,8 @@ router.get('/data-counts', requireRole('admin'), (req, res) => {
       relay_events: db.prepare('SELECT COUNT(*) as count FROM relay_events').get().count,
       watchdog_events: db.prepare('SELECT COUNT(*) as count FROM watchdog_events').get().count,
       sync_queue: db.prepare('SELECT COUNT(*) as count FROM sync_queue').get().count,
+      request_log: (() => { try { return db.prepare('SELECT COUNT(*) as count FROM request_log').get().count; } catch { return 0; } })(),
+      network_usage: (() => { try { return db.prepare('SELECT COUNT(*) as count FROM network_usage').get().count; } catch { return 0; } })(),
     };
     res.json(counts);
   } catch (err) {
@@ -487,6 +501,222 @@ router.get('/watchdog-history', (req, res) => {
     `).all(...params, parseInt(limit), parseInt(offset));
 
     res.json({ events, total, limit: parseInt(limit), offset: parseInt(offset) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/system/request-log - Get API request log analytics
+router.get('/request-log', requireRole('admin'), (req, res) => {
+  const { minutes = 60, group_by = 'path' } = req.query;
+  const cutoff = new Date(Date.now() - parseInt(minutes) * 60 * 1000).toISOString();
+
+  try {
+    // Per-path summary
+    const byPath = db.prepare(`
+      SELECT path, method,
+             COUNT(*) as requests,
+             SUM(response_bytes) as total_bytes,
+             AVG(response_bytes) as avg_bytes,
+             AVG(duration_ms) as avg_duration_ms,
+             MAX(response_bytes) as max_bytes
+      FROM request_log
+      WHERE created_at > ?
+      GROUP BY path, method
+      ORDER BY total_bytes DESC
+    `).all(cutoff);
+
+    // Per-IP summary
+    const byIp = db.prepare(`
+      SELECT ip,
+             COUNT(*) as requests,
+             SUM(response_bytes) as total_bytes,
+             COUNT(DISTINCT path) as unique_paths
+      FROM request_log
+      WHERE created_at > ?
+      GROUP BY ip
+      ORDER BY total_bytes DESC
+    `).all(cutoff);
+
+    // Overall totals
+    const totals = db.prepare(`
+      SELECT COUNT(*) as requests,
+             SUM(response_bytes) as total_bytes,
+             AVG(response_bytes) as avg_bytes,
+             AVG(duration_ms) as avg_duration_ms
+      FROM request_log
+      WHERE created_at > ?
+    `).get(cutoff);
+
+    // Recent requests
+    const recent = db.prepare(`
+      SELECT method, path, status, response_bytes, duration_ms, ip, created_at
+      FROM request_log
+      WHERE created_at > ?
+      ORDER BY created_at DESC
+      LIMIT 50
+    `).all(cutoff);
+
+    res.json({ byPath, byIp, totals, recent, period: { minutes: parseInt(minutes), since: cutoff } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/system/relay-drift - Get relay drift log entries
+router.get('/relay-drift', requireRole('admin'), (req, res) => {
+  const { limit = 100, equipment_id, hours = 24 } = req.query;
+  try {
+    const cutoff = new Date(Date.now() - parseInt(hours) * 3600 * 1000).toISOString();
+    let where = 'created_at > ?';
+    const params = [cutoff];
+    if (equipment_id) {
+      where += ' AND equipment_id = ?';
+      params.push(parseInt(equipment_id));
+    }
+    const entries = db.prepare(`
+      SELECT * FROM relay_drift_log
+      WHERE ${where}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(...params, parseInt(limit));
+
+    // Summary by equipment+channel
+    const summary = db.prepare(`
+      SELECT equipment_id, equipment_name, channel, context, COUNT(*) as count,
+             MAX(created_at) as last_seen
+      FROM relay_drift_log
+      WHERE created_at > ?
+      GROUP BY equipment_id, channel, context
+      ORDER BY count DESC, last_seen DESC
+    `).all(cutoff);
+
+    res.json({ entries, summary, period: { hours: parseInt(hours), since: cutoff } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/system/network-usage - Get network usage statistics
+router.get('/network-usage', requireRole('admin'), (req, res) => {
+  const { period = 'daily', days = 30, interface: iface } = req.query;
+
+  try {
+    let groupBy, dateFormat, limit;
+    if (period === 'monthly') {
+      groupBy = "strftime('%Y-%m', timestamp)";
+      dateFormat = 'month';
+      limit = parseInt(days) || 12;
+    } else {
+      // daily (default)
+      groupBy = "date(timestamp)";
+      dateFormat = 'day';
+      limit = parseInt(days) || 30;
+    }
+
+    let whereClause = '1=1';
+    const params = [];
+
+    if (iface) {
+      whereClause += ' AND interface = ?';
+      params.push(iface);
+    }
+
+    // Aggregated usage per period
+    const usage = db.prepare(`
+      SELECT ${groupBy} as period,
+             interface,
+             SUM(rx_bytes) as rx_bytes,
+             SUM(tx_bytes) as tx_bytes,
+             SUM(rx_bytes + tx_bytes) as total_bytes,
+             COUNT(*) as samples
+      FROM network_usage
+      WHERE ${whereClause}
+      GROUP BY ${groupBy}, interface
+      ORDER BY period DESC
+      LIMIT ?
+    `).all(...params, limit * 10); // multiply for multiple interfaces
+
+    // Total summary
+    const summary = db.prepare(`
+      SELECT interface,
+             SUM(rx_bytes) as rx_bytes,
+             SUM(tx_bytes) as tx_bytes,
+             SUM(rx_bytes + tx_bytes) as total_bytes,
+             MIN(timestamp) as first_record,
+             MAX(timestamp) as last_record,
+             COUNT(*) as samples
+      FROM network_usage
+      WHERE ${whereClause}
+      GROUP BY interface
+    `).all(...params);
+
+    // Today's usage
+    const today = db.prepare(`
+      SELECT interface,
+             SUM(rx_bytes) as rx_bytes,
+             SUM(tx_bytes) as tx_bytes,
+             SUM(rx_bytes + tx_bytes) as total_bytes
+      FROM network_usage
+      WHERE date(timestamp) = date('now') ${iface ? 'AND interface = ?' : ''}
+      GROUP BY interface
+    `).all(...(iface ? [iface] : []));
+
+    // This month's usage
+    const thisMonth = db.prepare(`
+      SELECT interface,
+             SUM(rx_bytes) as rx_bytes,
+             SUM(tx_bytes) as tx_bytes,
+             SUM(rx_bytes + tx_bytes) as total_bytes
+      FROM network_usage
+      WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now') ${iface ? 'AND interface = ?' : ''}
+      GROUP BY interface
+    `).all(...(iface ? [iface] : []));
+
+    // Available interfaces
+    const interfaces = db.prepare(
+      'SELECT DISTINCT interface FROM network_usage ORDER BY interface'
+    ).all().map(r => r.interface);
+
+    res.json({
+      period: dateFormat,
+      usage,
+      summary,
+      today,
+      thisMonth,
+      interfaces
+    });
+  } catch (err) {
+    console.error('[System] Network usage error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/system/network-usage/live - Get current /proc/net/dev snapshot
+router.get('/network-usage/live', requireRole('admin'), (req, res) => {
+  try {
+    const content = fs.readFileSync('/proc/net/dev', 'utf8');
+    const lines = content.split('\n').slice(2);
+    const interfaces = [];
+    const excluded = new Set(['lo', 'docker0']);
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const [ifacePart, ...rest] = trimmed.split(':');
+      const iface = ifacePart.trim();
+      if (excluded.has(iface) || iface.startsWith('br-') || iface.startsWith('veth')) continue;
+      const values = rest.join(':').trim().split(/\s+/);
+      interfaces.push({
+        name: iface,
+        rx_bytes: parseInt(values[0]) || 0,
+        tx_bytes: parseInt(values[8]) || 0,
+        rx_packets: parseInt(values[1]) || 0,
+        tx_packets: parseInt(values[9]) || 0
+      });
+    }
+
+    res.json({ interfaces, timestamp: new Date().toISOString() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -45,6 +45,11 @@ const settingsTabs = [
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
     </svg>
   )},
+  { name: 'Network', path: 'network', adminOnly: true, icon: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  )},
   { name: 'Data', path: 'data', adminOnly: true, icon: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -2890,24 +2895,404 @@ function WatchdogHistory() {
   );
 }
 
+function NetworkUsage() {
+  const { token } = useAuth();
+  const { formatDateTime } = useSettings();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState('daily');
+  const [selectedInterface, setSelectedInterface] = useState('');
+
+  const headers = { 'Authorization': `Bearer ${token}` };
+
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0) + ' ' + units[i];
+  };
+
+  const fetchData = () => {
+    setLoading(true);
+    const params = new URLSearchParams({ period, days: period === 'monthly' ? 12 : 30 });
+    if (selectedInterface) params.set('interface', selectedInterface);
+    fetch(`${API_BASE}/system/network-usage?${params}`, { headers })
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  React.useEffect(() => { fetchData(); }, [period, selectedInterface]);
+
+  // Aggregate usage across interfaces for chart display
+  const getAggregatedUsage = () => {
+    if (!data?.usage) return [];
+    const map = {};
+    for (const row of data.usage) {
+      if (!map[row.period]) map[row.period] = { period: row.period, rx: 0, tx: 0, total: 0 };
+      map[row.period].rx += row.rx_bytes;
+      map[row.period].tx += row.tx_bytes;
+      map[row.period].total += row.total_bytes;
+    }
+    return Object.values(map).sort((a, b) => a.period.localeCompare(b.period));
+  };
+
+  const aggregated = data ? getAggregatedUsage() : [];
+  const maxTotal = aggregated.length > 0 ? Math.max(...aggregated.map(r => r.total)) : 0;
+
+  // Aggregate today/thisMonth across interfaces
+  const todayTotal = data?.today?.reduce((acc, r) => ({ rx: acc.rx + r.rx_bytes, tx: acc.tx + r.tx_bytes, total: acc.total + r.total_bytes }), { rx: 0, tx: 0, total: 0 }) || { rx: 0, tx: 0, total: 0 };
+  const monthTotal = data?.thisMonth?.reduce((acc, r) => ({ rx: acc.rx + r.rx_bytes, tx: acc.tx + r.tx_bytes, total: acc.total + r.total_bytes }), { rx: 0, tx: 0, total: 0 }) || { rx: 0, tx: 0, total: 0 };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Network Usage</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Monitor daily and monthly network bandwidth consumption</p>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Today Download</p>
+          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{formatBytes(todayTotal.rx)}</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Today Upload</p>
+          <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{formatBytes(todayTotal.tx)}</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">This Month Download</p>
+          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{formatBytes(monthTotal.rx)}</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">This Month Upload</p>
+          <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{formatBytes(monthTotal.tx)}</p>
+        </div>
+      </div>
+
+      {/* Today / Month totals */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+            <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Today Total</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{formatBytes(todayTotal.total)}</p>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center">
+            <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">This Month Total</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{formatBytes(monthTotal.total)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+          <button
+            onClick={() => setPeriod('daily')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${period === 'daily' ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+          >Daily</button>
+          <button
+            onClick={() => setPeriod('monthly')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${period === 'monthly' ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+          >Monthly</button>
+        </div>
+        {data?.interfaces?.length > 1 && (
+          <select
+            value={selectedInterface}
+            onChange={(e) => setSelectedInterface(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+          >
+            <option value="">All Interfaces</option>
+            {data.interfaces.map(i => <option key={i} value={i}>{i}</option>)}
+          </select>
+        )}
+        <button onClick={fetchData} className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        </button>
+      </div>
+
+      {/* Chart */}
+      {loading ? (
+        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
+          Loading network data...
+        </div>
+      ) : aggregated.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
+          <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+          <p className="text-gray-500 dark:text-gray-400">No network usage data yet.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Data is collected every 5 minutes. Check back shortly.</p>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
+            {period === 'daily' ? 'Daily' : 'Monthly'} Usage
+          </h3>
+          <div className="space-y-2">
+            {aggregated.map((row) => (
+              <div key={row.period} className="group">
+                <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+                  <span className="font-medium">{row.period}</span>
+                  <span>{formatBytes(row.total)}</span>
+                </div>
+                <div className="flex h-5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
+                  <div
+                    className="bg-blue-500 transition-all duration-300"
+                    style={{ width: maxTotal > 0 ? `${(row.rx / maxTotal) * 100}%` : '0%' }}
+                    title={`Download: ${formatBytes(row.rx)}`}
+                  />
+                  <div
+                    className="bg-green-500 transition-all duration-300"
+                    style={{ width: maxTotal > 0 ? `${(row.tx / maxTotal) * 100}%` : '0%' }}
+                    title={`Upload: ${formatBytes(row.tx)}`}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <div className="w-3 h-3 rounded-sm bg-blue-500"></div> Download
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <div className="w-3 h-3 rounded-sm bg-green-500"></div> Upload
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-interface breakdown */}
+      {data?.summary && data.summary.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Interface Breakdown (All Time)</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
+                  <th className="pb-2 pr-4">Interface</th>
+                  <th className="pb-2 pr-4">Download</th>
+                  <th className="pb-2 pr-4">Upload</th>
+                  <th className="pb-2 pr-4">Total</th>
+                  <th className="pb-2">Since</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {data.summary.map(row => (
+                  <tr key={row.interface} className="text-gray-700 dark:text-gray-300">
+                    <td className="py-2 pr-4 font-mono text-xs">{row.interface}</td>
+                    <td className="py-2 pr-4 text-blue-600 dark:text-blue-400">{formatBytes(row.rx_bytes)}</td>
+                    <td className="py-2 pr-4 text-green-600 dark:text-green-400">{formatBytes(row.tx_bytes)}</td>
+                    <td className="py-2 pr-4 font-medium">{formatBytes(row.total_bytes)}</td>
+                    <td className="py-2 text-xs text-gray-500">{row.first_record ? formatDateTime(row.first_record) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Request Log - API traffic analysis */}
+      <RequestLog />
+    </div>
+  );
+}
+
+function RequestLog() {
+  const { token } = useAuth();
+  const { formatDateTime } = useSettings();
+  const [logData, setLogData] = useState(null);
+  const [logLoading, setLogLoading] = useState(true);
+  const [logMinutes, setLogMinutes] = useState(60);
+  const [showRecent, setShowRecent] = useState(false);
+
+  const headers = { 'Authorization': `Bearer ${token}` };
+
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0) + ' ' + units[i];
+  };
+
+  const fetchLog = () => {
+    setLogLoading(true);
+    fetch(`${API_BASE}/system/request-log?minutes=${logMinutes}`, { headers })
+      .then(r => r.json())
+      .then(d => { setLogData(d); setLogLoading(false); })
+      .catch(() => setLogLoading(false));
+  };
+
+  React.useEffect(() => { fetchLog(); }, [logMinutes]);
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">API Request Log</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Which endpoints are consuming bandwidth</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={logMinutes}
+            onChange={(e) => setLogMinutes(parseInt(e.target.value))}
+            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+          >
+            <option value={5}>Last 5 min</option>
+            <option value={15}>Last 15 min</option>
+            <option value={60}>Last 1 hr</option>
+            <option value={360}>Last 6 hr</option>
+            <option value={1440}>Last 24 hr</option>
+          </select>
+          <button onClick={fetchLog} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          </button>
+        </div>
+      </div>
+
+      {logLoading ? (
+        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">Loading...</div>
+      ) : !logData?.byPath?.length ? (
+        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">No requests logged yet. Data appears after the first API call.</div>
+      ) : (
+        <>
+          {/* Totals bar */}
+          {logData.totals && (
+            <div className="flex flex-wrap gap-4 mb-4 text-xs text-gray-600 dark:text-gray-400">
+              <span><strong>{logData.totals.requests?.toLocaleString()}</strong> requests</span>
+              <span><strong>{formatBytes(logData.totals.total_bytes)}</strong> total response data</span>
+              <span>Avg <strong>{formatBytes(Math.round(logData.totals.avg_bytes || 0))}</strong>/req</span>
+              <span>Avg <strong>{Math.round(logData.totals.avg_duration_ms || 0)}ms</strong> latency</span>
+            </div>
+          )}
+
+          {/* By path table */}
+          <div className="overflow-x-auto mb-4">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
+                  <th className="pb-2 pr-3">Endpoint</th>
+                  <th className="pb-2 pr-3 text-right">Requests</th>
+                  <th className="pb-2 pr-3 text-right">Total Data</th>
+                  <th className="pb-2 pr-3 text-right">Avg Size</th>
+                  <th className="pb-2 text-right">Avg Latency</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {logData.byPath.map((row, i) => (
+                  <tr key={i} className="text-gray-700 dark:text-gray-300">
+                    <td className="py-1.5 pr-3 font-mono truncate max-w-[250px]">
+                      <span className={`inline-block w-10 text-center rounded text-[10px] font-medium mr-1 ${row.method === 'GET' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'}`}>{row.method}</span>
+                      {row.path}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">{row.requests}</td>
+                    <td className="py-1.5 pr-3 text-right font-medium">{formatBytes(row.total_bytes)}</td>
+                    <td className="py-1.5 pr-3 text-right">{formatBytes(Math.round(row.avg_bytes || 0))}</td>
+                    <td className="py-1.5 text-right">{Math.round(row.avg_duration_ms || 0)}ms</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* By IP */}
+          {logData.byIp?.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">By Client IP</h4>
+              <div className="flex flex-wrap gap-2">
+                {logData.byIp.map((row, i) => (
+                  <div key={i} className="px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-400">
+                    <span className="font-mono">{row.ip || 'unknown'}</span>
+                    <span className="ml-2 font-medium text-gray-900 dark:text-white">{formatBytes(row.total_bytes)}</span>
+                    <span className="ml-1">({row.requests} reqs)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Toggle recent requests */}
+          <button
+            onClick={() => setShowRecent(!showRecent)}
+            className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+          >
+            {showRecent ? 'Hide' : 'Show'} recent requests ({logData.recent?.length || 0})
+          </button>
+
+          {showRecent && logData.recent?.length > 0 && (
+            <div className="mt-2 overflow-x-auto max-h-64 overflow-y-auto">
+              <table className="w-full text-[11px]">
+                <thead className="sticky top-0 bg-white dark:bg-gray-800">
+                  <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <th className="pb-1 pr-2">Time</th>
+                    <th className="pb-1 pr-2">Method</th>
+                    <th className="pb-1 pr-2">Path</th>
+                    <th className="pb-1 pr-2 text-right">Size</th>
+                    <th className="pb-1 pr-2 text-right">ms</th>
+                    <th className="pb-1">IP</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                  {logData.recent.map((row, i) => (
+                    <tr key={i} className="text-gray-600 dark:text-gray-400">
+                      <td className="py-1 pr-2 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
+                      <td className="py-1 pr-2">{row.method}</td>
+                      <td className="py-1 pr-2 font-mono truncate max-w-[200px]">{row.path}</td>
+                      <td className="py-1 pr-2 text-right">{formatBytes(row.response_bytes)}</td>
+                      <td className="py-1 pr-2 text-right">{row.duration_ms}</td>
+                      <td className="py-1 font-mono">{row.ip}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function DataManagement() {
   const { token } = useAuth();
+  const { formatDateTime } = useSettings();
   const [counts, setCounts] = useState(null);
+  const [storage, setStorage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState({});
   const [message, setMessage] = useState(null);
 
   const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  const fetchCounts = () => {
-    setLoading(true);
-    fetch(`${API_BASE}/system/data-counts`, { headers })
-      .then(r => r.json())
-      .then(data => { setCounts(data); setLoading(false); })
-      .catch(() => setLoading(false));
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0) + ' ' + units[i];
   };
 
-  React.useEffect(() => { fetchCounts(); }, []);
+  const fetchAll = () => {
+    setLoading(true);
+    Promise.all([
+      fetch(`${API_BASE}/system/data-counts`, { headers }).then(r => r.json()),
+      fetch(`${API_BASE}/settings/storage`, { headers }).then(r => r.json())
+    ]).then(([countsData, storageData]) => {
+      setCounts(countsData);
+      setStorage(storageData);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  React.useEffect(() => { fetchAll(); }, []);
 
   const clearData = async (target, label) => {
     if (!confirm(`Are you sure you want to delete ALL ${label}? This cannot be undone.`)) return;
@@ -2918,7 +3303,7 @@ function DataManagement() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to clear');
       setMessage({ type: 'success', text: `Cleared ${data.deleted} ${label} record(s)` });
-      fetchCounts();
+      fetchAll();
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
@@ -2936,13 +3321,21 @@ function DataManagement() {
     { key: 'watchdog-events', label: 'Watchdog Events', countKey: 'watchdog_events', description: 'Watchdog and connectivity monitoring history' },
     { key: 'sync-queue', label: 'Sync Queue', countKey: 'sync_queue', description: 'Cloud sync queue entries' },
     { key: 'watchdog-cooldowns', label: 'Watchdog Cooldowns', countKey: null, description: 'Reset watchdog alert cooldowns so alerts can fire again immediately' },
+    { key: 'request-log', label: 'Request Log', countKey: 'request_log', description: 'API request log used for network traffic analysis' },
+    { key: 'network-usage', label: 'Network Usage', countKey: 'network_usage', description: 'Network bandwidth tracking snapshots' },
   ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Data Management</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Clear history and log data from the system database</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Data Management</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Monitor storage usage and clear history data</p>
+        </div>
+        <button onClick={fetchAll} disabled={loading}
+          className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-50">
+          <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        </button>
       </div>
 
       {message && (
@@ -2951,10 +3344,73 @@ function DataManagement() {
         </div>
       )}
 
-      {loading ? (
+      {/* Storage Overview */}
+      {storage && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">SD Card Storage</h3>
+          {/* Disk usage bar */}
+          <div className="mb-4">
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <span>{formatBytes(storage.disk?.used)} used of {formatBytes(storage.disk?.total)}</span>
+              <span>{formatBytes(storage.disk?.available)} free</span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${
+                storage.disk?.percentUsed > 90 ? 'bg-red-500' :
+                storage.disk?.percentUsed > 70 ? 'bg-amber-500' : 'bg-green-500'
+              }`} style={{ width: `${storage.disk?.percentUsed || 0}%` }}>
+                <span className="text-[10px] font-bold text-white pl-2 leading-4">{storage.disk?.percentUsed}%</span>
+              </div>
+            </div>
+          </div>
+          {/* Breakdown cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Database</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{formatBytes(storage.database?.size)}</p>
+              <p className="text-[10px] text-gray-400">sensehub.db</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Data Directory</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{formatBytes(storage.dataDirectory?.size)}</p>
+              <p className="text-[10px] text-gray-400">WAL + backups</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Logs</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{formatBytes(storage.logsDirectory?.size)}</p>
+              <p className="text-[10px] text-gray-400">Log files</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400">SenseHub Total</p>
+              <p className="text-lg font-bold text-gray-900 dark:text-white">{formatBytes(storage.disk?.usedByApp)}</p>
+              <p className="text-[10px] text-gray-400">{storage.disk?.total ? ((storage.disk.usedByApp / storage.disk.total) * 100).toFixed(1) : 0}% of SD card</p>
+            </div>
+          </div>
+          {/* Biggest tables */}
+          {counts && (
+            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Biggest tables by row count</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(counts)
+                  .sort(([,a], [,b]) => b - a)
+                  .filter(([,count]) => count > 0)
+                  .slice(0, 6)
+                  .map(([table, count]) => (
+                    <span key={table} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-400">
+                      <span className="font-medium text-gray-900 dark:text-white">{count.toLocaleString()}</span>
+                      {table.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {loading && !storage ? (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
-          Loading data counts...
+          Loading storage info...
         </div>
       ) : (
         <div className="space-y-3">
@@ -3079,6 +3535,7 @@ export default function Settings() {
             <Route path="notifications" element={<NotificationSettings />} />
             <Route path="backup" element={<BackupSettings />} />
             <Route path="watchdog" element={<WatchdogHistory />} />
+            <Route path="network" element={<NetworkUsage />} />
             <Route path="data" element={<DataManagement />} />
           </Routes>
         </div>

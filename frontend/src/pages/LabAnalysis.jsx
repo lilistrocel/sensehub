@@ -125,7 +125,10 @@ export default function LabAnalysis() {
         headers,
         body: JSON.stringify({
           entries: valid.map(e => ({
-            sample_date: sampleDate,
+            // Append current time to date so calibration can match against sensor readings
+            sample_date: sampleDate === new Date().toISOString().split('T')[0]
+              ? new Date().toISOString()
+              : sampleDate + 'T12:00:00Z',
             nutrient: e.nutrient,
             value: parseFloat(e.value),
             unit: e.unit,

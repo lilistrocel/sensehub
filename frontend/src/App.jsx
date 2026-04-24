@@ -21,6 +21,8 @@ import Cameras from './pages/Cameras';
 import Debug from './pages/Debug';
 import Fertigation from './pages/Fertigation';
 import LabAnalysis from './pages/LabAnalysis';
+import Calibration from './pages/Calibration';
+import Reports from './pages/Reports';
 import NotFound from './pages/NotFound';
 
 // Loading spinner component
@@ -186,6 +188,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LabAnalysis />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/calibration"
+        element={
+          <ProtectedRoute>
+            <Calibration />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute>
+            <Reports />
           </ProtectedRoute>
         }
       />

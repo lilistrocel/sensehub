@@ -18,6 +18,9 @@ export default function Cameras() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(null);
   const [snapshotTick, setSnapshotTick] = useState(0);
+  const [storedSnapshots, setStoredSnapshots] = useState({});
+  const [selectedHistory, setSelectedHistory] = useState(null);
+  const [capturing, setCapturing] = useState(null);
 
   const canManage = user?.role === 'admin' || user?.role === 'operator';
   const canDelete = user?.role === 'admin';
@@ -31,6 +34,7 @@ export default function Cameras() {
 
   useEffect(() => {
     fetchCameras();
+    fetchStoredSnapshots();
   }, []);
 
   // Auto-refresh snapshots
@@ -52,6 +56,59 @@ export default function Cameras() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchStoredSnapshots = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/cameras/snapshots/latest`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const map = {};
+        data.forEach(s => { map[s.camera_id] = s; });
+        setStoredSnapshots(map);
+      }
+    } catch {}
+  };
+
+  const fetchCameraHistory = async (cameraId) => {
+    try {
+      const res = await fetch(`${API_BASE}/cameras/${cameraId}/snapshots?limit=42`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) return await res.json();
+    } catch {}
+    return [];
+  };
+
+  const handleCapture = async (camera) => {
+    setCapturing(camera.id);
+    try {
+      const res = await fetch(`${API_BASE}/cameras/${camera.id}/capture`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Capture failed');
+      showSuccess(`Snapshot captured for ${camera.name}`);
+      fetchStoredSnapshots();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setCapturing(null);
+    }
+  };
+
+  const openHistory = async (camera) => {
+    const snaps = await fetchCameraHistory(camera.id);
+    setSelectedHistory({ camera, snapshots: snaps });
+  };
+
+  const formatDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+      d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   };
 
   const handleAdd = async (e) => {
@@ -372,25 +429,44 @@ export default function Cameras() {
                   </div>
                 </div>
 
-                {/* Actions */}
-                {canManage && (
-                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <button onClick={() => handleTest(camera)} disabled={testing === camera.id}
-                      className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">
-                      {testing === camera.id ? 'Testing...' : 'Test'}
-                    </button>
-                    <button onClick={() => openEdit(camera)}
-                      className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
-                      Edit
-                    </button>
-                    {canDelete && (
-                      <button onClick={() => openDelete(camera)}
-                        className="text-xs px-3 py-1.5 rounded bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 ml-auto">
-                        Delete
-                      </button>
-                    )}
-                  </div>
+                {/* Last stored snapshot info */}
+                {storedSnapshots[camera.id] && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                    Last capture: {formatDate(storedSnapshots[camera.id].captured_at)}
+                  </p>
                 )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                  {canManage && (
+                    <button onClick={() => handleCapture(camera)} disabled={capturing === camera.id}
+                      className="text-xs px-3 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-50">
+                      {capturing === camera.id ? 'Capturing...' : 'Capture Now'}
+                    </button>
+                  )}
+                  <button onClick={() => openHistory(camera)}
+                    className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
+                    History
+                  </button>
+                  {canManage && (
+                    <>
+                      <button onClick={() => handleTest(camera)} disabled={testing === camera.id}
+                        className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">
+                        {testing === camera.id ? 'Testing...' : 'Test'}
+                      </button>
+                      <button onClick={() => openEdit(camera)}
+                        className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
+                        Edit
+                      </button>
+                    </>
+                  )}
+                  {canDelete && (
+                    <button onClick={() => openDelete(camera)}
+                      className="text-xs px-3 py-1.5 rounded bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 ml-auto">
+                      Delete
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -464,6 +540,64 @@ export default function Cameras() {
               </button>
             </div>
             <LivePlayer camera={showLiveModal} />
+          </div>
+        </div>
+      )}
+
+      {/* Snapshot History Modal */}
+      {selectedHistory && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-start justify-center min-h-screen px-4 pt-8 pb-20">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-75" onClick={() => setSelectedHistory(null)} />
+            <div className="relative w-full max-w-5xl bg-white dark:bg-gray-800 rounded-lg shadow-xl">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedHistory.camera.name} - Snapshot History</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedHistory.snapshots.length} snapshots (captured every 4 hours)</p>
+                </div>
+                <button onClick={() => setSelectedHistory(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="p-4">
+                {selectedHistory.snapshots.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <svg className="w-12 h-12 mx-auto mb-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p>No snapshots yet. The first capture runs 1 minute after startup, then every 4 hours.</p>
+                    {canManage && (
+                      <button onClick={() => { handleCapture(selectedHistory.camera); }}
+                        className="mt-3 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Capture Now
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {selectedHistory.snapshots.map(snap => (
+                      <div key={snap.id} className="group relative">
+                        <a href={`${API_BASE}/cameras/snapshots/file/${snap.filename}`} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={`${API_BASE}/cameras/snapshots/file/${snap.filename}`}
+                            alt={formatDate(snap.captured_at)}
+                            className="w-full aspect-video object-cover rounded-lg border border-gray-200 dark:border-gray-700 group-hover:border-blue-500 transition-colors"
+                            loading="lazy"
+                          />
+                        </a>
+                        <div className="mt-1 flex items-center justify-between">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(snap.captured_at)}</p>
+                          <p className="text-[10px] text-gray-400">{(snap.file_size / 1024).toFixed(0)} KB</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

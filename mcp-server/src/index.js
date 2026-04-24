@@ -224,6 +224,164 @@ function createMcpServer() {
     }
   );
 
+  // ========== CAMERA TOOLS ==========
+
+  server.tool(
+    'get_cameras',
+    'List all cameras with their status, IP address, model, and stream info.',
+    {},
+    async () => {
+      const data = await api.get('/api/cameras');
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'capture_camera_snapshot',
+    'Capture a snapshot from a camera right now and store it. Returns the snapshot metadata (filename, size, timestamp). Use get_cameras first to find camera IDs.',
+    {
+      camera_id: z.number().int().describe('Camera ID'),
+    },
+    async ({ camera_id }) => {
+      const data = await api.post(`/api/cameras/${camera_id}/capture`);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'get_camera_snapshots',
+    'Get stored snapshot history for a camera. Snapshots are captured automatically every 4 hours. Returns list of snapshots with filenames, sizes, and capture timestamps.',
+    {
+      camera_id: z.number().int().describe('Camera ID'),
+      limit: z.number().int().optional().describe('Max snapshots to return (default 42, ~7 days)'),
+    },
+    async ({ camera_id, limit }) => {
+      const params = new URLSearchParams();
+      if (limit) params.set('limit', String(limit));
+      const qs = params.toString();
+      const data = await api.get(`/api/cameras/${camera_id}/snapshots${qs ? '?' + qs : ''}`);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'get_camera_snapshot_image',
+    'Get the URL for a stored camera snapshot image. Returns the URL path that can be used to view/download the JPEG image. Use get_camera_snapshots first to find filenames.',
+    {
+      filename: z.string().describe('Snapshot filename (e.g., cam_1_2026-03-25T09-22-03-497Z.jpg)'),
+    },
+    async ({ filename }) => {
+      const url = `${API_URL}/api/cameras/snapshots/file/${encodeURIComponent(filename)}`;
+      return { content: [{ type: 'text', text: JSON.stringify({ url, note: 'This URL serves the JPEG image directly. No auth required.' }, null, 2) }] };
+    }
+  );
+
+  // ========== CROP DATA TOOLS (A64Core Contract) ==========
+
+  server.tool(
+    'set_crop_data',
+    'Assign a crop to a SenseHub block. Called by A64Core when a crop is planted. Atomically replaces any prior active crop on that block_id. All optimal_ranges values are {min, max, unit} objects.',
+    {
+      block_id: z.string().describe('A64Core block UUID'),
+      a64core_planting_id: z.string().optional().describe('A64Core planting document UUID'),
+      crop: z.object({
+        plant_data_id: z.string().optional(),
+        name: z.string(),
+        variety: z.string().optional(),
+        scientific_name: z.string().optional()
+      }),
+      timing: z.object({
+        planted_date: z.string().optional(),
+        expected_harvest_date: z.string().optional(),
+        growth_cycle_days: z.number().optional()
+      }).optional(),
+      population: z.object({
+        plant_count: z.number().optional(),
+        max_capacity: z.number().optional()
+      }).optional(),
+      current_stage: z.string().optional().describe('seedling|vegetative|flowering|fruiting|ripening'),
+      optimal_ranges: z.record(z.any()).optional().describe('Keys: ec, ph, temperature, humidity, water, light. Values: {min, max, unit}'),
+      stage_durations_days: z.record(z.number()).optional().describe('Expected days per stage: {seedling:14, vegetative:28, ...}')
+    },
+    async ({ block_id, a64core_planting_id, crop, timing, population, current_stage, optimal_ranges, stage_durations_days }) => {
+      const data = await api.post('/api/crops', {
+        block_id, a64core_planting_id, crop, timing, population,
+        current_stage, optimal_ranges, stage_durations_days
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'get_crop_data',
+    'Get the active crop assignment for a block. Returns the full crop payload (same shape as set_crop_data) plus sensehub_crop_id, received_at, and last_stage_update_at. Returns null if no active crop.',
+    {
+      block_id: z.string().describe('A64Core block UUID'),
+    },
+    async ({ block_id }) => {
+      const data = await api.get(`/api/crops/by-block/${encodeURIComponent(block_id)}`);
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'update_growth_stage',
+    'Update the growth stage of the active crop on a block. Called by A64Core when the computed stage advances. Valid stages: seedling, vegetative, flowering, fruiting, ripening, harvested.',
+    {
+      block_id: z.string().describe('A64Core block UUID'),
+      stage: z.string().describe('New stage: seedling|vegetative|flowering|fruiting|ripening|harvested'),
+      transitioned_at: z.string().optional().describe('ISO 8601 UTC timestamp of the transition'),
+      days_since_planting: z.number().optional().describe('Days elapsed since planting at time of transition')
+    },
+    async ({ block_id, stage, transitioned_at, days_since_planting }) => {
+      const data = await api.post(`/api/crops/0/stage`, { block_id, stage, transitioned_at, days_since_planting });
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'complete_crop',
+    'Mark the active crop on a block as harvested/completed. Called by A64Core when harvest is finalized. SenseHub archives the record and stops stage-based automations until a new set_crop_data arrives.',
+    {
+      block_id: z.string().describe('A64Core block UUID'),
+      harvested_at: z.string().optional().describe('ISO 8601 UTC harvest timestamp'),
+      total_yield_kg: z.number().optional().describe('Cumulative yield in kg'),
+      average_quality_grade: z.string().optional().describe('A, B, C, or D'),
+      harvest_count: z.number().optional().describe('Number of discrete harvest events')
+    },
+    async ({ block_id, harvested_at, total_yield_kg, average_quality_grade, harvest_count }) => {
+      const data = await api.post(`/api/crops/0/complete`, { block_id, harvested_at, total_yield_kg, average_quality_grade, harvest_count });
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  // ========== BLOCK MAPPING TOOLS ==========
+
+  server.tool(
+    'configure_block_mapping',
+    'Associate a SenseHub zone with an A64Core block UUID. Idempotent. This is optional — if a primary crop zone is configured, set_crop_data routes automatically. Only needed for multi-zone sites.',
+    {
+      zone_id: z.number().int().describe('SenseHub zone ID'),
+      block_id: z.string().describe('A64Core block UUID'),
+      block_code: z.string().optional().describe('Human-readable block code (e.g., "GH1-A")'),
+      block_name: z.string().optional().describe('Display name for the block')
+    },
+    async ({ zone_id, block_id, block_code, block_name }) => {
+      const data = await api.post('/api/crops/configure-block-mapping', { zone_id, block_id, block_code, block_name });
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'list_zone_mappings',
+    'List all SenseHub zones with block mappings and which is the primary crop zone. Zones with no mapping show block_id: null. Includes primary_crop_zone_id.',
+    {},
+    async () => {
+      const data = await api.get('/api/crops/zone-mappings');
+      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
   // ========== RESOURCES ==========
 
   server.resource(
@@ -253,6 +411,26 @@ function createMcpServer() {
     async () => {
       const data = await api.get('/api/alerts?acknowledged=false');
       return { contents: [{ uri: 'sensehub://alerts', mimeType: 'application/json', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.resource(
+    'crops',
+    'sensehub://crops',
+    { description: 'Active crop assignments per zone with plant parameters and growth stages' },
+    async () => {
+      const data = await api.get('/api/crops');
+      return { contents: [{ uri: 'sensehub://crops', mimeType: 'application/json', text: JSON.stringify(data, null, 2) }] };
+    }
+  );
+
+  server.resource(
+    'cameras',
+    'sensehub://cameras',
+    { description: 'All cameras with status and latest snapshot info' },
+    async () => {
+      const data = await api.get('/api/cameras');
+      return { contents: [{ uri: 'sensehub://cameras', mimeType: 'application/json', text: JSON.stringify(data, null, 2) }] };
     }
   );
 

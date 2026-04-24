@@ -25,6 +25,9 @@ const notificationRoutes = require('./routes/notifications');
 const cameraRoutes = require('./routes/cameras');
 const labReadingRoutes = require('./routes/labReadings');
 const fertigationRoutes = require('./routes/fertigation');
+const calibrationRoutes = require('./routes/calibration');
+const reportRoutes = require('./routes/reports');
+const cropRoutes = require('./routes/crops');
 
 // Import middleware
 const { authMiddleware } = require('./middleware/auth');
@@ -36,6 +39,8 @@ const { relayTimerService } = require('./services/RelayTimerService');
 const { automationSchedulerService } = require('./services/AutomationSchedulerService');
 const { cameraStreamService } = require('./services/CameraStreamService');
 const { watchdogService } = require('./services/WatchdogService');
+const { networkUsageService } = require('./services/NetworkUsageService');
+const { snapshotService } = require('./services/SnapshotService');
 
 const app = express();
 const server = http.createServer(app);
@@ -47,6 +52,70 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 app.use(cors());
 app.use(express.json());
 
+// Request logging middleware - logs to database for network analysis
+const requestLogDb = require('./utils/database').db;
+(() => {
+  try {
+    requestLogDb.exec(`
+      CREATE TABLE IF NOT EXISTS request_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        method TEXT NOT NULL,
+        path TEXT NOT NULL,
+        status INTEGER,
+        response_bytes INTEGER,
+        duration_ms INTEGER,
+        ip TEXT,
+        user_agent TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_request_log_created ON request_log(created_at);
+      CREATE INDEX IF NOT EXISTS idx_request_log_path ON request_log(path, created_at);
+    `);
+  } catch (e) { /* table already exists */ }
+})();
+
+const insertRequestLog = requestLogDb.prepare(
+  'INSERT INTO request_log (method, path, status, response_bytes, duration_ms, ip, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+);
+
+app.use((req, res, next) => {
+  // Skip health checks and static assets
+  if (req.path === '/api/health') return next();
+
+  const start = Date.now();
+  const originalEnd = res.end;
+  let responseSize = 0;
+
+  // Intercept write to measure response size
+  const originalWrite = res.write;
+  res.write = function(chunk, ...args) {
+    if (chunk) responseSize += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
+    return originalWrite.apply(this, [chunk, ...args]);
+  };
+
+  res.end = function(chunk, ...args) {
+    if (chunk) responseSize += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
+    const duration = Date.now() - start;
+
+    try {
+      insertRequestLog.run(
+        req.method,
+        req.path,
+        res.statusCode,
+        responseSize,
+        duration,
+        req.ip || req.connection?.remoteAddress || '',
+        (req.headers['user-agent'] || '').substring(0, 200),
+        new Date().toISOString()
+      );
+    } catch (e) { /* don't break requests on log failure */ }
+
+    return originalEnd.apply(this, [chunk, ...args]);
+  };
+
+  next();
+});
+
 // Health check endpoint (no auth required)
 app.get('/api/health', (req, res) => {
   const dbStatus = db.isConnected() ? 'connected' : 'disconnected';
@@ -56,6 +125,20 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || '1.0.0'
   });
+});
+
+// Public routes (no auth required)
+app.get('/api/cameras/snapshots/file/:filename', (req, res) => {
+  const path = require('path');
+  const fs = require('fs');
+  const { SNAPSHOT_DIR } = require('./services/SnapshotService');
+  const filepath = path.join(SNAPSHOT_DIR, req.params.filename);
+  if (!filepath.startsWith(SNAPSHOT_DIR) || !fs.existsSync(filepath)) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.set('Content-Type', 'image/jpeg');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(filepath);
 });
 
 // API routes
@@ -76,6 +159,9 @@ app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/cameras', authMiddleware, cameraRoutes);
 app.use('/api/lab-readings', authMiddleware, labReadingRoutes);
 app.use('/api/fertigation', authMiddleware, fertigationRoutes);
+app.use('/api/calibration', authMiddleware, calibrationRoutes);
+app.use('/api/reports', authMiddleware, reportRoutes);
+app.use('/api/crops', authMiddleware, cropRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
@@ -160,11 +246,29 @@ server.listen(PORT, async () => {
   } catch (error) {
     console.error('Watchdog service: Failed to start -', error.message);
   }
+
+  // Start network usage tracking
+  try {
+    networkUsageService.start();
+    console.log('Network usage service: Started');
+  } catch (error) {
+    console.error('Network usage service: Failed to start -', error.message);
+  }
+
+  // Start snapshot capture service (every 4 hours)
+  try {
+    snapshotService.start();
+    console.log('Snapshot service: Started');
+  } catch (error) {
+    console.error('Snapshot service: Failed to start -', error.message);
+  }
 });
 
 // Graceful shutdown handler
 process.on('SIGINT', async () => {
   console.log('\\nGraceful shutdown initiated...');
+  snapshotService.stop();
+  networkUsageService.stop();
   watchdogService.stop();
   cameraStreamService.stop();
   automationSchedulerService.stop();
@@ -175,6 +279,8 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\\nGraceful shutdown initiated...');
+  snapshotService.stop();
+  networkUsageService.stop();
   watchdogService.stop();
   cameraStreamService.stop();
   automationSchedulerService.stop();

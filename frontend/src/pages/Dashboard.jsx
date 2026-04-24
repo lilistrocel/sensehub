@@ -212,6 +212,7 @@ export default function Dashboard() {
   const [timeRange, setTimeRange] = useState('24'); // hours
   const [selectedAlert, setSelectedAlert] = useState(null); // For alert details modal
   const [equipmentList, setEquipmentList] = useState([]); // For equipment controls
+  const [activeCrops, setActiveCrops] = useState([]); // Crop assignments from A20Core
   const [controlLoading, setControlLoading] = useState({}); // Track loading state per equipment
   const [controlMessage, setControlMessage] = useState(null); // Control feedback message
   const [isRefreshing, setIsRefreshing] = useState(false); // Track manual refresh state
@@ -498,6 +499,11 @@ export default function Dashboard() {
       }
     };
     fetchZones();
+    // Fetch active crops
+    fetch(`${API_BASE}/crops`, { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(setActiveCrops)
+      .catch(() => {});
   }, [token]);
 
   // Fetch dashboard data
@@ -860,6 +866,109 @@ export default function Dashboard() {
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Active Crops */}
+          {activeCrops.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Active Crops</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {activeCrops.filter(c => c.active).map(crop => {
+                  const or = crop.optimal_ranges || {};
+                  const planted = crop.timing?.planted_date ? new Date(crop.timing.planted_date) : null;
+                  const harvest = crop.timing?.expected_harvest_date ? new Date(crop.timing.expected_harvest_date) : null;
+                  const now = new Date();
+                  const daysSincePlanting = planted ? Math.floor((now - planted) / 86400000) : null;
+                  const daysToHarvest = harvest ? Math.floor((harvest - now) / 86400000) : null;
+                  const totalDays = planted && harvest ? Math.floor((harvest - planted) / 86400000) : null;
+                  const progress = totalDays && daysSincePlanting !== null ? Math.min(100, Math.round((daysSincePlanting / totalDays) * 100)) : null;
+
+                  const stageColors = {
+                    seedling: 'bg-lime-100 text-lime-800 dark:bg-lime-900/30 dark:text-lime-400',
+                    vegetative: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+                    flowering: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400',
+                    fruiting: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+                    ripening: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+                  };
+
+                  return (
+                    <div key={crop.sensehub_crop_id} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-900 dark:text-white">{crop.crop?.name || crop.crop_name}</h3>
+                          {(crop.crop?.variety || crop.variety) && <p className="text-xs text-gray-500 dark:text-gray-400">{crop.crop?.variety || crop.variety}</p>}
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${stageColors[crop.current_stage] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
+                          {crop.current_stage}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mb-2">{crop.zone_name}</p>
+
+                      {/* Progress bar */}
+                      {progress !== null && (
+                        <div className="mb-2">
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                          </div>
+                          <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                            <span>{daysSincePlanting}d since planting</span>
+                            <span>{daysToHarvest !== null && daysToHarvest > 0 ? `${daysToHarvest}d to harvest` : daysToHarvest === 0 ? 'Harvest day!' : ''}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Optimal ranges */}
+                      {Object.keys(or).length > 0 && (
+                        <div className="space-y-1 text-xs">
+                          {or.ec && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500 dark:text-gray-400">Optimal EC</span>
+                              <span className="text-gray-900 dark:text-white font-medium">{or.ec.min}-{or.ec.max} {or.ec.unit || 'mS/cm'}</span>
+                            </div>
+                          )}
+                          {or.ph && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500 dark:text-gray-400">Optimal pH</span>
+                              <span className="text-gray-900 dark:text-white font-medium">{or.ph.min}-{or.ph.max}</span>
+                            </div>
+                          )}
+                          {or.temperature && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500 dark:text-gray-400">Optimal Temp</span>
+                              <span className="text-gray-900 dark:text-white font-medium">{or.temperature.min}-{or.temperature.max} {or.temperature.unit || 'C'}</span>
+                            </div>
+                          )}
+                          {or.humidity && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500 dark:text-gray-400">Optimal Humidity</span>
+                              <span className="text-gray-900 dark:text-white font-medium">{or.humidity.min}-{or.humidity.max} {or.humidity.unit || '%RH'}</span>
+                            </div>
+                          )}
+                          {or.water && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500 dark:text-gray-400">Water/plant/day</span>
+                              <span className="text-gray-900 dark:text-white font-medium">{or.water.volume_per_plant_per_day} {or.water.unit || 'L'}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {crop.population && (crop.population.plant_count || crop.population.max_capacity) && (
+                        <div className="flex justify-between text-xs mt-1">
+                          <span className="text-gray-500 dark:text-gray-400">Plants</span>
+                          <span className="text-gray-900 dark:text-white font-medium">
+                            {crop.population.plant_count || '?'}{crop.population.max_capacity ? ` / ${crop.population.max_capacity}` : ''}
+                          </span>
+                        </div>
+                      )}
+
+                      {crop.a64core_planting_id && (
+                        <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-2">Synced from A64Core</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
