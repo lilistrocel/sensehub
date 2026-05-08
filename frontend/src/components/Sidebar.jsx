@@ -58,9 +58,27 @@ const ReportsIcon = () => (
   </svg>
 );
 
+const AmicIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+  </svg>
+);
+
+const AgronomistIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+  </svg>
+);
+
 const AlertsIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+  </svg>
+);
+
+const RelayEventsIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
   </svg>
 );
 
@@ -102,9 +120,12 @@ const navItems = [
   { name: 'Automations', path: '/automations', icon: AutomationsIcon },
   { name: 'Fertigation', path: '/fertigation', icon: FertigationIcon },
   { name: 'Lab Analysis', path: '/lab-analysis', icon: LabIcon },
+  { name: 'AMIC Analyzer', path: '/amic', icon: AmicIcon },
+  { name: 'Agronomist', path: '/agronomist', icon: AgronomistIcon },
   { name: 'Calibration', path: '/calibration', icon: CalibrationIcon },
   { name: 'Reports', path: '/reports', icon: ReportsIcon },
   { name: 'Alerts', path: '/alerts', icon: AlertsIcon },
+  { name: 'Relay Events', path: '/relay-events', icon: RelayEventsIcon },
   { name: 'Settings', path: '/settings', icon: SettingsIcon },
   { name: 'Debug', path: '/debug', icon: DebugIcon },
 ];

@@ -23,6 +23,9 @@ import Fertigation from './pages/Fertigation';
 import LabAnalysis from './pages/LabAnalysis';
 import Calibration from './pages/Calibration';
 import Reports from './pages/Reports';
+import Amic from './pages/Amic';
+import Agronomist from './pages/Agronomist';
+import RelayEvents from './pages/RelayEvents';
 import NotFound from './pages/NotFound';
 
 // Loading spinner component
@@ -208,10 +211,34 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/amic"
+        element={
+          <ProtectedRoute>
+            <Amic />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/agronomist"
+        element={
+          <ProtectedRoute>
+            <Agronomist />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/alerts"
         element={
           <ProtectedRoute>
             <Alerts />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/relay-events"
+        element={
+          <ProtectedRoute>
+            <RelayEvents />
           </ProtectedRoute>
         }
       />

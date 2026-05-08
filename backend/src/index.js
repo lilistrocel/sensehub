@@ -28,6 +28,8 @@ const fertigationRoutes = require('./routes/fertigation');
 const calibrationRoutes = require('./routes/calibration');
 const reportRoutes = require('./routes/reports');
 const cropRoutes = require('./routes/crops');
+const amicRoutes = require('./routes/amic');
+const agronomistRoutes = require('./routes/agronomist');
 
 // Import middleware
 const { authMiddleware } = require('./middleware/auth');
@@ -41,6 +43,8 @@ const { cameraStreamService } = require('./services/CameraStreamService');
 const { watchdogService } = require('./services/WatchdogService');
 const { networkUsageService } = require('./services/NetworkUsageService');
 const { snapshotService } = require('./services/SnapshotService');
+const { agronomistSchedulerService } = require('./services/AgronomistSchedulerService');
+const { relaySafetyWatchdogService } = require('./services/RelaySafetyWatchdogService');
 
 const app = express();
 const server = http.createServer(app);
@@ -162,6 +166,9 @@ app.use('/api/fertigation', authMiddleware, fertigationRoutes);
 app.use('/api/calibration', authMiddleware, calibrationRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/crops', authMiddleware, cropRoutes);
+app.use('/api/amic', authMiddleware, amicRoutes);
+app.use('/api/agronomist', authMiddleware, agronomistRoutes);
+app.use('/api/relay-events', authMiddleware, require('./routes/relayEvents'));
 
 // Error handling middleware
 app.use(errorHandler);
@@ -247,6 +254,14 @@ server.listen(PORT, async () => {
     console.error('Watchdog service: Failed to start -', error.message);
   }
 
+  // Start relay safety watchdog (force-OFFs any channel stuck ON beyond its max duration)
+  try {
+    relaySafetyWatchdogService.start();
+    console.log('Relay safety watchdog: Started');
+  } catch (error) {
+    console.error('Relay safety watchdog: Failed to start -', error.message);
+  }
+
   // Start network usage tracking
   try {
     networkUsageService.start();
@@ -262,11 +277,20 @@ server.listen(PORT, async () => {
   } catch (error) {
     console.error('Snapshot service: Failed to start -', error.message);
   }
+
+  // Start agronomist daily report scheduler
+  try {
+    agronomistSchedulerService.start();
+    console.log('Agronomist scheduler: Started');
+  } catch (error) {
+    console.error('Agronomist scheduler: Failed to start -', error.message);
+  }
 });
 
 // Graceful shutdown handler
 process.on('SIGINT', async () => {
   console.log('\\nGraceful shutdown initiated...');
+  agronomistSchedulerService.stop();
   snapshotService.stop();
   networkUsageService.stop();
   watchdogService.stop();
@@ -279,6 +303,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\\nGraceful shutdown initiated...');
+  agronomistSchedulerService.stop();
   snapshotService.stop();
   networkUsageService.stop();
   watchdogService.stop();

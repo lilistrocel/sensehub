@@ -33,6 +33,7 @@ services:
       - DB_PATH=/app/data/sensehub.db
       - GO2RTC_URL=http://localhost:1984
       - TZ=Asia/Dubai
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     depends_on:
       go2rtc:
         condition: service_healthy

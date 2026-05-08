@@ -450,6 +450,60 @@ const initSchema = () => {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Agronomist daily reports — Claude-generated farm analysis (one per day)
+    CREATE TABLE IF NOT EXISTS agronomist_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_date TEXT NOT NULL UNIQUE,
+      generated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      model TEXT,
+      input_snapshot TEXT,
+      summary TEXT NOT NULL,
+      full_markdown TEXT NOT NULL,
+      recommendations TEXT,
+      opinion TEXT,
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      cache_read_tokens INTEGER DEFAULT 0,
+      cache_creation_tokens INTEGER DEFAULT 0,
+      status TEXT CHECK(status IN ('success','failure')) DEFAULT 'success',
+      error TEXT
+    );
+
+    -- Tier 2 weekly rollups — compressed weekly paragraphs for long-horizon context
+    CREATE TABLE IF NOT EXISTS agronomist_weekly_rollups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      week_start TEXT NOT NULL UNIQUE,
+      week_end TEXT NOT NULL,
+      rollup TEXT NOT NULL,
+      generated_from_report_ids TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Tier 3 long-term memory — single rolling 5KB markdown doc, versioned
+    CREATE TABLE IF NOT EXISTS agronomist_longterm_memory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      version INTEGER NOT NULL UNIQUE,
+      content TEXT NOT NULL,
+      byte_size INTEGER,
+      triggered_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- User-submitted clarifications/feedback on a daily report.
+    -- Injected into the prompt on regeneration so corrections (e.g. "the pH probe is uncalibrated,
+    -- ignore today's pH") propagate into the new report's summary, and from there into the
+    -- weekly rollup and long-term memory.
+    CREATE TABLE IF NOT EXISTS agronomist_report_clarifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      user_id INTEGER,
+      user_name TEXT,
+      message TEXT NOT NULL,
+      triggered_regenerate INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (report_id) REFERENCES agronomist_reports(id) ON DELETE CASCADE
+    );
+
     -- Create indexes for performance
     CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
     CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
@@ -485,6 +539,12 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_watchdog_events_type ON watchdog_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_watchdog_events_created ON watchdog_events(created_at);
     CREATE INDEX IF NOT EXISTS idx_watchdog_events_target ON watchdog_events(target, created_at);
+    CREATE INDEX IF NOT EXISTS idx_agronomist_reports_date ON agronomist_reports(report_date);
+    CREATE INDEX IF NOT EXISTS idx_agronomist_reports_generated ON agronomist_reports(generated_at);
+    CREATE INDEX IF NOT EXISTS idx_agronomist_weekly_week ON agronomist_weekly_rollups(week_start);
+    CREATE INDEX IF NOT EXISTS idx_agronomist_longterm_version ON agronomist_longterm_memory(version);
+    CREATE INDEX IF NOT EXISTS idx_agronomist_clarifications_report ON agronomist_report_clarifications(report_id);
+    CREATE INDEX IF NOT EXISTS idx_agronomist_clarifications_created ON agronomist_report_clarifications(created_at);
   `);
 
   // Add calibration columns to existing equipment table if they don't exist
@@ -704,6 +764,61 @@ const initSchema = () => {
     }
   } catch (err) {
     console.log('crop_assignments migration skipped:', err.message);
+  }
+
+  // Drop the rigid CHECK constraint on relay_events.source so new sources can be added
+  // without a schema migration each time (e.g. 'watchdog_force_off', 'transition_revert').
+  try {
+    const tbl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='relay_events'").get();
+    if (tbl && /CHECK\s*\(\s*source\s+IN\s*\(/i.test(tbl.sql)) {
+      console.log('Migrating relay_events: dropping rigid source CHECK constraint');
+      db.exec(`
+        BEGIN;
+        CREATE TABLE relay_events_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          equipment_id INTEGER NOT NULL,
+          channel INTEGER NOT NULL,
+          state INTEGER NOT NULL,
+          source TEXT NOT NULL,
+          automation_id INTEGER,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
+          FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE SET NULL
+        );
+        INSERT INTO relay_events_new (id, equipment_id, channel, state, source, automation_id, created_at)
+          SELECT id, equipment_id, channel, state, source, automation_id, created_at FROM relay_events;
+        DROP TABLE relay_events;
+        ALTER TABLE relay_events_new RENAME TO relay_events;
+        CREATE INDEX IF NOT EXISTS idx_relay_events_equipment ON relay_events(equipment_id);
+        CREATE INDEX IF NOT EXISTS idx_relay_events_created ON relay_events(created_at);
+        CREATE INDEX IF NOT EXISTS idx_relay_events_equip_channel ON relay_events(equipment_id, channel, created_at);
+        COMMIT;
+      `);
+      console.log('relay_events CHECK constraint dropped');
+    }
+  } catch (err) {
+    console.error('relay_events constraint migration failed:', err.message);
+  }
+
+  // Add pH offset tracking columns to lab_readings.
+  // Records the AMIC pH calibration buffers + offset that were active when each pH row was saved,
+  // so historical rows stay reconcilable when the calibration buffers change later.
+  try {
+    const labCols = db.pragma("table_info(lab_readings)").map(col => col.name);
+    if (!labCols.includes('ph_offset')) {
+      db.exec('ALTER TABLE lab_readings ADD COLUMN ph_offset REAL');
+      console.log('Added ph_offset column to lab_readings table');
+    }
+    if (!labCols.includes('ph_buffer_low')) {
+      db.exec('ALTER TABLE lab_readings ADD COLUMN ph_buffer_low REAL');
+      console.log('Added ph_buffer_low column to lab_readings table');
+    }
+    if (!labCols.includes('ph_buffer_high')) {
+      db.exec('ALTER TABLE lab_readings ADD COLUMN ph_buffer_high REAL');
+      console.log('Added ph_buffer_high column to lab_readings table');
+    }
+  } catch (err) {
+    console.log('lab_readings pH offset columns migration skipped:', err.message);
   }
 
   console.log('Database schema initialized');
