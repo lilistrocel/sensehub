@@ -375,6 +375,41 @@ export default function Amic() {
             </tbody>
           </table>
         </div>
+
+        {/* Sum of ions — visual cross-check against the operator's handheld EC meter.
+            We sum every enabled non-pH channel in mg/L, then bracket the equivalent EC
+            using the common TDS↔EC conversion factor range for mixed hydroponic salts
+            (0.55-0.75 mg/L per µS/cm = roughly 550-750 mg/L per dS/m). */}
+        {(() => {
+          const enabledIons = status.measurements.filter(m => m.enabled !== false && m.unit === 'mg/L');
+          const sum = enabledIons.reduce((acc, m) => acc + (m.value || 0), 0);
+          // EC range using TDS/EC factor 0.55-0.75: EC = sum / factor / 1000
+          const ecLow = +(sum / 750).toFixed(2);
+          const ecHigh = +(sum / 550).toFixed(2);
+          return (
+            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Sum of measured ions</p>
+                  <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">{sum.toFixed(0)} <span className="text-base font-normal text-gray-500">mg/L</span></p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Excludes pH and any disabled channel. Excludes unmeasured anions (sulfate, phosphate, bicarbonate).
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Equivalent EC range</p>
+                  <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">{ecLow} – {ecHigh} <span className="text-base font-normal text-gray-500">dS/m</span></p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Range uses TDS↔EC factor 0.55–0.75 for mixed hydroponic salts. Compare to your handheld EC meter.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-2 text-xs text-blue-900 dark:text-blue-300">
+                <strong>How to use this:</strong> if your handheld EC meter reads within the bracket above ({ecLow}–{ecHigh} dS/m), the AMIC's ion concentrations are consistent with the actual feed. A handheld reading <strong>below</strong> the range = unmeasured anions or AMIC over-reading. <strong>Above</strong> the range = sample dilution, sample line on the wrong source, or AMIC under-reading.
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* pH Calibration */}
@@ -385,7 +420,7 @@ export default function Amic() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Channel Configuration</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Assign which ion each electrode measures</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Assign which ion each electrode measures.</p>
           </div>
           {canControl && (
             <button onClick={() => editingChannels ? saveChannels() : setEditingChannels(true)}
@@ -393,6 +428,9 @@ export default function Amic() {
               {editingChannels ? 'Save' : 'Edit'}
             </button>
           )}
+        </div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-2 mb-3 text-xs text-amber-900 dark:text-amber-200">
+          <strong>Verify with NT Sensors:</strong> The defaults below come from the manual's example layout (page 16). The manufacturer ships different electrode combinations per customer — check your delivery slip or contact NT Sensors customer service with your unit's serial number to confirm the actual installed order before trusting these labels.
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {channels.map((ch, i) => (
@@ -428,10 +466,407 @@ export default function Amic() {
         </div>
       </div>
 
-      {/* Pump timing info */}
-      <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-xs text-gray-600 dark:text-gray-400">
-        Pump timings: input {status.timing.pump_input_seconds}s · output {status.timing.pump_output_seconds}s
+      {/* Pump timings (admin-editable) */}
+      <PumpTimings status={status} isAdmin={user?.role === 'admin'} headers={headers} onUpdate={() => fetchStatus(false)} />
+
+      {/* Scheduled calibrations */}
+      <ScheduledCalibrations isAdmin={user?.role === 'admin'} headers={headers} />
+
+      {/* Cycle history */}
+      <CycleHistory headers={headers} />
+    </div>
+  );
+}
+
+function ScheduledCalibrations({ isAdmin, headers }) {
+  const { showError, showSuccess } = useToast();
+  const [data, setData] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/amic/schedule`, { headers });
+      if (res.ok) setData(await res.json());
+    } catch {}
+  }, [headers]);
+
+  React.useEffect(() => {
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const startEdit = () => {
+    setDraft(JSON.parse(JSON.stringify(data?.schedule || { enabled: false, times: [] })));
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/amic/schedule`, {
+        method: 'PUT', headers,
+        body: JSON.stringify(draft),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Failed');
+      showSuccess('Schedule saved');
+      setEditing(false);
+      load();
+    } catch (err) { showError(err.message); }
+    finally { setSaving(false); }
+  };
+
+  const updateSlot = (idx, patch) => {
+    setDraft(d => ({ ...d, times: d.times.map((t, i) => i === idx ? { ...t, ...patch } : t) }));
+  };
+  const addSlot = () => setDraft(d => ({ ...d, times: [...(d.times||[]), { hour: 12, minute: 0, enabled: true, label: '' }] }));
+  const removeSlot = (idx) => setDraft(d => ({ ...d, times: d.times.filter((_, i) => i !== idx) }));
+
+  if (!data) return null;
+
+  const fmtTime = (h, m) => String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+  const fmtLastFired = (iso) => iso ? new Date(iso).toLocaleString() : 'never';
+
+  const ls = data.last_scheduled_calibration;
+  const lsAge = ls ? Math.floor((Date.now() - new Date(ls.ended_at).getTime()) / 3600000) : null;
+  const lsCalFails = ls ? (ls.cal_check || []).filter(c => !c.passed) : [];
+  const lsHealthy = ls && ls.mv_swing != null && ls.mv_swing >= 20 && lsCalFails.length === 0;
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Scheduled Calibrations</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Fire Calibrate cycles automatically at the same time(s) every day. Each slot fires at most once per day; missed-by-more-than-5-minutes slots are skipped until tomorrow.
+          </p>
+        </div>
+        {isAdmin && !editing && (
+          <button onClick={startEdit} className="text-xs px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700">Edit</button>
+        )}
       </div>
+
+      {/* Status: when's the next one, when was the last one */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        <div className="bg-gray-50 dark:bg-gray-900 rounded p-3">
+          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Next scheduled cal</p>
+          {data.schedule.enabled && data.next_firing_at ? (
+            <p className="text-sm text-gray-900 dark:text-white mt-1">{new Date(data.next_firing_at).toLocaleString()}</p>
+          ) : (
+            <p className="text-sm text-gray-500 italic mt-1">{data.schedule.enabled ? 'no enabled slots' : 'schedule disabled'}</p>
+          )}
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-900 rounded p-3">
+          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Most recent scheduled cal</p>
+          {ls ? (
+            <div className="mt-1 text-sm">
+              <p className="text-gray-900 dark:text-white">
+                {new Date(ls.ended_at).toLocaleString()}
+                {lsAge != null && <span className="text-xs text-gray-500 ml-2">({lsAge < 1 ? '<1h ago' : lsAge + 'h ago'})</span>}
+              </p>
+              <p className="text-xs mt-1">
+                {lsHealthy ? <span className="text-green-700 dark:text-green-400">✓ Completed cleanly</span>
+                  : lsCalFails.length > 0 ? <span className="text-red-700 dark:text-red-400">⚠ {lsCalFails.length} channel cal_check fail: {lsCalFails.map(c=>c.label).join(', ')}</span>
+                  : ls.mv_swing != null && ls.mv_swing < 20 ? <span className="text-amber-700 dark:text-amber-400">⚠ low mV swing ({ls.mv_swing} mV) — probe contact suspect</span>
+                  : <span className="text-gray-500">completed</span>}
+                {ls.mv_swing != null && <span className="text-gray-500 ml-2">· {ls.mv_swing} mV swing</span>}
+                {ls.duration_seconds != null && <span className="text-gray-500 ml-2">· {Math.floor(ls.duration_seconds/60)}m {ls.duration_seconds%60}s</span>}
+              </p>
+            </div>
+          ) : <p className="text-sm text-gray-500 italic mt-1">no scheduled cals on record yet</p>}
+        </div>
+      </div>
+
+      {/* View / edit schedule slots */}
+      {editing ? (
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={draft.enabled} onChange={e => setDraft({ ...draft, enabled: e.target.checked })} />
+            <span className="font-medium text-gray-900 dark:text-white">Schedule enabled</span>
+          </label>
+          {(draft.times || []).map((slot, i) => (
+            <div key={i} className="flex items-center gap-2 flex-wrap bg-gray-50 dark:bg-gray-900 rounded p-3">
+              <label className="flex items-center gap-1 text-xs">
+                <input type="checkbox" checked={slot.enabled} onChange={e => updateSlot(i, { enabled: e.target.checked })} />
+                <span className="text-gray-600 dark:text-gray-400">on</span>
+              </label>
+              <input type="number" min="0" max="23" value={slot.hour}
+                onChange={e => updateSlot(i, { hour: parseInt(e.target.value) || 0 })}
+                className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+              <span className="text-gray-500">:</span>
+              <input type="number" min="0" max="59" value={slot.minute}
+                onChange={e => updateSlot(i, { minute: parseInt(e.target.value) || 0 })}
+                className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+              <input type="text" placeholder="label (optional)" value={slot.label || ''}
+                onChange={e => updateSlot(i, { label: e.target.value })}
+                className="flex-1 min-w-[120px] px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300" />
+              <button onClick={() => removeSlot(i)} className="text-xs px-2 py-1 text-red-700 dark:text-red-400 hover:underline">Remove</button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2">
+            <button onClick={addSlot} className="text-xs px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300">+ Add slot</button>
+            <span className="text-xs text-gray-500 ml-auto">Times are interpreted in the server's local timezone (Asia/Dubai).</span>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300">Cancel</button>
+            <button onClick={save} disabled={saving} className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Status: {data.schedule.enabled ? <span className="text-green-700 dark:text-green-400 font-medium">enabled</span> : <span className="text-gray-500 italic">disabled</span>}
+          </p>
+          {(data.schedule.times || []).map((slot, i) => (
+            <div key={i} className="flex items-center gap-3 text-sm">
+              <span className={`inline-block w-2 h-2 rounded-full ${slot.enabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+              <span className="font-mono font-medium text-gray-900 dark:text-white">{fmtTime(slot.hour, slot.minute)}</span>
+              {slot.label && <span className="text-xs text-gray-500">({slot.label})</span>}
+              <span className="text-xs text-gray-500 ml-auto">last fired: {fmtLastFired(slot.last_fired)}</span>
+            </div>
+          ))}
+          {(!data.schedule.times || data.schedule.times.length === 0) && (
+            <p className="text-sm text-gray-500 italic">No slots configured. {isAdmin ? 'Click Edit to add one.' : ''}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PumpTimings({ status, isAdmin, headers, onUpdate }) {
+  const { showError, showSuccess } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [input, setInput] = useState(status.timing.pump_input_seconds);
+  const [output, setOutput] = useState(status.timing.pump_output_seconds);
+  const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (!editing) {
+      setInput(status.timing.pump_input_seconds);
+      setOutput(status.timing.pump_output_seconds);
+    }
+  }, [status.timing.pump_input_seconds, status.timing.pump_output_seconds, editing]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/amic/pump-times`, {
+        method: 'PUT', headers,
+        body: JSON.stringify({ input_seconds: parseInt(input), output_seconds: parseInt(output) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      showSuccess(`Pump times saved: input ${data.pump_input_seconds}s · output ${data.pump_output_seconds}s`);
+      setEditing(false);
+      onUpdate();
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pump Timing</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Sample-in / sample-out durations during a Measure cycle. Increase <code>input</code> if the cell isn't fully covering both probes (manual p.11). Spec defaults: 12s / 16s.
+          </p>
+        </div>
+        {isAdmin && (
+          <button onClick={() => editing ? save() : setEditing(true)} disabled={saving}
+            className="text-xs px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
+            {saving ? 'Saving…' : editing ? 'Save' : 'Edit'}
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap items-end gap-4 mt-3">
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">PMP_INPUT_TIME (s)</label>
+          {editing ? (
+            <input type="number" min="1" max="120" value={input} onChange={e => setInput(e.target.value)}
+              className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+          ) : (
+            <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">{status.timing.pump_input_seconds}<span className="text-sm font-normal text-gray-500"> s</span></p>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">PMP_OUTPUT_TIME (s)</label>
+          {editing ? (
+            <input type="number" min="1" max="120" value={output} onChange={e => setOutput(e.target.value)}
+              className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
+          ) : (
+            <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">{status.timing.pump_output_seconds}<span className="text-sm font-normal text-gray-500"> s</span></p>
+          )}
+        </div>
+        {editing && <button onClick={() => { setEditing(false); setInput(status.timing.pump_input_seconds); setOutput(status.timing.pump_output_seconds); }}
+          className="text-xs px-3 py-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded">Cancel</button>}
+      </div>
+    </div>
+  );
+}
+
+function CycleHistory({ headers }) {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [liveTrace, setLiveTrace] = useState(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/amic/cycle-history?limit=20&with_trace=1`, { headers });
+        if (res.ok && !cancelled) setHistory(await res.json());
+        const lt = await fetch(`${API_BASE}/amic/live-trace`, { headers });
+        if (lt.ok && !cancelled) setLiveTrace(await lt.json());
+      } catch {}
+      finally { if (!cancelled) setLoading(false); }
+    };
+    load();
+    const t = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [headers]);
+
+  const fmtDuration = (sec) => {
+    if (sec == null) return '—';
+    if (sec < 60) return sec + 's';
+    return Math.floor(sec/60) + 'm ' + (sec % 60) + 's';
+  };
+  const stateColor = (s) => ({
+    measuring: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    calibrating: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    draining: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
+    empty_system: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+    conditioning: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+  }[s] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300');
+
+  // Find last calibration for the prominent "When was last cal?" callout
+  const lastCal = history.find(r => r.cycle_state === 'calibrating');
+  const lastCalAge = lastCal ? Math.floor((Date.now() - new Date(lastCal.ended_at).getTime()) / 86400000) : null;
+
+  // Diagnose probe-contact for a cycle: spread = max - min over the trace.
+  // Calibration uses multi-ion standards (P1 Low, P2 High), NOT pH buffers — so the
+  // pH probe sees whatever pH each standard happens to be at. P1 and P2 are usually
+  // 1–2 pH units apart, giving 30–120 mV swing. The pH-buffer 170 mV swing only
+  // happens during manual pH calibration (separate procedure, p.17 of the manual).
+  const contactDiagnosis = (r) => {
+    if (!r.live_mv_samples || r.live_mv_samples < 3) return { label: 'no trace', tone: 'gray' };
+    const spread = (r.live_mv_max ?? 0) - (r.live_mv_min ?? 0);
+    if (r.cycle_state === 'calibrating') {
+      if (spread < 5) return { label: 'flat — probe likely NOT in contact with liquid', tone: 'red', spread };
+      if (spread < 20) return { label: 'low swing (' + spread.toFixed(0) + ' mV) — minimal solution change detected, contact suspect', tone: 'amber', spread };
+      return { label: 'healthy ' + spread.toFixed(0) + ' mV swing — pH probe responding to standards', tone: 'green', spread };
+    }
+    // Measure / Drain / Empty / Conditioning — less stringent
+    if (spread < 3 && (r.cycle_state === 'measuring' || r.cycle_state === 'conditioning')) return { label: 'flat — contact suspect', tone: 'amber', spread };
+    return { label: spread.toFixed(0) + ' mV variation', tone: 'gray', spread };
+  };
+
+  // Build a tiny SVG sparkline from a trace
+  const Sparkline = ({ trace, width = 110, height = 26 }) => {
+    if (!trace || trace.length < 2) return <span className="text-xs text-gray-400">—</span>;
+    const ys = trace.map(s => s.mv);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const range = maxY - minY || 1;
+    const pts = trace.map((s, i) => {
+      const x = (i / (trace.length - 1)) * width;
+      const y = height - ((s.mv - minY) / range) * height;
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    return (
+      <svg width={width} height={height} className="inline-block align-middle">
+        <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.2" className="text-blue-600 dark:text-blue-400" />
+      </svg>
+    );
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+      <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Cycle History</h3>
+        {lastCal ? (
+          <span className={`text-xs px-2 py-0.5 rounded ${lastCalAge > 1 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'}`}>
+            Last calibration: {lastCalAge === 0 ? 'today' : lastCalAge + ' day' + (lastCalAge === 1 ? '' : 's') + ' ago'} ({lastCal.ended_at.slice(0,16).replace('T',' ')})
+          </span>
+        ) : (
+          <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">⚠ No calibration cycle on record</span>
+        )}
+      </div>
+
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+        The pH-probe live mV is sampled every ~15s during each cycle. Calibration uses the multi-ion standards (P1 Low, P2 High), which usually differ in pH by 1–2 units — so a healthy Cal trace shows a ~30–120 mV swing as the cell drains, refills with the next standard, and the probe sees a different pH. A <strong>flat trace (&lt;5 mV swing)</strong> means the probe wasn't picking up either standard — cell didn't fill or there's air between the probe rods. (Note: the ~170 mV swing only applies to the manual pH calibration procedure with pH 4 / pH 7 buffers, not the automatic Calibration cycle.)
+      </p>
+
+      {/* Live diagnostic during an active cycle */}
+      {liveTrace && liveTrace.sample_count >= 2 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 uppercase">Live mV trace (cycle in progress)</p>
+              <p className="text-xs text-blue-700 dark:text-blue-400">
+                {liveTrace.sample_count} samples since {liveTrace.cycle_started_at?.slice(11,16) || '—'} ·
+                spread {(Math.max(...liveTrace.samples.map(s=>s.mv)) - Math.min(...liveTrace.samples.map(s=>s.mv))).toFixed(1)} mV
+              </p>
+            </div>
+            <Sparkline trace={liveTrace.samples} width={200} height={40} />
+          </div>
+        </div>
+      )}
+
+      {loading ? <p className="text-sm text-gray-500">Loading…</p> :
+       history.length === 0 ? <p className="text-sm text-gray-500">No cycles recorded yet. The next Measure / Calibration / etc will be logged here when it completes.</p> : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-xs uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+              <tr>
+                <th className="px-2 py-1 text-left">Started</th>
+                <th className="px-2 py-1 text-left">Cycle</th>
+                <th className="px-2 py-1 text-left">Duration</th>
+                <th className="px-2 py-1 text-left">Source</th>
+                <th className="px-2 py-1 text-left">Cal-check</th>
+                <th className="px-2 py-1 text-left">Meas-check</th>
+                <th className="px-2 py-1 text-left">pH probe contact (mV trace)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {history.slice(0, 20).map(r => {
+                const calFails = (r.cal_check || []).filter(c => !c.passed);
+                const measFails = (r.measurement_check || []).filter(c => !c.passed);
+                const dx = contactDiagnosis(r);
+                const toneCls = {
+                  red: 'text-red-700 dark:text-red-400',
+                  amber: 'text-amber-700 dark:text-amber-400',
+                  green: 'text-green-700 dark:text-green-400',
+                  gray: 'text-gray-500 dark:text-gray-400',
+                }[dx.tone];
+                return (
+                  <tr key={r.id}>
+                    <td className="px-2 py-1.5 font-mono text-xs">{r.started_at.slice(0,16).replace('T',' ')}</td>
+                    <td className="px-2 py-1.5"><span className={`text-xs px-2 py-0.5 rounded ${stateColor(r.cycle_state)}`}>{r.cycle_state}</span></td>
+                    <td className="px-2 py-1.5 font-mono text-xs">{fmtDuration(r.duration_seconds)}</td>
+                    <td className="px-2 py-1.5 text-xs text-gray-500">{r.source}</td>
+                    <td className="px-2 py-1.5 text-xs">{calFails.length === 0 ? <span className="text-green-600">all OK</span> : <span className="text-red-700 dark:text-red-400">{calFails.length} fail: {calFails.map(c => c.label).join(', ')}</span>}</td>
+                    <td className="px-2 py-1.5 text-xs">{measFails.length === 0 ? <span className="text-green-600">all OK</span> : <span className="text-red-700 dark:text-red-400">{measFails.length} fail: {measFails.map(c => c.label).join(', ')}</span>}</td>
+                    <td className="px-2 py-1.5 text-xs">
+                      <Sparkline trace={r.live_mv_trace} />
+                      <span className={`ml-2 ${toneCls}`}>{dx.label}</span>
+                      {r.live_mv_samples > 0 && (
+                        <span className="ml-1 text-gray-400">({r.live_mv_min?.toFixed(0)}→{r.live_mv_max?.toFixed(0)} mV, n={r.live_mv_samples})</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+       )}
     </div>
   );
 }

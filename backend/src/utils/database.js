@@ -489,6 +489,31 @@ const initSchema = () => {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- AMIC live mV trace columns added to amic_cycle_history (see ALTER below).
+    -- AMIC cycle completion log — every Measure / Calibrate / Drain / Empty System / Condition
+    -- cycle that completes (1→0 transition) is recorded here with its duration plus the
+    -- per-channel cal_check / measurement_check pass-fail flags at the moment of completion.
+    -- Lets us answer "when was last calibration?" and audit measurement quality over time.
+    CREATE TABLE IF NOT EXISTS amic_cycle_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cycle_state TEXT NOT NULL,           -- 'measuring'|'calibrating'|'draining'|'empty_system'|'conditioning'
+      started_at TEXT NOT NULL,
+      ended_at TEXT NOT NULL,
+      duration_seconds INTEGER,
+      source TEXT,                         -- 'sensehub'|'panel'|'unknown'
+      cal_check TEXT,                      -- JSON: [{ch, label, passed}, ...] at end of cycle
+      measurement_check TEXT,              -- JSON: [{ch, label, passed}, ...] at end of cycle
+      pump_input_seconds INTEGER,          -- snapshot of timing config
+      pump_output_seconds INTEGER,
+      live_mv_trace TEXT,                  -- JSON [{t: ISO, mv: number}, ...] — pH electrode mV sampled during the cycle.
+                                           -- Diagnostic: real cal/measurement should show mV variation as standards alternate;
+                                           -- a flat/saturated trace means the probe wasn't in contact with the liquid.
+      live_mv_min REAL,                    -- min sampled mV across the cycle
+      live_mv_max REAL,                    -- max sampled mV across the cycle
+      live_mv_samples INTEGER DEFAULT 0,   -- count of samples in trace
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- User-submitted clarifications/feedback on a daily report.
     -- Injected into the prompt on regeneration so corrections (e.g. "the pH probe is uncalibrated,
     -- ignore today's pH") propagate into the new report's summary, and from there into the
@@ -545,7 +570,20 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_agronomist_longterm_version ON agronomist_longterm_memory(version);
     CREATE INDEX IF NOT EXISTS idx_agronomist_clarifications_report ON agronomist_report_clarifications(report_id);
     CREATE INDEX IF NOT EXISTS idx_agronomist_clarifications_created ON agronomist_report_clarifications(created_at);
+    CREATE INDEX IF NOT EXISTS idx_amic_cycle_history_started ON amic_cycle_history(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_amic_cycle_history_state ON amic_cycle_history(cycle_state, started_at DESC);
   `);
+
+  // Idempotent ALTERs in case the table already exists from a prior deploy without live-mv columns
+  try {
+    const cols = db.pragma('table_info(amic_cycle_history)').map(c => c.name);
+    if (!cols.includes('live_mv_trace'))    db.exec("ALTER TABLE amic_cycle_history ADD COLUMN live_mv_trace TEXT");
+    if (!cols.includes('live_mv_min'))      db.exec("ALTER TABLE amic_cycle_history ADD COLUMN live_mv_min REAL");
+    if (!cols.includes('live_mv_max'))      db.exec("ALTER TABLE amic_cycle_history ADD COLUMN live_mv_max REAL");
+    if (!cols.includes('live_mv_samples'))  db.exec("ALTER TABLE amic_cycle_history ADD COLUMN live_mv_samples INTEGER DEFAULT 0");
+  } catch (err) {
+    console.error('amic_cycle_history live mV columns migration failed:', err.message);
+  }
 
   // Add calibration columns to existing equipment table if they don't exist
   try {

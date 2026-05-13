@@ -145,6 +145,88 @@ router.post('/capture-ph/:point', requireRole('admin', 'operator'), async (req, 
   }
 });
 
+// PUT /api/amic/pump-times — set PMP_INPUT_TIME / PMP_OUTPUT_TIME (admin only).
+// Body: { input_seconds?: number, output_seconds?: number }  (omit a field to leave unchanged)
+router.put('/pump-times', requireRole('admin'), async (req, res) => {
+  const { input_seconds, output_seconds } = req.body || {};
+  if (input_seconds != null && (input_seconds < 1 || input_seconds > 120)) {
+    return res.status(400).json({ error: 'input_seconds must be 1-120' });
+  }
+  if (output_seconds != null && (output_seconds < 1 || output_seconds > 120)) {
+    return res.status(400).json({ error: 'output_seconds must be 1-120' });
+  }
+  if (input_seconds == null && output_seconds == null) {
+    return res.status(400).json({ error: 'pass at least one of input_seconds or output_seconds' });
+  }
+  try {
+    const result = await amicService.setPumpTimes(input_seconds, output_seconds);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(503).json({ error: err.message });
+  }
+});
+
+// GET /api/amic/cycle-history — last N completed cycles with per-channel cal/meas check flags
+//   ?with_trace=1 to include the full live mV trace JSON in each row (heavier)
+router.get('/cycle-history', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const includeTrace = req.query.with_trace === '1' || req.query.with_trace === 'true';
+  res.json(amicService.listCycleHistory(limit, includeTrace));
+});
+
+// GET /api/amic/cycle-history/:id — full row including live mV trace for one cycle
+router.get('/cycle-history/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const row = amicService.getCycleHistoryById(id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  res.json(row);
+});
+
+// GET /api/amic/schedule — current calibration schedule + computed next firing time
+router.get('/schedule', (req, res) => {
+  const { amicSchedulerService } = require('../services/AmicSchedulerService');
+  const schedule = amicService.getSchedule();
+  // Also include the most recent scheduled-cycle outcome from history (if any)
+  const lastScheduled = require('../utils/database').db.prepare(
+    "SELECT id, started_at, ended_at, duration_seconds, cal_check, measurement_check, live_mv_min, live_mv_max, live_mv_samples FROM amic_cycle_history WHERE source='scheduled' AND cycle_state='calibrating' ORDER BY started_at DESC LIMIT 1"
+  ).get();
+  let lastScheduledParsed = null;
+  if (lastScheduled) {
+    try {
+      lastScheduledParsed = {
+        ...lastScheduled,
+        cal_check: lastScheduled.cal_check ? JSON.parse(lastScheduled.cal_check) : [],
+        measurement_check: lastScheduled.measurement_check ? JSON.parse(lastScheduled.measurement_check) : [],
+        mv_swing: (lastScheduled.live_mv_max != null && lastScheduled.live_mv_min != null)
+          ? +(lastScheduled.live_mv_max - lastScheduled.live_mv_min).toFixed(1) : null,
+      };
+    } catch {}
+  }
+  res.json({
+    schedule,
+    next_firing_at: amicSchedulerService.nextFiringTime(schedule),
+    last_scheduled_calibration: lastScheduledParsed,
+  });
+});
+
+// PUT /api/amic/schedule — admin only. Body: { enabled, times: [...] }
+router.put('/schedule', requireRole('admin'), (req, res) => {
+  try {
+    const saved = amicService.saveSchedule(req.body || {});
+    res.json({ ok: true, schedule: saved });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/amic/live-trace — in-memory trace for the currently-active cycle (live diagnostic).
+// Frontend can poll this every few seconds during a calibration to see if the pH probe
+// is actually picking up mV swings as the standards alternate.
+router.get('/live-trace', (req, res) => {
+  res.json(amicService.getActiveLiveTrace());
+});
+
 // POST /api/amic/save-to-lab - Save last measurement values to lab_readings
 // Body: { zone_id?: number, sample_date?: ISO string }
 router.post('/save-to-lab', requireRole('admin', 'operator'), async (req, res) => {

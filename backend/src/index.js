@@ -45,6 +45,7 @@ const { networkUsageService } = require('./services/NetworkUsageService');
 const { snapshotService } = require('./services/SnapshotService');
 const { agronomistSchedulerService } = require('./services/AgronomistSchedulerService');
 const { relaySafetyWatchdogService } = require('./services/RelaySafetyWatchdogService');
+const { amicSchedulerService } = require('./services/AmicSchedulerService');
 
 const app = express();
 const server = http.createServer(app);
@@ -276,6 +277,14 @@ server.listen(PORT, async () => {
     console.log('Snapshot service: Started');
   } catch (error) {
     console.error('Snapshot service: Failed to start -', error.message);
+  }
+
+  // Start AMIC calibration scheduler (fires Calibrate at configured times of day)
+  try {
+    amicSchedulerService.start();
+    console.log('AMIC calibration scheduler: Started');
+  } catch (error) {
+    console.error('AMIC calibration scheduler: Failed to start -', error.message);
   }
 
   // Start agronomist daily report scheduler
