@@ -392,6 +392,208 @@ function RejectionCard({ feedback }) {
   );
 }
 
+/**
+ * PlanDiscussion — non-destructive thread on a plan. Operator posts a question
+ * or highlight, planner responds inline with reasoning. Conversation does NOT
+ * modify the plan. When the operator decides the open thread warrants a real
+ * revision, "Apply open items as regenerate" rejects + regenerates the plan
+ * with the full thread converted to feedback.
+ */
+const VERDICT_BADGE = {
+  plan_correct:    { label: 'Plan is correct', cls: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
+  concern_valid:   { label: 'Concern is valid', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' },
+  need_more_data:  { label: 'Need more data', cls: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+};
+
+function PlanDiscussion({ planId, planStatus, canControl, headers, showError, showSuccess, onRegenerated }) {
+  const [thread, setThread] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState('question');
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/planner/plans/${planId}/clarifications`, { headers });
+      if (res.ok) setThread(await res.json());
+    } catch (_) {} finally { setLoading(false); }
+  };
+
+  useEffect(() => { if (planId) load(); /* eslint-disable-next-line */ }, [planId]);
+
+  const send = async () => {
+    const msg = draft.trim();
+    if (!msg) return;
+    setPosting(true);
+    try {
+      const res = await fetch(`${API_BASE}/planner/plans/${planId}/clarifications`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ role, message: msg }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        showError(e.error || 'Failed to send clarification');
+      } else {
+        setDraft('');
+        await load();
+      }
+    } catch (err) { showError(err.message); }
+    finally { setPosting(false); }
+  };
+
+  const openItems = thread.filter(t => t.status === 'open');
+  const hasOpen = openItems.length > 0;
+
+  const regenerate = async () => {
+    if (!confirm(`Convert ${openItems.length} open clarification(s) into a rejection feedback and regenerate the plan?`)) return;
+    setRegenerating(true);
+    try {
+      const res = await fetch(`${API_BASE}/planner/plans/${planId}/clarifications/regenerate`, {
+        method: 'POST', headers,
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        showError(e.error || 'Failed to regenerate');
+      } else {
+        const data = await res.json();
+        showSuccess('Plan rejected and regenerated from clarifications');
+        if (data.regenerated?.id && onRegenerated) onRegenerated(data.regenerated.id);
+      }
+    } catch (err) { showError(err.message); }
+    finally { setRegenerating(false); }
+  };
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+        <div>
+          <div className="font-semibold text-gray-900 dark:text-gray-100">Discussion</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Ask the planner to explain a decision, or highlight something it may have missed. Conversation only — won't modify the plan unless you convert it to a regenerate.
+          </div>
+        </div>
+        {hasOpen && canControl && planStatus === 'pending' && (
+          <button
+            onClick={regenerate}
+            disabled={regenerating}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-xs rounded-md whitespace-nowrap"
+            title="Bundle all open clarifications as rejection feedback and regenerate the plan"
+          >
+            {regenerating ? 'Regenerating…' : `Apply ${openItems.length} open as regenerate`}
+          </button>
+        )}
+      </div>
+
+      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+        {loading ? (
+          <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Loading…</div>
+        ) : thread.length === 0 ? (
+          <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 italic">No clarifications on this plan yet.</div>
+        ) : (
+          thread.map(c => {
+            const verdict = c.response_verdict ? VERDICT_BADGE[c.response_verdict] : null;
+            return (
+              <div key={c.id} className="px-4 py-3">
+                <div className="flex items-start gap-2 mb-1">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide ${
+                    c.role === 'highlight'
+                      ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
+                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                  }`}>
+                    {c.role === 'highlight' ? '⚠ Highlight' : '💬 Question'}
+                  </span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {c.user_name || 'operator'} · {fmtDateTime(c.created_at)}
+                  </span>
+                  {c.status === 'addressed' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                      addressed{c.addressed_by_plan_id ? ` (→ plan #${c.addressed_by_plan_id})` : ''}
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+                  {c.message}
+                </div>
+                {c.planner_response && (
+                  <div className="mt-2 ml-3 pl-3 border-l-2 border-primary-300 dark:border-primary-700 bg-gray-50 dark:bg-gray-900/40 rounded-r py-2 pr-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300">
+                        Planner
+                      </span>
+                      {verdict && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${verdict.cls}`}>
+                          {verdict.label}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{fmtDateTime(c.responded_at)}</span>
+                    </div>
+                    <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{c.planner_response}</div>
+                  </div>
+                )}
+                {!c.planner_response && c.responded_at == null && (
+                  <div className="text-xs text-gray-400 italic mt-1">waiting for planner…</div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {canControl && (
+        <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Type:</label>
+            <button
+              onClick={() => setRole('question')}
+              className={`px-2 py-1 text-xs rounded ${
+                role === 'question'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-blue-700 border border-blue-300 hover:bg-blue-50 dark:bg-gray-800 dark:text-blue-300 dark:border-blue-700'
+              }`}>
+              💬 Question
+            </button>
+            <button
+              onClick={() => setRole('highlight')}
+              className={`px-2 py-1 text-xs rounded ${
+                role === 'highlight'
+                  ? 'bg-orange-600 text-white'
+                  : 'bg-white text-orange-700 border border-orange-300 hover:bg-orange-50 dark:bg-gray-800 dark:text-orange-300 dark:border-orange-700'
+              }`}>
+              ⚠ Highlight
+            </button>
+            <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 italic">
+              {role === 'highlight'
+                ? 'You believe the plan missed something — planner will acknowledge and propose adjustments.'
+                : 'You want the planner to explain its reasoning — no plan change.'}
+            </span>
+          </div>
+          <textarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder={role === 'highlight'
+              ? 'e.g. "VWC peaks at 60% on Sensor 1 during all 3 irrigations — too aggressive?"'
+              : 'e.g. "Why 3 fertigation cycles instead of 2? What\'s the rationale for the 12:00 timing?"'}
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+          />
+          <div className="mt-2 flex justify-end">
+            <button
+              onClick={send}
+              disabled={posting || !draft.trim()}
+              className="px-4 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm rounded-md"
+            >
+              {posting ? 'Sending…' : 'Send to planner'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Planner() {
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
@@ -762,6 +964,19 @@ export default function Planner() {
               {selected.status === 'rejected' && (
                 <RejectionCard feedback={selected.rejection_feedback} />
               )}
+
+              {/* Non-destructive Q&A with the planner — operator asks questions or
+                  flags concerns; planner responds with reasoning. No plan changes. */}
+              <PlanDiscussion
+                planId={selected.id}
+                planStatus={selected.status}
+                canControl={canControl}
+                headers={headers}
+                showError={showError}
+                showSuccess={showSuccess}
+                onRegenerated={(newPlanId) => fetchPlans(newPlanId)}
+              />
+
 
               {/* Yesterday review (from agent) + scorecard cards (from input snapshot) */}
               <YesterdayReviewCard

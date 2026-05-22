@@ -1723,6 +1723,192 @@ class OperationalPlannerService {
     return { rejected, regenerated };
   }
 
+  // -------- clarifications --------
+
+  /** List the full clarification thread for a plan, oldest-first. */
+  listClarifications(planId) {
+    return db.prepare(`
+      SELECT * FROM operational_plan_clarifications
+      WHERE plan_id = ?
+      ORDER BY created_at ASC, id ASC
+    `).all(planId);
+  }
+
+  /**
+   * Post a clarification on a plan. Always-on: stores the operator's message,
+   * immediately calls Claude with the plan + thread + current snapshot for a
+   * grounded explanation, stores the response, and returns the populated row.
+   *
+   * Does NOT modify the plan. The operator can later choose to bundle the
+   * thread into a regenerate via convertClarificationsToRegenerate().
+   */
+  async postClarification({ planId, message, role = 'question', userId = null, userName = null }) {
+    const plan = this.getPlanById(planId);
+    if (!plan) throw new Error(`Plan ${planId} not found`);
+    const trimmed = (message || '').trim();
+    if (!trimmed) {
+      const err = new Error('Clarification message is required'); err.code = 'MESSAGE_REQUIRED'; throw err;
+    }
+    const r = ['question', 'highlight'].includes(role) ? role : 'question';
+
+    // Persist the operator's message first so we have an audit trail even if Claude fails.
+    const insertId = db.prepare(`
+      INSERT INTO operational_plan_clarifications
+        (plan_id, user_id, user_name, role, message)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(planId, userId, userName, r, trimmed).lastInsertRowid;
+
+    // Build the prompt context.
+    const thread = this.listClarifications(planId);
+    const todayStr = this._localDateStr(new Date());
+    let snapshot;
+    try { snapshot = agronomistService.aggregateDailyData(todayStr); }
+    catch (e) { snapshot = { error: e.message }; }
+
+    const userMessage = [
+      '# Operator clarification request',
+      '',
+      `Plan id: ${plan.id}, plan_date: ${plan.plan_date}, version: ${plan.version}, status: ${plan.status}.`,
+      `Operator intent: ${r === 'highlight' ? 'HIGHLIGHT (operator believes the plan missed something)' : 'QUESTION (operator wants reasoning explained)'}.`,
+      '',
+      '## Operator says:',
+      trimmed,
+      '',
+      '## Prior thread (oldest first; including the message above as the last entry):',
+      ...thread.map(c => `- [${c.role}] ${c.user_name || 'operator'}: ${c.message}${c.planner_response ? `\n  → planner: ${c.planner_response.slice(0, 500)}` : ''}`),
+      '',
+      '## Plan you previously produced (the one being questioned)',
+      '```json',
+      JSON.stringify({
+        headline: plan.headline,
+        summary: plan.summary,
+        proposed_plan: plan.proposed_plan,
+      }, null, 2).slice(0, 12000),
+      '```',
+      '',
+      '## Current operational snapshot (TODAY, for grounding):',
+      '```json',
+      JSON.stringify(snapshot, null, 2).slice(0, 6000),
+      '```',
+      '',
+      'Reply per the SYSTEM rules. End with the verdict line.',
+    ].join('\n');
+
+    const SYSTEM_PROMPT = `You are the same operational planner that wrote the plan being questioned. The operator wants to discuss it WITHOUT modifying it.
+
+# Your job
+
+Read the operator's message, the prior thread, the plan, and the current operational snapshot. Reply with concrete, data-grounded reasoning.
+
+# Rules
+
+1. **Cite specifics from the plan.** Name the proposed_automation, target, risk, or dose_program_request you're talking about.
+2. **Check the operator's empirical claims against the snapshot.** If they say "VWC peaks at 60%", verify against today_snapshot.substrate_diagnostics (zone_avg, zone_max, oscillation, dry_down_median). Quote actual numbers.
+3. **Acknowledge real omissions.** If the operator has identified something the plan genuinely missed, say so plainly.
+4. **Do not regenerate the plan.** This is conversation only. If the issue is significant enough to warrant a structural change, recommend the operator convert this thread into a rejection feedback (the UI has a button for it).
+5. Be terse. Two paragraphs max. The operator reads many of these per day.
+
+# Required ending — pick ONE verdict line, EXACTLY this format
+
+[VERDICT: plan_correct] — the plan stands; here is why
+[VERDICT: concern_valid] — the operator has flagged something the plan missed/got wrong; describe the adjustment that should be made on the next regenerate
+[VERDICT: need_more_data] — operator should provide X before this can be answered
+
+The verdict line must be the LAST line of your response.`;
+
+    const client = this._client_or_throw();
+    const cfg = this.getConfig();
+    let responseText = '';
+    let verdict = null;
+    try {
+      const msg = await client.messages.create({
+        model: cfg.model || DEFAULT_MODEL,
+        max_tokens: 1500,
+        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: userMessage }],
+      });
+      const block = msg.content?.find(b => b.type === 'text');
+      responseText = block?.text || '(no response)';
+      const m = responseText.match(/\[VERDICT:\s*(plan_correct|concern_valid|need_more_data)\s*\]/i);
+      if (m) verdict = m[1].toLowerCase();
+    } catch (err) {
+      responseText = `[Planner responder failed: ${err.message || String(err)}]`;
+    }
+
+    db.prepare(`
+      UPDATE operational_plan_clarifications
+      SET planner_response = ?, response_verdict = ?, responded_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(responseText, verdict, insertId);
+
+    return db.prepare('SELECT * FROM operational_plan_clarifications WHERE id = ?').get(insertId);
+  }
+
+  /**
+   * Convert all open clarifications on a plan into a single rejection feedback,
+   * mark the plan rejected, and regenerate. The new plan's id is linked back
+   * on each clarification via addressed_by_plan_id.
+   */
+  async convertClarificationsToRegenerate(planId, userId = null) {
+    const plan = this.getPlanById(planId);
+    if (!plan) throw new Error(`Plan ${planId} not found`);
+    if (!['pending', 'confirmed'].includes(plan.status)) {
+      const err = new Error(`Plan ${planId} cannot be regenerated from clarifications (status=${plan.status})`);
+      err.code = 'INVALID_STATE'; throw err;
+    }
+
+    const open = db.prepare(`
+      SELECT * FROM operational_plan_clarifications
+      WHERE plan_id = ? AND status = 'open'
+      ORDER BY created_at ASC
+    `).all(planId);
+    if (open.length === 0) {
+      const err = new Error('No open clarifications to convert'); err.code = 'NO_CLARIFICATIONS'; throw err;
+    }
+
+    // Bundle clarifications + planner responses into a single feedback blob.
+    const feedback = [
+      'Operator-raised clarifications that warrant a plan revision:',
+      ...open.map((c, i) => `${i + 1}. [${c.role}] ${c.message}${c.planner_response ? `\n   Planner response: ${c.planner_response.split('\n').slice(-3).join(' ')}` : ''}`),
+    ].join('\n');
+
+    let result;
+    if (plan.status === 'pending') {
+      // Standard path: reject the pending plan + regenerate the same date.
+      result = await this.rejectPlan(planId, feedback, userId);
+    } else {
+      // Confirmed plan path: leave the applied record untouched (preserve history of
+      // what actually ran), and generate a new version for the same date carrying
+      // the clarifications as feedback. The new version is `pending` and supersedes
+      // the confirmed one only if the operator manually applies it.
+      const generatedFor = plan.generated_for || this._localDateStr(new Date());
+      const regenerated = await this.generatePlanForTomorrow(generatedFor, {
+        previous_rejection: {
+          rejected_plan_id: plan.id,
+          plan_date: plan.plan_date,
+          version: plan.version,
+          headline: plan.headline,
+          summary: plan.summary,
+          feedback: `[NOTE: prior plan v${plan.version} on ${plan.plan_date} was already CONFIRMED and applied; this revision was requested via clarification thread. Address the operator's concerns explicitly — if the new plan diverges from the running automations, list the deltas clearly so the operator can decide whether to apply.]\n\n${feedback}`,
+        },
+      });
+      result = { rejected: plan, regenerated };
+    }
+
+    // Link the open clarifications to the new plan + mark them addressed.
+    if (result.regenerated?.id) {
+      const upd = db.prepare(`
+        UPDATE operational_plan_clarifications
+        SET status = 'addressed', addressed_by_plan_id = ?
+        WHERE id = ?
+      `);
+      const tx = db.transaction(() => { for (const c of open) upd.run(result.regenerated.id, c.id); });
+      tx();
+    }
+
+    return result;
+  }
+
   // -------- reads --------
 
   /** List plans — by default returns LATEST version per plan_date. */

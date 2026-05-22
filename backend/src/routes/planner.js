@@ -118,4 +118,54 @@ router.delete('/plans/:id', requireRole('admin'), (req, res) => {
   res.json({ ok: true, deleted: changes });
 });
 
+// ─── Plan clarifications (non-destructive Q&A on a plan) ───
+
+// GET /api/planner/plans/:id/clarifications — list the thread
+router.get('/plans/:id/clarifications', (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    res.json(operationalPlannerService.listClarifications(id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/planner/plans/:id/clarifications — operator posts a question/highlight,
+// service immediately responds with reasoning (no plan modification).
+// Body: { role: 'question' | 'highlight', message: string }
+router.post('/plans/:id/clarifications', requireRole('admin', 'operator'), async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const { role, message } = req.body || {};
+  try {
+    const row = await operationalPlannerService.postClarification({
+      planId: id,
+      message,
+      role,
+      userId: req.user?.id || null,
+      userName: req.user?.email || req.user?.name || null,
+    });
+    res.json(row);
+  } catch (err) {
+    if (err.code === 'MESSAGE_REQUIRED') return res.status(400).json({ error: err.message, code: err.code });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/planner/plans/:id/clarifications/regenerate — bundle open clarifications
+// into rejection feedback, reject the plan, regenerate a new version that addresses them.
+router.post('/plans/:id/clarifications/regenerate', requireRole('admin', 'operator'), async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const result = await operationalPlannerService.convertClarificationsToRegenerate(id, req.user?.id || null);
+    res.json(result);
+  } catch (err) {
+    if (err.code === 'NO_CLARIFICATIONS') return res.status(400).json({ error: err.message, code: err.code });
+    if (err.code === 'INVALID_STATE') return res.status(409).json({ error: err.message, code: err.code });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -685,6 +685,35 @@ const initSchema = () => {
       FOREIGN KEY (report_id) REFERENCES agronomist_reports(id) ON DELETE CASCADE
     );
 
+    -- Plan clarifications — a non-destructive conversation thread on a plan.
+    -- Operator posts a question ("explain why 3 irrigations") or a highlight
+    -- ("VWC peaks at 60%, you missed this"). The planner immediately responds
+    -- with reasoning grounded in the plan + current snapshot, without modifying
+    -- the plan itself. If the operator later decides the concerns warrant a
+    -- regenerate, the whole thread can be converted to rejection_feedback and
+    -- a new plan version is generated with addressed_by_plan_id pointing back.
+    --
+    -- role distinguishes intent so the responder prompt can adjust tone:
+    --   "question" → operator wants reasoning explained
+    --   "highlight" → operator believes the plan missed something
+    CREATE TABLE IF NOT EXISTS operational_plan_clarifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id INTEGER NOT NULL,
+      user_id INTEGER,
+      user_name TEXT,
+      role TEXT NOT NULL DEFAULT 'question' CHECK(role IN ('question', 'highlight')),
+      message TEXT NOT NULL,
+      planner_response TEXT,
+      response_verdict TEXT CHECK(response_verdict IN ('plan_correct', 'concern_valid', 'need_more_data', NULL)),
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'addressed', 'archived')),
+      addressed_by_plan_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      responded_at TEXT,
+      FOREIGN KEY (plan_id) REFERENCES operational_plans(id) ON DELETE CASCADE,
+      FOREIGN KEY (addressed_by_plan_id) REFERENCES operational_plans(id) ON DELETE SET NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
     -- Consumption baselines: snapshot a cumulative reading (e.g. kWh) so the UI
     -- can show "consumption since {created_at}" = current_value - baseline_value.
     CREATE TABLE IF NOT EXISTS consumption_baselines (
@@ -739,6 +768,8 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_agronomist_longterm_version ON agronomist_longterm_memory(version);
     CREATE INDEX IF NOT EXISTS idx_agronomist_clarifications_report ON agronomist_report_clarifications(report_id);
     CREATE INDEX IF NOT EXISTS idx_agronomist_clarifications_created ON agronomist_report_clarifications(created_at);
+    CREATE INDEX IF NOT EXISTS idx_plan_clarifications_plan ON operational_plan_clarifications(plan_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_plan_clarifications_status ON operational_plan_clarifications(status);
     CREATE INDEX IF NOT EXISTS idx_amic_cycle_history_started ON amic_cycle_history(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_amic_cycle_history_state ON amic_cycle_history(cycle_state, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_operational_plans_date ON operational_plans(plan_date DESC);
