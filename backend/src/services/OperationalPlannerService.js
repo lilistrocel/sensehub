@@ -71,6 +71,22 @@ Hard rules:
 - Predicted irrigation ppm of element E from tank T = stock_mg_per_l[E] × (venturi_flow / water_pump_flow) × (duty% / 100). Sum across tanks gives total delivered ppm; compare to context.element_targets. If you can't match the target with existing programs, escalate per the rules below.
 - Tanks with current_stock_liters near zero will run out mid-cycle — flag this in risks[] and propose a refill recommendation rather than scheduling cycles against an empty tank.
 
+# Critical-element lockouts (HARD CONSTRAINTS — apply-path will refuse to run otherwise)
+
+The operator has accumulated guardrails on top of the soft hard_min/hard_max bounds. These are HARD rules: if a guardrail trips, your plan will be REJECTED at apply time and the operator must manually override with a typed reason. Avoid that — design the plan to satisfy the guardrails up-front and acknowledge them explicitly in the rationale.
+
+The active guardrail set is in context.guardrails[]. Each rule has: element, comparison, threshold, forbidden_action, minimum_tank_duty_pct. Evaluate every rule before submitting:
+
+- For each guardrail, check the latest feed sample of its element (context.today_snapshot.lab.irrigation.latest_per_nutrient[element]).
+- If the comparison trips (e.g. "null_or_lt 150" trips when value is missing OR below 150), the rule is ACTIVE.
+- When active, NO proposed_automation may reference a dose_program where the element-source tank (any tank whose ingredients have a compatibility_group or composition matching the element) has duty < minimum_tank_duty_pct.
+- When active, NO dose_program_request may propose duty < minimum_tank_duty_pct for the element-source tank.
+- When active, NO mixture_request may reduce the element's mass in the recipe by more than 20% vs the current tank recipe.
+
+**Active rule today: ca_lockout_below_150.** If feed calcium_Ca is below 150 mg/L (or there's no recent sample), the calcium-source tank (Tank 1, the Ca-nitrate stock) MUST stay at duty ≥ 80% in every fertigation cycle. Three documented Ca crashes in four weeks were all caused by planner-driven dose reductions — this is non-negotiable.
+
+If the operator's stated agronomic problem requires reducing NO3 or EC, and Ca is low: do NOT pick Half Strength (which cuts Tank 1 to 50%). Instead, propose a dose_program_request that keeps Tank 1 at ≥ 80% duty while cutting the OTHER tanks (e.g. Tank 1 at 90%, Tanks 2/4 at 50%). This is the "Reduced-NO3 Ca Priority" pattern.
+
 # Lab data (AMIC) → action mapping (REQUIRED reading)
 
 The AMIC analyzer reports nutrient concentrations in IONIC form (nitrate_NO3, ammonium_NH4, potassium_K, calcium_Ca, magnesium_Mg, sulfate_SO4, phosphate_PO4, chloride_Cl, sodium_Na). These appear in context.today_snapshot.lab[role].today and lab[role].latest_per_nutrient. The same labels exist in context.element_targets so direct comparison is possible — no unit conversion needed when the target's element label matches the lab's nutrient label.
@@ -785,6 +801,11 @@ class OperationalPlannerService {
       fertigation_tanks: fertigationTanks,
       water_pump_lpm: waterPumpFlow,
       ionic_equivalence: ionicEquivalence,
+      guardrails: db.prepare(`
+        SELECT id, name, description, severity, element, comparison, threshold,
+               forbidden_action, minimum_tank_duty_pct, override_role
+        FROM plan_guardrails WHERE enabled = 1
+      `).all(),
       dose_programs: dosePrograms,
       element_targets: elementTargets,
       ingredients_library: ingredientLibrary,
@@ -1386,7 +1407,231 @@ class OperationalPlannerService {
    * @param {number} userId - operator confirming (for audit)
    * @returns {object} - the updated plan row + applied_summary
    */
-  applyPlan(planId, userId = null) {
+  /**
+   * Evaluate every enabled guardrail rule against a plan.
+   *
+   * Returns an array of triggered rule evaluations:
+   *   [{
+   *     rule_id, rule_name, severity, description, element, threshold,
+   *     comparison, latest_value, latest_sample_at,
+   *     triggering_automations: [{ automation_index, automation_name, dose_program_id, dose_program_name, ca_tank_duty_pct, ... }],
+   *     triggering_dose_program_requests: [{ proposed_name, ca_tank_duty_pct }],
+   *     triggering_mixture_requests: [{ proposed_name, target_tank_id, ca_mass_delta_kg }],
+   *     would_block: boolean,
+   *     override_role: 'admin' | 'operator' | 'admin_or_operator',
+   *   }]
+   *
+   * Empty array = plan passes all guardrails.
+   */
+  evaluatePlanGuardrails(plan) {
+    if (!plan || !plan.proposed_plan) return [];
+    const rules = db.prepare("SELECT * FROM plan_guardrails WHERE enabled = 1").all();
+    if (rules.length === 0) return [];
+
+    // Index Ca-source tanks: any tank whose ingredients have compatibility_group='calcium'
+    // is treated as a Ca source. Returned as { [tank_id]: { name, mixture_id } }.
+    const caSourceTanks = (() => {
+      const rows = db.prepare(`
+        SELECT DISTINCT t.id, t.name, t.mixture_id
+        FROM fertigation_tanks t
+        JOIN fertigation_mixture_items mi ON mi.mixture_id = t.mixture_id
+        JOIN fertigation_ingredients i ON i.id = mi.ingredient_id
+        WHERE i.compatibility_group = 'calcium'
+      `).all();
+      const out = {};
+      for (const r of rows) out[r.id] = r;
+      return out;
+    })();
+
+    // Today's snapshot for the lab readings each rule wants to evaluate.
+    const todayStr = this._localDateStr(new Date());
+    let snapshot;
+    try { snapshot = agronomistService.aggregateDailyData(todayStr); }
+    catch (_) { snapshot = null; }
+
+    const proposed = plan.proposed_plan;
+    const propAutos = Array.isArray(proposed.proposed_automations) ? proposed.proposed_automations : [];
+
+    // Resolve dose program duty cycles once.
+    const programDuties = {};
+    const programNames = {};
+    for (const row of db.prepare(`
+      SELECT p.id as program_id, p.name as program_name, pt.tank_id, pt.duty_pct
+      FROM fertigation_dose_programs p
+      JOIN fertigation_dose_program_tanks pt ON pt.program_id = p.id
+    `).all()) {
+      if (!programDuties[row.program_id]) programDuties[row.program_id] = {};
+      programDuties[row.program_id][row.tank_id] = row.duty_pct;
+      programNames[row.program_id] = row.program_name;
+    }
+
+    const evals = [];
+    for (const rule of rules) {
+      // Resolve the current value of this element from the snapshot (irrigation/feed side).
+      const feedSlot = snapshot?.lab?.irrigation?.latest_per_nutrient || {};
+      const todayFeed = snapshot?.lab?.irrigation?.today || [];
+      const todaySample = todayFeed.find(r => r.nutrient === rule.element);
+      const latestSample = todaySample || feedSlot[rule.element] || null;
+      const latestValue = latestSample ? Number(latestSample.value) : null;
+
+      // Evaluate trigger condition.
+      let triggered = false;
+      switch (rule.comparison) {
+        case 'lt':           triggered = latestValue != null && latestValue < rule.threshold; break;
+        case 'lte':          triggered = latestValue != null && latestValue <= rule.threshold; break;
+        case 'gt':           triggered = latestValue != null && latestValue > rule.threshold; break;
+        case 'gte':          triggered = latestValue != null && latestValue >= rule.threshold; break;
+        case 'null_or_lt':   triggered = latestValue == null || latestValue < rule.threshold; break;
+        case 'null_or_lte':  triggered = latestValue == null || latestValue <= rule.threshold; break;
+        default: triggered = false;
+      }
+      if (!triggered) continue;
+
+      // The rule trips ONLY if the plan would also do a forbidden action — i.e.
+      // reduce delivery of this element below the rule's minimum tank duty %.
+      const minDuty = rule.minimum_tank_duty_pct != null ? rule.minimum_tank_duty_pct : 100;
+      const triggeringAutos = [];
+      const triggeringDoseReqs = [];
+      const triggeringMixtureReqs = [];
+
+      // Auto-resolve which tanks "carry" this element. For Ca rule → caSourceTanks.
+      // Generalised: look at every mixture's ingredient composition for the element.
+      let elementTankIds;
+      if (rule.element === 'calcium_Ca') {
+        elementTankIds = new Set(Object.keys(caSourceTanks).map(Number));
+      } else {
+        const elementalSymbol = ({
+          calcium_Ca: 'Ca', magnesium_Mg: 'Mg', potassium_K: 'K',
+          nitrate_NO3: 'N', ammonium_NH4: 'N', sulfate_SO4: 'S',
+          phosphate_PO4: 'P',
+        })[rule.element] || rule.element;
+        const rows = db.prepare(`
+          SELECT DISTINCT t.id, i.composition
+          FROM fertigation_tanks t
+          JOIN fertigation_mixture_items mi ON mi.mixture_id = t.mixture_id
+          JOIN fertigation_ingredients i ON i.id = mi.ingredient_id
+        `).all();
+        elementTankIds = new Set();
+        for (const r of rows) {
+          let comp = {}; try { comp = r.composition ? JSON.parse(r.composition) : {}; } catch (_) {}
+          if (comp[elementalSymbol] && comp[elementalSymbol] > 0) elementTankIds.add(r.id);
+        }
+      }
+
+      // Scan proposed_automations for a dose_program where any element-tank's duty < minDuty
+      for (let i = 0; i < propAutos.length; i++) {
+        const a = propAutos[i];
+        if (!a.dose_program_id) continue;
+        const duties = programDuties[a.dose_program_id] || {};
+        for (const tankId of elementTankIds) {
+          const duty = duties[tankId];
+          if (duty != null && duty < minDuty) {
+            triggeringAutos.push({
+              automation_index: i,
+              automation_name: a.name,
+              dose_program_id: a.dose_program_id,
+              dose_program_name: programNames[a.dose_program_id],
+              tank_id: tankId,
+              tank_duty_pct: duty,
+              required_min_duty_pct: minDuty,
+            });
+            break;
+          }
+        }
+      }
+
+      // Scan dose_program_requests[] for proposed new programs with element-tank duty < minDuty
+      let dpr = proposed.dose_program_requests;
+      if (typeof dpr === 'string') {
+        try { dpr = JSON.parse(dpr); } catch (_) { dpr = []; }
+      }
+      for (const req of (Array.isArray(dpr) ? dpr : [])) {
+        let duties = req.duty_cycles;
+        if (typeof duties === 'string') { try { duties = JSON.parse(duties); } catch (_) { duties = []; } }
+        if (!Array.isArray(duties)) continue;
+        for (const d of duties) {
+          if (elementTankIds.has(d.tank_id) && d.duty_pct < minDuty) {
+            triggeringDoseReqs.push({
+              proposed_name: req.proposed_name,
+              tank_id: d.tank_id,
+              tank_duty_pct: d.duty_pct,
+              required_min_duty_pct: minDuty,
+            });
+            break;
+          }
+        }
+      }
+
+      // Scan mixture_requests[] for proposed recipe changes that reduce Ca mass
+      // (specifically the Ca rule — for generic rules we'd need richer comparison
+      // against current ingredient masses; v1 only flags Ca explicitly).
+      if (rule.element === 'calcium_Ca') {
+        let mxr = proposed.mixture_requests;
+        if (typeof mxr === 'string') { try { mxr = JSON.parse(mxr); } catch (_) { mxr = []; } }
+        for (const req of (Array.isArray(mxr) ? mxr : [])) {
+          if (!elementTankIds.has(req.target_tank_id)) continue;
+          let ingredients = req.ingredients;
+          if (typeof ingredients === 'string') { try { ingredients = JSON.parse(ingredients); } catch (_) { ingredients = []; } }
+          // Sum Ca mass in the proposed recipe.
+          let proposedCaKg = 0;
+          for (const it of (Array.isArray(ingredients) ? ingredients : [])) {
+            if (/calcium/i.test(it.name || '')) {
+              const mass = parseFloat(it.amount) || 0;
+              proposedCaKg += mass * 0.19; // approx Ca fraction in Ca-nitrate (worst-case for any Ca salt; specific check is in service prompt)
+            }
+          }
+          // Current Ca mass in the tank's current recipe.
+          const tank = db.prepare('SELECT mixture_id FROM fertigation_tanks WHERE id = ?').get(req.target_tank_id);
+          let currentCaKg = 0;
+          if (tank?.mixture_id) {
+            const items = db.prepare(`
+              SELECT mi.amount, i.composition
+              FROM fertigation_mixture_items mi
+              JOIN fertigation_ingredients i ON i.id = mi.ingredient_id
+              WHERE mi.mixture_id = ?
+            `).all(tank.mixture_id);
+            for (const it of items) {
+              let comp = {}; try { comp = it.composition ? JSON.parse(it.composition) : {}; } catch (_) {}
+              currentCaKg += (parseFloat(it.amount) || 0) * ((comp.Ca || 0) / 100);
+            }
+          }
+          if (proposedCaKg < currentCaKg * 0.8) {
+            triggeringMixtureReqs.push({
+              proposed_name: req.proposed_name,
+              target_tank_id: req.target_tank_id,
+              current_ca_kg: Math.round(currentCaKg * 100) / 100,
+              proposed_ca_kg: Math.round(proposedCaKg * 100) / 100,
+            });
+          }
+        }
+      }
+
+      if (triggeringAutos.length === 0 && triggeringDoseReqs.length === 0 && triggeringMixtureReqs.length === 0) continue;
+
+      evals.push({
+        rule_id: rule.id,
+        rule_name: rule.name,
+        severity: rule.severity,
+        description: rule.description,
+        element: rule.element,
+        comparison: rule.comparison,
+        threshold: rule.threshold,
+        latest_value: latestValue,
+        latest_sample_at: latestSample?.sample_date || null,
+        latest_days_ago: latestSample?.days_ago ?? null,
+        minimum_tank_duty_pct: minDuty,
+        triggering_automations: triggeringAutos,
+        triggering_dose_program_requests: triggeringDoseReqs,
+        triggering_mixture_requests: triggeringMixtureReqs,
+        would_block: true,
+        override_role: rule.override_role,
+      });
+    }
+
+    return evals;
+  }
+
+  applyPlan(planId, userId = null, opts = {}) {
     const plan = this.getPlanById(planId);
     if (!plan) throw new Error(`Plan ${planId} not found`);
     if (plan.status === 'confirmed') {
@@ -1400,12 +1645,44 @@ class OperationalPlannerService {
       throw err;
     }
 
+    // Evaluate guardrails BEFORE touching any automations. Block if any rule
+    // trips without a matching override in the apply payload.
+    const triggered = this.evaluatePlanGuardrails(plan);
+    const overrides = Array.isArray(opts.overrides) ? opts.overrides : [];
+    const unmitigated = triggered.filter(t => {
+      const o = overrides.find(ov => ov.rule_id === t.rule_id || ov.rule_name === t.rule_name);
+      return !o || !o.reason || !String(o.reason).trim();
+    });
+    if (unmitigated.length > 0) {
+      const err = new Error(`Plan blocked by ${unmitigated.length} guardrail(s): ${unmitigated.map(t => t.rule_name).join(', ')}`);
+      err.code = 'GUARDRAIL_BLOCKED';
+      err.guardrails = unmitigated;
+      throw err;
+    }
+
     const proposed = plan.proposed_plan;
     if (!proposed) throw new Error(`Plan ${planId} has no proposed_plan content`);
     const changes = Array.isArray(proposed.changes_from_today) ? proposed.changes_from_today : [];
     const propAutos = Array.isArray(proposed.proposed_automations) ? proposed.proposed_automations : [];
 
-    const summary = { added: [], modified: [], disabled: [], kept: [], errors: [] };
+    const summary = {
+      added: [], modified: [], disabled: [], kept: [], errors: [],
+      // Record any guardrail overrides + the operator-provided reason for each.
+      // The triggered rules are always preserved (even when overrides were
+      // applied) so a later audit can reconstruct what the guardrail saw.
+      guardrail_overrides: triggered.map(t => {
+        const o = overrides.find(ov => ov.rule_id === t.rule_id || ov.rule_name === t.rule_name);
+        return {
+          rule_id: t.rule_id,
+          rule_name: t.rule_name,
+          severity: t.severity,
+          element: t.element,
+          latest_value: t.latest_value,
+          override_reason: o?.reason || null,
+          override_user_id: userId,
+        };
+      }),
+    };
 
     const insertStmt = db.prepare(`
       INSERT INTO automations (name, description, enabled, priority, trigger_config, conditions, actions, template_id, dose_program_id)

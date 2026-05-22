@@ -685,6 +685,31 @@ const initSchema = () => {
       FOREIGN KEY (report_id) REFERENCES agronomist_reports(id) ON DELETE CASCADE
     );
 
+    -- Plan guardrails — rules that block applying a plan whose dosing actions
+    -- would worsen a low/high nutrient. Each rule checks one element against a
+    -- threshold (e.g. feed Ca < 150 mg/L) and forbids a specific action class
+    -- (e.g. "reduce duty of any Ca-source tank below 80% duty"). The applyPlan
+    -- path evaluates every enabled rule and refuses to apply when triggered
+    -- unless the operator passes a matching override (typed reason + admin role).
+    --
+    -- Generic by design so adding K / NO3 / Mg guardrails later requires only a
+    -- new row, not new code.
+    CREATE TABLE IF NOT EXISTS plan_guardrails (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      severity TEXT NOT NULL DEFAULT 'high' CHECK(severity IN ('low','medium','high','critical')),
+      element TEXT NOT NULL,
+      comparison TEXT NOT NULL CHECK(comparison IN ('lt','lte','gt','gte','null_or_lt','null_or_lte')),
+      threshold REAL NOT NULL,
+      forbidden_action TEXT NOT NULL DEFAULT 'reduce_element_delivery',
+      minimum_tank_duty_pct REAL,
+      override_role TEXT NOT NULL DEFAULT 'admin' CHECK(override_role IN ('admin','operator','admin_or_operator')),
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Plan clarifications — a non-destructive conversation thread on a plan.
     -- Operator posts a question ("explain why 3 irrigations") or a highlight
     -- ("VWC peaks at 60%, you missed this"). The planner immediately responds
@@ -1108,6 +1133,38 @@ const initSchema = () => {
     }
   } catch (err) {
     console.error('crop_element_targets seed failed:', err.message);
+  }
+
+  // Seed plan guardrails on first run (idempotent — uses INSERT OR IGNORE on name).
+  // These block applying a plan whose dosing would worsen a low-nutrient state.
+  // Triggered automatically by the apply path; operator must type a reason to override.
+  try {
+    const guardrails = [
+      {
+        name: 'ca_lockout_below_150',
+        description: 'When latest feed AMIC Ca is below 150 mg/L (or no recent sample), refuse to apply any plan that reduces a calcium-source tank below 80% duty. Three documented Ca crashes within four weeks were all traceable to planner-driven dose reductions; this guardrail forces an explicit operator override before another reduction can be applied.',
+        severity: 'high',
+        element: 'calcium_Ca',
+        comparison: 'null_or_lt',
+        threshold: 150,
+        forbidden_action: 'reduce_element_delivery',
+        minimum_tank_duty_pct: 80,
+        override_role: 'admin',
+      },
+    ];
+    const ins = db.prepare(`
+      INSERT OR IGNORE INTO plan_guardrails
+        (name, description, severity, element, comparison, threshold, forbidden_action, minimum_tank_duty_pct, override_role)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    let added = 0;
+    for (const g of guardrails) {
+      const r = ins.run(g.name, g.description, g.severity, g.element, g.comparison, g.threshold, g.forbidden_action, g.minimum_tank_duty_pct, g.override_role);
+      if (r.changes > 0) added++;
+    }
+    if (added > 0) console.log(`Seeded ${added} plan guardrails`);
+  } catch (err) {
+    console.error('plan_guardrails seed failed:', err.message);
   }
 
   // Seed ionic-form targets that match the labels AMIC emits (nitrate_NO3, etc.).

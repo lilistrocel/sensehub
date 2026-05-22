@@ -607,6 +607,8 @@ export default function Planner() {
   const [generating, setGenerating] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [guardrails, setGuardrails] = useState([]);
+  const [overrideDialog, setOverrideDialog] = useState(null); // { rules, reasons: {rule_id: text} }
   const [showSettings, setShowSettings] = useState(false);
   const [showRawSnapshot, setShowRawSnapshot] = useState(false);
   const [showReject, setShowReject] = useState(false);
@@ -641,6 +643,11 @@ export default function Planner() {
     try {
       const res = await fetch(`${API_BASE}/planner/plans/${id}`, { headers });
       if (res.ok) setSelected(await res.json());
+      // Guardrails are cheap to evaluate and the warning needs to be visible
+      // BEFORE the operator clicks Confirm — so prefetch alongside the plan.
+      const gres = await fetch(`${API_BASE}/planner/plans/${id}/guardrails`, { headers });
+      if (gres.ok) setGuardrails(await gres.json());
+      else setGuardrails([]);
     } catch (err) {
       showError('Failed to load plan: ' + err.message);
     }
@@ -712,18 +719,30 @@ export default function Planner() {
     }
   };
 
-  const confirmPlan = async () => {
+  const confirmPlan = async (overrides = []) => {
     if (!canControl || !selected) return;
-    if (!window.confirm('Confirm this plan and apply it to live automations? This will INSERT/UPDATE/DISABLE automations per the diff manifest.')) return;
+    if (overrides.length === 0) {
+      if (!window.confirm('Confirm this plan and apply it to live automations? This will INSERT/UPDATE/DISABLE automations per the diff manifest.')) return;
+    }
     setConfirming(true);
     try {
-      const res = await fetch(`${API_BASE}/planner/plans/${selected.id}/confirm`, { method: 'POST', headers });
+      const res = await fetch(`${API_BASE}/planner/plans/${selected.id}/confirm`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ overrides }),
+      });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showSuccess('Plan confirmed — automations updated.');
+        showSuccess(overrides.length > 0 ? 'Plan confirmed WITH guardrail overrides — recorded for audit.' : 'Plan confirmed — automations updated.');
         const errors = data.applied_summary?.errors?.length || 0;
         if (errors > 0) showError(`${errors} change(s) failed — see details on plan.`);
+        setOverrideDialog(null);
         await fetchPlans(selected.id);
+      } else if (data.code === 'GUARDRAIL_BLOCKED') {
+        // Open the override dialog with the triggered rules.
+        setOverrideDialog({ rules: data.guardrails || [], reasons: {} });
+      } else if (data.code === 'OVERRIDE_FORBIDDEN') {
+        showError(`Override not allowed: ${data.error}`);
       } else {
         showError(data.error || 'Confirm failed');
       }
@@ -925,6 +944,39 @@ export default function Planner() {
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-3 font-mono">
                     tokens: in {tokenUsage.input.toLocaleString()} · out {tokenUsage.output.toLocaleString()}
                     {tokenUsage.cache_read > 0 && ` · cache hit ${tokenUsage.cache_read.toLocaleString()}`}
+                  </div>
+                )}
+
+                {/* Guardrail warnings — visible BEFORE Confirm so operator knows what they'll need to override */}
+                {selected.status === 'pending' && guardrails.length > 0 && (
+                  <div className="mt-4 border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/30 rounded p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-red-600 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span className="font-semibold text-red-900 dark:text-red-100">
+                        {guardrails.length} guardrail{guardrails.length === 1 ? '' : 's'} would block Confirm
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {guardrails.map(g => (
+                        <div key={g.rule_id} className="text-sm">
+                          <div className="font-semibold text-red-900 dark:text-red-200">{g.rule_name}</div>
+                          <div className="text-red-800 dark:text-red-200 text-xs mt-0.5">
+                            Latest {g.element}: <span className="font-mono">{g.latest_value != null ? `${g.latest_value} mg/L` : 'no recent sample'}</span>
+                            {' '}({g.comparison} {g.threshold}) — requires {g.element} tank duty ≥ {g.minimum_tank_duty_pct}%
+                          </div>
+                          {g.triggering_automations?.length > 0 && (
+                            <div className="text-red-800 dark:text-red-200 text-xs mt-1 italic">
+                              Triggered by: {g.triggering_automations.map(a => `"${a.automation_name}" (program ${a.dose_program_name}, tank duty ${a.tank_duty_pct}%)`).join('; ')}
+                            </div>
+                          )}
+                          <div className="text-red-700 dark:text-red-300 text-xs mt-1">
+                            Override role required: <span className="font-mono">{g.override_role}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -1143,6 +1195,81 @@ export default function Planner() {
                 className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50"
               >
                 {rejecting ? 'Regenerating…' : 'Reject & Regenerate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guardrail override dialog — pops when Confirm returns 409 GUARDRAIL_BLOCKED.
+          Requires a typed reason per blocked rule before re-submitting Confirm. */}
+      {overrideDialog && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-2xl w-full p-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Guardrail override required
+                </h3>
+              </div>
+              <button onClick={() => setOverrideDialog(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
+              This plan would normally be blocked. Provide a written reason for each guardrail below to apply anyway. Reasons are recorded in the plan's audit trail. {overrideDialog.rules.some(r => r.override_role === 'admin') && (!isAdmin) && (
+                <span className="block mt-1 text-red-600 dark:text-red-400 font-medium">⚠ One or more rules require admin-role override.</span>
+              )}
+            </p>
+            <div className="space-y-4 mb-4">
+              {overrideDialog.rules.map(g => (
+                <div key={g.rule_id} className="border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30 rounded p-3">
+                  <div className="font-semibold text-red-900 dark:text-red-100">{g.rule_name}</div>
+                  <div className="text-xs text-red-800 dark:text-red-200 mt-1">{g.description}</div>
+                  <div className="text-xs text-red-700 dark:text-red-300 mt-2 font-mono">
+                    {g.element}: {g.latest_value != null ? `${g.latest_value} mg/L` : 'no recent sample'}
+                    {' '}({g.comparison} {g.threshold}) · requires duty ≥ {g.minimum_tank_duty_pct}%
+                  </div>
+                  <label className="block mt-3">
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Reason for override <span className="text-red-600">*</span></span>
+                    <textarea
+                      rows={2}
+                      value={overrideDialog.reasons[g.rule_id] || ''}
+                      onChange={e => setOverrideDialog(d => ({
+                        ...d,
+                        reasons: { ...d.reasons, [g.rule_id]: e.target.value },
+                      }))}
+                      placeholder="e.g. Fresh AMIC just confirmed Ca at 195 mg/L — sample queue stale; applying tomorrow's plan as designed."
+                      className="w-full mt-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-white"
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setOverrideDialog(null)}
+                className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const overrides = overrideDialog.rules.map(g => ({
+                    rule_id: g.rule_id,
+                    rule_name: g.rule_name,
+                    reason: (overrideDialog.reasons[g.rule_id] || '').trim(),
+                  }));
+                  const missing = overrides.filter(o => !o.reason);
+                  if (missing.length > 0) {
+                    showError(`Provide a reason for ${missing.length} guardrail(s) before applying`);
+                    return;
+                  }
+                  confirmPlan(overrides);
+                }}
+                disabled={confirming}
+                className="px-4 py-1.5 text-sm bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded font-medium">
+                {confirming ? 'Applying…' : 'Apply with override'}
               </button>
             </div>
           </div>
