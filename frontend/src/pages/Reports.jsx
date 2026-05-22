@@ -60,11 +60,28 @@ export default function Reports() {
     failures: acc.failures + d.automations.failures,
     skipped: acc.skipped + d.automations.skipped_actions,
     drift: acc.drift + d.drift_events,
-  }), { water_seconds: 0, water_liters: 0, fert_seconds: 0, fert_liters: 0, water_events: 0, fert_events: 0, auto_runs: 0, failures: 0, skipped: 0, drift: 0 });
+    power_kwh: acc.power_kwh + (d.power?.total_kwh || 0),
+  }), { water_seconds: 0, water_liters: 0, fert_seconds: 0, fert_liters: 0, water_events: 0, fert_events: 0, auto_runs: 0, failures: 0, skipped: 0, drift: 0, power_kwh: 0 });
 
   // Max values for bar chart scaling
   const maxWater = data?.report ? Math.max(...data.report.map(d => d.water.total_seconds), 1) : 1;
   const maxFert = data?.report ? Math.max(...data.report.map(d => d.fertigation.total_seconds), 1) : 1;
+  const maxPower = data?.report ? Math.max(...data.report.map(d => d.power?.total_kwh || 0), 1) : 1;
+
+  const formatKwh = (v) => {
+    if (!v) return '0 kWh';
+    if (v >= 1000) return `${(v / 1000).toFixed(2)} MWh`;
+    return `${v.toFixed(v < 10 ? 2 : 1)} kWh`;
+  };
+
+  // Per-meter totals across the period
+  const meterTotals = (() => {
+    if (!data?.power_meters?.length || !data.report) return [];
+    return data.power_meters.map(pm => {
+      const total = data.report.reduce((acc, d) => acc + (d.power?.by_meter?.[pm.equipment_id]?.kwh || 0), 0);
+      return { ...pm, total_kwh: Math.round(total * 100) / 100 };
+    });
+  })();
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6">
@@ -98,7 +115,7 @@ export default function Reports() {
         <>
           {/* Period totals */}
           {totals && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <p className="text-xs text-blue-600 dark:text-blue-400 uppercase font-semibold">Total Water</p>
                 <p className="text-2xl font-bold text-blue-900 dark:text-blue-200 mt-1">{formatLiters(totals.water_liters)}</p>
@@ -108,6 +125,13 @@ export default function Reports() {
                 <p className="text-xs text-green-600 dark:text-green-400 uppercase font-semibold">Total Fertigation</p>
                 <p className="text-2xl font-bold text-green-900 dark:text-green-200 mt-1">{formatLiters(totals.fert_liters)}</p>
                 <p className="text-xs text-green-500 dark:text-green-400 mt-1">{formatDuration(totals.fert_seconds)} runtime, {totals.fert_events} cycles</p>
+              </div>
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 uppercase font-semibold">Total Power</p>
+                <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-200 mt-1">{formatKwh(totals.power_kwh)}</p>
+                <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                  {meterTotals.length} meter{meterTotals.length === 1 ? '' : 's'} imported
+                </p>
               </div>
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
                 <p className="text-xs text-amber-600 dark:text-amber-400 uppercase font-semibold">Skipped by EC</p>
@@ -279,7 +303,85 @@ export default function Reports() {
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-sm bg-green-500" /> Fertigation (Irrigation 2)
             </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-sm bg-yellow-500" /> Power (Imported kWh)
+            </div>
           </div>
+
+          {/* Power consumption — per meter, per day */}
+          {meterTotals.length > 0 && (
+            <div className="mt-8">
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Power Consumption</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Daily energy imported per power meter (computed from cumulative kWh counter).
+                </p>
+              </div>
+
+              {/* Per-meter period totals */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+                {meterTotals.map(m => (
+                  <div key={m.equipment_id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={m.name}>{m.name}</p>
+                    <p className="text-xl font-bold text-yellow-700 dark:text-yellow-400 mt-1">{formatKwh(m.total_kwh)}</p>
+                    <p className="text-[10px] text-gray-400">total over {days} days</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Daily breakdown per meter */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase w-28">Date</th>
+                        {meterTotals.map(m => (
+                          <th key={m.equipment_id} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">
+                            {m.name}
+                          </th>
+                        ))}
+                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase w-28">Day total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {data.report.map(day => {
+                        const dayTotal = day.power?.total_kwh || 0;
+                        return (
+                          <tr key={day.date}>
+                            <td className="px-3 py-2 align-top">
+                              <p className="text-xs font-semibold text-gray-900 dark:text-white">{formatDate(day.date)}</p>
+                              <p className="text-[10px] text-gray-400">{day.date}</p>
+                            </td>
+                            {meterTotals.map(m => {
+                              const cell = day.power?.by_meter?.[m.equipment_id];
+                              const kwh = cell?.kwh || 0;
+                              return (
+                                <td key={m.equipment_id} className="px-3 py-2 align-middle">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] text-yellow-700 dark:text-yellow-400 w-20 text-right font-medium tabular-nums">
+                                      {formatKwh(kwh)}
+                                    </span>
+                                    <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                                      <div className="bg-yellow-500 h-full rounded-full transition-all"
+                                        style={{ width: `${maxPower ? (kwh / maxPower) * 100 : 0}%` }} />
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                            <td className="px-3 py-2 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
+                              {formatKwh(dayTotal)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

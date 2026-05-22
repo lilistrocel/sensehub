@@ -57,7 +57,8 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
     trigger_config: { type: 'manual' },
     conditions: [],
     condition_logic: 'AND', // AND or OR logic for conditions
-    actions: []
+    actions: [],
+    dose_program_id: null, // optional: links to a published fertigation_dose_program
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -72,6 +73,9 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   // Equipment list for threshold triggers
   const [equipment, setEquipment] = useState([]);
   const [loadingEquipment, setLoadingEquipment] = useState(false);
+
+  // Published fertigation dose programs — for the optional dose_program_id selector.
+  const [dosePrograms, setDosePrograms] = useState([]);
 
   // Condition editing
   const [conditionField, setConditionField] = useState('');
@@ -121,7 +125,8 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
           trigger_config: triggerConfig,
           conditions: conditions,
           condition_logic: automation.condition_logic || 'AND',
-          actions: actions
+          actions: actions,
+          dose_program_id: automation.dose_program_id || null,
         });
       } else {
         // Reset form for new automation
@@ -133,7 +138,8 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
           trigger_config: { type: 'manual' },
           conditions: [],
           condition_logic: 'AND',
-          actions: []
+          actions: [],
+          dose_program_id: null,
         });
       }
       setActiveTab('trigger');
@@ -146,6 +152,12 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
   useEffect(() => {
     if (isOpen && token) {
       fetchEquipment();
+      // Dose programs are tiny and rarely change — fetch alongside equipment.
+      fetch(`${API_BASE}/fertigation/dose-programs?status=published`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      }).then(r => r.ok ? r.json() : []).then(list => {
+        setDosePrograms(Array.isArray(list) ? list : []);
+      }).catch(() => {});
     }
   }, [isOpen, token]);
 
@@ -440,7 +452,8 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
           trigger_config: formData.trigger_config,
           conditions: formData.conditions,
           condition_logic: formData.condition_logic,
-          actions: formData.actions
+          actions: formData.actions,
+          dose_program_id: formData.dose_program_id || null,
         })
       });
 
@@ -609,6 +622,40 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
                 placeholder="Describe what this automation does..."
               />
+            </div>
+
+            {/* Optional fertigation dose program — drives Waveshare Irrigation 2 injector valves
+                in parallel with this automation's actions. Only relevant for irrigation/fertigation
+                cycles; leave at "None" for other automation types. */}
+            <div className="mb-6">
+              <label htmlFor="dose_program_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Fertigation dose program
+                <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">(optional — for irrigation/fertigation cycles)</span>
+              </label>
+              <select
+                id="dose_program_id"
+                value={formData.dose_program_id || ''}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  dose_program_id: e.target.value ? parseInt(e.target.value) : null,
+                }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              >
+                <option value="">— None (no fertilizer injection) —</option>
+                {dosePrograms.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.target_ec ? ` · EC ${p.target_ec}` : ''}
+                    {p.compatibility_strategy === 'time_slice' ? ' · time-slice' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                When set, the FertigationDoseScheduler opens injector valves on Waveshare Irrigation 2
+                according to this program's per-tank duty cycles for the duration of this automation's
+                longest control action. Only published programs are listable; manage programs under
+                Fertigation → Dose Programs.
+              </p>
             </div>
 
             {/* Tab Navigation */}
@@ -3169,6 +3216,7 @@ export default function Automations() {
   const { token, user } = useAuth();
   const { formatDateTime } = useSettings();
   const [automations, setAutomations] = useState([]);
+  const [doseProgramsById, setDoseProgramsById] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -3185,6 +3233,14 @@ export default function Automations() {
 
   useEffect(() => {
     fetchAutomations();
+    // Load dose programs once for the row badge lookup (small list, rarely changes).
+    fetch(`${API_BASE}/fertigation/dose-programs`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    }).then(r => r.ok ? r.json() : []).then(list => {
+      const m = {};
+      for (const p of (Array.isArray(list) ? list : [])) m[p.id] = p;
+      setDoseProgramsById(m);
+    }).catch(() => {});
   }, [token]);
 
   const fetchAutomations = async () => {
@@ -3587,6 +3643,23 @@ export default function Automations() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
                                 Template
+                              </span>
+                            )}
+                            {auto.dose_program_id && doseProgramsById[auto.dose_program_id] && (
+                              <span
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800"
+                                title={`Dose program drives Waveshare Irrigation 2 injector valves while this automation runs. Strategy: ${doseProgramsById[auto.dose_program_id].compatibility_strategy || 'permissive'}`}
+                              >
+                                <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                </svg>
+                                Dose: {doseProgramsById[auto.dose_program_id].name}
+                              </span>
+                            )}
+                            {auto.dose_program_id && !doseProgramsById[auto.dose_program_id] && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                                title="Automation references a dose program that no longer exists">
+                                Dose: missing (#{auto.dose_program_id})
                               </span>
                             )}
                             {canEdit && triggerConfig?.type === 'manual' && (auto.enabled === 1 || auto.enabled === true) && (

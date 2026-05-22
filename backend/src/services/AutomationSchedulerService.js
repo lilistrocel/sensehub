@@ -11,6 +11,7 @@
 
 const { db } = require('../utils/database');
 const { executeAutomation } = require('./AutomationExecutor');
+const { evaluateSkip } = require('./SkipEvaluator');
 
 class AutomationSchedulerService {
   constructor() {
@@ -19,6 +20,10 @@ class AutomationSchedulerService {
     this.startupTimeoutId = null;
     this.running = false;
     this._tickInProgress = false;
+    // Edge-detection memory for threshold triggers. Map<automation_id, boolean>.
+    // We fire on rising edge (false→true). undefined defaults to false on first read, so a
+    // fresh restart with condition already true will fire ONCE to re-establish relay state.
+    this._lastThresholdState = new Map();
   }
 
   start() {
@@ -79,42 +84,107 @@ class AutomationSchedulerService {
 
         if (triggerType === 'schedule') {
           if (this._isScheduleDue(triggerConfig, automation.last_run)) {
-            console.log(`[Scheduler] Firing scheduled automation: "${automation.name}" (id=${automation.id})`);
-            try {
-              const result = await executeAutomation(automation, 'scheduler');
-              console.log(`[Scheduler] Automation "${automation.name}" executed: ${result.executedActions.length} action(s)`);
-
-              // For one-time schedules, disable after firing
-              if (triggerConfig.schedule_type === 'once') {
-                db.prepare("UPDATE automations SET enabled = 0, updated_at = datetime('now') WHERE id = ?")
-                  .run(automation.id);
-                console.log(`[Scheduler] One-time automation "${automation.name}" disabled after execution`);
-              }
-            } catch (err) {
-              console.error(`[Scheduler] Error executing automation "${automation.name}":`, err.message);
-              db.prepare(
-                "INSERT INTO automation_logs (automation_id, status, message, triggered_at, completed_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))"
-              ).run(automation.id, 'failure', `Scheduler error: ${err.message}`);
-            }
+            await this._fireWithSkipCheck(automation, triggerConfig, 'schedule');
           }
         } else if (triggerType === 'threshold') {
-          if (this._isThresholdMet(triggerConfig, automation.last_run)) {
-            console.log(`[Scheduler] Threshold met for automation: "${automation.name}" (id=${automation.id})`);
-            try {
-              const result = await executeAutomation(automation, 'scheduler');
-              console.log(`[Scheduler] Automation "${automation.name}" executed: ${result.executedActions.length} action(s)`);
-            } catch (err) {
-              console.error(`[Scheduler] Error executing automation "${automation.name}":`, err.message);
-              db.prepare(
-                "INSERT INTO automation_logs (automation_id, status, message, triggered_at, completed_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))"
-              ).run(automation.id, 'failure', `Scheduler error: ${err.message}`);
-            }
+          const currentlyMet = this._isThresholdMet(triggerConfig, automation.last_run);
+          const previouslyMet = this._lastThresholdState.get(automation.id) ?? false;
+          // Persist current state for next tick
+          this._lastThresholdState.set(automation.id, currentlyMet);
+          // Fire ONLY on the rising edge (false → true). This stops the per-poll re-fire
+          // bug that was generating 90+ runs/day for steady conditions like "temp > 30°C".
+          // When the condition falls (true → false), the companion OFF-rule (e.g. #36 at <26°C)
+          // is responsible for the OFF action.
+          if (currentlyMet && !previouslyMet) {
+            await this._fireWithSkipCheck(automation, triggerConfig, 'threshold');
           }
+        } else {
+          // Trigger type changed away from threshold — clear any stale edge state for this id
+          this._lastThresholdState.delete(automation.id);
         }
         // 'manual' and 'event' triggers are not handled by the scheduler
       }
     } catch (err) {
       console.error('[Scheduler] Error in automation check loop:', err.message);
+    }
+  }
+
+  /**
+   * Fire an automation with a pre-execution skip check.
+   * If SkipEvaluator returns skip=true, log status='skipped' and do not run the actions.
+   * Otherwise execute normally and reset the consecutive_skips counter.
+   *
+   * @param {object} automation - the live automation row
+   * @param {object} triggerConfig - parsed trigger
+   * @param {string} kind - 'schedule' | 'threshold' (for log context)
+   */
+  async _fireWithSkipCheck(automation, triggerConfig, kind) {
+    // Pre-execution skip evaluation
+    let evalResult;
+    try {
+      evalResult = evaluateSkip(automation);
+    } catch (err) {
+      console.error(`[Scheduler] SkipEvaluator threw on "${automation.name}":`, err.message);
+      evalResult = { skip: false };
+    }
+
+    if (evalResult.stale_sensor && !evalResult.skip) {
+      // Sensor too old to trust — log a note but proceed normally
+      console.log(`[Scheduler] "${automation.name}" sensor stale, skip eval bypassed: ${evalResult.reason}`);
+    }
+
+    if (evalResult.skip) {
+      const reason = evalResult.reason || 'Skipped by pre-execution gate';
+      const src = evalResult.source || 'unknown';
+      console.log(`[Scheduler] SKIPPING "${automation.name}" (id=${automation.id}, source=${src}): ${reason}`);
+      // Bump consecutive_skips, persist last_run so we don't re-fire within the same tick window
+      db.prepare(`
+        UPDATE automations
+        SET consecutive_skips = COALESCE(consecutive_skips, 0) + 1,
+            last_run = datetime('now'),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `).run(automation.id);
+      db.prepare(
+        "INSERT INTO automation_logs (automation_id, status, message, triggered_at, completed_at) VALUES (?, 'skipped', ?, datetime('now'), datetime('now'))"
+      ).run(automation.id, `[${src}] ${reason}`);
+
+      // Consecutive-skip alert at threshold
+      const updated = db.prepare('SELECT consecutive_skips FROM automations WHERE id = ?').get(automation.id);
+      const n = updated?.consecutive_skips || 0;
+      if (n === 3 || n === 6 || n === 12) {
+        try {
+          db.prepare(
+            "INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))"
+          ).run(
+            n >= 12 ? 'critical' : 'warning',
+            `Automation "${automation.name}" (id=${automation.id}) has skipped ${n} consecutive times. Verify the sensor reading driving the skip is correct.`,
+          );
+        } catch (err) {
+          console.error('[Scheduler] Failed to write consecutive-skip alert:', err.message);
+        }
+      }
+      return;
+    }
+
+    // Normal execution path
+    console.log(`[Scheduler] Firing ${kind} automation: "${automation.name}" (id=${automation.id})`);
+    try {
+      const result = await executeAutomation(automation, 'scheduler');
+      console.log(`[Scheduler] Automation "${automation.name}" executed: ${result.executedActions.length} action(s)`);
+      // Reset skip streak on successful run
+      db.prepare("UPDATE automations SET consecutive_skips = 0 WHERE id = ?").run(automation.id);
+      // For one-time schedules, disable after firing
+      if (kind === 'schedule' && triggerConfig.schedule_type === 'once') {
+        db.prepare("UPDATE automations SET enabled = 0, updated_at = datetime('now') WHERE id = ?")
+          .run(automation.id);
+        console.log(`[Scheduler] One-time automation "${automation.name}" disabled after execution`);
+      }
+    } catch (err) {
+      console.error(`[Scheduler] Error executing automation "${automation.name}":`, err.message);
+      db.prepare(
+        "INSERT INTO automation_logs (automation_id, status, message, triggered_at, completed_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))"
+      ).run(automation.id, 'failure', `Scheduler error: ${err.message}`);
     }
   }
 
@@ -184,16 +254,13 @@ class AutomationSchedulerService {
   /**
    * Check if a threshold trigger's condition is currently met.
    * Reads the equipment's last_reading from the database.
+   *
+   * NOTE: This is a PURE state check — returns true whenever the sensor value crosses
+   * the threshold, without any cooldown. The caller (the threshold path in _tick) is
+   * responsible for edge-detection via _lastThresholdState. A cooldown here would
+   * inject phantom false→true transitions and reintroduce the per-poll spam bug.
    */
-  _isThresholdMet(triggerConfig, lastRun) {
-    const now = new Date();
-
-    // Cooldown: don't re-trigger within 60 seconds of last run
-    if (lastRun) {
-      const lastRunTime = this._parseUtcTimestamp(lastRun);
-      if (lastRunTime && (now - lastRunTime) < 60000) return false;
-    }
-
+  _isThresholdMet(triggerConfig, _lastRun /* intentionally unused */) {
     if (!triggerConfig.equipment_id) return false;
 
     const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(triggerConfig.equipment_id);
@@ -263,9 +330,8 @@ class AutomationSchedulerService {
       }
     })();
 
-    if (result) {
-      console.log(`[Scheduler] Threshold met: ${sensorType}=${currentValue} ${operator} ${threshold} → firing`);
-    }
+    // Don't log here — this is called every tick and would spam the logs.
+    // The caller logs only when it actually fires (rising edge).
     return result;
   }
 

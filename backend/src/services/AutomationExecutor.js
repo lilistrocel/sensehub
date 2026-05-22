@@ -8,6 +8,7 @@ const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { relayTimerService } = require('./RelayTimerService');
 const { logRelayEvent } = require('./RelayEventLogger');
+const { fertigationDoseScheduler } = require('./FertigationDoseScheduler');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -173,6 +174,33 @@ async function executeAutomation(automation, source = 'manual') {
     } else if (action.type === 'transition') {
       const result = await executeTransitionAction(action, automation, actionIdx);
       executedActions.push(result);
+    }
+  }
+
+  // If this automation references a fertigation dose program, kick off the dose
+  // scheduler for the duration of the longest control action that actually ran.
+  // The water pump + venturi pump actions handle themselves via duration_seconds;
+  // the dose scheduler just modulates the injector valves alongside them.
+  if (automation.dose_program_id) {
+    try {
+      const durations = executedActions
+        .filter(a => a.type === 'control' && a.status !== 'error' && a.status !== 'skipped_dependency')
+        .map(a => parseFloat(a.duration_seconds) || 0);
+      const ranControl = durations.some(d => d > 0);
+      const cycleSeconds = Math.max(0, ...durations);
+      if (ranControl && cycleSeconds > 0 && !fertigationDoseScheduler.isRunning()) {
+        fertigationDoseScheduler.startCycle({
+          programId: automation.dose_program_id,
+          durationSeconds: cycleSeconds,
+          automationId: automation.id,
+        }).catch(err => {
+          console.error(`[Automation ${automation.id}] dose scheduler refused to start: ${err.message}`);
+        });
+      } else if (fertigationDoseScheduler.isRunning()) {
+        console.warn(`[Automation ${automation.id}] dose program ${automation.dose_program_id} skipped: scheduler busy with another cycle`);
+      }
+    } catch (err) {
+      console.error(`[Automation ${automation.id}] dose scheduler hook failed:`, err.message);
     }
   }
 

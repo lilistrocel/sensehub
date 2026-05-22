@@ -356,6 +356,66 @@ class AgronomistService {
       };
     }
 
+    // Per-nutrient AMIC trend — last 3 samples per (nutrient, role) with delta
+    // direction so the planner sees trajectory not just latest value. Surfaces
+    // the "681 → 869 → 2238" pattern that triggered the alarm.
+    for (const role of Object.keys(labByRole)) {
+      labByRole[role].trend = {};
+    }
+    for (const r of latestRows) {
+      const role = classify(r.zone_id, r.zone_name);
+      const slot = labByRole[role].trend;
+      if (!slot[r.nutrient]) slot[r.nutrient] = [];
+      if (slot[r.nutrient].length < 3) {
+        slot[r.nutrient].push({
+          value: r.value,
+          unit: r.unit,
+          sample_date: r.sample_date,
+        });
+      }
+    }
+    for (const role of Object.keys(labByRole)) {
+      for (const [nutrient, hist] of Object.entries(labByRole[role].trend)) {
+        if (hist.length >= 2) {
+          // hist[0] is most recent (latestRows sorted DESC), hist[hist.length-1] is oldest
+          const latest = hist[0].value;
+          const oldest = hist[hist.length - 1].value;
+          const delta = latest - oldest;
+          const pct = oldest !== 0 ? (delta / oldest) * 100 : null;
+          labByRole[role].trend[nutrient] = {
+            samples: hist,
+            delta_latest_minus_oldest: Math.round(delta * 100) / 100,
+            pct_change: pct != null ? Math.round(pct * 10) / 10 : null,
+            direction: delta > 0 ? 'rising' : delta < 0 ? 'falling' : 'flat',
+          };
+        } else {
+          labByRole[role].trend[nutrient] = { samples: hist, direction: 'single_point' };
+        }
+      }
+    }
+
+    // Derived totals: effective elemental N from ionic forms, so the planner has
+    // both views available (some targets are stored in elemental form, some lab
+    // labels are ionic). Conversion factors are mass fractions of the element in
+    // the ion: N/NO3 = 14/62 ≈ 0.226, N/NH4 = 14/18 ≈ 0.778, P/PO4 = 31/95 ≈ 0.326.
+    for (const role of Object.keys(labByRole)) {
+      const latest = labByRole[role].latest_per_nutrient || {};
+      const derived = {};
+      const no3 = latest['nitrate_NO3']?.value;
+      const nh4 = latest['ammonium_NH4']?.value;
+      if (no3 != null || nh4 != null) {
+        const effN = (no3 != null ? no3 * 0.226 : 0) + (nh4 != null ? nh4 * 0.778 : 0);
+        derived.effective_N_mg_per_l = Math.round(effN * 10) / 10;
+        derived.effective_N_breakdown = {
+          from_NO3: no3 != null ? Math.round(no3 * 0.226 * 10) / 10 : null,
+          from_NH4: nh4 != null ? Math.round(nh4 * 0.778 * 10) / 10 : null,
+        };
+      }
+      const po4 = latest['phosphate_PO4']?.value;
+      if (po4 != null) derived.effective_P_mg_per_l = Math.round(po4 * 0.326 * 10) / 10;
+      if (Object.keys(derived).length > 0) labByRole[role].derived = derived;
+    }
+
     // --- Alerts created today ---
     const alerts = db.prepare(`
       SELECT a.severity, a.message, a.created_at, a.acknowledged,
@@ -382,6 +442,13 @@ class AgronomistService {
       `SELECT COUNT(*) AS c FROM relay_drift_log WHERE created_at BETWEEN ? AND ?`
     ).get(dayStart, dayEnd).c;
 
+    // --- Substrate diagnostics: tell the planner whether each substrate sensor's
+    //     VWC is oscillating (drainage works, just over-irrigated) or flat-high
+    //     (saturated / drainage blocked / sensor pooled). Two prescriptions, very
+    //     different fixes — without these metrics the AI can't tell them apart from
+    //     raw hourly averages alone. ---
+    const substrateDiagnostics = this._computeSubstrateDiagnostics(dateStr, dayStart, dayEnd);
+
     return {
       date: dateStr,
       timezone: process.env.TZ || 'UTC',
@@ -389,6 +456,7 @@ class AgronomistService {
       dispensing,
       reference_sensors,
       sensors: sensorReadings,
+      substrate_diagnostics: substrateDiagnostics,
       lab: labByRole,
       alerts: alerts.map(a => ({
         severity: a.severity,
@@ -404,6 +472,214 @@ class AgronomistService {
         drift_events: driftCount,
       },
     };
+  }
+
+  /** Substrate diagnostics, aggregated PER ZONE (not per sensor).
+   *
+   *  Multiple substrate sensors in the same zone are treated as redundant
+   *  cross-checks (e.g. two probes in two coco peat bags within one greenhouse).
+   *  The zone-level diagnostic uses the median across redundant sensors; the
+   *  per-sensor breakdown is kept underneath so the operator can drill down.
+   *
+   *  For each zone:
+   *    - sensors[]: per-sensor min/max/avg/oscillation/dry_down stats
+   *    - zone_avg, zone_median, zone_oscillation: aggregated across sensors
+   *    - sensor_disagreement_pct: max(per-sensor avg) - min(per-sensor avg)
+   *      (sustained disagreement means at least one sensor or one bag is off)
+   *    - dry_down_median_pct: median per-cycle drop, computed on the sensor-median trace
+   *    - classification: 'flat_saturated' | 'over_irrigated' | 'healthy' | etc.
+   *    - sensor_mismatch_warning: set when disagreement > threshold
+   *    - hint: free-text guidance for the planner / operator
+   *
+   *  Drainage interpretation (applied to the zone median, not per sensor):
+   *    median dry-down < 0.3% per cycle  → flat_saturated → physical inspection
+   *    < 1% AND avg > 50%                → over_irrigated → reduce cadence
+   *    1-3% AND avg in 40-50%            → healthy
+   *    > 3% OR avg < 40%                 → under_irrigated
+   */
+  _computeSubstrateDiagnostics(dateStr, dayStart, dayEnd) {
+    // Substrate sensors grouped by their assigned zone(s). Unassigned sensors go
+    // into a synthetic "unassigned" bucket so the operator still gets visibility.
+    const sensors = db.prepare(`
+      SELECT DISTINCT r.equipment_id, e.name AS equipment_name, r.name AS metric
+      FROM readings r
+      JOIN equipment e ON e.id = r.equipment_id
+      WHERE date(r.timestamp) = ?
+        AND (r.name LIKE '%Moisture%' OR r.name LIKE '%VWC%')
+    `).all(dateStr);
+
+    // Build {equipment_id -> [zone_id, zone_name]} (junction is many-to-many, but
+    // for redundant-sensor logic we only care about the primary association — pick
+    // the lowest zone_id deterministically).
+    const sensorZone = {};
+    for (const s of sensors) {
+      const z = db.prepare(`
+        SELECT z.id, z.name FROM equipment_zones ez
+        JOIN zones z ON z.id = ez.zone_id
+        WHERE ez.equipment_id = ?
+        ORDER BY z.id LIMIT 1
+      `).get(s.equipment_id);
+      sensorZone[s.equipment_id] = z ? { id: z.id, name: z.name } : null;
+    }
+
+    // Irrigation OFF events on real delivery channels (flow_rate > 0 excludes the
+    // pump channels we tagged earlier). Dry-down is measured after these.
+    const offEvents = db.prepare(`
+      SELECT re.equipment_id, re.channel, re.created_at AS off_time
+      FROM relay_events re
+      JOIN relay_channel_config rcc
+        ON rcc.equipment_id = re.equipment_id AND rcc.channel = re.channel
+      WHERE re.state = 0
+        AND rcc.flow_rate > 0
+        AND re.created_at BETWEEN ? AND ?
+      ORDER BY re.created_at ASC
+    `).all(dayStart, dayEnd);
+
+    // First pass: compute per-sensor stats. Keeps the raw signal available for the
+    // disagreement check and for operator drill-down even though the planner's
+    // prescription is per-zone.
+    const perSensor = [];
+    for (const s of sensors) {
+      const samples = db.prepare(`
+        SELECT timestamp, value FROM readings
+        WHERE equipment_id = ? AND name = ? AND date(timestamp) = ?
+        ORDER BY timestamp ASC
+      `).all(s.equipment_id, s.metric, dateStr);
+      if (samples.length === 0) continue;
+
+      let lo = Infinity, hi = -Infinity, sum = 0;
+      for (const r of samples) {
+        const v = Number(r.value);
+        if (!Number.isFinite(v)) continue;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+        sum += v;
+      }
+      const min = round1(lo);
+      const max = round1(hi);
+      const avg = round1(sum / samples.length);
+      const oscillation = round1(max - min);
+
+      // Per-cycle dry-down: drop in 30 min after each irrigation OFF.
+      const dryDowns = [];
+      const tsAsMs = samples.map(r => new Date(r.timestamp).getTime());
+      const tsValues = samples.map(r => Number(r.value));
+      for (const ev of offEvents) {
+        const offMs = new Date(ev.off_time + 'Z').getTime();
+        const windowEnd = offMs + 30 * 60 * 1000;
+        let i = tsAsMs.findIndex(t => t >= offMs);
+        if (i < 0) continue;
+        const vAtOff = tsValues[i];
+        let minAfter = vAtOff;
+        for (let j = i; j < tsAsMs.length && tsAsMs[j] <= windowEnd; j++) {
+          if (tsValues[j] < minAfter) minAfter = tsValues[j];
+        }
+        const drop = vAtOff - minAfter;
+        if (Number.isFinite(drop) && drop >= 0) dryDowns.push(round2(drop));
+      }
+      dryDowns.sort((a, b) => a - b);
+      const dry_down_median_pct = dryDowns.length ? dryDowns[Math.floor(dryDowns.length / 2)] : null;
+      const dry_down_max_pct = dryDowns.length ? dryDowns[dryDowns.length - 1] : null;
+
+      const zone = sensorZone[s.equipment_id] || null;
+      perSensor.push({
+        equipment_id: s.equipment_id,
+        equipment_name: s.equipment_name,
+        metric: s.metric,
+        zone_id: zone?.id ?? null,
+        zone_name: zone?.name ?? null,
+        samples: samples.length,
+        min, max, avg, oscillation,
+        dry_down_count: dryDowns.length,
+        dry_down_median_pct,
+        dry_down_max_pct,
+      });
+    }
+
+    // Second pass: aggregate by zone. Sensors with no zone go into 'unassigned'.
+    const zoneBuckets = new Map();
+    for (const p of perSensor) {
+      const key = p.zone_id != null ? String(p.zone_id) : 'unassigned';
+      if (!zoneBuckets.has(key)) {
+        zoneBuckets.set(key, {
+          zone_id: p.zone_id, zone_name: p.zone_name,
+          sensors: [],
+        });
+      }
+      zoneBuckets.get(key).sensors.push(p);
+    }
+
+    const zones = [];
+    for (const bucket of zoneBuckets.values()) {
+      const ss = bucket.sensors;
+      const avgs = ss.map(s => s.avg).filter(Number.isFinite);
+      const dryMedians = ss.map(s => s.dry_down_median_pct).filter(Number.isFinite);
+      const zone_avg = round1(median(avgs));
+      const zone_min = round1(Math.min(...ss.map(s => s.min)));
+      const zone_max = round1(Math.max(...ss.map(s => s.max)));
+      const zone_oscillation = round1(zone_max - zone_min);
+      const zone_dry_down_median = dryMedians.length ? round2(median(dryMedians)) : null;
+      const disagreement = avgs.length > 1 ? round1(Math.max(...avgs) - Math.min(...avgs)) : 0;
+
+      const dryRef = zone_dry_down_median;
+      let classification = 'unknown';
+      let hint = null;
+      if (ss.every(s => s.dry_down_count === 0)) {
+        classification = 'no_cycles';
+        hint = 'No irrigation cycles fired today on tracked delivery channels — drainage response cannot be evaluated. Check the irrigation schedule is enabled.';
+      } else if (dryRef != null && dryRef < 0.3) {
+        classification = 'flat_saturated';
+        hint = `Zone substrate barely responds to irrigation pulses (median dry-down ${dryRef}% in 30 min). Drainage is restricted at the zone level — inspect drain lines and substrate physically BEFORE cutting irrigation, since reducing input cannot fix a blocked drain.`;
+      } else if (dryRef != null && dryRef < 1.0 && zone_avg > 50) {
+        classification = 'over_irrigated';
+        hint = `Zone is draining (median dry-down ${dryRef}% / cycle) but cycles are too tight — avg VWC ${zone_avg}% above 40–50% target. Reduce cycle cadence or per-cycle duration so substrate dries back between pulses.`;
+      } else if (dryRef != null && dryRef >= 1.0 && dryRef <= 3.0 && zone_avg >= 40 && zone_avg <= 50) {
+        classification = 'healthy';
+        hint = `Zone VWC in 40–50% target with normal per-cycle dry-down (${dryRef}%). No action.`;
+      } else if (dryRef != null && (dryRef > 3.0 || zone_avg < 40)) {
+        classification = 'under_irrigated';
+        hint = `High dry-down per cycle (${dryRef}%) or avg VWC ${zone_avg}% below target — substrate drying too aggressively. Increase cycle cadence or duration.`;
+      } else if (zone_avg > 50) {
+        classification = 'over_irrigated';
+        hint = `Avg VWC ${zone_avg}% above target with per-cycle dry-down ${dryRef}%. Trim cycle cadence or duration.`;
+      } else {
+        classification = 'borderline';
+        hint = `Mixed signals — zone avg ${zone_avg}%, per-cycle dry-down ${dryRef}%, oscillation ${zone_oscillation}%. Worth a manual look at the raw VWC traces.`;
+      }
+
+      // Sensor disagreement is a separate, additive warning — applies regardless of
+      // the zone's main classification. > 4% mean divergence across redundant
+      // sensors usually means one bag or one probe is off.
+      let sensor_mismatch_warning = null;
+      if (ss.length > 1 && disagreement > 4) {
+        const labels = ss.map(s => `${s.equipment_name}=${s.avg}%`).join(', ');
+        sensor_mismatch_warning = `Redundant substrate sensors disagree by ${disagreement}% across the day (${labels}). Either one coco peat bag has a localized drainage/compaction issue, or one probe is fouled/miscalibrated. Recommend pulling both probes for a side-by-side wet/dry reference check OR a visual inspection of the two bags before trusting the zone average.`;
+      }
+
+      zones.push({
+        zone_id: bucket.zone_id,
+        zone_name: bucket.zone_name || (bucket.zone_id == null ? 'Unassigned sensors' : null),
+        sensor_count: ss.length,
+        zone_min, zone_max, zone_avg, zone_oscillation,
+        zone_dry_down_median_pct: zone_dry_down_median,
+        sensor_disagreement_pct: disagreement,
+        sensor_mismatch_warning,
+        classification,
+        hint,
+        sensors: ss,
+      });
+    }
+
+    return zones;
+
+    function round1(n) { return Number.isFinite(n) ? Math.round(n * 10) / 10 : null; }
+    function round2(n) { return Number.isFinite(n) ? Math.round(n * 100) / 100 : null; }
+    function median(arr) {
+      if (!arr.length) return null;
+      const s = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(s.length / 2);
+      return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+    }
   }
 
   /** Build a reference-sensor block for a single equipment_id.

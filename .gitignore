@@ -46,3 +46,9 @@ temp/
 
 # Features database (managed by autoforge)
 features.db
+
+# Claude Code project state
+.claude/
+
+# Stray screenshots not part of the codebase
+Screenshot*.png

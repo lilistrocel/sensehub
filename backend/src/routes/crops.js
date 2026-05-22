@@ -62,6 +62,10 @@ function toContractShape(row) {
       plant_count: row.plant_count,
       max_capacity: row.max_capacity
     },
+    substrate: {
+      soil_type: row.soil_type,
+      volume_l_per_plant: row.substrate_volume_l_per_plant,
+    },
     current_stage: row.current_stage,
     optimal_ranges: row.optimal_ranges ? JSON.parse(row.optimal_ranges) : {},
     stage_durations_days: row.stage_durations ? JSON.parse(row.stage_durations) : null,
@@ -294,11 +298,16 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   const existing = db.prepare('SELECT * FROM crop_assignments WHERE id = ?').get(parseInt(req.params.id));
   if (!existing) return res.status(404).json({ error: 'Not found' });
 
-  const { crop_name, variety, current_stage, optimal_ranges, plant_count, max_capacity } = req.body;
+  const {
+    crop_name, variety, current_stage, optimal_ranges,
+    plant_count, max_capacity, soil_type, substrate_volume_l_per_plant,
+  } = req.body;
   try {
     db.prepare(`
       UPDATE crop_assignments SET crop_name = ?, variety = ?, current_stage = ?,
-        optimal_ranges = ?, plant_count = ?, max_capacity = ?, updated_at = datetime('now')
+        optimal_ranges = ?, plant_count = ?, max_capacity = ?,
+        soil_type = ?, substrate_volume_l_per_plant = ?,
+        updated_at = datetime('now')
       WHERE id = ?
     `).run(
       crop_name ?? existing.crop_name,
@@ -307,6 +316,8 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
       optimal_ranges ? JSON.stringify(optimal_ranges) : existing.optimal_ranges,
       plant_count ?? existing.plant_count,
       max_capacity ?? existing.max_capacity,
+      soil_type !== undefined ? soil_type : existing.soil_type,
+      substrate_volume_l_per_plant !== undefined ? substrate_volume_l_per_plant : existing.substrate_volume_l_per_plant,
       existing.id
     );
     res.json(toContractShape(db.prepare('SELECT * FROM crop_assignments WHERE id = ?').get(existing.id)));

@@ -12,12 +12,35 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/automations - Create automation (optionally from a template)
+// Resolve & validate a dose_program_id passed from the form.
+// Returns the numeric id to persist, or null if no program is selected.
+// Throws if the id is unknown or points to a non-published program.
+function resolveDoseProgramId(raw) {
+  if (raw == null || raw === '' || raw === 0 || raw === '0') return null;
+  const id = parseInt(raw, 10);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const prog = db.prepare("SELECT id, status FROM fertigation_dose_programs WHERE id = ?").get(id);
+  if (!prog) {
+    const err = new Error(`dose_program_id ${id} does not exist`);
+    err.status = 400; throw err;
+  }
+  if (prog.status !== 'published') {
+    const err = new Error(`dose_program_id ${id} is in '${prog.status}' status; only published programs can be assigned`);
+    err.status = 400; throw err;
+  }
+  return id;
+}
+
 router.post('/', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, trigger_config, conditions, condition_logic, actions, priority, template_id } = req.body;
+  const { name, description, trigger_config, conditions, condition_logic, actions, priority, template_id, dose_program_id } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Bad Request', message: 'Name is required' });
   }
+
+  let doseProgId = null;
+  try { doseProgId = resolveDoseProgramId(dose_program_id); }
+  catch (e) { return res.status(e.status || 400).json({ error: 'Bad Request', message: e.message }); }
 
   // If template_id is provided, pull actions/conditions from the template
   let finalConditions = conditions || [];
@@ -39,7 +62,7 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
   }
 
   const result = db.prepare(
-    'INSERT INTO automations (name, description, trigger_config, conditions, condition_logic, actions, priority, template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO automations (name, description, trigger_config, conditions, condition_logic, actions, priority, template_id, dose_program_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     name,
     description,
@@ -48,7 +71,8 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
     finalConditionLogic,
     JSON.stringify(finalActions),
     priority || 0,
-    template_id || null
+    template_id || null,
+    doseProgId,
   );
 
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(result.lastInsertRowid);
@@ -89,13 +113,21 @@ router.get('/:id', (req, res) => {
 
 // PUT /api/automations/:id - Update automation
 router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, trigger_config, conditions, condition_logic, actions, priority, enabled, template_id } = req.body;
+  const { name, description, trigger_config, conditions, condition_logic, actions, priority, enabled, template_id, dose_program_id } = req.body;
   const automationId = req.params.id;
 
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(automationId);
 
   if (!automation) {
     return res.status(404).json({ error: 'Not Found', message: 'Automation not found' });
+  }
+
+  // dose_program_id: only override when the field is explicitly present in the
+  // payload (so PATCH-style partial updates don't accidentally clear an existing link).
+  let finalDoseProgId = automation.dose_program_id;
+  if (dose_program_id !== undefined) {
+    try { finalDoseProgId = resolveDoseProgramId(dose_program_id); }
+    catch (e) { return res.status(e.status || 400).json({ error: 'Bad Request', message: e.message }); }
   }
 
   // If linking to a template, pull actions/conditions from it
@@ -114,7 +146,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   }
 
   db.prepare(
-    "UPDATE automations SET name = ?, description = ?, trigger_config = ?, conditions = ?, condition_logic = ?, actions = ?, priority = ?, enabled = ?, template_id = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE automations SET name = ?, description = ?, trigger_config = ?, conditions = ?, condition_logic = ?, actions = ?, priority = ?, enabled = ?, template_id = ?, dose_program_id = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(
     name ?? automation.name,
     description ?? automation.description,
@@ -125,6 +157,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
     priority ?? automation.priority,
     enabled !== undefined ? (enabled ? 1 : 0) : automation.enabled,
     finalTemplateId,
+    finalDoseProgId,
     automationId
   );
 

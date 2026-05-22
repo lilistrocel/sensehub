@@ -1,0 +1,287 @@
+/**
+ * DataRetentionService — nightly compaction + pruning of high-volume tables.
+ *
+ * Move-then-drop pattern for `readings`:
+ *   1. Aggregate rows older than READINGS_RETENTION_DAYS into readings_daily_archive
+ *      (preserving min/mean/max/sample_count per day × equipment × metric).
+ *   2. DELETE the raw rows that were aggregated.
+ *
+ * Pure prune for relay_events and automation_logs — they're event streams, not
+ * time-series, so aggregating them adds noise without much value. Operators
+ * keep the readable summaries via the agronomist/analytics pipelines.
+ *
+ * Configurable via system_settings.data_retention_config JSON:
+ *   {
+ *     enabled: true,
+ *     run_hour: 3,                           // 03:00 local time
+ *     run_minute: 30,
+ *     readings_retention_days: 90,
+ *     relay_events_retention_days: 60,
+ *     automation_logs_retention_days: 30,
+ *     alerts_retention_days: 90,             // acknowledged alerts only
+ *     dry_run: false,                        // when true, logs what would be done without modifying anything
+ *   }
+ */
+
+const { db } = require('../utils/database');
+
+const CONFIG_KEY = 'data_retention_config';
+const DEFAULT_CONFIG = {
+  enabled: true,
+  run_hour: 3,
+  run_minute: 30,
+  readings_retention_days: 90,
+  relay_events_retention_days: 60,
+  automation_logs_retention_days: 30,
+  alerts_retention_days: 90,
+  dry_run: false,
+};
+
+class DataRetentionService {
+  constructor() {
+    this.timer = null;
+    this._lastFiredKey = null;
+    this._lastRunSummary = null;
+  }
+
+  getConfig() {
+    try {
+      const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(CONFIG_KEY);
+      if (row?.value) return { ...DEFAULT_CONFIG, ...JSON.parse(row.value) };
+    } catch {}
+    return { ...DEFAULT_CONFIG };
+  }
+
+  saveConfig(updates) {
+    const merged = { ...this.getConfig(), ...updates };
+    db.prepare(
+      'INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    ).run(CONFIG_KEY, JSON.stringify(merged));
+    return merged;
+  }
+
+  getLastRunSummary() { return this._lastRunSummary; }
+
+  start() {
+    if (this.timer) return;
+    this._ensureArchiveTable();
+    // 60s tick — checks once per minute whether it's the configured hour:minute
+    this.timer = setInterval(() => this._maybeTick().catch(err => {
+      console.error('[Retention] tick error:', err.message);
+    }), 60000);
+    console.log('[Retention] Service started (checks every 60s for configured run time)');
+  }
+
+  stop() {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+  }
+
+  _ensureArchiveTable() {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS readings_daily_archive (
+        day TEXT NOT NULL,
+        equipment_id INTEGER NOT NULL,
+        metric TEXT NOT NULL,
+        unit TEXT,
+        sample_count INTEGER,
+        min_val REAL,
+        mean_val REAL,
+        max_val REAL,
+        PRIMARY KEY (day, equipment_id, metric)
+      );
+      CREATE INDEX IF NOT EXISTS idx_readings_daily_archive_day ON readings_daily_archive(day);
+    `);
+  }
+
+  async _maybeTick() {
+    const cfg = this.getConfig();
+    if (!cfg.enabled) return;
+    const now = this._nowInLocalTz();
+    if (now.hour !== cfg.run_hour || now.minute !== cfg.run_minute) return;
+    const todayKey = `${now.dateStr}-${cfg.run_hour}-${cfg.run_minute}`;
+    if (this._lastFiredKey === todayKey) return;
+    this._lastFiredKey = todayKey;
+    console.log('[Retention] Starting nightly run');
+    try {
+      this._lastRunSummary = await this.runOnce(cfg);
+      console.log('[Retention] Completed:', JSON.stringify(this._lastRunSummary));
+    } catch (err) {
+      console.error('[Retention] Run failed:', err.message);
+      this._lastRunSummary = { error: err.message, at: new Date().toISOString() };
+    }
+  }
+
+  /** Run the retention cycle synchronously. Returns a summary object. Safe to call manually. */
+  runOnce(cfg = null) {
+    cfg = cfg || this.getConfig();
+    const summary = {
+      started_at: new Date().toISOString(),
+      dry_run: !!cfg.dry_run,
+      readings: {},
+      relay_events: {},
+      automation_logs: {},
+      alerts: {},
+    };
+
+    // ----- readings: aggregate then drop -----
+    summary.readings = this._compactReadings(cfg.readings_retention_days, cfg.dry_run);
+
+    // ----- relay_events: simple prune -----
+    summary.relay_events = this._pruneByAge(
+      'relay_events', 'created_at', cfg.relay_events_retention_days, cfg.dry_run,
+    );
+
+    // ----- automation_logs: simple prune -----
+    summary.automation_logs = this._pruneByAge(
+      'automation_logs', 'triggered_at', cfg.automation_logs_retention_days, cfg.dry_run,
+    );
+
+    // ----- alerts: prune only ACKNOWLEDGED alerts older than threshold -----
+    summary.alerts = this._pruneAckedAlerts(cfg.alerts_retention_days, cfg.dry_run);
+
+    // ----- VACUUM after big deletes (only if we actually deleted something) -----
+    const droppedRows =
+      (summary.readings.rows_dropped || 0) +
+      (summary.relay_events.rows_dropped || 0) +
+      (summary.automation_logs.rows_dropped || 0) +
+      (summary.alerts.rows_dropped || 0);
+    if (!cfg.dry_run && droppedRows > 10000) {
+      console.log(`[Retention] Reclaiming space via VACUUM (${droppedRows.toLocaleString()} rows dropped)`);
+      try {
+        db.exec('VACUUM');
+        summary.vacuumed = true;
+      } catch (err) {
+        summary.vacuum_error = err.message;
+      }
+    }
+
+    summary.finished_at = new Date().toISOString();
+    return summary;
+  }
+
+  _compactReadings(retentionDays, dryRun) {
+    const cutoffDate = this._cutoffDate(retentionDays);
+    const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+    // 1) Count what would move
+    const eligible = db.prepare(`
+      SELECT COUNT(*) AS n FROM readings WHERE date(timestamp) < ?
+    `).get(cutoffStr);
+    if (eligible.n === 0) return { eligible_rows: 0, archived_buckets: 0, rows_dropped: 0 };
+
+    if (dryRun) {
+      const buckets = db.prepare(`
+        SELECT COUNT(*) AS n FROM (
+          SELECT 1 FROM readings WHERE date(timestamp) < ?
+          GROUP BY date(timestamp), equipment_id, COALESCE(name, '')
+        )
+      `).get(cutoffStr);
+      return { eligible_rows: eligible.n, would_archive_buckets: buckets.n, rows_dropped: 0, dry_run: true };
+    }
+
+    // 2) Move aggregates into archive (INSERT OR REPLACE so re-runs are idempotent)
+    const insertArchive = db.prepare(`
+      INSERT INTO readings_daily_archive
+        (day, equipment_id, metric, unit, sample_count, min_val, mean_val, max_val)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(day, equipment_id, metric) DO UPDATE SET
+        unit = excluded.unit,
+        sample_count = excluded.sample_count,
+        min_val = excluded.min_val,
+        mean_val = excluded.mean_val,
+        max_val = excluded.max_val
+    `);
+    const aggregates = db.prepare(`
+      SELECT
+        date(timestamp) AS day,
+        equipment_id,
+        COALESCE(name, '') AS metric,
+        COALESCE(unit, '') AS unit,
+        COUNT(*) AS n,
+        MIN(value) AS min_val,
+        AVG(value) AS mean_val,
+        MAX(value) AS max_val
+      FROM readings
+      WHERE date(timestamp) < ? AND value IS NOT NULL
+      GROUP BY date(timestamp), equipment_id, COALESCE(name, '')
+    `).all(cutoffStr);
+
+    const tx = db.transaction((rows) => {
+      for (const r of rows) {
+        insertArchive.run(
+          r.day, r.equipment_id, r.metric, r.unit, r.n,
+          r.min_val, r.mean_val, r.max_val,
+        );
+      }
+    });
+    tx(aggregates);
+
+    // 3) Delete the raw rows we just archived
+    const del = db.prepare(`DELETE FROM readings WHERE date(timestamp) < ?`).run(cutoffStr);
+
+    return {
+      eligible_rows: eligible.n,
+      archived_buckets: aggregates.length,
+      rows_dropped: del.changes,
+      cutoff_date: cutoffStr,
+    };
+  }
+
+  _pruneByAge(table, tsColumn, retentionDays, dryRun) {
+    const cutoffDate = this._cutoffDate(retentionDays);
+    const cutoffIso = cutoffDate.toISOString();
+    const cutoffSql = cutoffIso.replace('T', ' ').slice(0, 19); // SQLite-friendly
+    const count = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE datetime(${tsColumn}) < datetime(?)`).get(cutoffSql);
+    if (count.n === 0) return { rows_dropped: 0 };
+    if (dryRun) return { eligible_rows: count.n, rows_dropped: 0, dry_run: true };
+    const r = db.prepare(`DELETE FROM ${table} WHERE datetime(${tsColumn}) < datetime(?)`).run(cutoffSql);
+    return { rows_dropped: r.changes, cutoff: cutoffSql };
+  }
+
+  _pruneAckedAlerts(retentionDays, dryRun) {
+    const cutoffDate = this._cutoffDate(retentionDays);
+    const cutoffSql = cutoffDate.toISOString().replace('T', ' ').slice(0, 19);
+    const count = db.prepare(`
+      SELECT COUNT(*) AS n FROM alerts
+      WHERE acknowledged = 1 AND datetime(created_at) < datetime(?)
+    `).get(cutoffSql);
+    if (count.n === 0) return { rows_dropped: 0 };
+    if (dryRun) return { eligible_rows: count.n, rows_dropped: 0, dry_run: true };
+    const r = db.prepare(`
+      DELETE FROM alerts
+      WHERE acknowledged = 1 AND datetime(created_at) < datetime(?)
+    `).run(cutoffSql);
+    return { rows_dropped: r.changes, cutoff: cutoffSql };
+  }
+
+  _cutoffDate(retentionDays) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - retentionDays);
+    return d;
+  }
+
+  _nowInLocalTz() {
+    const d = new Date();
+    const tz = process.env.TZ;
+    if (tz) {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      }).formatToParts(d);
+      const get = t => parts.find(p => p.type === t)?.value;
+      return {
+        dateStr: `${get('year')}-${get('month')}-${get('day')}`,
+        hour: parseInt(get('hour'), 10),
+        minute: parseInt(get('minute'), 10),
+      };
+    }
+    return {
+      dateStr: d.toISOString().slice(0, 10),
+      hour: d.getHours(),
+      minute: d.getMinutes(),
+    };
+  }
+}
+
+const dataRetentionService = new DataRetentionService();
+
+module.exports = { dataRetentionService, DataRetentionService };

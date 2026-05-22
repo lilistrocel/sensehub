@@ -134,7 +134,10 @@ router.get('/', (req, res) => {
     const parsed = templates.map(t => ({
       ...t,
       conditions: JSON.parse(t.conditions || '[]'),
-      actions: JSON.parse(t.actions || '[]')
+      actions: JSON.parse(t.actions || '[]'),
+      parameters: JSON.parse(t.parameters || '[]'),
+      instantiation_trigger: t.instantiation_trigger ? JSON.parse(t.instantiation_trigger) : null,
+      target_effects: (() => { try { return JSON.parse(t.target_effects || '[]'); } catch { return []; } })(),
     }));
 
     res.json(parsed);
@@ -159,6 +162,9 @@ router.get('/:id', (req, res) => {
       ...template,
       conditions: JSON.parse(template.conditions || '[]'),
       actions: JSON.parse(template.actions || '[]'),
+      parameters: JSON.parse(template.parameters || '[]'),
+      instantiation_trigger: template.instantiation_trigger ? JSON.parse(template.instantiation_trigger) : null,
+      target_effects: (() => { try { return JSON.parse(template.target_effects || '[]'); } catch { return []; } })(),
       linked_automations_count: linked.count
     });
   } catch (err) {
@@ -170,7 +176,11 @@ router.get('/:id', (req, res) => {
 // POST /api/automation-templates - Create a custom template
 router.post('/', requireRole('admin', 'operator'), (req, res) => {
   try {
-    const { name, description, category, conditions, condition_logic, actions } = req.body;
+    const {
+      name, description, category, conditions, condition_logic, actions,
+      parameters, agent_usage_notes, default_trigger_type, instantiation_trigger,
+      target_effects,
+    } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
@@ -179,22 +189,33 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
       return res.status(400).json({ error: 'At least one action is required' });
     }
 
-    const result = db.prepare(
-      'INSERT INTO automation_templates (name, description, category, conditions, condition_logic, actions, is_system) VALUES (?, ?, ?, ?, ?, ?, 0)'
-    ).run(
+    const result = db.prepare(`
+      INSERT INTO automation_templates
+        (name, description, category, conditions, condition_logic, actions, is_system,
+         parameters, agent_usage_notes, default_trigger_type, instantiation_trigger, target_effects)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+    `).run(
       name,
       description || null,
       category || 'General',
       JSON.stringify(conditions || []),
       condition_logic || 'AND',
-      JSON.stringify(actions)
+      JSON.stringify(actions),
+      JSON.stringify(parameters || []),
+      agent_usage_notes || null,
+      default_trigger_type || 'schedule',
+      instantiation_trigger ? JSON.stringify(instantiation_trigger) : null,
+      JSON.stringify(target_effects || []),
     );
 
     const newTemplate = db.prepare('SELECT * FROM automation_templates WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({
       ...newTemplate,
       conditions: JSON.parse(newTemplate.conditions || '[]'),
-      actions: JSON.parse(newTemplate.actions || '[]')
+      actions: JSON.parse(newTemplate.actions || '[]'),
+      parameters: JSON.parse(newTemplate.parameters || '[]'),
+      instantiation_trigger: newTemplate.instantiation_trigger ? JSON.parse(newTemplate.instantiation_trigger) : null,
+      target_effects: (() => { try { return JSON.parse(newTemplate.target_effects || '[]'); } catch { return []; } })(),
     });
   } catch (err) {
     console.error('Error creating automation template:', err);
@@ -210,18 +231,34 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
       return res.status(404).json({ error: 'Template not found' });
     }
 
-    const { name, description, category, conditions, condition_logic, actions } = req.body;
+    const {
+      name, description, category, conditions, condition_logic, actions,
+      parameters, agent_usage_notes, default_trigger_type, instantiation_trigger,
+      target_effects,
+    } = req.body;
 
     // Update the template
-    db.prepare(
-      "UPDATE automation_templates SET name = ?, description = ?, category = ?, conditions = ?, condition_logic = ?, actions = ?, updated_at = datetime('now') WHERE id = ?"
-    ).run(
+    db.prepare(`
+      UPDATE automation_templates
+      SET name = ?, description = ?, category = ?, conditions = ?, condition_logic = ?, actions = ?,
+          parameters = ?, agent_usage_notes = ?, default_trigger_type = ?, instantiation_trigger = ?,
+          target_effects = ?,
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
       name ?? template.name,
       description !== undefined ? description : template.description,
       category ?? template.category,
       conditions ? JSON.stringify(conditions) : template.conditions,
       condition_logic ?? template.condition_logic,
       actions ? JSON.stringify(actions) : template.actions,
+      parameters ? JSON.stringify(parameters) : template.parameters,
+      agent_usage_notes !== undefined ? agent_usage_notes : template.agent_usage_notes,
+      default_trigger_type ?? template.default_trigger_type,
+      instantiation_trigger !== undefined
+        ? (instantiation_trigger ? JSON.stringify(instantiation_trigger) : null)
+        : template.instantiation_trigger,
+      target_effects !== undefined ? JSON.stringify(target_effects) : template.target_effects,
       req.params.id
     );
 
@@ -249,6 +286,9 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
       ...updated,
       conditions: JSON.parse(updated.conditions || '[]'),
       actions: JSON.parse(updated.actions || '[]'),
+      parameters: JSON.parse(updated.parameters || '[]'),
+      instantiation_trigger: updated.instantiation_trigger ? JSON.parse(updated.instantiation_trigger) : null,
+      target_effects: (() => { try { return JSON.parse(updated.target_effects || '[]'); } catch { return []; } })(),
       propagated_to: propagated.changes
     });
   } catch (err) {

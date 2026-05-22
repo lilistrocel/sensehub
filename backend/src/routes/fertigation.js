@@ -1,6 +1,7 @@
 const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
+const { fertigationDoseScheduler } = require('../services/FertigationDoseScheduler');
 
 const router = express.Router();
 
@@ -16,14 +17,51 @@ router.get('/ingredients', (req, res) => {
 });
 
 // POST /api/fertigation/ingredients - Create ingredient
+// Accepts optional composition fields so the AI agronomist can predict delivered ppm.
 router.post('/ingredients', requireRole('admin', 'operator'), (req, res) => {
-  const { name } = req.body;
+  const { name, form, density_kg_per_l, compatibility_group, composition, notes } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
   try {
-    const result = db.prepare('INSERT INTO fertigation_ingredients (name) VALUES (?)').run(name.trim());
-    res.json({ id: result.lastInsertRowid, name: name.trim() });
+    const result = db.prepare(`
+      INSERT INTO fertigation_ingredients (name, form, density_kg_per_l, compatibility_group, composition, notes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      name.trim(),
+      form || 'solid',
+      density_kg_per_l ?? 1,
+      compatibility_group || null,
+      composition ? JSON.stringify(composition) : null,
+      notes || null,
+    );
+    res.json(db.prepare('SELECT * FROM fertigation_ingredients WHERE id = ?').get(result.lastInsertRowid));
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'Ingredient already exists' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/fertigation/ingredients/:id - Edit ingredient (composition, form, group, notes)
+router.put('/ingredients/:id', requireRole('admin', 'operator'), (req, res) => {
+  const { name, form, density_kg_per_l, compatibility_group, composition, notes } = req.body;
+  try {
+    const cur = db.prepare('SELECT * FROM fertigation_ingredients WHERE id = ?').get(req.params.id);
+    if (!cur) return res.status(404).json({ error: 'Ingredient not found' });
+    db.prepare(`
+      UPDATE fertigation_ingredients
+      SET name = ?, form = ?, density_kg_per_l = ?, compatibility_group = ?, composition = ?, notes = ?
+      WHERE id = ?
+    `).run(
+      name?.trim() || cur.name,
+      form || cur.form,
+      density_kg_per_l ?? cur.density_kg_per_l,
+      compatibility_group !== undefined ? compatibility_group : cur.compatibility_group,
+      composition !== undefined ? (composition ? JSON.stringify(composition) : null) : cur.composition,
+      notes !== undefined ? notes : cur.notes,
+      req.params.id,
+    );
+    res.json(db.prepare('SELECT * FROM fertigation_ingredients WHERE id = ?').get(req.params.id));
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'Name already in use' });
     res.status(500).json({ error: err.message });
   }
 });
@@ -79,10 +117,12 @@ router.post('/mixtures', requireRole('admin', 'operator'), (req, res) => {
     const result = db.prepare("INSERT INTO fertigation_mixtures (name, description) VALUES (?, ?)").run(name.trim(), description || null);
     const mixtureId = result.lastInsertRowid;
 
-    const insertItem = db.prepare('INSERT INTO fertigation_mixture_items (mixture_id, ingredient_id, parts) VALUES (?, ?, ?)');
+    const insertItem = db.prepare('INSERT INTO fertigation_mixture_items (mixture_id, ingredient_id, parts, amount, unit) VALUES (?, ?, ?, ?, ?)');
     for (const item of items) {
-      if (!item.ingredient_id || !item.parts || item.parts <= 0) continue;
-      insertItem.run(mixtureId, item.ingredient_id, item.parts);
+      const parts = item.parts && item.parts > 0 ? item.parts : 1;
+      const amount = (item.amount != null && item.amount !== '' && Number.isFinite(parseFloat(item.amount))) ? parseFloat(item.amount) : null;
+      if (!item.ingredient_id || (parts <= 0 && amount == null)) continue;
+      insertItem.run(mixtureId, item.ingredient_id, parts, amount, item.unit || 'kg');
     }
 
     // Return full mixture
@@ -114,10 +154,12 @@ router.put('/mixtures/:id', requireRole('admin', 'operator'), (req, res) => {
     if (items && Array.isArray(items)) {
       // Replace all items
       db.prepare('DELETE FROM fertigation_mixture_items WHERE mixture_id = ?').run(mixtureId);
-      const insertItem = db.prepare('INSERT INTO fertigation_mixture_items (mixture_id, ingredient_id, parts) VALUES (?, ?, ?)');
+      const insertItem = db.prepare('INSERT INTO fertigation_mixture_items (mixture_id, ingredient_id, parts, amount, unit) VALUES (?, ?, ?, ?, ?)');
       for (const item of items) {
-        if (!item.ingredient_id || !item.parts || item.parts <= 0) continue;
-        insertItem.run(mixtureId, item.ingredient_id, item.parts);
+        const parts = item.parts && item.parts > 0 ? item.parts : 1;
+        const amount = (item.amount != null && item.amount !== '' && Number.isFinite(parseFloat(item.amount))) ? parseFloat(item.amount) : null;
+        if (!item.ingredient_id || (parts <= 0 && amount == null)) continue;
+        insertItem.run(mixtureId, item.ingredient_id, parts, amount, item.unit || 'kg');
       }
     }
 
@@ -151,14 +193,19 @@ router.delete('/mixtures/:id', requireRole('admin', 'operator'), (req, res) => {
 
 // ─── Channel Config ───
 
-// GET /api/fertigation/channels - List all channel configs with equipment name + mixture info
+// GET /api/fertigation/channels - List all channel configs with equipment name + mixture/tank info
 router.get('/channels', (req, res) => {
   try {
     const channels = db.prepare(`
-      SELECT rc.*, e.name as equipment_name, fm.name as mixture_name
+      SELECT rc.*,
+             e.name as equipment_name,
+             fm.name as mixture_name,
+             ft.name as tank_name,
+             ft.role as tank_role
       FROM relay_channel_config rc
       JOIN equipment e ON rc.equipment_id = e.id
       LEFT JOIN fertigation_mixtures fm ON rc.mixture_id = fm.id
+      LEFT JOIN fertigation_tanks ft ON rc.tank_id = ft.id
       ORDER BY e.name, rc.channel
     `).all();
     res.json(channels);
@@ -167,13 +214,18 @@ router.get('/channels', (req, res) => {
   }
 });
 
-// PUT /api/fertigation/channels/:equipmentId/:channel - Upsert channel config
+// PUT /api/fertigation/channels/:equipmentId/:channel - Upsert channel config.
+// Accepts one of tank_id (preferred), mixture_id, or ingredient_name. When tank_id is
+// supplied the tank's mixture_id is copied over so existing consumption queries that rely
+// on mixture_id keep working, and the tank's equipment_id/channel are kept in sync.
 router.put('/channels/:equipmentId/:channel', requireRole('admin', 'operator'), (req, res) => {
   const { equipmentId, channel } = req.params;
-  const { ingredient_name, mixture_id, flow_rate, flow_unit } = req.body;
+  const { tank_id, ingredient_name, mixture_id, flow_rate, flow_unit } = req.body;
 
   if (flow_rate == null) return res.status(400).json({ error: 'flow_rate is required' });
-  if (!ingredient_name && !mixture_id) return res.status(400).json({ error: 'Either ingredient_name or mixture_id is required' });
+  if (!tank_id && !ingredient_name && !mixture_id) {
+    return res.status(400).json({ error: 'Provide tank_id, mixture_id, or ingredient_name' });
+  }
 
   const flowRateNum = parseFloat(flow_rate);
   if (isNaN(flowRateNum) || flowRateNum <= 0) return res.status(400).json({ error: 'flow_rate must be a positive number' });
@@ -181,18 +233,52 @@ router.put('/channels/:equipmentId/:channel', requireRole('admin', 'operator'), 
   const equipment = db.prepare('SELECT id FROM equipment WHERE id = ?').get(equipmentId);
   if (!equipment) return res.status(404).json({ error: 'Equipment not found' });
 
+  // Resolve tank binding: pull tank's mixture_id so legacy consumption queries still work.
+  let resolvedTankId = tank_id ? parseInt(tank_id) : null;
+  let resolvedMixtureId = mixture_id ? parseInt(mixture_id) : null;
+  let resolvedIngredient = mixture_id || tank_id ? null : (ingredient_name || null);
+  let tankRecord = null;
+  if (resolvedTankId) {
+    tankRecord = db.prepare('SELECT id, mixture_id FROM fertigation_tanks WHERE id = ?').get(resolvedTankId);
+    if (!tankRecord) return res.status(404).json({ error: 'Tank not found' });
+    resolvedMixtureId = tankRecord.mixture_id;
+  }
+
   try {
-    db.prepare(`
-      INSERT INTO relay_channel_config (equipment_id, channel, ingredient_name, mixture_id, flow_rate, flow_unit, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-      ON CONFLICT(equipment_id, channel)
-      DO UPDATE SET ingredient_name = excluded.ingredient_name, mixture_id = excluded.mixture_id, flow_rate = excluded.flow_rate, flow_unit = excluded.flow_unit, updated_at = datetime('now')
-    `).run(parseInt(equipmentId), parseInt(channel), mixture_id ? null : (ingredient_name || null), mixture_id ? parseInt(mixture_id) : null, flowRateNum, flow_unit || 'L/min');
+    const tx = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO relay_channel_config (equipment_id, channel, tank_id, ingredient_name, mixture_id, flow_rate, flow_unit, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(equipment_id, channel)
+        DO UPDATE SET tank_id = excluded.tank_id, ingredient_name = excluded.ingredient_name,
+                      mixture_id = excluded.mixture_id, flow_rate = excluded.flow_rate,
+                      flow_unit = excluded.flow_unit, updated_at = datetime('now')
+      `).run(
+        parseInt(equipmentId), parseInt(channel),
+        resolvedTankId, resolvedIngredient, resolvedMixtureId,
+        flowRateNum, flow_unit || 'L/min',
+      );
+
+      // Keep the tank's equipment_id/channel mirror in sync when bound.
+      if (tankRecord) {
+        // Clear any other tank that thought it owned this (equipment, channel) pair.
+        db.prepare(`
+          UPDATE fertigation_tanks SET equipment_id = NULL, channel = NULL, updated_at = CURRENT_TIMESTAMP
+          WHERE equipment_id = ? AND channel = ? AND id != ?
+        `).run(parseInt(equipmentId), parseInt(channel), tankRecord.id);
+        db.prepare(`
+          UPDATE fertigation_tanks SET equipment_id = ?, channel = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(parseInt(equipmentId), parseInt(channel), tankRecord.id);
+      }
+    });
+    tx();
 
     const config = db.prepare(`
-      SELECT rc.*, fm.name as mixture_name
+      SELECT rc.*, fm.name as mixture_name, ft.name as tank_name, ft.role as tank_role
       FROM relay_channel_config rc
       LEFT JOIN fertigation_mixtures fm ON rc.mixture_id = fm.id
+      LEFT JOIN fertigation_tanks ft ON rc.tank_id = ft.id
       WHERE rc.equipment_id = ? AND rc.channel = ?
     `).get(parseInt(equipmentId), parseInt(channel));
 
@@ -412,5 +498,802 @@ function calculateConsumption(from, to, groupBy) {
 
   return result;
 }
+
+// ─── Tanks ───
+//
+// A fertigation tank is a physical stock container (typically 1000 L) wired to a
+// fertigation pump channel. The tank holds a finished solution (water + dissolved
+// ingredients) recorded via refill events; the pump doses from it into the irrigation
+// line. The stock level depletes as the pump runs.
+
+const ELEMENTS = ['N','P','K','Ca','Mg','S','Fe','Cu','Mn','Mo','Zn','B','Cl','Na'];
+
+function loadMixtureItems(mixtureId) {
+  if (!mixtureId) return [];
+  return db.prepare(`
+    SELECT mi.ingredient_id, mi.parts, mi.amount, mi.unit,
+           fi.name, fi.form, fi.density_kg_per_l, fi.compatibility_group, fi.composition
+    FROM fertigation_mixture_items mi
+    JOIN fertigation_ingredients fi ON mi.ingredient_id = fi.id
+    WHERE mi.mixture_id = ?
+  `).all(mixtureId);
+}
+
+// Compute milligrams of each element delivered by 1 L of finished stock solution.
+// For solids: amount_kg * (composition_pct / 100) * 1e6 mg / water_base_liters
+// For liquids: amount_L * density_kg_per_l * (composition_g_per_L equivalent / 100) * 1e6 / water_base_liters
+// (We treat composition values uniformly as % by weight; for liquids the operator's reported
+//  amount in L is converted to kg via density. This is a simplification — refine if a liquid
+//  supplier label gives g/L directly.)
+function stockElementalMgPerL(items, waterBaseLiters) {
+  const out = {};
+  if (!waterBaseLiters || waterBaseLiters <= 0) return out;
+  for (const it of items) {
+    if (!it.amount || it.amount <= 0) continue;
+    const massKg = (it.unit === 'L' || it.unit === 'mL')
+      ? (it.unit === 'mL' ? it.amount / 1000 : it.amount) * (it.density_kg_per_l || 1)
+      : (it.unit === 'g' ? it.amount / 1000 : it.amount); // assume kg if not specified
+    let comp = {};
+    try { comp = it.composition ? JSON.parse(it.composition) : {}; } catch (_) {}
+    for (const [el, pct] of Object.entries(comp)) {
+      if (!ELEMENTS.includes(el)) continue;
+      const mg = massKg * (pct / 100) * 1e6; // total mg of element in the whole tank
+      out[el] = (out[el] || 0) + mg / waterBaseLiters;
+    }
+  }
+  return out;
+}
+
+// Round all values in an object to N decimal places.
+function round(obj, dp = 2) {
+  const f = Math.pow(10, dp);
+  const r = {};
+  for (const [k, v] of Object.entries(obj)) r[k] = Math.round(v * f) / f;
+  return r;
+}
+
+function attachTankComputed(tank) {
+  const items = loadMixtureItems(tank.mixture_id);
+  const stockMgPerL = stockElementalMgPerL(items, tank.water_base_liters);
+  return {
+    ...tank,
+    items,
+    stock_mg_per_l: round(stockMgPerL),
+  };
+}
+
+// GET /api/fertigation/tanks - List all tanks with computed stock composition
+router.get('/tanks', (req, res) => {
+  try {
+    const tanks = db.prepare(`
+      SELECT t.*, e.name as equipment_name, m.name as mixture_name
+      FROM fertigation_tanks t
+      LEFT JOIN equipment e ON t.equipment_id = e.id
+      LEFT JOIN fertigation_mixtures m ON t.mixture_id = m.id
+      ORDER BY t.id
+    `).all();
+    res.json(tanks.map(attachTankComputed));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fertigation/tanks/:id - Tank detail + recent refill history
+router.get('/tanks/:id', (req, res) => {
+  try {
+    const tank = db.prepare(`
+      SELECT t.*, e.name as equipment_name, m.name as mixture_name
+      FROM fertigation_tanks t
+      LEFT JOIN equipment e ON t.equipment_id = e.id
+      LEFT JOIN fertigation_mixtures m ON t.mixture_id = m.id
+      WHERE t.id = ?
+    `).get(req.params.id);
+    if (!tank) return res.status(404).json({ error: 'Tank not found' });
+    const refills = db.prepare(`
+      SELECT r.*, u.email as user_email
+      FROM fertigation_tank_refills r
+      LEFT JOIN users u ON r.user_id = u.id
+      WHERE r.tank_id = ?
+      ORDER BY r.refilled_at DESC
+      LIMIT 50
+    `).all(req.params.id).map(r => ({
+      ...r,
+      composition_snapshot: r.composition_snapshot ? JSON.parse(r.composition_snapshot) : null,
+    }));
+    res.json({ ...attachTankComputed(tank), refills });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/fertigation/tanks - Create tank
+router.post('/tanks', requireRole('admin', 'operator'), (req, res) => {
+  const { name, equipment_id, channel, role, capacity_liters, water_base_liters, current_stock_liters, mixture_id, active, notes } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const r = db.prepare(`
+      INSERT INTO fertigation_tanks
+        (name, equipment_id, channel, role, capacity_liters, water_base_liters, current_stock_liters, mixture_id, active, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      name.trim(),
+      equipment_id ?? null,
+      channel ?? null,
+      role || 'nutrient',
+      capacity_liters ?? 1000,
+      water_base_liters ?? (capacity_liters ?? 1000),
+      current_stock_liters ?? 0,
+      mixture_id ?? null,
+      active === 0 ? 0 : 1,
+      notes || null,
+    );
+    res.json(db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(r.lastInsertRowid));
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'A tank is already assigned to that equipment/channel' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/fertigation/tanks/:id - Update tank
+router.put('/tanks/:id', requireRole('admin', 'operator'), (req, res) => {
+  try {
+    const cur = db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id);
+    if (!cur) return res.status(404).json({ error: 'Tank not found' });
+    const f = (k, fallback) => req.body[k] !== undefined ? req.body[k] : fallback;
+    db.prepare(`
+      UPDATE fertigation_tanks SET
+        name = ?, equipment_id = ?, channel = ?, role = ?,
+        capacity_liters = ?, water_base_liters = ?, current_stock_liters = ?,
+        mixture_id = ?, active = ?, notes = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      f('name', cur.name)?.trim?.() || cur.name,
+      f('equipment_id', cur.equipment_id),
+      f('channel', cur.channel),
+      f('role', cur.role),
+      f('capacity_liters', cur.capacity_liters),
+      f('water_base_liters', cur.water_base_liters),
+      f('current_stock_liters', cur.current_stock_liters),
+      f('mixture_id', cur.mixture_id),
+      f('active', cur.active),
+      f('notes', cur.notes),
+      req.params.id,
+    );
+    res.json(db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id));
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'A tank is already assigned to that equipment/channel' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/fertigation/tanks/:id - Remove tank (refills cascade)
+router.delete('/tanks/:id', requireRole('admin', 'operator'), (req, res) => {
+  try {
+    const r = db.prepare('DELETE FROM fertigation_tanks WHERE id = ?').run(req.params.id);
+    if (r.changes === 0) return res.status(404).json({ error: 'Tank not found' });
+    res.json({ message: 'Tank deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/fertigation/tanks/:id/refill
+// Records a refill event and resets the tank's current_stock_liters. The recipe at refill
+// time is snapshotted as JSON so historical batches stay accurate even if the recipe later
+// changes. Body: { water_liters_added, mixture_id?, notes? }. If mixture_id is omitted the
+// tank's currently configured mixture is used.
+router.post('/tanks/:id/refill', requireRole('admin', 'operator'), (req, res) => {
+  const { water_liters_added, mixture_id, notes, use_pending_mixture } = req.body;
+  const liters = parseFloat(water_liters_added);
+  if (!Number.isFinite(liters) || liters <= 0) {
+    return res.status(400).json({ error: 'water_liters_added must be a positive number' });
+  }
+  try {
+    const tank = db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id);
+    if (!tank) return res.status(404).json({ error: 'Tank not found' });
+    // Three sources of recipe at refill time, in priority order:
+    //   1. caller explicitly passed mixture_id → use that
+    //   2. use_pending_mixture=true → adopt the pending recipe (and clear the pointer)
+    //   3. otherwise keep the tank's current mixture
+    let mixId = mixture_id ?? null;
+    let adoptedPending = false;
+    if (mixId == null && use_pending_mixture && tank.pending_mixture_id) {
+      mixId = tank.pending_mixture_id;
+      adoptedPending = true;
+    }
+    if (mixId == null) mixId = tank.mixture_id;
+    const items = loadMixtureItems(mixId);
+    const snapshot = {
+      mixture_id: mixId,
+      water_liters: liters,
+      items: items.map(it => ({
+        ingredient_id: it.ingredient_id,
+        name: it.name,
+        amount: it.amount,
+        unit: it.unit,
+        composition: it.composition ? JSON.parse(it.composition) : null,
+      })),
+    };
+    const newStock = Math.min(tank.capacity_liters || liters, (tank.current_stock_liters || 0) + liters);
+    const tx = db.transaction(() => {
+      const result = db.prepare(`
+        INSERT INTO fertigation_tank_refills
+          (tank_id, water_liters_added, total_volume_after, mixture_id, composition_snapshot, user_id, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        req.params.id,
+        liters,
+        newStock,
+        mixId,
+        JSON.stringify(snapshot),
+        req.user?.id || null,
+        notes || null,
+      );
+      db.prepare(`
+        UPDATE fertigation_tanks SET
+          current_stock_liters = ?,
+          water_base_liters = ?,
+          mixture_id = COALESCE(?, mixture_id),
+          pending_mixture_id = CASE WHEN ? = 1 THEN NULL ELSE pending_mixture_id END,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(newStock, liters, mixId, adoptedPending ? 1 : 0, req.params.id);
+      return result.lastInsertRowid;
+    });
+    const refillId = tx();
+    res.json({
+      refill_id: refillId,
+      tank: db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fertigation/tanks/:id/ppm-preview
+//
+// Predict element ppm in the irrigation line. The dose ratio is the Venturi pump's
+// flow rate divided by the irrigation water pump's flow rate (both in L/min):
+//
+//   dilution = venturi_flow_lpm / water_flow_lpm   (e.g. 1.7 / 257.5 ≈ 1:151)
+//   irrigation_ppm[el] = stock_mg_per_l[el] × dilution
+//
+// Defaults:
+//   - venturi_flow_lpm: pulled from the tank's bound channel config (relay_channel_config.flow_rate)
+//   - water_flow_lpm: average flow_rate of relay_channel_config rows whose ingredient_name = 'Water',
+//                     or the value supplied via query string. Caller can override either.
+// Query overrides: ?venturi_lpm=1.7&water_lpm=257.5
+router.get('/tanks/:id/ppm-preview', (req, res) => {
+  try {
+    const tank = db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id);
+    if (!tank) return res.status(404).json({ error: 'Tank not found' });
+
+    let venturi = parseFloat(req.query.venturi_lpm);
+    if (!Number.isFinite(venturi) || venturi <= 0) {
+      if (tank.equipment_id && tank.channel) {
+        const ch = db.prepare(`
+          SELECT flow_rate FROM relay_channel_config
+          WHERE equipment_id = ? AND channel = ?
+        `).get(tank.equipment_id, tank.channel);
+        if (ch && ch.flow_rate > 0) venturi = ch.flow_rate;
+      }
+    }
+
+    let water = parseFloat(req.query.water_lpm);
+    if (!Number.isFinite(water) || water <= 0) {
+      const row = db.prepare(`
+        SELECT AVG(flow_rate) as avg_flow FROM relay_channel_config
+        WHERE ingredient_name = 'Water' AND flow_rate > 0
+      `).get();
+      if (row && row.avg_flow > 0) water = row.avg_flow;
+    }
+
+    const items = loadMixtureItems(tank.mixture_id);
+    const stock = stockElementalMgPerL(items, tank.water_base_liters);
+
+    let dilution = null;
+    const irrigation = {};
+    if (venturi > 0 && water > 0) {
+      dilution = venturi / water;
+      for (const [el, mgPerL] of Object.entries(stock)) irrigation[el] = mgPerL * dilution;
+    }
+
+    res.json({
+      tank_id: tank.id,
+      water_base_liters: tank.water_base_liters,
+      venturi_lpm: Number.isFinite(venturi) ? venturi : null,
+      water_lpm: Number.isFinite(water) ? water : null,
+      dilution_ratio: dilution,
+      stock_mg_per_l: round(stock),
+      irrigation_ppm: dilution ? round(irrigation, 3) : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Dose Programs ───
+//
+// A dose program is a reusable "during a fertigation cycle, what % of the time should
+// each tank's injector valve be open?" recipe. Operator and AI planner both consume
+// the same library. Planner picks among status='published' only.
+
+function loadProgramTanks(programId) {
+  return db.prepare(`
+    SELECT pt.*, t.name as tank_name, t.role as tank_role, t.equipment_id, t.channel,
+           t.mixture_id, t.water_base_liters
+    FROM fertigation_dose_program_tanks pt
+    JOIN fertigation_tanks t ON pt.tank_id = t.id
+    WHERE pt.program_id = ?
+    ORDER BY pt.priority, pt.tank_id
+  `).all(programId);
+}
+
+function attachProgramComputed(prog) {
+  if (!prog) return prog;
+  let target_ppm = null;
+  try { target_ppm = prog.target_ppm ? JSON.parse(prog.target_ppm) : null; } catch (_) {}
+  return {
+    ...prog,
+    target_ppm,
+    tanks: loadProgramTanks(prog.id),
+  };
+}
+
+// GET /api/fertigation/dose-programs
+router.get('/dose-programs', (req, res) => {
+  try {
+    const status = req.query.status; // optional filter: 'draft', 'published', 'archived'
+    const where = status ? 'WHERE status = ?' : '';
+    const args = status ? [status] : [];
+    const rows = db.prepare(`SELECT * FROM fertigation_dose_programs ${where} ORDER BY status, name`).all(...args);
+    res.json(rows.map(attachProgramComputed));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fertigation/dose-programs/:id
+router.get('/dose-programs/:id', (req, res) => {
+  try {
+    const prog = db.prepare('SELECT * FROM fertigation_dose_programs WHERE id = ?').get(req.params.id);
+    if (!prog) return res.status(404).json({ error: 'Dose program not found' });
+    res.json(attachProgramComputed(prog));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+function writeProgramTanks(programId, tanks) {
+  db.prepare('DELETE FROM fertigation_dose_program_tanks WHERE program_id = ?').run(programId);
+  if (!Array.isArray(tanks)) return;
+  const ins = db.prepare(`
+    INSERT INTO fertigation_dose_program_tanks (program_id, tank_id, duty_pct, priority, compatibility_slot)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  for (const t of tanks) {
+    if (!t.tank_id) continue;
+    const duty = Math.max(0, Math.min(100, parseFloat(t.duty_pct ?? 0) || 0));
+    ins.run(programId, t.tank_id, duty, t.priority ?? 0, t.compatibility_slot ?? null);
+  }
+}
+
+// POST /api/fertigation/dose-programs
+router.post('/dose-programs', requireRole('admin', 'operator'), (req, res) => {
+  const b = req.body || {};
+  if (!b.name || !String(b.name).trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const tx = db.transaction(() => {
+      const r = db.prepare(`
+        INSERT INTO fertigation_dose_programs
+          (name, description, window_seconds, min_valve_on_seconds, min_valve_off_seconds,
+           target_ec, target_ph, target_ppm, compatibility_strategy, status, created_by, origin, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        String(b.name).trim(),
+        b.description || null,
+        Math.max(5, parseInt(b.window_seconds) || 60),
+        Math.max(1, parseInt(b.min_valve_on_seconds) || 5),
+        Math.max(1, parseInt(b.min_valve_off_seconds) || 5),
+        b.target_ec ?? null,
+        b.target_ph ?? null,
+        b.target_ppm ? JSON.stringify(b.target_ppm) : null,
+        ['permissive', 'time_slice'].includes(b.compatibility_strategy) ? b.compatibility_strategy : 'permissive',
+        ['draft', 'published', 'archived'].includes(b.status) ? b.status : 'draft',
+        req.user?.id || null,
+        ['manual', 'planner', 'agronomist'].includes(b.origin) ? b.origin : 'manual',
+        b.notes || null,
+      );
+      writeProgramTanks(r.lastInsertRowid, b.tanks);
+      return r.lastInsertRowid;
+    });
+    const id = tx();
+    res.json(attachProgramComputed(db.prepare('SELECT * FROM fertigation_dose_programs WHERE id = ?').get(id)));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/fertigation/dose-programs/:id
+router.put('/dose-programs/:id', requireRole('admin', 'operator'), (req, res) => {
+  const id = parseInt(req.params.id);
+  const cur = db.prepare('SELECT * FROM fertigation_dose_programs WHERE id = ?').get(id);
+  if (!cur) return res.status(404).json({ error: 'Dose program not found' });
+  const b = req.body || {};
+  const f = (k, fallback) => b[k] !== undefined ? b[k] : fallback;
+  try {
+    const tx = db.transaction(() => {
+      db.prepare(`
+        UPDATE fertigation_dose_programs SET
+          name = ?, description = ?, window_seconds = ?,
+          min_valve_on_seconds = ?, min_valve_off_seconds = ?,
+          target_ec = ?, target_ph = ?, target_ppm = ?,
+          compatibility_strategy = ?, status = ?, notes = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+        (f('name', cur.name) || '').trim() || cur.name,
+        f('description', cur.description),
+        Math.max(5, parseInt(f('window_seconds', cur.window_seconds)) || 60),
+        Math.max(1, parseInt(f('min_valve_on_seconds', cur.min_valve_on_seconds)) || 5),
+        Math.max(1, parseInt(f('min_valve_off_seconds', cur.min_valve_off_seconds)) || 5),
+        f('target_ec', cur.target_ec),
+        f('target_ph', cur.target_ph),
+        b.target_ppm !== undefined ? (b.target_ppm ? JSON.stringify(b.target_ppm) : null) : cur.target_ppm,
+        ['permissive', 'time_slice'].includes(f('compatibility_strategy', cur.compatibility_strategy)) ? f('compatibility_strategy', cur.compatibility_strategy) : cur.compatibility_strategy,
+        ['draft', 'published', 'archived'].includes(f('status', cur.status)) ? f('status', cur.status) : cur.status,
+        f('notes', cur.notes),
+        id,
+      );
+      if (Array.isArray(b.tanks)) writeProgramTanks(id, b.tanks);
+    });
+    tx();
+    res.json(attachProgramComputed(db.prepare('SELECT * FROM fertigation_dose_programs WHERE id = ?').get(id)));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/fertigation/dose-programs/:id
+router.delete('/dose-programs/:id', requireRole('admin', 'operator'), (req, res) => {
+  try {
+    const r = db.prepare('DELETE FROM fertigation_dose_programs WHERE id = ?').run(req.params.id);
+    if (r.changes === 0) return res.status(404).json({ error: 'Dose program not found' });
+    res.json({ message: 'Dose program deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/fertigation/dose-programs/:id/publish — convenience: flip status to published
+router.post('/dose-programs/:id/publish', requireRole('admin', 'operator'), (req, res) => {
+  try {
+    const r = db.prepare("UPDATE fertigation_dose_programs SET status = 'published', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
+    if (r.changes === 0) return res.status(404).json({ error: 'Dose program not found' });
+    res.json(attachProgramComputed(db.prepare('SELECT * FROM fertigation_dose_programs WHERE id = ?').get(req.params.id)));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fertigation/dose-programs/:id/ppm-preview?water_lpm=257.5
+//
+// Predicted irrigation ppm with this program: for each tank in the program with
+// duty>0, compute stock_mg/L × (venturi/water) × (duty/100), sum per element.
+// venturi = bound channel's flow_rate; water = avg of "Water" channels.
+router.get('/dose-programs/:id/ppm-preview', (req, res) => {
+  try {
+    const prog = db.prepare('SELECT * FROM fertigation_dose_programs WHERE id = ?').get(req.params.id);
+    if (!prog) return res.status(404).json({ error: 'Dose program not found' });
+
+    let waterLpm = parseFloat(req.query.water_lpm);
+    if (!Number.isFinite(waterLpm) || waterLpm <= 0) {
+      const row = db.prepare(`
+        SELECT AVG(flow_rate) as avg_flow FROM relay_channel_config
+        WHERE ingredient_name = 'Water' AND flow_rate > 0
+      `).get();
+      if (row && row.avg_flow > 0) waterLpm = row.avg_flow;
+    }
+
+    const tanks = loadProgramTanks(prog.id);
+    const totalPpm = {};
+    const perTank = [];
+    for (const t of tanks) {
+      if (!t.duty_pct || !t.mixture_id) {
+        perTank.push({ tank_id: t.tank_id, tank_name: t.tank_name, duty_pct: t.duty_pct, irrigation_ppm: null, reason: 'No recipe or duty=0' });
+        continue;
+      }
+      const venturi = t.equipment_id && t.channel ? db.prepare(`
+        SELECT flow_rate FROM relay_channel_config WHERE equipment_id = ? AND channel = ?
+      `).get(t.equipment_id, t.channel)?.flow_rate : null;
+      if (!venturi || !waterLpm) {
+        perTank.push({ tank_id: t.tank_id, tank_name: t.tank_name, duty_pct: t.duty_pct, irrigation_ppm: null, reason: 'Unbound channel or no water flow rate' });
+        continue;
+      }
+      const items = loadMixtureItems(t.mixture_id);
+      const stock = stockElementalMgPerL(items, t.water_base_liters);
+      const dilution = (venturi / waterLpm) * (t.duty_pct / 100);
+      const irrPpm = {};
+      for (const [el, mgPerL] of Object.entries(stock)) {
+        const ppm = mgPerL * dilution;
+        irrPpm[el] = ppm;
+        totalPpm[el] = (totalPpm[el] || 0) + ppm;
+      }
+      perTank.push({
+        tank_id: t.tank_id,
+        tank_name: t.tank_name,
+        duty_pct: t.duty_pct,
+        venturi_lpm: venturi,
+        irrigation_ppm: round(irrPpm, 3),
+      });
+    }
+
+    res.json({
+      program_id: prog.id,
+      water_lpm: waterLpm || null,
+      window_seconds: prog.window_seconds,
+      compatibility_strategy: prog.compatibility_strategy,
+      per_tank: perTank,
+      total_irrigation_ppm: round(totalPpm, 3),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Element Targets ───
+//
+// Per-element ppm bounds + priority that the AI planner uses when picking duty
+// cycles or proposing mixture changes. Rows with crop_assignment_id=NULL +
+// growth_stage=NULL are system-wide defaults. The planner resolves a target for
+// crop X / stage Y by trying (X, Y) → (X, NULL) → (NULL, NULL).
+
+const ELEMENT_WHITELIST = [
+  // Elemental forms (used by tank-composition / dose-program math)
+  'N', 'P', 'K', 'Ca', 'Mg', 'S', 'Fe', 'Cu', 'Mn', 'Mo', 'Zn', 'B', 'Cl', 'Na',
+  // Ionic forms (emitted by AMIC — labels match lab_readings.nutrient values)
+  'nitrate_NO3', 'ammonium_NH4', 'potassium_K', 'calcium_Ca', 'magnesium_Mg',
+  'sulfate_SO4', 'phosphate_PO4', 'chloride_Cl', 'sodium_Na',
+];
+
+// GET /api/fertigation/element-targets?crop_assignment_id=...
+router.get('/element-targets', (req, res) => {
+  try {
+    const cropId = req.query.crop_assignment_id;
+    const where = [];
+    const args = [];
+    if (cropId === 'null' || cropId === '') {
+      where.push('crop_assignment_id IS NULL');
+    } else if (cropId) {
+      where.push('crop_assignment_id = ?'); args.push(parseInt(cropId));
+    }
+    const sql = `SELECT * FROM crop_element_targets ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY crop_assignment_id, growth_stage, element`;
+    res.json(db.prepare(sql).all(...args));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/fertigation/element-targets — upsert (idempotent by (crop, stage, element))
+router.post('/element-targets', requireRole('admin', 'operator'), (req, res) => {
+  const b = req.body || {};
+  if (!b.element || !ELEMENT_WHITELIST.includes(b.element)) return res.status(400).json({ error: 'element must be one of ' + ELEMENT_WHITELIST.join(', ') });
+  const priority = Math.max(1, Math.min(5, parseInt(b.priority) || 3));
+  try {
+    db.prepare(`
+      INSERT INTO crop_element_targets
+        (crop_assignment_id, growth_stage, element, hard_min, soft_target, hard_max, priority, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(crop_assignment_id, growth_stage, element)
+      DO UPDATE SET
+        hard_min = excluded.hard_min,
+        soft_target = excluded.soft_target,
+        hard_max = excluded.hard_max,
+        priority = excluded.priority,
+        notes = excluded.notes,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(
+      b.crop_assignment_id ?? null,
+      b.growth_stage ?? null,
+      b.element,
+      b.hard_min ?? null,
+      b.soft_target ?? null,
+      b.hard_max ?? null,
+      priority,
+      b.notes ?? null,
+    );
+    const row = db.prepare(`
+      SELECT * FROM crop_element_targets
+      WHERE COALESCE(crop_assignment_id,-1) = COALESCE(?,-1)
+        AND COALESCE(growth_stage,'') = COALESCE(?,'')
+        AND element = ?
+    `).get(b.crop_assignment_id ?? null, b.growth_stage ?? null, b.element);
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/fertigation/element-targets/:id
+router.delete('/element-targets/:id', requireRole('admin', 'operator'), (req, res) => {
+  try {
+    const r = db.prepare('DELETE FROM crop_element_targets WHERE id = ?').run(req.params.id);
+    if (r.changes === 0) return res.status(404).json({ error: 'Target not found' });
+    res.json({ message: 'Target deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/fertigation/tanks/:id/apply-pending-mixture
+// Swap the tank's active mixture to its pending one, clear the pending pointer.
+// Typically called from the refill flow once the operator physically mixes the
+// new recipe. Idempotent — no-op if there's no pending mixture.
+router.post('/tanks/:id/apply-pending-mixture', requireRole('admin', 'operator'), (req, res) => {
+  try {
+    const tank = db.prepare('SELECT id, pending_mixture_id, mixture_id FROM fertigation_tanks WHERE id = ?').get(req.params.id);
+    if (!tank) return res.status(404).json({ error: 'Tank not found' });
+    if (!tank.pending_mixture_id) return res.json({ changed: false, message: 'No pending mixture' });
+    db.prepare(`
+      UPDATE fertigation_tanks
+      SET mixture_id = pending_mixture_id, pending_mixture_id = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(req.params.id);
+    res.json({ changed: true, previous_mixture_id: tank.mixture_id, active_mixture_id: tank.pending_mixture_id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Dose Cycle Control ───
+//
+// The dose scheduler drives Waveshare valve relays during a fertigation cycle.
+// These endpoints are the surface for previewing a cycle, kicking one off manually
+// (e.g. for testing), and aborting one mid-cycle. The actual production trigger
+// will come from the automation system via a new template (next step).
+
+// POST /api/fertigation/dose-cycle/preview
+// Body: { program_id, duration_seconds }
+// Returns the deterministic per-valve schedule without writing anything.
+router.post('/dose-cycle/preview', (req, res) => {
+  const { program_id, duration_seconds } = req.body || {};
+  if (!program_id || !duration_seconds) return res.status(400).json({ error: 'program_id and duration_seconds required' });
+  try {
+    const prog = db.prepare('SELECT * FROM fertigation_dose_programs WHERE id = ?').get(program_id);
+    if (!prog) return res.status(404).json({ error: 'Dose program not found' });
+    const tanks = db.prepare(`
+      SELECT pt.*, t.equipment_id, t.channel, t.name as tank_name
+      FROM fertigation_dose_program_tanks pt
+      JOIN fertigation_tanks t ON pt.tank_id = t.id
+      WHERE pt.program_id = ?
+      ORDER BY pt.priority, pt.tank_id
+    `).all(program_id);
+    const schedule = fertigationDoseScheduler.computeSchedule({ ...prog, tanks }, parseFloat(duration_seconds));
+    res.json({ program_id, duration_seconds: parseFloat(duration_seconds), schedule });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/fertigation/dose-cycle/start
+// Body: { program_id, duration_seconds, dry_run? }
+// Begins a live cycle. Errors if a cycle is already running.
+router.post('/dose-cycle/start', requireRole('admin', 'operator'), async (req, res) => {
+  const { program_id, duration_seconds, dry_run } = req.body || {};
+  if (!program_id || !duration_seconds) return res.status(400).json({ error: 'program_id and duration_seconds required' });
+  try {
+    const result = await fertigationDoseScheduler.startCycle({
+      programId: parseInt(program_id),
+      durationSeconds: parseFloat(duration_seconds),
+      dryRun: !!dry_run,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/fertigation/dose-cycle/abort
+router.post('/dose-cycle/abort', requireRole('admin', 'operator'), async (req, res) => {
+  try {
+    const aborted = await fertigationDoseScheduler.abortCycle(req.body?.reason || 'manual stop');
+    res.json({ aborted });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fertigation/dose-cycle/status
+// Returns enriched cycle state for the UI: program/automation names, progress,
+// per-tank live valve states + next toggle time. Polled at ~2s by the live banner.
+router.get('/dose-cycle/status', (req, res) => {
+  const running = fertigationDoseScheduler.isRunning();
+  const cycle = fertigationDoseScheduler.currentCycle();
+  if (!running || !cycle) return res.json({ running: false });
+
+  const program = cycle.programId
+    ? db.prepare('SELECT id, name FROM fertigation_dose_programs WHERE id = ?').get(cycle.programId)
+    : null;
+  const automation = cycle.automationId
+    ? db.prepare('SELECT id, name FROM automations WHERE id = ?').get(cycle.automationId)
+    : null;
+
+  const nowMs = Date.now();
+  const elapsed = Math.max(0, Math.floor((nowMs - cycle.startedAt) / 1000));
+  const duration = Math.floor((cycle.endsAt - cycle.startedAt) / 1000);
+  const remaining = Math.max(0, duration - elapsed);
+
+  // For each tank in the schedule, look up the next valve event after "now"
+  // and derive the current state from valveStates map.
+  const tanks = (cycle.schedule?.tanks || []).map(t => {
+    const stateKey = `${t.equipment_id}:${t.channel}`;
+    const currentState = !!cycle.valveStates?.[stateKey];
+    // Find next event after current elapsed time.
+    const nextEv = (t.valve_events || []).find(ev => ev.at_sec > elapsed);
+    return {
+      tank_id: t.tank_id,
+      tank_name: t.tank_name,
+      equipment_id: t.equipment_id,
+      channel: t.channel,
+      duty_pct: t.duty_pct,
+      slot: t.slot,
+      current_state: currentState,
+      next_toggle_at_sec: nextEv?.at_sec ?? null,
+      next_toggle_state: nextEv?.state ?? null,
+      seconds_until_next: nextEv ? Math.max(0, nextEv.at_sec - elapsed) : null,
+    };
+  });
+
+  res.json({
+    running: true,
+    cycle_log_id: cycle.cycleLogId,
+    program,
+    automation,
+    started_at: new Date(cycle.startedAt).toISOString(),
+    ends_at: new Date(cycle.endsAt).toISOString(),
+    duration_seconds: duration,
+    elapsed_seconds: elapsed,
+    remaining_seconds: remaining,
+    progress_pct: duration > 0 ? Math.round((elapsed / duration) * 100) : 0,
+    compatibility_strategy: cycle.schedule?.compatibility_strategy,
+    window_seconds: cycle.schedule?.window_seconds,
+    tanks,
+  });
+});
+
+// GET /api/fertigation/dose-cycle/history?limit=20
+// Recent dose-cycle log rows enriched with program and automation names for the UI table.
+router.get('/dose-cycle/history', (req, res) => {
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+  try {
+    const rows = db.prepare(`
+      SELECT
+        dcl.id,
+        dcl.cycle_started_at,
+        dcl.cycle_ended_at,
+        dcl.duration_seconds,
+        dcl.status,
+        dcl.notes,
+        dcl.ec_trim_applied,
+        dcl.effective_duty_pcts,
+        dcl.program_id,
+        dcl.automation_id,
+        p.name AS program_name,
+        a.name AS automation_name
+      FROM fertigation_dose_cycle_log dcl
+      LEFT JOIN fertigation_dose_programs p ON p.id = dcl.program_id
+      LEFT JOIN automations a ON a.id = dcl.automation_id
+      ORDER BY dcl.cycle_started_at DESC
+      LIMIT ?
+    `).all(limit);
+    res.json(rows.map(r => ({
+      ...r,
+      effective_duty_pcts: (() => { try { return r.effective_duty_pcts ? JSON.parse(r.effective_duty_pcts) : null; } catch { return null; } })(),
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;

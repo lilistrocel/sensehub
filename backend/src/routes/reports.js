@@ -23,6 +23,15 @@ router.get('/daily', (req, res) => {
   try {
     const report = [];
 
+    // Discover power meters: any equipment that has logged an "Energy Imported" reading in kWh.
+    const powerMeters = db.prepare(`
+      SELECT DISTINCT r.equipment_id, e.name
+      FROM readings r
+      JOIN equipment e ON e.id = r.equipment_id
+      WHERE r.name = 'Energy Imported' AND r.unit = 'kWh'
+      ORDER BY r.equipment_id
+    `).all();
+
     for (let d = 0; d < days; d++) {
       const dayOffset = d;
       const dateStr = db.prepare(
@@ -130,6 +139,35 @@ router.get('/daily', (req, res) => {
         WHERE created_at BETWEEN ? AND ?
       `).get(dayStart, dayEnd).count;
 
+      // Power consumption per meter: daily kWh imported = MAX(value) - MIN(value)
+      // "Energy Imported" is a monotonically increasing cumulative counter, so the
+      // delta between first and last sample of the day is the day's consumption.
+      const power = {};
+      let powerTotalKwh = 0;
+      for (const pm of powerMeters) {
+        // readings.timestamp is stored in ISO-Z form (e.g. 2026-05-17T13:00:54.027Z),
+        // so match by extracted date rather than a space-separated BETWEEN range.
+        const row = db.prepare(`
+          SELECT MIN(value) as start_v, MAX(value) as end_v, COUNT(*) as samples
+          FROM readings
+          WHERE equipment_id = ? AND name = 'Energy Imported'
+            AND date(timestamp) = ?
+        `).get(pm.equipment_id, dateStr);
+        const kwh = (row && row.samples > 0 && row.start_v != null && row.end_v != null)
+          ? Math.max(0, row.end_v - row.start_v)
+          : 0;
+        const rounded = Math.round(kwh * 100) / 100;
+        power[pm.equipment_id] = {
+          equipment_id: pm.equipment_id,
+          name: pm.name,
+          kwh: rounded,
+          start: row?.start_v ?? null,
+          end: row?.end_v ?? null,
+          samples: row?.samples ?? 0,
+        };
+        powerTotalKwh += rounded;
+      }
+
       report.push({
         date: dateStr,
         water: {
@@ -156,7 +194,11 @@ router.get('/daily', (req, res) => {
           skipped_runs: autoStats.skipped_runs || 0,
           skipped_actions: totalSkippedActions
         },
-        drift_events: driftCount
+        drift_events: driftCount,
+        power: {
+          total_kwh: Math.round(powerTotalKwh * 100) / 100,
+          by_meter: power,
+        }
       });
     }
 
@@ -168,6 +210,7 @@ router.get('/daily', (req, res) => {
       days,
       water_equipment: { id: WATER_EQUIPMENT_ID, name: waterEq?.name },
       fertigation_equipment: { id: FERTIGATION_EQUIPMENT_ID, name: fertEq?.name },
+      power_meters: powerMeters,
       report
     });
   } catch (err) {

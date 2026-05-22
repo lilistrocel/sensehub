@@ -4,6 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useSettings } from '../context/SettingsContext';
 import { getChannelDisplayName } from '../utils/channelUtils';
+import {
+  CATEGORIES,
+  CATEGORY_MAP,
+  categorizeReading,
+  loadHiddenCategories,
+  saveHiddenCategories,
+} from '../utils/sensorCategories';
+import { formatScaled } from '../utils/unitScaling';
 
 const API_BASE = '/api';
 
@@ -213,10 +221,88 @@ export default function Dashboard() {
   const [selectedAlert, setSelectedAlert] = useState(null); // For alert details modal
   const [equipmentList, setEquipmentList] = useState([]); // For equipment controls
   const [activeCrops, setActiveCrops] = useState([]); // Crop assignments from A20Core
+  const [editingCrop, setEditingCrop] = useState(null); // crop being edited via modal
   const [controlLoading, setControlLoading] = useState({}); // Track loading state per equipment
   const [controlMessage, setControlMessage] = useState(null); // Control feedback message
   const [isRefreshing, setIsRefreshing] = useState(false); // Track manual refresh state
   const [lastRefreshTime, setLastRefreshTime] = useState(null); // Track last refresh time
+  const [hiddenCategories, setHiddenCategories] = useState(() => loadHiddenCategories()); // Set of category ids hidden from Live Sensor Readings
+
+  // Build {equipment_id -> type} lookup so categorization can fall back to equipment type
+  const equipmentTypeById = React.useMemo(() => {
+    const m = {};
+    for (const eq of equipmentList) m[eq.id] = eq.type;
+    return m;
+  }, [equipmentList]);
+
+  // Tag each reading with its category, exclude relays, and count per category
+  const { taggedReadings, categoryCounts, visibleReadings } = React.useMemo(() => {
+    const tagged = (sensorReadings || [])
+      .filter(r => equipmentTypeById[r.equipment_id] !== 'relay')
+      .map(r => ({ ...r, _category: categorizeReading(r, equipmentTypeById) }));
+    const counts = {};
+    for (const r of tagged) counts[r._category] = (counts[r._category] || 0) + 1;
+    const visible = tagged.filter(r => !hiddenCategories.has(r._category));
+    return { taggedReadings: tagged, categoryCounts: counts, visibleReadings: visible };
+  }, [sensorReadings, equipmentTypeById, hiddenCategories]);
+
+  const toggleCategory = (id) => {
+    setHiddenCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      saveHiddenCategories(next);
+      return next;
+    });
+  };
+
+  // ---- Consumption Tracker (kWh baselines) ----
+  const [baselines, setBaselines] = useState([]);
+  const [showAddBaseline, setShowAddBaseline] = useState(false);
+  const fetchBaselines = React.useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/baselines/active`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) setBaselines(await r.json());
+    } catch (e) { /* silent */ }
+  }, [token]);
+  useEffect(() => { if (token) fetchBaselines(); }, [token, fetchBaselines]);
+
+  const addBaseline = async (equipmentId, metricName, label) => {
+    try {
+      const r = await fetch(`${API_BASE}/baselines/equipment/${equipmentId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metric_name: metricName, label }),
+      });
+      if (r.ok) { await fetchBaselines(); setShowAddBaseline(false); }
+    } catch (e) { /* silent */ }
+  };
+  const removeBaseline = async (id) => {
+    try {
+      await fetch(`${API_BASE}/baselines/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      await fetchBaselines();
+    } catch (e) { /* silent */ }
+  };
+
+  // Map of (equipment_id|metric_name) -> latest reading, for live delta computation
+  const readingByKey = React.useMemo(() => {
+    const m = {};
+    for (const r of sensorReadings || []) m[`${r.equipment_id}|${r.name || ''}`] = r;
+    return m;
+  }, [sensorReadings]);
+
+  // Trackable metrics = any kWh-unit reading that's not already being tracked
+  const trackableOptions = React.useMemo(() => {
+    const taken = new Set(baselines.map(b => `${b.equipment_id}|${b.metric_name}`));
+    return (sensorReadings || [])
+      .filter(r => (r.unit === 'kWh') && !taken.has(`${r.equipment_id}|${r.name || ''}`))
+      .map(r => ({
+        equipment_id: r.equipment_id,
+        equipment_name: r.equipment_name,
+        metric_name: r.name || '',
+        current_value: r.value,
+        unit: r.unit,
+      }));
+  }, [sensorReadings, baselines]);
 
   // Check if user can control equipment (admin or operator only)
   const canControl = user?.role === 'admin' || user?.role === 'operator';
@@ -499,7 +585,11 @@ export default function Dashboard() {
       }
     };
     fetchZones();
-    // Fetch active crops
+    fetchActiveCrops();
+  }, [token]);
+
+  const fetchActiveCrops = React.useCallback(() => {
+    if (!token) return;
     fetch(`${API_BASE}/crops`, { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : [])
       .then(setActiveCrops)
@@ -896,13 +986,27 @@ export default function Dashboard() {
                   return (
                     <div key={crop.sensehub_crop_id} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                       <div className="flex items-start justify-between mb-2">
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <h3 className="text-sm font-bold text-gray-900 dark:text-white">{crop.crop?.name || crop.crop_name}</h3>
                           {(crop.crop?.variety || crop.variety) && <p className="text-xs text-gray-500 dark:text-gray-400">{crop.crop?.variety || crop.variety}</p>}
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${stageColors[crop.current_stage] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
-                          {crop.current_stage}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${stageColors[crop.current_stage] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
+                            {crop.current_stage}
+                          </span>
+                          {canControl && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingCrop(crop)}
+                              title="Edit plants / soil"
+                              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-0.5"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-[10px] text-gray-400 mb-2">{crop.zone_name}</p>
 
@@ -962,6 +1066,15 @@ export default function Dashboard() {
                           </span>
                         </div>
                       )}
+                      {crop.substrate?.soil_type && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500 dark:text-gray-400">Substrate</span>
+                          <span className="text-gray-900 dark:text-white font-medium">
+                            {crop.substrate.soil_type}
+                            {crop.substrate.volume_l_per_plant ? ` · ${crop.substrate.volume_l_per_plant} L/plant` : ''}
+                          </span>
+                        </div>
+                      )}
 
                       {crop.a64core_planting_id && (
                         <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-2">Synced from A64Core</p>
@@ -973,8 +1086,100 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Consumption Tracker Widget */}
+          {!selectedZoneId && (baselines.length > 0 || trackableOptions.length > 0) && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Consumption Tracker</h2>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">delta since you started tracking</span>
+                </div>
+                {canControl && trackableOptions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddBaseline(v => !v)}
+                    className="text-sm px-3 py-1 rounded-md bg-amber-500 hover:bg-amber-600 text-white font-medium"
+                  >
+                    {showAddBaseline ? 'Cancel' : '+ Track meter'}
+                  </button>
+                )}
+              </div>
+
+              {showAddBaseline && trackableOptions.length > 0 && (
+                <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+                  <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Pick a meter / metric to baseline at the current reading:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {trackableOptions.map(opt => (
+                      <button
+                        key={`${opt.equipment_id}|${opt.metric_name}`}
+                        type="button"
+                        onClick={() => addBaseline(opt.equipment_id, opt.metric_name, null)}
+                        className="text-xs px-3 py-1.5 rounded-md border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 bg-white dark:bg-gray-800 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                        title={`Capture ${opt.current_value?.toFixed?.(3) ?? opt.current_value} ${opt.unit} as baseline`}
+                      >
+                        <span className="font-medium">{opt.equipment_name}</span>
+                        <span className="mx-1 text-gray-400">·</span>
+                        <span>{opt.metric_name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+                {baselines.length === 0 ? (
+                  <div className="col-span-full text-center py-6 text-sm text-gray-500 dark:text-gray-400">
+                    No active trackers. Click <span className="text-amber-600 font-medium">+ Track meter</span> above to capture a baseline.
+                  </div>
+                ) : baselines.map(b => {
+                  const live = readingByKey[`${b.equipment_id}|${b.metric_name}`];
+                  const current = live ? live.value : b.current_value;
+                  const delta = (typeof current === 'number' && typeof b.baseline_value === 'number')
+                    ? current - b.baseline_value
+                    : null;
+                  const scaled = delta !== null ? formatScaled(delta, b.unit || 'kWh') : null;
+                  return (
+                    <div
+                      key={b.id}
+                      className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700 border-l-4 border-l-amber-500"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{b.equipment_name}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{b.metric_name}</span>
+                        </div>
+                        {canControl && (
+                          <button
+                            type="button"
+                            onClick={() => removeBaseline(b.id)}
+                            className="text-xs text-gray-400 hover:text-red-500"
+                            title="Stop tracking"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-3xl font-bold text-gray-900 dark:text-white">
+                          {scaled ? scaled.value : '—'}
+                        </span>
+                        <span className="text-lg text-gray-500 dark:text-gray-400">
+                          {scaled ? scaled.unit : (b.unit || 'kWh')}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 flex items-center justify-between">
+                        <span>Since {b.created_at ? formatDateTime(b.created_at) : '—'}</span>
+                        <span>Base {b.baseline_value?.toFixed?.(2) ?? b.baseline_value} {b.unit || 'kWh'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Sensor Readings Widget */}
-          {!selectedZoneId && sensorReadings && sensorReadings.length > 0 && (
+          {!selectedZoneId && taggedReadings.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Live Sensor Readings</h2>
@@ -992,11 +1197,54 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
+
+              {/* Category filter chips */}
+              <div className="px-6 pt-4 flex flex-wrap items-center gap-2">
+                <span className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mr-1">Show</span>
+                {CATEGORIES.filter(c => (categoryCounts[c.id] || 0) > 0).map(c => {
+                  const active = !hiddenCategories.has(c.id);
+                  const cls = active ? c.chipActive : c.chipIdle;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleCategory(c.id)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${cls}`}
+                      title={active ? `Hide ${c.label}` : `Show ${c.label}`}
+                    >
+                      <span>{c.icon}</span>
+                      <span>{c.label}</span>
+                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${active ? 'bg-white/20' : 'bg-black/10 dark:bg-white/10'}`}>
+                        {categoryCounts[c.id]}
+                      </span>
+                    </button>
+                  );
+                })}
+                {hiddenCategories.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setHiddenCategories(new Set()); saveHiddenCategories(new Set()); }}
+                    className="ml-auto text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    Show all
+                  </button>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-                {sensorReadings.map((reading) => (
+                {visibleReadings.length === 0 ? (
+                  <div className="col-span-full text-center py-8 text-sm text-gray-500 dark:text-gray-400">
+                    All categories are hidden. Tap a chip above to show readings.
+                  </div>
+                ) : visibleReadings.map((reading) => {
+                  const cat = CATEGORY_MAP[reading._category] || CATEGORY_MAP.other;
+                  const display = typeof reading.value === 'number'
+                    ? formatScaled(reading.value, reading.unit || '')
+                    : { value: reading.value, unit: reading.unit || '' };
+                  return (
                   <div
                     key={reading.id || `${reading.equipment_id}-${reading.name || ''}`}
-                    className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700"
+                    className={`bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700 border-l-4 ${cat.border}`}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex flex-col">
@@ -1016,17 +1264,24 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="text-3xl font-bold text-gray-900 dark:text-white">
-                        {typeof reading.value === 'number' ? reading.value.toFixed(1) : reading.value}
+                        {display.value}
                       </span>
-                      <span className="text-lg text-gray-500 dark:text-gray-400">{reading.unit || ''}</span>
+                      <span className="text-lg text-gray-500 dark:text-gray-400">{display.unit}</span>
                     </div>
-                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                      {reading.timestamp
-                        ? formatDateTime(reading.timestamp)
-                        : 'No timestamp'}
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="text-xs text-gray-400 dark:text-gray-500">
+                        {reading.timestamp
+                          ? formatDateTime(reading.timestamp)
+                          : 'No timestamp'}
+                      </div>
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${cat.badge}`}>
+                        <span>{cat.icon}</span>
+                        <span>{cat.label}</span>
+                      </span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1476,8 +1731,116 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {editingCrop && (
+            <CropEditModal
+              crop={editingCrop}
+              token={token}
+              onClose={() => setEditingCrop(null)}
+              onSaved={() => { setEditingCrop(null); fetchActiveCrops(); }}
+            />
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+const SOIL_TYPES = [
+  '', 'Rockwool', 'Coco Coir', 'Coco + Perlite', 'Perlite', 'Peat Mix', 'Soil',
+  'Hydroton (Clay Pebbles)', 'NFT (no substrate)', 'DWC (no substrate)', 'Aeroponic', 'Other',
+];
+
+function CropEditModal({ crop, token, onClose, onSaved }) {
+  const cropId = crop.sensehub_crop_id || crop.id;
+  const [form, setForm] = useState({
+    plant_count: crop.population?.plant_count ?? '',
+    max_capacity: crop.population?.max_capacity ?? '',
+    soil_type: crop.substrate?.soil_type ?? '',
+    substrate_volume_l_per_plant: crop.substrate?.volume_l_per_plant ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    setSaving(true); setErr('');
+    try {
+      const body = {
+        plant_count: form.plant_count === '' ? null : parseInt(form.plant_count),
+        max_capacity: form.max_capacity === '' ? null : parseInt(form.max_capacity),
+        soil_type: form.soil_type === '' ? null : form.soil_type,
+        substrate_volume_l_per_plant: form.substrate_volume_l_per_plant === '' ? null : parseFloat(form.substrate_volume_l_per_plant),
+      };
+      const r = await fetch(`${API_BASE}/crops/${cropId}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { setErr((await r.json()).error || 'Save failed'); setSaving(false); return; }
+      onSaved();
+    } catch (e) { setErr(e.message); setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900 dark:text-white">
+            Edit — {crop.crop?.name || crop.crop_name}
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Plant count</label>
+              <input type="number" min="0" step="1" value={form.plant_count}
+                onChange={e => update('plant_count', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Max capacity</label>
+              <input type="number" min="0" step="1" value={form.max_capacity}
+                onChange={e => update('max_capacity', e.target.value)}
+                placeholder="optional"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Substrate / soil type</label>
+            <select value={form.soil_type} onChange={e => update('soil_type', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white">
+              {SOIL_TYPES.map(s => <option key={s} value={s}>{s || '— Not set —'}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Substrate volume per plant (L)
+            </label>
+            <input type="number" min="0" step="0.1" value={form.substrate_volume_l_per_plant}
+              onChange={e => update('substrate_volume_l_per_plant', e.target.value)}
+              placeholder="e.g. 8 (typical rockwool slab share)"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white" />
+            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+              Used by the planner to estimate water-holding capacity and irrigation timing.
+            </p>
+          </div>
+          {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300">Cancel</button>
+            <button onClick={save} disabled={saving}
+              className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm rounded-md disabled:opacity-60">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -27,9 +27,13 @@ const labReadingRoutes = require('./routes/labReadings');
 const fertigationRoutes = require('./routes/fertigation');
 const calibrationRoutes = require('./routes/calibration');
 const reportRoutes = require('./routes/reports');
+const analyticsRoutes = require('./routes/analytics');
+const retentionRoutes = require('./routes/retention');
 const cropRoutes = require('./routes/crops');
 const amicRoutes = require('./routes/amic');
 const agronomistRoutes = require('./routes/agronomist');
+const plannerRoutes = require('./routes/planner');
+const baselineRoutes = require('./routes/baselines');
 
 // Import middleware
 const { authMiddleware } = require('./middleware/auth');
@@ -46,6 +50,8 @@ const { snapshotService } = require('./services/SnapshotService');
 const { agronomistSchedulerService } = require('./services/AgronomistSchedulerService');
 const { relaySafetyWatchdogService } = require('./services/RelaySafetyWatchdogService');
 const { amicSchedulerService } = require('./services/AmicSchedulerService');
+const { operationalPlannerSchedulerService } = require('./services/OperationalPlannerSchedulerService');
+const { dataRetentionService } = require('./services/DataRetentionService');
 
 const app = express();
 const server = http.createServer(app);
@@ -166,9 +172,13 @@ app.use('/api/lab-readings', authMiddleware, labReadingRoutes);
 app.use('/api/fertigation', authMiddleware, fertigationRoutes);
 app.use('/api/calibration', authMiddleware, calibrationRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
+app.use('/api/analytics', authMiddleware, analyticsRoutes);
+app.use('/api/retention', authMiddleware, retentionRoutes);
 app.use('/api/crops', authMiddleware, cropRoutes);
 app.use('/api/amic', authMiddleware, amicRoutes);
 app.use('/api/agronomist', authMiddleware, agronomistRoutes);
+app.use('/api/planner', authMiddleware, plannerRoutes);
+app.use('/api/baselines', authMiddleware, baselineRoutes);
 app.use('/api/relay-events', authMiddleware, require('./routes/relayEvents'));
 
 // Error handling middleware
@@ -293,6 +303,22 @@ server.listen(PORT, async () => {
     console.log('Agronomist scheduler: Started');
   } catch (error) {
     console.error('Agronomist scheduler: Failed to start -', error.message);
+  }
+
+  // Start operational planner scheduler (fires daily at configured time, default 18:00)
+  try {
+    operationalPlannerSchedulerService.start();
+    console.log('Operational planner scheduler: Started');
+  } catch (error) {
+    console.error('Operational planner scheduler: Failed to start -', error.message);
+  }
+
+  // Start data retention scheduler (fires nightly at configured time, default 03:30)
+  try {
+    dataRetentionService.start();
+    console.log('Data retention scheduler: Started');
+  } catch (error) {
+    console.error('Data retention scheduler: Failed to start -', error.message);
   }
 });
 

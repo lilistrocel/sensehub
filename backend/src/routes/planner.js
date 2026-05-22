@@ -1,0 +1,121 @@
+const express = require('express');
+const { operationalPlannerService } = require('../services/OperationalPlannerService');
+const { requireRole } = require('../middleware/auth');
+
+const router = express.Router();
+
+// GET /api/planner/config
+router.get('/config', (req, res) => {
+  res.json({
+    ...operationalPlannerService.getConfig(),
+    api_key_present: !!process.env.ANTHROPIC_API_KEY,
+  });
+});
+
+// PUT /api/planner/config — admin only
+router.put('/config', requireRole('admin'), (req, res) => {
+  try {
+    const updated = operationalPlannerService.saveConfig(req.body || {});
+    res.json({ ...updated, api_key_present: !!process.env.ANTHROPIC_API_KEY });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/planner/plans?limit=30
+router.get('/plans', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+  const offset = parseInt(req.query.offset) || 0;
+  res.json(operationalPlannerService.listPlans(limit, offset));
+});
+
+// GET /api/planner/plans/by-date/:date — YYYY-MM-DD
+router.get('/plans/by-date/:date', (req, res) => {
+  const plan = operationalPlannerService.getPlanByDate(req.params.date);
+  if (!plan) return res.status(404).json({ error: 'Not found' });
+  res.json(plan);
+});
+
+// GET /api/planner/plans/:id
+router.get('/plans/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const plan = operationalPlannerService.getPlanById(id);
+  if (!plan) return res.status(404).json({ error: 'Not found' });
+  res.json(plan);
+});
+
+// GET /api/planner/plans/by-date/:date/versions — full version history for a plan_date
+router.get('/plans/by-date/:date/versions', (req, res) => {
+  res.json(operationalPlannerService.listVersionsForDate(req.params.date));
+});
+
+// POST /api/planner/generate — admin/operator manual trigger
+// Body: { date?: 'YYYY-MM-DD' (reference today, defaults to today), force?: boolean }
+// Generates the plan FOR THE DAY AFTER `date`.
+router.post('/generate', requireRole('admin', 'operator'), async (req, res) => {
+  const { date, force } = req.body || {};
+  try {
+    const plan = await operationalPlannerService.generatePlanForTomorrow(date || null, { force: !!force });
+    res.json({ ok: true, plan });
+  } catch (err) {
+    if (err.code === 'ALREADY_EXISTS') {
+      return res.status(409).json({ error: err.message, code: 'ALREADY_EXISTS' });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/planner/plans/:id/confirm — admin/operator
+// Walks changes_from_today and applies INSERT/UPDATE/DISABLE on automations.
+router.post('/plans/:id/confirm', requireRole('admin', 'operator'), (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const result = operationalPlannerService.applyPlan(id, req.user?.id || null);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err.code === 'ALREADY_CONFIRMED') return res.status(409).json({ error: err.message, code: err.code });
+    if (err.code === 'INVALID_STATE') return res.status(409).json({ error: err.message, code: err.code });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/planner/plans/:id/reject — admin/operator
+// Body: { feedback: string }  REQUIRED non-empty
+// Marks plan rejected and regenerates a new plan addressing the feedback.
+router.post('/plans/:id/reject', requireRole('admin', 'operator'), async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const feedback = (req.body && req.body.feedback) || '';
+  try {
+    const result = await operationalPlannerService.rejectPlan(id, feedback, req.user?.id || null);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err.code === 'FEEDBACK_REQUIRED') return res.status(400).json({ error: err.message, code: err.code });
+    if (err.code === 'INVALID_STATE') return res.status(409).json({ error: err.message, code: err.code });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/planner/plans/:id/scorecard — compute the deterministic scorecard for this plan
+//   ?stop_at_now=1 — partial scoring (for today's still-running plan), else full-day
+router.get('/plans/:id/scorecard', (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const plan = operationalPlannerService.getPlanById(id);
+  if (!plan) return res.status(404).json({ error: 'Not found' });
+  const opts = {};
+  if (req.query.stop_at_now === '1' || req.query.stop_at_now === 'true') opts.stopAtMs = Date.now();
+  res.json(operationalPlannerService.computeScorecard(plan, opts));
+});
+
+// DELETE /api/planner/plans/:id — admin only
+router.delete('/plans/:id', requireRole('admin'), (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const changes = operationalPlannerService.deletePlan(id);
+  res.json({ ok: true, deleted: changes });
+});
+
+module.exports = router;

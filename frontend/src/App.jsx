@@ -25,6 +25,9 @@ import Calibration from './pages/Calibration';
 import Reports from './pages/Reports';
 import Amic from './pages/Amic';
 import Agronomist from './pages/Agronomist';
+import Planner from './pages/Planner';
+import Templates from './pages/Templates';
+import Analytics from './pages/Analytics';
 import RelayEvents from './pages/RelayEvents';
 import NotFound from './pages/NotFound';
 
@@ -223,6 +226,30 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Agronomist />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/planner"
+        element={
+          <ProtectedRoute>
+            <Planner />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/templates"
+        element={
+          <ProtectedRoute>
+            <Templates />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <Analytics />
           </ProtectedRoute>
         }
       />

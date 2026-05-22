@@ -17,6 +17,24 @@ const dns = require('dns');
 const { db } = require('../utils/database');
 const { telegramService } = require('./TelegramService');
 
+// Auto-rearm: when a threshold automation should be firing but hasn't (the relay was
+// killed by the safety watchdog and the condition is still met, so no rising edge
+// re-fires it), this service can re-execute the automation. Hard-capped per
+// automation/hour to prevent runaway.
+//
+// Config (system_settings.watchdog_rearm_config JSON):
+//   { enabled: true, max_per_hour: 6, min_interval_seconds: 300 }
+const REARM_CONFIG_KEY = 'watchdog_rearm_config';
+const REARM_DEFAULTS = { enabled: true, max_per_hour: 6, min_interval_seconds: 300 };
+
+function getRearmConfig() {
+  try {
+    const row = db.prepare("SELECT value FROM system_settings WHERE key = ?").get(REARM_CONFIG_KEY);
+    if (row?.value) return { ...REARM_DEFAULTS, ...JSON.parse(row.value) };
+  } catch (_) {}
+  return { ...REARM_DEFAULTS };
+}
+
 const logEvent = db.prepare(`
   INSERT INTO watchdog_events (event_type, target, status, message, detail, duration_seconds, created_at)
   VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
@@ -39,6 +57,25 @@ class WatchdogService {
 
     // Queue of Telegram messages to send once internet is back
     this._pendingNotifications = [];
+
+    // Rolling window of recent auto-rearm fires per automation id, in ms.
+    // _rearmHistory[autoId] = [ms, ms, ...] (only kept for the trailing hour).
+    this._rearmHistory = new Map();
+  }
+
+  /** Returns true if we should rearm this automation, false if rate-limited.
+   *  Records the attempt (regardless of outcome) so repeat calls within the
+   *  cooldown still see it as recently rearmed. */
+  _shouldRearm(automationId, cfg) {
+    const now = Date.now();
+    const windowMs = 60 * 60 * 1000;
+    const arr = (this._rearmHistory.get(automationId) || []).filter(t => now - t < windowMs);
+    const minIntervalMs = (cfg.min_interval_seconds || 300) * 1000;
+    if (arr.length && now - arr[arr.length - 1] < minIntervalMs) return false;
+    if (arr.length >= (cfg.max_per_hour || 6)) return false;
+    arr.push(now);
+    this._rearmHistory.set(automationId, arr);
+    return true;
   }
 
   start() {
@@ -373,13 +410,47 @@ class WatchdogService {
         triggerConfig._automation_id = auto.id;
         const missedInfo = this._isThresholdMissedButMet(triggerConfig, lastRun, graceMinutes, now);
         if (missedInfo.missed) {
-          if (lastAlert && (now - lastAlert) < 3600000) continue;
-          alerts.push({
-            automationId: auto.id,
-            name: auto.name,
-            type: 'threshold_met_not_fired',
-            detail: missedInfo.detail
-          });
+          // Auto-rearm: re-fire the automation if the condition is still met. This
+          // covers the rising-edge gap left behind when the safety watchdog force-OFFs
+          // a relay while its triggering condition is still true — without this,
+          // nothing turns the relay back on until the sensor crosses the threshold
+          // again.
+          const rearmCfg = getRearmConfig();
+          let rearmed = false;
+          let rearmError = null;
+          if (rearmCfg.enabled && this._shouldRearm(auto.id, rearmCfg)) {
+            try {
+              const { executeAutomation } = require('./AutomationExecutor');
+              await executeAutomation(auto, 'watchdog_rearm');
+              rearmed = true;
+              try {
+                logEvent.run(
+                  'automation', auto.name, 'rearm', `Auto-rearmed: ${auto.name}`,
+                  missedInfo.detail, null,
+                );
+              } catch (_) {}
+            } catch (err) {
+              rearmError = err.message || String(err);
+              console.error(`[Watchdog] Auto-rearm failed for "${auto.name}":`, rearmError);
+            }
+          }
+
+          // Only raise the "Threshold Met But Not Fired" alert if the rearm did not
+          // succeed (rate-limited, disabled, or executor error). When rearm worked
+          // the alert is redundant — the system self-healed.
+          if (!rearmed) {
+            if (lastAlert && (now - lastAlert) < 3600000) continue;
+            alerts.push({
+              automationId: auto.id,
+              name: auto.name,
+              type: 'threshold_met_not_fired',
+              detail: missedInfo.detail + (rearmError ? `\nAuto-rearm error: ${rearmError}` : ''),
+            });
+          } else {
+            // Update last_watchdog_alert so the next tick's de-dupe window applies
+            // to the rearm (we don't want to rearm + alert + rearm in a loop).
+            db.prepare("UPDATE automations SET last_watchdog_alert = datetime('now') WHERE id = ?").run(auto.id);
+          }
         }
       }
     }
