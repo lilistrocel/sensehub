@@ -720,6 +720,10 @@ export default function Planner() {
   };
 
   const confirmPlan = async (overrides = []) => {
+    // Defensive: if a synthetic React event somehow leaks in (e.g. someone wires
+    // onClick={confirmPlan}), treat it as no-overrides instead of trying to
+    // JSON.stringify the DOM/Fiber graph.
+    if (!Array.isArray(overrides)) overrides = [];
     if (!canControl || !selected) return;
     if (overrides.length === 0) {
       if (!window.confirm('Confirm this plan and apply it to live automations? This will INSERT/UPDATE/DISABLE automations per the diff manifest.')) return;
@@ -984,7 +988,7 @@ export default function Planner() {
                 {selected.status === 'pending' && canControl && (
                   <div className="mt-4 flex gap-2 flex-wrap border-t border-gray-200 dark:border-gray-700 pt-3">
                     <button
-                      onClick={confirmPlan}
+                      onClick={() => confirmPlan()}
                       disabled={confirming || rejecting}
                       className="px-4 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded disabled:opacity-50"
                     >
