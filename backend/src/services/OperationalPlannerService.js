@@ -1518,11 +1518,19 @@ class OperationalPlannerService {
         }
       }
 
-      // Scan proposed_automations for a dose_program where any element-tank's duty < minDuty
+      // Scan proposed_automations for a dose_program where any element-tank's duty < minDuty.
+      //
+      // EXEMPTION: a pure water flush (dose program with ALL tank duties == 0) is not a
+      // "dose reduction" — it's an orthogonal leaching operation that delivers no
+      // nutrients, so it doesn't worsen any element's feed concentration. The guardrail
+      // skips it. Half-strength / partial-reduction programs (any tank > 0 alongside a
+      // sub-threshold element tank) still trip the rule.
       for (let i = 0; i < propAutos.length; i++) {
         const a = propAutos[i];
         if (!a.dose_program_id) continue;
         const duties = programDuties[a.dose_program_id] || {};
+        const isPureFlush = Object.keys(duties).length > 0 && Object.values(duties).every(d => (d || 0) === 0);
+        if (isPureFlush) continue;
         for (const tankId of elementTankIds) {
           const duty = duties[tankId];
           if (duty != null && duty < minDuty) {

@@ -696,7 +696,7 @@ const initSchema = () => {
     -- new row, not new code.
     CREATE TABLE IF NOT EXISTS plan_guardrails (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
+      name TEXT NOT NULL UNIQUE,
       description TEXT,
       severity TEXT NOT NULL DEFAULT 'high' CHECK(severity IN ('low','medium','high','critical')),
       element TEXT NOT NULL,
@@ -1133,6 +1133,20 @@ const initSchema = () => {
     }
   } catch (err) {
     console.error('crop_element_targets seed failed:', err.message);
+  }
+
+  // Repair: existing installations created plan_guardrails WITHOUT a UNIQUE
+  // constraint on name, so each backend restart silently re-inserted the seed
+  // row. Dedupe (keep lowest id per name) + install the partial unique index so
+  // INSERT OR IGNORE actually ignores from now on.
+  try {
+    db.exec(`
+      DELETE FROM plan_guardrails
+      WHERE id NOT IN (SELECT MIN(id) FROM plan_guardrails GROUP BY name);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_plan_guardrails_name_unique ON plan_guardrails(name);
+    `);
+  } catch (err) {
+    console.error('plan_guardrails dedup/unique migration failed:', err.message);
   }
 
   // Seed plan guardrails on first run (idempotent — uses INSERT OR IGNORE on name).
