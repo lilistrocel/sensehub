@@ -71,6 +71,24 @@ Hard rules:
 - Predicted irrigation ppm of element E from tank T = stock_mg_per_l[E] × (venturi_flow / water_pump_flow) × (duty% / 100). Sum across tanks gives total delivered ppm; compare to context.element_targets. If you can't match the target with existing programs, escalate per the rules below.
 - Tanks with current_stock_liters near zero will run out mid-cycle — flag this in risks[] and propose a refill recommendation rather than scheduling cycles against an empty tank.
 
+# Daily delivery math + recovery dynamics (REQUIRED reading)
+
+context.daily_delivery_estimate gives you, for every CURRENTLY-enabled fertigation automation with a dose_program_id, the predicted total mass per element delivered per day AND the mean feed ppm that produces (= delivered grams ÷ total irrigation litres). Use these numbers to reason about whether your plan can ACTUALLY reach a soft target, not just whether each cycle's instantaneous ppm looks right.
+
+Concretely:
+- mean_feed_ppm.calcium_Ca = 92 mg/L with the current 4×32-min Full-Strength schedule. That is BELOW the 200 soft target — even at maximum dosing, the schedule has insufficient total daily delivery capacity. Adding more cycles or longer per-zone times is the only way to raise it; switching dose program strength alone is not.
+- When you propose a schedule change, compute the implied new daily mass for every element you're trying to fix. Quote it in your rationale.
+
+Recovery dynamics:
+- A feed reading below hard_min implies the SUBSTRATE is depleted, not just the feed line. Recovery from a Ca crash to soft-target takes 2-3 days of sustained MAX dosing — one day of Full Strength brings feed Ca from ~35 to ~100, not to 200. State this timeline explicitly in the plan summary so the operator's expectations are set.
+- Drain values dropping in parallel with feed (e.g. drain Ca 110 → 77 over the same week feed crashed) confirms substrate depletion. Plan should target sustained recovery, not single-day correction.
+
+Pulse fertigation (REQUIRED preference for flat_saturated substrates):
+- When today_snapshot.substrate_diagnostics shows a zone with classification 'flat_saturated' (median dry-down < 0.3% per cycle), prefer SMALLER, MORE FREQUENT pulses at FULL strength over fewer larger cycles.
+- Each large cycle pushes a big VWC spike the substrate can't drain — small pulses keep VWC in a tighter band AND deliver the same daily nutrient mass without flooding.
+- Concrete example: today's 4 cycles × 8 min/zone × Full Strength is equivalent in daily mass to 8 cycles × 4 min/zone or 12 cycles × 2.5 min/zone. The latter forms are vastly better for substrate health under flat_saturated conditions.
+- DO NOT pulse-fertigate with Half Strength or partial-duty programs — pulsing only works when each pulse is fully concentrated. The point is more frequent fresh feed, not diluted feed.
+
 # Critical-element lockouts (HARD CONSTRAINTS — apply-path will refuse to run otherwise)
 
 The operator has accumulated guardrails on top of the soft hard_min/hard_max bounds. These are HARD rules: if a guardrail trips, your plan will be REJECTED at apply time and the operator must manually override with a typed reason. Avoid that — design the plan to satisfy the guardrails up-front and acknowledge them explicitly in the rationale.
@@ -433,8 +451,12 @@ const PLAN_SCHEMA = {
       type: 'string',
       description: 'JSON array string of NEW tank recipes to propose when no duty-cycle adjustment can hit element_targets. Use "[]" if none. Each entry is an object: {proposed_name, target_tank_id (integer from context.fertigation_tanks), purpose, ingredients (JSON array of {name, amount, unit}; name MUST be from context.ingredients_library), expected_stock_mg_per_l (JSON object string), rationale}. Respect compatibility_group: never mix calcium with sulfate or phosphate in one tank. Most expensive action — use sparingly.',
     },
+    operator_tasks_requests: {
+      type: 'string',
+      description: 'JSON array string of actionable tasks the human operator must do for your plan / analysis to work — physical interventions, measurements, calibrations, or tutorials. Use "[]" if none. Each entry is an object: {title (short, imperative), description, category ("physical"|"measurement"|"tutorial"|"config_change"), priority ("low"|"medium"|"high"|"critical"), instructions (markdown — step-by-step if needed), expected_outcome (what the operator should observe when done — e.g. "feed Ca should rise from 35 to ~100 mg/L within 4h"), target_entity (free text, e.g. "Tank 1", "Zone 1 drain outlets")}. Reference these in your plan rationale so the operator understands what their part is. On the next run you will see context.operator_tasks showing which past tasks were completed (with notes confirming or disproving your theory) or declined (with reasons). Use that feedback to refine the next plan — DO NOT re-emit a task that was already declined unless you provide new justification addressing the operator\'s reason.',
+    },
   },
-  required: ['headline', 'summary', 'proposed_automations', 'changes_from_today', 'targets', 'yesterday_review', 'risks', 'template_requests', 'dose_program_requests', 'mixture_requests'],
+  required: ['headline', 'summary', 'proposed_automations', 'changes_from_today', 'targets', 'yesterday_review', 'risks', 'template_requests', 'dose_program_requests', 'mixture_requests', 'operator_tasks_requests'],
   additionalProperties: false,
 };
 
@@ -806,6 +828,21 @@ class OperationalPlannerService {
                forbidden_action, minimum_tank_duty_pct, override_role
         FROM plan_guardrails WHERE enabled = 1
       `).all(),
+      daily_delivery_estimate: this._estimateDailyNutrientDelivery({
+        automations: currentAutomations,
+        tanks: fertigationTanks,
+        dosePrograms,
+        waterPumpFlow,
+      }),
+      operator_tasks: db.prepare(`
+        SELECT id, source, title, description, category, priority, status,
+               completed_at, completion_notes, decline_reason, created_at
+        FROM operator_tasks
+        WHERE status IN ('open', 'done', 'declined')
+          AND created_at > datetime('now', '-14 days')
+        ORDER BY status = 'open' DESC, created_at DESC
+        LIMIT 50
+      `).all(),
       dose_programs: dosePrograms,
       element_targets: elementTargets,
       ingredients_library: ingredientLibrary,
@@ -848,6 +885,116 @@ class OperationalPlannerService {
     const d = new Date(`${dateStr}T12:00:00Z`);
     d.setUTCDate(d.getUTCDate() + 1);
     return d.toISOString().slice(0, 10);
+  }
+
+  /**
+   * Estimate daily nutrient delivery from the currently-enabled fertigation
+   * automations + their dose programs. Returns:
+   *   {
+   *     total_irrigation_l_per_day,
+   *     total_stock_l_per_day_per_tank: { [tank_id]: liters },
+   *     mass_g_per_day: { [element]: grams },
+   *     mean_feed_ppm: { [element]: mg/L },   // = mass_g / total_irrigation_l
+   *     warnings: [string]
+   *   }
+   *
+   * Lets the planner reason about "do my scheduled cycles actually deliver
+   * enough Ca to hit 200 mg/L feed, given current tank concentration and
+   * total daily water volume?" — instead of only seeing per-cycle ppm.
+   */
+  _estimateDailyNutrientDelivery({ automations, tanks, dosePrograms, waterPumpFlow }) {
+    const out = {
+      total_irrigation_l_per_day: 0,
+      total_stock_l_per_day_per_tank: {},
+      mass_g_per_day: {},
+      mean_feed_ppm: {},
+      warnings: [],
+    };
+
+    if (!waterPumpFlow || waterPumpFlow <= 0) {
+      out.warnings.push('water_pump_lpm unknown — cannot compute feed ppm');
+    }
+    const tankById = {};
+    for (const t of tanks || []) tankById[t.id] = t;
+    const programById = {};
+    for (const p of dosePrograms || []) programById[p.id] = p;
+
+    for (const a of automations || []) {
+      if (!a.enabled) continue;
+      if (!a.dose_program_id) continue;
+      const program = programById[a.dose_program_id];
+      if (!program) continue;
+      const actions = Array.isArray(a.actions) ? a.actions : [];
+      // Total cycle duration = longest action's offset+duration on the irrigation board.
+      let cycleSeconds = 0;
+      for (const act of actions) {
+        const offset = parseInt(act.delay_seconds) || 0;
+        const dur = parseInt(act.duration_seconds) || 0;
+        if (offset + dur > cycleSeconds) cycleSeconds = offset + dur;
+      }
+      if (cycleSeconds <= 0) continue;
+
+      // Cycles/day: schedule triggers fire once per day (most common); threshold-triggered
+      // cycles fire opportunistically — we cannot predict frequency, so skip them in the
+      // mass calculation and warn instead.
+      const tc = a.trigger_config || {};
+      let cyclesPerDay = 0;
+      if (tc.type === 'schedule') {
+        if (tc.schedule_type === 'daily') cyclesPerDay = 1;
+        else if (tc.schedule_type === 'interval' && tc.interval_minutes > 0) {
+          cyclesPerDay = Math.round(1440 / tc.interval_minutes);
+        } else if (tc.schedule_type === 'once') cyclesPerDay = 0;
+      }
+      if (cyclesPerDay === 0) continue;
+
+      const fertigationSeconds = cycleSeconds * cyclesPerDay;
+      // Water delivered: pump runs for the full cycle duration.
+      out.total_irrigation_l_per_day += (waterPumpFlow || 0) * (fertigationSeconds / 60);
+
+      // For each tank in the program, the venturi (typically 1.7 L/min) injects for
+      // duty% × cycle duration. Time-slice programs cut each tank's effective
+      // injection window further — slot N runs slot_seconds out of every window_seconds.
+      const tanksInProgram = Array.isArray(program.tanks) ? program.tanks : [];
+      const slots = [...new Set(tanksInProgram
+        .map(t => t.compatibility_slot)
+        .filter(s => s != null))].sort((a, b) => a - b);
+      const slotCount = program.compatibility_strategy === 'time_slice' && slots.length > 1 ? slots.length : 1;
+
+      for (const pt of tanksInProgram) {
+        const duty = (pt.duty_pct || 0) / 100;
+        if (duty <= 0) continue;
+        const tank = tankById[pt.tank_id];
+        if (!tank) continue;
+        // Slot share — slot-agnostic tanks run in every slot (full window).
+        const slotShare = (slotCount === 1 || pt.compatibility_slot == null) ? 1 : (1 / slotCount);
+        const tankVenturi = tank.venturi_lpm || 0;
+        if (tankVenturi <= 0) continue;
+        const stockLitersForTank = tankVenturi * (fertigationSeconds / 60) * duty * slotShare;
+        out.total_stock_l_per_day_per_tank[pt.tank_id] =
+          (out.total_stock_l_per_day_per_tank[pt.tank_id] || 0) + stockLitersForTank;
+
+        // Multiply by stock_mg_per_l to get total element mass delivered.
+        const stockMg = tank.stock_mg_per_l || {};
+        for (const [el, mgPerL] of Object.entries(stockMg)) {
+          const grams = (mgPerL * stockLitersForTank) / 1000;
+          out.mass_g_per_day[el] = (out.mass_g_per_day[el] || 0) + grams;
+        }
+      }
+    }
+
+    // Round + derive mean feed ppm.
+    for (const k of Object.keys(out.total_stock_l_per_day_per_tank)) {
+      out.total_stock_l_per_day_per_tank[k] = Math.round(out.total_stock_l_per_day_per_tank[k] * 100) / 100;
+    }
+    out.total_irrigation_l_per_day = Math.round(out.total_irrigation_l_per_day);
+    for (const [el, g] of Object.entries(out.mass_g_per_day)) {
+      out.mass_g_per_day[el] = Math.round(g * 10) / 10;
+      if (out.total_irrigation_l_per_day > 0) {
+        // mean feed ppm = grams × 1000 mg/g / liters
+        out.mean_feed_ppm[el] = Math.round((g * 1000 / out.total_irrigation_l_per_day) * 10) / 10;
+      }
+    }
+    return out;
   }
 
   _localDateStr(d) {
@@ -1425,7 +1572,35 @@ class OperationalPlannerService {
    */
   evaluatePlanGuardrails(plan) {
     if (!plan || !plan.proposed_plan) return [];
-    const rules = db.prepare("SELECT * FROM plan_guardrails WHERE enabled = 1").all();
+    const explicitRules = db.prepare("SELECT * FROM plan_guardrails WHERE enabled = 1").all();
+
+    // Auto-protect any element_target marked priority=1 (operator's most-critical
+    // elements) even when no explicit guardrail row exists. The virtual rule
+    // mirrors the explicit-rule schema so the rest of the evaluator treats it
+    // identically. Skip elements that already have an explicit rule to avoid
+    // duplicate firing.
+    const explicitElements = new Set(explicitRules.map(r => r.element));
+    const priority1Targets = db.prepare(`
+      SELECT element, hard_min FROM crop_element_targets
+      WHERE priority = 1 AND hard_min IS NOT NULL
+    `).all();
+    const virtualRules = priority1Targets
+      .filter(t => !explicitElements.has(t.element))
+      .map(t => ({
+        id: `virt_${t.element}`,
+        name: `auto_protect_${t.element}_priority1`,
+        description: `Auto-generated from element_targets: ${t.element} has priority=1 and is below its hard_min (${t.hard_min} mg/L). Blocks any plan that reduces a ${t.element}-source tank below 80% duty until feed value recovers.`,
+        severity: 'high',
+        element: t.element,
+        comparison: 'null_or_lt',
+        threshold: t.hard_min,
+        forbidden_action: 'reduce_element_delivery',
+        minimum_tank_duty_pct: 80,
+        override_role: 'admin',
+        _virtual: true,
+      }));
+
+    const rules = [...explicitRules, ...virtualRules];
     if (rules.length === 0) return [];
 
     // Index Ca-source tanks: any tank whose ingredients have compatibility_group='calcium'
@@ -1946,6 +2121,43 @@ class OperationalPlannerService {
         }
       });
       mtx();
+    }
+
+    // Persist operator_tasks_requests as actual operator_tasks rows linked to this plan.
+    summary.tasks_created = [];
+    let tasksRequests = proposed.operator_tasks_requests;
+    if (typeof tasksRequests === 'string' && tasksRequests.trim()) {
+      try { tasksRequests = JSON.parse(tasksRequests); }
+      catch (e) { summary.errors.push({ operator_tasks_requests_parse: String(e.message) }); tasksRequests = []; }
+    }
+    if (Array.isArray(tasksRequests) && tasksRequests.length > 0) {
+      const insertTask = db.prepare(`
+        INSERT INTO operator_tasks
+          (source, source_plan_id, title, description, category, priority,
+           instructions, expected_outcome, target_entity)
+        VALUES ('planner', ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const ttx = db.transaction(() => {
+        for (const t of tasksRequests) {
+          if (!t.title) continue;
+          try {
+            const r = insertTask.run(
+              planId,
+              String(t.title).slice(0, 200),
+              t.description || null,
+              ['physical','measurement','tutorial','config_change'].includes(t.category) ? t.category : 'physical',
+              ['low','medium','high','critical'].includes(t.priority) ? t.priority : 'medium',
+              t.instructions || null,
+              t.expected_outcome || null,
+              t.target_entity || null,
+            );
+            summary.tasks_created.push({ id: r.lastInsertRowid, title: t.title });
+          } catch (e) {
+            summary.errors.push({ operator_task: t.title, error: String(e?.message || e) });
+          }
+        }
+      });
+      ttx();
     }
 
     db.prepare(`

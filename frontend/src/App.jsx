@@ -23,6 +23,7 @@ import Fertigation from './pages/Fertigation';
 import LabAnalysis from './pages/LabAnalysis';
 import Calibration from './pages/Calibration';
 import Reports from './pages/Reports';
+import Tasks from './pages/Tasks';
 import Amic from './pages/Amic';
 import Agronomist from './pages/Agronomist';
 import Planner from './pages/Planner';
@@ -250,6 +251,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Analytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <ProtectedRoute>
+            <Tasks />
           </ProtectedRoute>
         }
       />

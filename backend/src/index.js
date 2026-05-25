@@ -33,6 +33,7 @@ const cropRoutes = require('./routes/crops');
 const amicRoutes = require('./routes/amic');
 const agronomistRoutes = require('./routes/agronomist');
 const plannerRoutes = require('./routes/planner');
+const operatorTasksRoutes = require('./routes/operatorTasks');
 const baselineRoutes = require('./routes/baselines');
 
 // Import middleware
@@ -178,6 +179,7 @@ app.use('/api/crops', authMiddleware, cropRoutes);
 app.use('/api/amic', authMiddleware, amicRoutes);
 app.use('/api/agronomist', authMiddleware, agronomistRoutes);
 app.use('/api/planner', authMiddleware, plannerRoutes);
+app.use('/api/operator-tasks', authMiddleware, operatorTasksRoutes);
 app.use('/api/baselines', authMiddleware, baselineRoutes);
 app.use('/api/relay-events', authMiddleware, require('./routes/relayEvents'));
 

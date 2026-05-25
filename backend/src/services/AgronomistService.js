@@ -81,8 +81,12 @@ const REPORT_OUTPUT_SCHEMA = {
         additionalProperties: false,
       },
     },
+    operator_tasks_requests: {
+      type: 'string',
+      description: 'JSON array string of actionable tasks the human operator must do that depend on physical farm interventions — measurements, drilling drain holes, refilling tanks, calibrating sensors, etc. Use "[]" if none. Each entry is an object: {title (short, imperative), description, category ("physical"|"measurement"|"tutorial"|"config_change"), priority ("low"|"medium"|"high"|"critical"), instructions (markdown step-by-step), expected_outcome (what should be observed when done), target_entity (free text, e.g. "Tank 1", "AMIC CH1")}. The recommendations field stays in your prose narrative — operator_tasks_requests are STRUCTURED, tracked, with confirm/decline feedback flowing back into your next report. Reference them in full_markdown so the operator understands the context.',
+    },
   },
-  required: ['opinion', 'summary', 'full_markdown', 'recommendations'],
+  required: ['opinion', 'summary', 'full_markdown', 'recommendations', 'operator_tasks_requests'],
   additionalProperties: false,
 };
 
@@ -457,6 +461,15 @@ class AgronomistService {
       reference_sensors,
       sensors: sensorReadings,
       substrate_diagnostics: substrateDiagnostics,
+      operator_tasks: db.prepare(`
+        SELECT id, source, title, description, category, priority, status,
+               completed_at, completion_notes, decline_reason, created_at
+        FROM operator_tasks
+        WHERE status IN ('open', 'done', 'declined')
+          AND created_at > datetime('now', '-14 days')
+        ORDER BY status = 'open' DESC, created_at DESC
+        LIMIT 50
+      `).all(),
       lab: labByRole,
       alerts: alerts.map(a => ({
         severity: a.severity,
@@ -928,7 +941,40 @@ class AgronomistService {
       usage.cache_creation_input_tokens || 0,
     );
 
-    return this.getReportByDate(date);
+    // Persist operator_tasks_requests as actual tasks tied to this report.
+    const saved = this.getReportByDate(date);
+    let taskReqs = parsed.operator_tasks_requests;
+    if (typeof taskReqs === 'string' && taskReqs.trim()) {
+      try { taskReqs = JSON.parse(taskReqs); } catch (_) { taskReqs = []; }
+    }
+    if (Array.isArray(taskReqs) && taskReqs.length > 0 && saved?.id) {
+      const insertTask = db.prepare(`
+        INSERT INTO operator_tasks
+          (source, source_report_id, title, description, category, priority,
+           instructions, expected_outcome, target_entity)
+        VALUES ('agronomist', ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const ttx = db.transaction(() => {
+        for (const t of taskReqs) {
+          if (!t.title) continue;
+          try {
+            insertTask.run(
+              saved.id,
+              String(t.title).slice(0, 200),
+              t.description || null,
+              ['physical','measurement','tutorial','config_change'].includes(t.category) ? t.category : 'physical',
+              ['low','medium','high','critical'].includes(t.priority) ? t.priority : 'medium',
+              t.instructions || null,
+              t.expected_outcome || null,
+              t.target_entity || null,
+            );
+          } catch (_) {}
+        }
+      });
+      ttx();
+    }
+
+    return saved;
   }
 
   // -------- weekly rollup (Tier 2) --------

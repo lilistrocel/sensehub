@@ -685,6 +685,46 @@ const initSchema = () => {
       FOREIGN KEY (report_id) REFERENCES agronomist_reports(id) ON DELETE CASCADE
     );
 
+    -- Operator tasks — actionable items the AI agents can issue to the human
+    -- operator (e.g. "add 10 kg Ca-nitrate to Tank 1", "drill more drain holes
+    -- in coco peat bag 5", "verify AMIC CH1 calibration"). The operator marks
+    -- each task done (with completion notes that confirm the agent's theory)
+    -- or declined (with a reason that disproves the theory). Both outcomes
+    -- flow back into the agent's next-run context so its mental model updates.
+    --
+    -- category drives UI grouping + icon:
+    --   physical       — operator must do something physical to the farm
+    --   measurement    — operator must measure / sample something
+    --   tutorial       — operator should read instructions (no direct action)
+    --   config_change  — operator must change a setting / value in the UI
+    --
+    -- source links the task back to the agent run that proposed it, so the
+    -- next agent run sees which of its prior recommendations were enacted.
+    CREATE TABLE IF NOT EXISTS operator_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('agronomist','planner','manual','watchdog')),
+      source_report_id INTEGER,
+      source_plan_id INTEGER,
+      title TEXT NOT NULL,
+      description TEXT,
+      category TEXT NOT NULL DEFAULT 'physical' CHECK(category IN ('physical','measurement','tutorial','config_change')),
+      priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high','critical')),
+      instructions TEXT,
+      expected_outcome TEXT,
+      target_entity TEXT,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','done','declined','snoozed','archived')),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      due_by TEXT,
+      snoozed_until TEXT,
+      completed_at TEXT,
+      completed_by_user_id INTEGER,
+      completion_notes TEXT,
+      decline_reason TEXT,
+      FOREIGN KEY (source_report_id) REFERENCES agronomist_reports(id) ON DELETE SET NULL,
+      FOREIGN KEY (source_plan_id) REFERENCES operational_plans(id) ON DELETE SET NULL,
+      FOREIGN KEY (completed_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
     -- Plan guardrails — rules that block applying a plan whose dosing actions
     -- would worsen a low/high nutrient. Each rule checks one element against a
     -- threshold (e.g. feed Ca < 150 mg/L) and forbids a specific action class
@@ -795,6 +835,8 @@ const initSchema = () => {
     CREATE INDEX IF NOT EXISTS idx_agronomist_clarifications_created ON agronomist_report_clarifications(created_at);
     CREATE INDEX IF NOT EXISTS idx_plan_clarifications_plan ON operational_plan_clarifications(plan_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_plan_clarifications_status ON operational_plan_clarifications(status);
+    CREATE INDEX IF NOT EXISTS idx_operator_tasks_status ON operator_tasks(status, priority, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_operator_tasks_source ON operator_tasks(source, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_amic_cycle_history_started ON amic_cycle_history(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_amic_cycle_history_state ON amic_cycle_history(cycle_state, started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_operational_plans_date ON operational_plans(plan_date DESC);
@@ -1161,6 +1203,17 @@ const initSchema = () => {
         element: 'calcium_Ca',
         comparison: 'null_or_lt',
         threshold: 150,
+        forbidden_action: 'reduce_element_delivery',
+        minimum_tank_duty_pct: 80,
+        override_role: 'admin',
+      },
+      {
+        name: 'k_lockout_below_200',
+        description: 'When latest feed AMIC K is below 200 mg/L (or no recent sample), refuse to apply any plan that reduces a potassium-source tank below 80% duty. K follows the same crash-pattern as Ca did and dropping from 375 → 130 mg/L through planner dose cuts has already been documented; this guardrail prevents the same multi-week recovery saga.',
+        severity: 'high',
+        element: 'potassium_K',
+        comparison: 'null_or_lt',
+        threshold: 200,
         forbidden_action: 'reduce_element_delivery',
         minimum_tank_duty_pct: 80,
         override_role: 'admin',
