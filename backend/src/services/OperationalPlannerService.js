@@ -67,7 +67,7 @@ A reusable bundle of "{tank → duty%}" plus a target EC/pH and a window length 
 
 Hard rules:
 - Tanks with role="nutrient" deliver N/P/K/Ca/Mg/S/micros. Tanks with role="ph_down" / "ph_up" deliver acid/base — use them only for pH trim.
-- If two nutrient tanks have ingredients in different compatibility_groups (e.g. one in "calcium", another in "sulfate" or "phosphate"), the dose program MUST use compatibility_strategy="time_slice" with compatibility_slot set per tank (typically 0 for calcium-group, 1 for sulfate/phosphate-group). Co-injecting at high concentration risks gypsum/Ca-phosphate precipitation in the venturi.
+- This site uses SEPARATE-VENTURI-PER-TANK hardware: each tank injects through its own venturi into the main irrigation line. The concentrate streams from incompatible tanks (e.g. Ca-nitrate + K-sulfate) NEVER meet at stock concentration — they only mix downstream in the main water flow at feed concentrations (~125 mg/L Ca + 90 mg/L SO₄), which is well below CaSO₄ saturation (~2,100 mg/L). Therefore compatibility_strategy="permissive" is SAFE and PREFERRED for this hardware — it delivers ~2× the nutrient mass of time_slice at the same recipe. Only fall back to time_slice if (a) the operator explicitly documents a shared-venturi setup, or (b) measured AMIC values show precipitation symptoms (sudden drop in Ca delivery despite unchanged duty cycles, scale formation reported in operator tasks).
 - Predicted irrigation ppm of element E from tank T = stock_mg_per_l[E] × (venturi_flow / water_pump_flow) × (duty% / 100). Sum across tanks gives total delivered ppm; compare to context.element_targets. If you can't match the target with existing programs, escalate per the rules below.
 - Tanks with current_stock_liters near zero will run out mid-cycle — flag this in risks[] and propose a refill recommendation rather than scheduling cycles against an empty tank.
 
@@ -1540,8 +1540,65 @@ class OperationalPlannerService {
       usage.cache_read_input_tokens || 0,
       usage.cache_creation_input_tokens || 0,
     );
+    const newPlanId = result.lastInsertRowid;
 
-    return this.getPlanById(result.lastInsertRowid);
+    // Persist operator_tasks_requests immediately so the human sees them BEFORE
+    // confirming the plan — they may be prerequisites (e.g. "verify Tank 1 stock"
+    // should be done before applying any dose change). Dedupe against currently-
+    // open tasks by source+title so a regen doesn't pile up duplicates.
+    this._persistOperatorTaskRequests(parsed.operator_tasks_requests, 'planner', { source_plan_id: newPlanId });
+
+    return this.getPlanById(newPlanId);
+  }
+
+  /**
+   * Insert each operator_tasks_request as a real operator_tasks row, deduping
+   * against currently-open tasks (same title + source) so regenerated plans
+   * don't multiply identical tasks. Returns the count of newly-inserted tasks.
+   */
+  _persistOperatorTaskRequests(raw, source, opts = {}) {
+    let list = raw;
+    if (typeof list === 'string' && list.trim()) {
+      try { list = JSON.parse(list); } catch (_) { list = []; }
+    }
+    if (!Array.isArray(list) || list.length === 0) return 0;
+
+    const findOpen = db.prepare(`
+      SELECT id FROM operator_tasks
+      WHERE source = ? AND title = ? AND status = 'open'
+      LIMIT 1
+    `);
+    const ins = db.prepare(`
+      INSERT INTO operator_tasks
+        (source, source_report_id, source_plan_id, title, description, category, priority,
+         instructions, expected_outcome, target_entity)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    let added = 0;
+    const tx = db.transaction(() => {
+      for (const t of list) {
+        if (!t || !t.title) continue;
+        const title = String(t.title).slice(0, 200);
+        if (findOpen.get(source, title)) continue; // dedupe
+        try {
+          ins.run(
+            source,
+            opts.source_report_id || null,
+            opts.source_plan_id || null,
+            title,
+            t.description || null,
+            ['physical','measurement','tutorial','config_change'].includes(t.category) ? t.category : 'physical',
+            ['low','medium','high','critical'].includes(t.priority) ? t.priority : 'medium',
+            t.instructions || null,
+            t.expected_outcome || null,
+            t.target_entity || null,
+          );
+          added++;
+        } catch (_) {}
+      }
+    });
+    tx();
+    return added;
   }
 
   // -------- apply / reject --------
@@ -2123,42 +2180,8 @@ class OperationalPlannerService {
       mtx();
     }
 
-    // Persist operator_tasks_requests as actual operator_tasks rows linked to this plan.
-    summary.tasks_created = [];
-    let tasksRequests = proposed.operator_tasks_requests;
-    if (typeof tasksRequests === 'string' && tasksRequests.trim()) {
-      try { tasksRequests = JSON.parse(tasksRequests); }
-      catch (e) { summary.errors.push({ operator_tasks_requests_parse: String(e.message) }); tasksRequests = []; }
-    }
-    if (Array.isArray(tasksRequests) && tasksRequests.length > 0) {
-      const insertTask = db.prepare(`
-        INSERT INTO operator_tasks
-          (source, source_plan_id, title, description, category, priority,
-           instructions, expected_outcome, target_entity)
-        VALUES ('planner', ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      const ttx = db.transaction(() => {
-        for (const t of tasksRequests) {
-          if (!t.title) continue;
-          try {
-            const r = insertTask.run(
-              planId,
-              String(t.title).slice(0, 200),
-              t.description || null,
-              ['physical','measurement','tutorial','config_change'].includes(t.category) ? t.category : 'physical',
-              ['low','medium','high','critical'].includes(t.priority) ? t.priority : 'medium',
-              t.instructions || null,
-              t.expected_outcome || null,
-              t.target_entity || null,
-            );
-            summary.tasks_created.push({ id: r.lastInsertRowid, title: t.title });
-          } catch (e) {
-            summary.errors.push({ operator_task: t.title, error: String(e?.message || e) });
-          }
-        }
-      });
-      ttx();
-    }
+    // Tasks have already been persisted at plan-generation time (so they're
+    // visible BEFORE confirm, in case any are prerequisites). No-op here.
 
     db.prepare(`
       UPDATE operational_plans
