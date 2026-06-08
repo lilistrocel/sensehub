@@ -105,6 +105,19 @@ The active guardrail set is in context.guardrails[]. Each rule has: element, com
 
 If the operator's stated agronomic problem requires reducing NO3 or EC, and Ca is low: do NOT pick Half Strength (which cuts Tank 1 to 50%). Instead, propose a dose_program_request that keeps Tank 1 at ≥ 80% duty while cutting the OTHER tanks (e.g. Tank 1 at 90%, Tanks 2/4 at 50%). This is the "Reduced-NO3 Ca Priority" pattern.
 
+**Flush vs Ca-deficit trade-off (HARD CONSTRAINT — apply-path WILL block otherwise).** A water-only leaching flush is NOT exempt from agronomic reasoning just because it bypasses the dose-reduction guardrail. The guardrail's purpose is to protect feed concentration; a flush attacks the deficit problem from the OTHER side — by leaching root-zone solutes (incl. Ca) before they're absorbed.
+
+  The leach benefit is ONLY positive when drain Na (and only drain Na — not the soft_target, the actual measured drain value at context.today_snapshot.lab.drain.latest_per_nutrient.sodium_Na) is ABOVE 80 mg/L AND its trend (context.today_snapshot.lab.drain.trend.sodium_Na.direction) is 'rising' or 'flat'. A falling Na trend means prior flushes are already working — adding another flush is wasted root-zone disturbance.
+
+  The Ca washout cost = the flush drags freshly-delivered fertigation Ca below the root absorption window. The cost is proportional to (a) flush volume and (b) proximity to a fertigation cycle. A flush within ±4h (240 min) of a fertigation cycle washes out a meaningful fraction of that fertigation's Ca delivery. 60–90 min gap is NOT sufficient — the plant root mass needs 3–4 hours to absorb the Ca from a fertigation cycle, especially in flat_saturated substrate where the bag is already at field capacity and any added water immediately displaces existing root-zone solution.
+
+  HARD RULE — if ANY priority-1 element (e.g. calcium_Ca) is below its hard_min AND (drain Na < 80 mg/L OR drain Na trend is 'falling' OR drain Na sample is missing/stale beyond 3 days), you MUST emit change_type='modify' with enabled=false for the morning flush automation, AND you MUST NOT add any new pure-water-flush automation, AND you MUST NOT keep an existing flush enabled. The apply-path will REJECT plans that violate this — this is a guardrail equivalent in force to ca_lockout_below_150, not an advisory.
+
+  Acceptable patterns when Ca < 150 AND drain Na is unknown/falling/<80:
+    - Morning flush DISABLED (change_type='modify' enabled=false); add an operator_task asking the operator to physically inspect a drain sample and only re-enable the flush once Na is confirmed >80 and rising.
+    - Replace pure flush with a low-EC fertigation cycle (Tank 1 at 80%, others at 30–40%) so Ca delivery continues while reducing salt buildup.
+    - A flush IS acceptable only when Na > 80 AND trend is rising/flat AND placed >4h before/after every fertigation cycle.
+
 # Lab data (AMIC) → action mapping (REQUIRED reading)
 
 The AMIC analyzer reports nutrient concentrations in IONIC form (nitrate_NO3, ammonium_NH4, potassium_K, calcium_Ca, magnesium_Mg, sulfate_SO4, phosphate_PO4, chloride_Cl, sodium_Na). These appear in context.today_snapshot.lab[role].today and lab[role].latest_per_nutrient. The same labels exist in context.element_targets so direct comparison is possible — no unit conversion needed when the target's element label matches the lab's nutrient label.
@@ -282,6 +295,11 @@ No-duplicates rule (REQUIRED self-check): Before submitting, scan proposed_autom
 - If AMIC nutrient data shows a clear deficiency/excess, surface it as a 'risk' rather than mutating the dose blindly — the operator decides.
 - If a sensor lost comms, don't trust its readings; reduce the weight of that signal in your decisions.
 - If the agronomist's daily report has recommendations, treat them as expert input and reflect them in the plan (or explain in 'rationale' why not).
+- **Watchdog-induced equipment exclusions are YOURS to fix, not the operator's.** When a piece of equipment (e.g. a fan-control relay board) is excluded from an automation because the safety watchdog killed it after the per-equipment max_on timer (default 1500s, often raised to 21600s = 6h via per_equipment override), the root cause is that NO automation re-asserts the relay before the timer expires. Boards in OTHER automations stay alive because the scheduler re-fires the threshold automation every few minutes, refreshing the safety timer each time the action executes.
+  - DO NOT carry an "excluded — pending operator action" exclusion forward more than once. If you said "operator must extend watchdog threshold OR restructure" yesterday and the operator hasn't done it, then the planner-side restructure IS the action you should take TODAY: add the excluded equipment back to the relevant always-on / threshold-driven fan or pump automations so the scheduler re-asserts the relays every cycle. This is your domain, not "hardware-pending".
+  - Acceptable exclusions: (a) the equipment is physically disconnected (status='offline' or last_communication > 30 min stale), (b) the equipment is being deliberately shut down for maintenance (operator_task in flight), (c) the equipment is bound to a SEPARATE on/off automation that re-asserts it (i.e., it's already protected).
+  - Unacceptable exclusions: (a) "watchdog killed it last week", (b) "pending operator hardware fix" when the actual lever is in an automation actions array, (c) inherited exclusion from a prior plan that has been carried forward >2 days without re-evaluation.
+  - When you ADD previously-excluded equipment back to an automation, say so explicitly in the rationale: "Re-adding Board 2 (eq=4) to #36/64/76 — the prior 'watchdog exclusion' was solvable by having the scheduler re-assert the relays every threshold tick; no hardware change needed."
 
 # Rejection regeneration (if previous_rejection is set in context)
 
@@ -309,7 +327,7 @@ const PLAN_SCHEMA = {
         properties: {
           name: { type: 'string', description: 'Short human-readable name, e.g. "Morning fertigation (06:00)"' },
           description: { type: 'string', description: 'What this automation does and why it is included in tomorrow\'s plan.' },
-          enabled: { type: 'boolean', description: 'Always true for proposed automations.' },
+          enabled: { type: 'boolean', description: 'true (default) = automation is enabled. Set to FALSE only when paired with change_type="modify" to keep an automation row in the DB but stop it from firing (e.g., disabling the morning flush when the flush vs Ca-deficit hard rule trips — preserves trigger/actions/dose program for later re-enable). Do NOT encode "DISABLED" or any other intent in the name field — use this flag.' },
           priority: { type: 'integer', description: '0 = normal. Higher values run earlier when due simultaneously.' },
           trigger_config: {
             type: 'object',
@@ -329,7 +347,7 @@ const PLAN_SCHEMA = {
           },
           actions_json: {
             type: 'string',
-            description: 'JSON array string used ONLY for raw fallback (template_id=0). Use "[]" when template_id>0 since the template provides actions. Each action object: {type, action, equipment_id, channel, delay_seconds, duration_seconds, severity, message}. type ∈ {control, alert, log}. For control: action="on"|"off". Always specify channel (1-based) for per-channel control; never use 0 for OFF actions.',
+            description: 'JSON array string used ONLY for raw fallback (template_id=0). Use "[]" when template_id>0 since the template provides actions. SENTINEL FOR change_type="modify": emitting "[]" here means "do not change the actions — preserve whatever is in the live automation". This is the correct value when you want to rename, re-enable, disable, or otherwise alter metadata WITHOUT touching the action set. If you DO intend to change the actions, write the full new action array — do not emit "[]" and hope the engine fills in the old actions while you change something else. Each action object: {type, action, equipment_id, channel, delay_seconds, duration_seconds, severity, message}. type ∈ {control, alert, log}. For control: action="on"|"off". Always specify channel (1-based) for per-channel control; never use 0 for OFF actions.',
           },
           template_id: {
             type: 'integer',
@@ -1868,6 +1886,133 @@ class OperationalPlannerService {
       });
     }
 
+    // === Non-blocking warning: water-only flush scheduled near fertigation while in deficit.
+    // A pure flush delivers no nutrients (so it does not trip the dose-reduction rule above),
+    // but if feed is below hard_min for any priority-1 element AND the flush runs within
+    // ±4h of a fertigation cycle, the flush risks washing out the nutrients that fertigation
+    // just delivered before the plant root mass absorbs them. Emit as severity='low',
+    // would_block=false so it is informational only.
+    const deficitElements = [];
+    for (const rule of rules) {
+      const feedSlot = snapshot?.lab?.irrigation?.latest_per_nutrient || {};
+      const todayFeed = snapshot?.lab?.irrigation?.today || [];
+      const todaySample = todayFeed.find(r => r.nutrient === rule.element);
+      const latestSample = todaySample || feedSlot[rule.element] || null;
+      const latestValue = latestSample ? Number(latestSample.value) : null;
+      let inDeficit = false;
+      switch (rule.comparison) {
+        case 'lt':
+        case 'null_or_lt':
+          inDeficit = latestValue == null || latestValue < rule.threshold; break;
+        case 'lte':
+        case 'null_or_lte':
+          inDeficit = latestValue == null || latestValue <= rule.threshold; break;
+        default: inDeficit = false;
+      }
+      if (inDeficit) deficitElements.push({
+        element: rule.element,
+        rule_name: rule.name,
+        threshold: rule.threshold,
+        latest_value: latestValue,
+      });
+    }
+
+    if (deficitElements.length > 0) {
+      const parseTriggerTime = (tc) => {
+        if (!tc) return null;
+        try {
+          const t = typeof tc === 'string' ? JSON.parse(tc) : tc;
+          const s = t?.time;
+          if (!s || typeof s !== 'string') return null;
+          const m = s.match(/^(\d{1,2}):(\d{2})/);
+          return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+        } catch (_) { return null; }
+      };
+      const classed = propAutos.map((a, idx) => {
+        const t = parseTriggerTime(a.trigger_config);
+        let kind = 'other';
+        if (a.dose_program_id) {
+          const duties = programDuties[a.dose_program_id] || {};
+          const allZero = Object.keys(duties).length > 0 && Object.values(duties).every(d => (d || 0) === 0);
+          kind = allZero ? 'flush' : 'fertigation';
+        }
+        return { idx, name: a.name, time_min: t, kind, enabled: a.enabled !== false, dose_program_id: a.dose_program_id, dose_program_name: programNames[a.dose_program_id] };
+      });
+      // Only the enabled flushes count — a flush already disabled in the proposed plan is fine.
+      const flushes = classed.filter(c => c.kind === 'flush' && c.enabled);
+      const fertigations = classed.filter(c => c.kind === 'fertigation' && c.time_min != null && c.enabled);
+
+      // Pull drain Na value + trend direction from snapshot to decide whether the
+      // leach benefit is "proven" (would_block=false) or "unproven" (would_block=true).
+      const drainNaSample = snapshot?.lab?.drain?.latest_per_nutrient?.sodium_Na || null;
+      const drainNaValue = drainNaSample ? Number(drainNaSample.value) : null;
+      const drainNaDaysAgo = drainNaSample?.days_ago != null ? Number(drainNaSample.days_ago) : null;
+      const drainNaTrend = snapshot?.lab?.drain?.trend?.sodium_Na?.direction || null;
+      const NA_THRESHOLD = 80;
+      const STALE_DAYS = 3;
+      const leachBenefitProven = (
+        drainNaValue != null &&
+        drainNaValue >= NA_THRESHOLD &&
+        (drainNaTrend === 'rising' || drainNaTrend === 'flat') &&
+        (drainNaDaysAgo == null || drainNaDaysAgo <= STALE_DAYS)
+      );
+
+      const PROXIMITY_MIN = 240; // ±4 hours
+      for (const f of flushes) {
+        // If no time is set, fall back to assuming the flush is in conflict with any
+        // fertigation cycle (we can't compute proximity, so we block conservatively
+        // because the planner can't prove >4h gap).
+        const nearby = f.time_min == null
+          ? fertigations
+          : fertigations.filter(g => Math.abs(g.time_min - f.time_min) <= PROXIMITY_MIN);
+        if (nearby.length === 0) continue;
+
+        const deficitSummary = deficitElements
+          .map(d => `${d.element} (${d.latest_value == null ? 'n/a' : d.latest_value} < ${d.threshold})`)
+          .join(', ');
+        const drainNaSummary = drainNaValue == null
+          ? 'no recent sample'
+          : `${drainNaValue} mg/L ${drainNaTrend || 'unknown-trend'}${drainNaDaysAgo != null ? ` (${drainNaDaysAgo}d old)` : ''}`;
+
+        if (leachBenefitProven) {
+          // Drain Na justifies leaching. Still warn (operator should be aware of
+          // washout cost) but don't block — operator can confirm without override.
+          evals.push({
+            rule_id: `flush_proximity_${f.idx}`,
+            rule_name: `flush_near_fertigation_during_deficit`,
+            severity: 'low',
+            description: `Water-only flush "${f.name}" runs near a fertigation cycle while ${deficitSummary} is below hard_min. Drain Na (${drainNaSummary}) justifies leaching, so this is informational only — but the ${PROXIMITY_MIN}-minute proximity window still implies some fraction of the fertigation Ca will be washed out before the plant root mass absorbs it.`,
+            element: deficitElements.map(d => d.element).join(','),
+            comparison: null, threshold: null, latest_value: null, latest_sample_at: null, latest_days_ago: null, minimum_tank_duty_pct: null,
+            triggering_automations: [
+              { automation_index: f.idx, automation_name: f.name, dose_program_id: f.dose_program_id, dose_program_name: f.dose_program_name, kind: 'water_flush', deficit_elements: deficitElements, drain_na: { value: drainNaValue, trend: drainNaTrend, days_ago: drainNaDaysAgo } },
+              ...nearby.map(n => ({ automation_index: n.idx, automation_name: n.name, dose_program_id: n.dose_program_id, dose_program_name: n.dose_program_name, kind: 'fertigation', minutes_from_flush: n.time_min != null && f.time_min != null ? n.time_min - f.time_min : null })),
+            ],
+            triggering_dose_program_requests: [], triggering_mixture_requests: [],
+            would_block: false, override_role: null,
+          });
+        } else {
+          // Leach benefit unproven — block. Override role 'admin' so operator can
+          // force-apply with a typed reason if they have field knowledge that
+          // overrides the sample-based reasoning.
+          evals.push({
+            rule_id: `flush_proximity_${f.idx}`,
+            rule_name: `flush_during_deficit_without_na_justification`,
+            severity: 'high',
+            description: `Water-only flush "${f.name}" is enabled in this plan while ${deficitSummary}, AND drain Na (${drainNaSummary}) does NOT meet the ≥${NA_THRESHOLD} mg/L rising/flat threshold within the last ${STALE_DAYS} days that would justify leaching. With Ca below hard_min and Na not confirmed elevated, the flush will only worsen the root-zone Ca deficit. To unblock: either (a) disable the flush in this plan, (b) confirm a fresh drain sample shows Na > ${NA_THRESHOLD} mg/L and rising/flat (re-run the planner after sampling), or (c) override with a typed admin reason.`,
+            element: deficitElements.map(d => d.element).join(','),
+            comparison: null, threshold: null, latest_value: drainNaValue, latest_sample_at: drainNaSample?.sample_date || null, latest_days_ago: drainNaDaysAgo, minimum_tank_duty_pct: null,
+            triggering_automations: [
+              { automation_index: f.idx, automation_name: f.name, dose_program_id: f.dose_program_id, dose_program_name: f.dose_program_name, kind: 'water_flush', deficit_elements: deficitElements, drain_na: { value: drainNaValue, trend: drainNaTrend, days_ago: drainNaDaysAgo } },
+              ...nearby.map(n => ({ automation_index: n.idx, automation_name: n.name, dose_program_id: n.dose_program_id, dose_program_name: n.dose_program_name, kind: 'fertigation', minutes_from_flush: n.time_min != null && f.time_min != null ? n.time_min - f.time_min : null })),
+            ],
+            triggering_dose_program_requests: [], triggering_mixture_requests: [],
+            would_block: true, override_role: 'admin',
+          });
+        }
+      }
+    }
+
     return evals;
   }
 
@@ -1886,10 +2031,12 @@ class OperationalPlannerService {
     }
 
     // Evaluate guardrails BEFORE touching any automations. Block if any rule
-    // trips without a matching override in the apply payload.
+    // trips without a matching override in the apply payload. Entries with
+    // would_block === false are informational warnings and never block apply.
     const triggered = this.evaluatePlanGuardrails(plan);
     const overrides = Array.isArray(opts.overrides) ? opts.overrides : [];
     const unmitigated = triggered.filter(t => {
+      if (t.would_block === false) return false;
       const o = overrides.find(ov => ov.rule_id === t.rule_id || ov.rule_name === t.rule_name);
       return !o || !o.reason || !String(o.reason).trim();
     });
@@ -1926,11 +2073,11 @@ class OperationalPlannerService {
 
     const insertStmt = db.prepare(`
       INSERT INTO automations (name, description, enabled, priority, trigger_config, conditions, actions, template_id, dose_program_id)
-      VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const updateStmt = db.prepare(`
       UPDATE automations
-      SET name = ?, description = ?, enabled = 1, priority = ?,
+      SET name = ?, description = ?, enabled = ?, priority = ?,
           trigger_config = ?, conditions = ?, actions = ?, template_id = ?, dose_program_id = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
@@ -1976,19 +2123,34 @@ class OperationalPlannerService {
         };
       }
       // Raw path (template_id = 0). actions come from actions_json (string).
+      // Sentinel meaning: an empty/missing actions_json on a MODIFY change does NOT
+      // mean "wipe to empty" — it means "leave the existing actions alone". Empty
+      // actions on an enabled automation produces a no-op rule that the watchdog
+      // keeps trying to rearm forever (we've seen this destroy fan automations).
+      // The caller passes an `existingActions` array (from current_automations) so
+      // we can preserve them when the planner intends a metadata-only modify.
       let rawActions = [];
-      try {
-        const aj = autoSpec.actions_json;
-        if (aj && aj.trim() && aj.trim() !== '[]') rawActions = JSON.parse(aj);
-        if (!Array.isArray(rawActions)) throw new Error('actions_json did not parse as array');
-      } catch (e) {
-        throw new Error(`Invalid actions_json on raw automation: ${e.message}`);
+      const aj = autoSpec.actions_json;
+      const isEmptyAj = !aj || !aj.trim() || aj.trim() === '[]';
+      if (isEmptyAj) {
+        // Caller (modify path) supplies existingActions via a closure on autoSpec.
+        // For add path there's no existing, so we leave [] which is correct (add
+        // with no actions is a different code-smell handled upstream).
+        rawActions = Array.isArray(autoSpec._existingActions) ? autoSpec._existingActions : [];
+      } else {
+        try {
+          rawActions = JSON.parse(aj);
+          if (!Array.isArray(rawActions)) throw new Error('actions_json did not parse as array');
+        } catch (e) {
+          throw new Error(`Invalid actions_json on raw automation: ${e.message}`);
+        }
       }
       return {
         trigger: this._normalizeTriggerForEngine(autoSpec.trigger_config),
         conditions: [],
         actions: this._normalizeActionsForEngine(rawActions),
         template_id: null,
+        _preserved_actions: isEmptyAj && rawActions.length > 0,
       };
     };
 
@@ -2037,15 +2199,17 @@ class OperationalPlannerService {
               if (!autoSpec) throw new Error('add requires valid proposed_automation_index (and no name match found)');
               const resolved = resolveAutoSpec(autoSpec);
               const doseProgId = resolveDoseProgramId(autoSpec);
+              // enabled defaults to true; planner can opt-in to false to add-and-disable.
+              const enabledVal = autoSpec.enabled === false ? 0 : 1;
               const res = insertStmt.run(
-                autoSpec.name, autoSpec.description || '', autoSpec.priority || 0,
+                autoSpec.name, autoSpec.description || '', enabledVal, autoSpec.priority || 0,
                 JSON.stringify(resolved.trigger),
                 JSON.stringify(resolved.conditions),
                 JSON.stringify(resolved.actions),
                 resolved.template_id,
                 doseProgId,
               );
-              summary.added.push({ id: res.lastInsertRowid, name: autoSpec.name, template_id: resolved.template_id, dose_program_id: doseProgId });
+              summary.added.push({ id: res.lastInsertRowid, name: autoSpec.name, enabled: !!enabledVal, template_id: resolved.template_id, dose_program_id: doseProgId });
               break;
             }
             case 'modify': {
@@ -2062,10 +2226,28 @@ class OperationalPlannerService {
                 summary.kept.push({ id: ch.current_automation_id, name: ch.target, downgraded_from: 'modify' });
                 break;
               }
+              // Fetch existing actions so empty actions_json on modify is treated
+              // as "keep existing actions" rather than "wipe to empty".
+              try {
+                const existingRow = db.prepare('SELECT actions FROM automations WHERE id = ?').get(ch.current_automation_id);
+                if (existingRow?.actions) {
+                  try { autoSpec._existingActions = JSON.parse(existingRow.actions); }
+                  catch (_) { autoSpec._existingActions = []; }
+                }
+              } catch (_) { /* leave _existingActions unset */ }
               const resolved = resolveAutoSpec(autoSpec);
+              if (resolved._preserved_actions) {
+                summary.warnings.push({
+                  change: ch,
+                  warning: `modify on #${ch.current_automation_id} (${autoSpec.name}) emitted empty actions_json — preserving existing ${autoSpec._existingActions.length} action(s) instead of wiping. Planner should set actions_json explicitly if it intends to change actions.`,
+                });
+              }
               const doseProgId = resolveDoseProgramId(autoSpec);
+              // enabled defaults to true; planner can pass enabled=false to disable
+              // an automation via modify (previously the only way was change_type='remove').
+              const enabledVal = autoSpec.enabled === false ? 0 : 1;
               const r = updateStmt.run(
-                autoSpec.name, autoSpec.description || '', autoSpec.priority || 0,
+                autoSpec.name, autoSpec.description || '', enabledVal, autoSpec.priority || 0,
                 JSON.stringify(resolved.trigger),
                 JSON.stringify(resolved.conditions),
                 JSON.stringify(resolved.actions),
@@ -2074,7 +2256,7 @@ class OperationalPlannerService {
                 ch.current_automation_id,
               );
               if (r.changes === 0) throw new Error(`automation ${ch.current_automation_id} not found`);
-              summary.modified.push({ id: ch.current_automation_id, name: autoSpec.name, template_id: resolved.template_id, dose_program_id: doseProgId });
+              summary.modified.push({ id: ch.current_automation_id, name: autoSpec.name, enabled: !!enabledVal, template_id: resolved.template_id, dose_program_id: doseProgId });
               break;
             }
             case 'remove': {

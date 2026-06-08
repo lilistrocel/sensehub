@@ -542,7 +542,7 @@ export default function Users() {
                             id="name"
                             value={formData.name}
                             onChange={handleInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                            className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                             placeholder="John Doe"
                           />
                         </div>
@@ -557,7 +557,7 @@ export default function Users() {
                             id="email"
                             value={formData.email}
                             onChange={handleInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                            className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                             placeholder="user@example.com"
                           />
                         </div>
@@ -572,7 +572,7 @@ export default function Users() {
                             id="password"
                             value={formData.password}
                             onChange={handleInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                            className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                             placeholder={editingUser ? "Leave blank to keep current password" : "Minimum 8 characters"}
                           />
                         </div>
@@ -586,7 +586,7 @@ export default function Users() {
                             id="role"
                             value={formData.role}
                             onChange={handleInputChange}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                            className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                           >
                             <option value="viewer">Viewer - View-only access</option>
                             <option value="operator">Operator - Can control equipment and create automations</option>
@@ -746,7 +746,7 @@ export default function Users() {
                           setNewPassword(e.target.value);
                           setResetPasswordError('');
                         }}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-amber-500 focus:border-amber-500 sm:text-sm"
+                        className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-amber-500 focus:border-amber-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                         placeholder="Minimum 8 characters"
                         autoFocus
                       />

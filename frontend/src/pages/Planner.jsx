@@ -951,19 +951,20 @@ export default function Planner() {
                   </div>
                 )}
 
-                {/* Guardrail warnings — visible BEFORE Confirm so operator knows what they'll need to override */}
-                {selected.status === 'pending' && guardrails.length > 0 && (
+                {/* Guardrail warnings — visible BEFORE Confirm so operator knows what they'll need to override.
+                    Split into blockers (would_block !== false) and informational warnings (would_block === false). */}
+                {selected.status === 'pending' && guardrails.filter(g => g.would_block !== false).length > 0 && (
                   <div className="mt-4 border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/30 rounded p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <svg className="w-5 h-5 text-red-600 dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                       <span className="font-semibold text-red-900 dark:text-red-100">
-                        {guardrails.length} guardrail{guardrails.length === 1 ? '' : 's'} would block Confirm
+                        {guardrails.filter(g => g.would_block !== false).length} guardrail{guardrails.filter(g => g.would_block !== false).length === 1 ? '' : 's'} would block Confirm
                       </span>
                     </div>
                     <div className="space-y-2">
-                      {guardrails.map(g => (
+                      {guardrails.filter(g => g.would_block !== false).map(g => (
                         <div key={g.rule_id} className="text-sm">
                           <div className="font-semibold text-red-900 dark:text-red-200">{g.rule_name}</div>
                           <div className="text-red-800 dark:text-red-200 text-xs mt-0.5">
@@ -978,6 +979,40 @@ export default function Planner() {
                           <div className="text-red-700 dark:text-red-300 text-xs mt-1">
                             Override role required: <span className="font-mono">{g.override_role}</span>
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Non-blocking informational warnings (e.g. flush near fertigation during deficit). */}
+                {selected.status === 'pending' && guardrails.filter(g => g.would_block === false).length > 0 && (
+                  <div className="mt-4 border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 rounded p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-5 h-5 text-amber-600 dark:text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="font-semibold text-amber-900 dark:text-amber-100">
+                        {guardrails.filter(g => g.would_block === false).length} informational warning{guardrails.filter(g => g.would_block === false).length === 1 ? '' : 's'} (does not block Confirm)
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {guardrails.filter(g => g.would_block === false).map(g => (
+                        <div key={g.rule_id} className="text-sm">
+                          <div className="font-semibold text-amber-900 dark:text-amber-200">{g.rule_name}</div>
+                          <div className="text-amber-800 dark:text-amber-200 text-xs mt-1">{g.description}</div>
+                          {g.triggering_automations?.length > 0 && (
+                            <ul className="text-amber-800 dark:text-amber-200 text-xs mt-1 ml-4 list-disc">
+                              {g.triggering_automations.map((a, idx) => (
+                                <li key={idx}>
+                                  {a.kind === 'water_flush' && <span className="font-mono">[flush]</span>}
+                                  {a.kind === 'fertigation' && <span className="font-mono">[fertigation, {a.minutes_from_flush >= 0 ? '+' : ''}{a.minutes_from_flush} min]</span>}
+                                  {' '}"{a.automation_name}"
+                                  {a.dose_program_name && <span className="text-amber-700 dark:text-amber-300"> · program {a.dose_program_name}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
                       ))}
                     </div>
