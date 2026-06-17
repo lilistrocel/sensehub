@@ -1058,7 +1058,7 @@ export default function Dashboard() {
                           )}
                         </div>
                       )}
-                      {crop.population && (crop.population.plant_count || crop.population.max_capacity) && (
+                      {crop.population && (crop.population.plant_count != null || crop.population.max_capacity != null) && (
                         <div className="flex justify-between text-xs mt-1">
                           <span className="text-gray-500 dark:text-gray-400">Plants</span>
                           <span className="text-gray-900 dark:text-white font-medium">
@@ -1633,7 +1633,7 @@ export default function Dashboard() {
                     {alert.acknowledged ? (
                       <span className="text-xs text-green-600 dark:text-green-400">Acknowledged</span>
                     ) : (
-                      <span className="text-xs text-gray-400 dark:text-gray-500">0</span>
+                      <span className="text-xs text-amber-600 dark:text-amber-400">Unacknowledged</span>
                     )}
                   </div>
                 ))}

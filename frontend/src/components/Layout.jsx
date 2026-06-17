@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Breadcrumb from './Breadcrumb';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +20,10 @@ export default function Layout({ children }) {
     pendingItems: 0
   });
   const [unacknowledgedCount, setUnacknowledgedCount] = useState(0);
+  // null = unknown (no successful response yet), true/false = last known reachability.
+  // Derived from the existing cloud-status fetch below; a successful API response is
+  // genuine evidence the backend (and the SQLite DB it queries) is reachable.
+  const [backendReachable, setBackendReachable] = useState(null);
 
   // Fetch cloud status on mount and periodically
   useEffect(() => {
@@ -30,9 +35,13 @@ export default function Layout({ children }) {
         if (response.ok) {
           const data = await response.json();
           setCloudStatus(data);
+          setBackendReachable(true);
+        } else {
+          setBackendReachable(false);
         }
       } catch (err) {
         console.error('Failed to fetch cloud status:', err);
+        setBackendReachable(false);
       }
     };
 
@@ -130,8 +139,8 @@ export default function Layout({ children }) {
 
               {/* Unacknowledged alerts badge */}
               {unacknowledgedCount > 0 && (
-                <a
-                  href="/alerts"
+                <Link
+                  to="/alerts"
                   className="flex items-center text-sm hover:opacity-80"
                   title={`${unacknowledgedCount} unacknowledged alert${unacknowledgedCount !== 1 ? 's' : ''}`}
                 >
@@ -143,7 +152,7 @@ export default function Layout({ children }) {
                       {unacknowledgedCount > 99 ? '99+' : unacknowledgedCount}
                     </span>
                   </span>
-                </a>
+                </Link>
               )}
 
               {/* Cloud status indicator */}
@@ -173,13 +182,31 @@ export default function Layout({ children }) {
           <div className="flex items-center justify-between">
             <span>A20Core - SenseHub v1.0.0</span>
             <div className="flex items-center space-x-4">
-              <span className="flex items-center">
-                <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
-                System OK
+              <span className="flex items-center" title={
+                backendReachable === null
+                  ? 'Checking backend connectivity...'
+                  : backendReachable
+                    ? 'Backend reachable'
+                    : 'Backend unreachable'
+              }>
+                <span className={`w-2 h-2 rounded-full mr-1 ${
+                  backendReachable === null ? 'bg-gray-400'
+                    : backendReachable ? 'bg-green-500' : 'bg-red-500'
+                }`}></span>
+                {backendReachable === null ? 'Checking…' : backendReachable ? 'System OK' : 'System Unreachable'}
               </span>
-              <span className="flex items-center">
-                <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
-                DB Connected
+              <span className="flex items-center" title={
+                backendReachable === null
+                  ? 'Database status unknown'
+                  : backendReachable
+                    ? 'Database responding'
+                    : 'No response from database'
+              }>
+                <span className={`w-2 h-2 rounded-full mr-1 ${
+                  backendReachable === null ? 'bg-gray-400'
+                    : backendReachable ? 'bg-green-500' : 'bg-red-500'
+                }`}></span>
+                {backendReachable === null ? 'DB Unknown' : backendReachable ? 'DB Connected' : 'DB Unreachable'}
               </span>
             </div>
           </div>

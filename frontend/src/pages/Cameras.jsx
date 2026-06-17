@@ -244,96 +244,6 @@ export default function Cameras() {
     );
   };
 
-  const FormFields = () => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
-          <input type="text" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">IP Address *</label>
-          <input type="text" required value={form.ip_address} onChange={e => setForm({ ...form, ip_address: e.target.value })}
-            placeholder="192.168.1.104"
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        </div>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-        <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">RTSP Port</label>
-          <input type="number" value={form.rtsp_port} onChange={e => setForm({ ...form, rtsp_port: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">HTTP Port</label>
-          <input type="number" value={form.http_port} onChange={e => setForm({ ...form, http_port: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Manufacturer</label>
-          <input type="text" value={form.manufacturer} onChange={e => setForm({ ...form, manufacturer: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Model</label>
-          <input type="text" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
-          <input type="text" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })}
-            autoComplete="off"
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
-          <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-            autoComplete="new-password"
-            placeholder={showEditModal ? '(unchanged if empty)' : ''}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        </div>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">RTSP Stream Path</label>
-        <input type="text" value={form.stream_url} onChange={e => setForm({ ...form, stream_url: e.target.value })}
-          placeholder="/Streaming/Channels/101"
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Hikvision default: /Streaming/Channels/101 (main) or /102 (sub)</p>
-      </div>
-      <div className="flex items-center">
-        <input type="checkbox" id="enabled" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })}
-          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
-        <label htmlFor="enabled" className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enabled</label>
-      </div>
-    </div>
-  );
-
-  // Modal wrapper component
-  const Modal = ({ show, onClose, title, children }) => {
-    if (!show) return null;
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto">
-        <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-          <div className="fixed inset-0 bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-75 transition-opacity" onClick={onClose} />
-          <div className="relative bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
-            </div>
-            {children}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -476,7 +386,7 @@ export default function Cameras() {
       {/* Add Camera Modal */}
       <Modal show={showAddModal} onClose={() => setShowAddModal(false)} title="Add Camera">
         <form onSubmit={handleAdd}>
-          <div className="px-6 py-4"><FormFields /></div>
+          <div className="px-6 py-4"><FormFields form={form} setForm={setForm} isEdit={false} /></div>
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 flex justify-end gap-3">
             <button type="button" onClick={() => setShowAddModal(false)}
               className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500">
@@ -493,7 +403,7 @@ export default function Cameras() {
       {/* Edit Camera Modal */}
       <Modal show={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Camera">
         <form onSubmit={handleEdit}>
-          <div className="px-6 py-4"><FormFields /></div>
+          <div className="px-6 py-4"><FormFields form={form} setForm={setForm} isEdit={true} /></div>
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 flex justify-end gap-3">
             <button type="button" onClick={() => setShowEditModal(false)}
               className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500">
@@ -601,6 +511,103 @@ export default function Cameras() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Hoisted to module scope so it keeps a stable identity across renders of
+// Cameras() — otherwise React remounts these inputs on every keystroke and the
+// cursor jumps out of the field while typing. State is passed in via props.
+const inputCls = "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white";
+
+function FormFields({ form, setForm, isEdit }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
+          <input type="text" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+            className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">IP Address *</label>
+          <input type="text" required value={form.ip_address} onChange={e => setForm({ ...form, ip_address: e.target.value })}
+            placeholder="192.168.1.104"
+            className={inputCls} />
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+        <input type="text" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+          className={inputCls} />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">RTSP Port</label>
+          <input type="number" value={form.rtsp_port} onChange={e => setForm({ ...form, rtsp_port: e.target.value })}
+            className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">HTTP Port</label>
+          <input type="number" value={form.http_port} onChange={e => setForm({ ...form, http_port: e.target.value })}
+            className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Manufacturer</label>
+          <input type="text" value={form.manufacturer} onChange={e => setForm({ ...form, manufacturer: e.target.value })}
+            className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Model</label>
+          <input type="text" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })}
+            className={inputCls} />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
+          <input type="text" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })}
+            autoComplete="off"
+            className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+          <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+            autoComplete="new-password"
+            placeholder={isEdit ? '(unchanged if empty)' : ''}
+            className={inputCls} />
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">RTSP Stream Path</label>
+        <input type="text" value={form.stream_url} onChange={e => setForm({ ...form, stream_url: e.target.value })}
+          placeholder="/Streaming/Channels/101"
+          className={inputCls} />
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Hikvision default: /Streaming/Channels/101 (main) or /102 (sub)</p>
+      </div>
+      <div className="flex items-center">
+        <input type="checkbox" id="enabled" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })}
+          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+        <label htmlFor="enabled" className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enabled</label>
+      </div>
+    </div>
+  );
+}
+
+// Modal wrapper component — hoisted to module scope for stable identity.
+function Modal({ show, onClose, title, children }) {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+        <div className="fixed inset-0 bg-gray-500 dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-75 transition-opacity" onClick={onClose} />
+        <div className="relative bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+          </div>
+          {children}
+        </div>
+      </div>
     </div>
   );
 }

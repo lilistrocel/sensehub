@@ -86,6 +86,32 @@ function PublicRoute({ children }) {
   return children;
 }
 
+// Admin-only route wrapper (authenticated AND role === 'admin').
+// Used to gate developer/diagnostic routes away from operators and viewers.
+function AdminRoute({ children }) {
+  const { isAuthenticated, loading, needsSetup, user } = useAuth();
+  const location = useLocation();
+
+  if (loading || needsSetup === null) {
+    return <LoadingSpinner />;
+  }
+
+  if (needsSetup) {
+    return <Navigate to="/setup" replace />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Non-admins are redirected to the dashboard rather than seeing the page.
+  if (user?.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Layout>{children}</Layout>;
+}
+
 // Setup route wrapper (only accessible when setup is needed)
 function SetupRoute({ children }) {
   const { isAuthenticated, loading, needsSetup } = useAuth();
@@ -286,14 +312,19 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/debug"
-        element={
-          <ProtectedRoute>
-            <Debug />
-          </ProtectedRoute>
-        }
-      />
+      {/* Debug/diagnostics: dev builds only, and admin-only even there.
+          In production builds (import.meta.env.DEV === false) the route is not
+          mounted at all, so it falls through to the 404 handler. */}
+      {import.meta.env.DEV && (
+        <Route
+          path="/debug"
+          element={
+            <AdminRoute>
+              <Debug />
+            </AdminRoute>
+          }
+        />
+      )}
       {/* Catch all - show 404 page */}
       <Route path="*" element={<NotFound />} />
     </Routes>

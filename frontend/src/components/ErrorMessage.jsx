@@ -6,6 +6,7 @@ import React from 'react';
  * @param {string} props.message - The error message to display
  * @param {boolean} props.canRetry - Whether to show the retry button
  * @param {Function} props.onRetry - Callback function when retry is clicked
+ * @param {Function} props.onDismiss - Callback function when dismiss (X) is clicked; the dismiss button only renders when this is provided
  * @param {boolean} props.isNetworkError - Whether this is a network-related error
  * @param {string} props.className - Additional CSS classes
  */
@@ -13,6 +14,7 @@ function ErrorMessage({
   message,
   canRetry = false,
   onRetry,
+  onDismiss,
   isNetworkError = false,
   className = ''
 }) {
@@ -62,10 +64,12 @@ function ErrorMessage({
           )}
         </div>
 
-        {/* Dismiss Button (if no retry) */}
-        {!canRetry && (
+        {/* Dismiss Button — only when an onDismiss handler is provided */}
+        {onDismiss && (
           <div className="ml-auto pl-3">
             <button
+              type="button"
+              onClick={onDismiss}
               className="text-red-400 hover:text-red-600 focus:outline-none"
               aria-label="Dismiss"
             >

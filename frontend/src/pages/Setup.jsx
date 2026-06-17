@@ -469,10 +469,14 @@ function Setup() {
                 </div>
 
                 <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6">
-                  <p className="text-gray-600 text-sm font-medium mb-2">Default Admin Credentials:</p>
+                  <p className="text-gray-600 text-sm font-medium mb-2">Default Admin Account:</p>
                   <div className="text-sm text-gray-800 space-y-1">
                     <p><span className="font-medium">Email:</span> admin@sensehub.local</p>
-                    <p><span className="font-medium">Password:</span> admin123</p>
+                    <p className="text-gray-600">
+                      A temporary password is generated for this account. For security it is
+                      <span className="font-medium"> not shown here</span> — you will be required to set a
+                      new password the first time you sign in.
+                    </p>
                   </div>
                 </div>
 

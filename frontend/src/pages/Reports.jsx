@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 const API_BASE = '/api';
 
@@ -24,8 +25,10 @@ const formatDate = (dateStr) => {
 
 export default function Reports() {
   const { token } = useAuth();
+  const { showError } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [days, setDays] = useState(7);
   const [expandedDay, setExpandedDay] = useState(null);
 
@@ -33,11 +36,18 @@ export default function Reports() {
 
   const fetchReport = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API_BASE}/reports/daily?days=${days}`, { headers });
-      if (res.ok) setData(await res.json());
-    } catch {}
-    setLoading(false);
+      if (!res.ok) throw new Error(`Failed to load reports (HTTP ${res.status})`);
+      setData(await res.json());
+    } catch (err) {
+      const msg = err.message || 'Failed to load reports';
+      setError(msg);
+      showError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchReport(); }, [days]);
@@ -110,6 +120,26 @@ export default function Reports() {
         <div className="text-center py-12 text-gray-500 dark:text-gray-400">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2" />
           Loading reports...
+        </div>
+      ) : error && !data ? (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
+          <svg className="w-10 h-10 mx-auto text-red-500 dark:text-red-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="font-semibold text-red-800 dark:text-red-400">Could not load reports</p>
+          <p className="text-sm text-red-700 dark:text-red-400 mt-1">{error}</p>
+          <button onClick={fetchReport} disabled={loading}
+            className="mt-4 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
+            Retry
+          </button>
+        </div>
+      ) : data && (!data.report || data.report.length === 0) ? (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+          <svg className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <p className="text-gray-500 dark:text-gray-400 text-lg">No report data for this period</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Try selecting a longer date range, or check back once automations have run.</p>
         </div>
       ) : data && (
         <>

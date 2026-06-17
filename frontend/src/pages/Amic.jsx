@@ -162,6 +162,18 @@ export default function Amic() {
     conditioning: { name: 'Conditioning', color: 'pink' },
   };
 
+  // Static, full class strings per color so Tailwind's JIT keeps them. Dynamic
+  // strings like `bg-${color}-50` get purged at build time and never render, so
+  // we look up complete literal class names instead. Keep keys in sync with the
+  // `color` values in STATE_DISPLAY above.
+  const STATE_COLOR_CLASSES = {
+    blue:   { banner: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',         text: 'text-blue-700 dark:text-blue-400',     bar: 'bg-blue-500' },
+    amber:  { banner: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800',      text: 'text-amber-700 dark:text-amber-400',   bar: 'bg-amber-500' },
+    cyan:   { banner: 'bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800',          text: 'text-cyan-700 dark:text-cyan-400',     bar: 'bg-cyan-500' },
+    purple: { banner: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800',  text: 'text-purple-700 dark:text-purple-400', bar: 'bg-purple-500' },
+    pink:   { banner: 'bg-pink-50 dark:bg-pink-900/20 border-pink-200 dark:border-pink-800',          text: 'text-pink-700 dark:text-pink-400',     bar: 'bg-pink-500' },
+  };
+
   // Drive the cycle banner from the persisted current_cycle (survives page reload + backend restart).
   // Falls back to live state flags if the API is older than this build.
   const currentCycle = (() => {
@@ -182,6 +194,8 @@ export default function Amic() {
     }
     return null;
   })();
+
+  const cycleColor = currentCycle ? STATE_COLOR_CLASSES[currentCycle.color] : null;
 
   const elapsedSecTotal = currentCycle?.startedAt ? Math.max(0, Math.floor((now - currentCycle.startedAt) / 1000)) : 0;
   const elapsedMin = Math.floor(elapsedSecTotal / 60);
@@ -226,14 +240,14 @@ export default function Amic() {
 
       {/* Status banner */}
       <div className={`rounded-lg p-4 border ${
-        currentCycle
-          ? `bg-${currentCycle.color}-50 dark:bg-${currentCycle.color}-900/20 border-${currentCycle.color}-200 dark:border-${currentCycle.color}-800`
+        cycleColor
+          ? cycleColor.banner
           : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
       }`}>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <p className="text-xs uppercase font-semibold text-gray-600 dark:text-gray-400">Current State</p>
-            <p className={`text-2xl font-bold ${currentCycle ? `text-${currentCycle.color}-700 dark:text-${currentCycle.color}-400` : 'text-green-700 dark:text-green-400'}`}>
+            <p className={`text-2xl font-bold ${cycleColor ? cycleColor.text : 'text-green-700 dark:text-green-400'}`}>
               {currentCycle ? `${currentCycle.name}...` : '✓ Idle / Ready'}
             </p>
             {currentCycle?.source === 'panel' && (
@@ -264,7 +278,7 @@ export default function Amic() {
         {currentCycle && currentCycle.expected > 0 && currentCycle.startedAt && (
           <div className="mt-3 w-full bg-white/60 dark:bg-black/30 rounded-full h-1.5 overflow-hidden">
             <div
-              className={`h-full transition-all duration-500 ease-out ${overrunning ? 'bg-amber-500' : `bg-${currentCycle.color}-500`}`}
+              className={`h-full transition-all duration-500 ease-out ${overrunning ? 'bg-amber-500' : (cycleColor ? cycleColor.bar : 'bg-green-500')}`}
               style={{ width: `${progressPct}%` }}
             />
           </div>
