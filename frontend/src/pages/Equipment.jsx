@@ -113,6 +113,22 @@ const REGISTER_PRESETS = {
   }
 };
 
+// Derive the default register quantity (word count) from a Modbus data type.
+// 16-bit and boolean values occupy 1 register; 32-bit values occupy 2.
+const defaultQuantityForType = (dataType) => {
+  switch (dataType) {
+    case 'uint32':
+    case 'int32':
+    case 'float32':
+      return 2;
+    case 'uint16':
+    case 'int16':
+    case 'bool':
+    default:
+      return 1;
+  }
+};
+
 // Status badge component with color coding
 function StatusBadge({ status, large = false }) {
   const statusStyles = {
@@ -2663,7 +2679,11 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
         register: '',
         type: 'holding',
         dataType: 'uint16',
-        access: 'read'
+        access: 'read',
+        quantity: defaultQuantityForType('uint16'),
+        scale: 1,
+        offset: 0,
+        unit: ''
       }]
     }));
   };
@@ -2673,6 +2693,10 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
     setFormData(prev => {
       const updated = [...prev.register_mappings];
       updated[index] = { ...updated[index], [field]: value };
+      // Auto-derive quantity (word count) when the data type changes.
+      if (field === 'dataType') {
+        updated[index].quantity = defaultQuantityForType(value);
+      }
       return { ...prev, register_mappings: updated };
     });
   };
@@ -2730,13 +2754,23 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
           // Validate mapping structure
           const validMappings = mappings.filter(m =>
             typeof m === 'object' && m.name && m.register !== undefined
-          ).map(m => ({
-            name: m.name || '',
-            register: String(m.register || ''),
-            type: m.type || 'holding',
-            dataType: m.dataType || 'uint16',
-            access: m.access || 'read'
-          }));
+          ).map(m => {
+            const dataType = m.dataType || 'uint16';
+            return {
+              name: m.name || '',
+              label: m.label || '',
+              register: String(m.register || ''),
+              type: m.type || 'holding',
+              dataType,
+              access: m.access || 'read',
+              quantity: m.quantity != null ? m.quantity : defaultQuantityForType(dataType),
+              scale: m.scale != null ? m.scale : 1,
+              offset: m.offset != null ? m.offset : 0,
+              unit: m.unit || '',
+              functionCode: m.functionCode,
+              enabled: m.enabled !== false
+            };
+          });
           setFormData(prev => ({
             ...prev,
             register_mappings: validMappings
@@ -3168,6 +3202,41 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                               <option value="readwrite">Read/Write</option>
                             </select>
                           </div>
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <input
+                              type="number"
+                              placeholder="Qty (words)"
+                              value={mapping.quantity ?? defaultQuantityForType(mapping.dataType)}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'quantity', e.target.value === '' ? '' : Number(e.target.value))}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                              title="Number of 16-bit registers to read (auto-set from data type: 1 for 16-bit/bool, 2 for 32-bit)"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Unit (e.g. °C)"
+                              value={mapping.unit || ''}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'unit', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                            />
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="Scale (×)"
+                              value={mapping.scale ?? 1}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'scale', e.target.value === '' ? '' : Number(e.target.value))}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                              title="Multiplier applied to the raw value"
+                            />
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="Offset (+)"
+                              value={mapping.offset ?? 0}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'offset', e.target.value === '' ? '' : Number(e.target.value))}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                              title="Value added after scaling"
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -3279,7 +3348,11 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
         register: '',
         type: 'holding',
         dataType: 'uint16',
-        access: 'read'
+        access: 'read',
+        quantity: defaultQuantityForType('uint16'),
+        scale: 1,
+        offset: 0,
+        unit: ''
       }]
     }));
   };
@@ -3289,6 +3362,10 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
     setFormData(prev => {
       const updated = [...prev.register_mappings];
       updated[index] = { ...updated[index], [field]: value };
+      // Auto-derive quantity (word count) when the data type changes.
+      if (field === 'dataType') {
+        updated[index].quantity = defaultQuantityForType(value);
+      }
       return { ...prev, register_mappings: updated };
     });
   };
@@ -3346,13 +3423,23 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
           // Validate mapping structure
           const validMappings = mappings.filter(m =>
             typeof m === 'object' && m.name && m.register !== undefined
-          ).map(m => ({
-            name: m.name || '',
-            register: String(m.register || ''),
-            type: m.type || 'holding',
-            dataType: m.dataType || 'uint16',
-            access: m.access || 'read'
-          }));
+          ).map(m => {
+            const dataType = m.dataType || 'uint16';
+            return {
+              name: m.name || '',
+              label: m.label || '',
+              register: String(m.register || ''),
+              type: m.type || 'holding',
+              dataType,
+              access: m.access || 'read',
+              quantity: m.quantity != null ? m.quantity : defaultQuantityForType(dataType),
+              scale: m.scale != null ? m.scale : 1,
+              offset: m.offset != null ? m.offset : 0,
+              unit: m.unit || '',
+              functionCode: m.functionCode,
+              enabled: m.enabled !== false
+            };
+          });
           setFormData(prev => ({
             ...prev,
             register_mappings: validMappings
@@ -3770,6 +3857,41 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                               <option value="write">Write Only</option>
                               <option value="readwrite">Read/Write</option>
                             </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <input
+                              type="number"
+                              placeholder="Qty (words)"
+                              value={mapping.quantity ?? defaultQuantityForType(mapping.dataType)}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'quantity', e.target.value === '' ? '' : Number(e.target.value))}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                              title="Number of 16-bit registers to read (auto-set from data type: 1 for 16-bit/bool, 2 for 32-bit)"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Unit (e.g. °C)"
+                              value={mapping.unit || ''}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'unit', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                            />
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="Scale (×)"
+                              value={mapping.scale ?? 1}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'scale', e.target.value === '' ? '' : Number(e.target.value))}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                              title="Multiplier applied to the raw value"
+                            />
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="Offset (+)"
+                              value={mapping.offset ?? 0}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'offset', e.target.value === '' ? '' : Number(e.target.value))}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                              title="Value added after scaling"
+                            />
                           </div>
                         </div>
                       ))}

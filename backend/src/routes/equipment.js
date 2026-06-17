@@ -2,7 +2,17 @@ const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
 const { modbusTcpClient } = require('../services/ModbusTcpClient');
+const { modbusPollingService } = require('../services/ModbusPollingService');
 const { logRelayEvent } = require('../services/RelayEventLogger');
+
+// Reload the polling service's device list so newly added / changed / removed
+// equipment takes effect immediately. Defensive: never let a refresh failure
+// affect the API response (fired after the response is sent).
+function refreshPolling() {
+  Promise.resolve()
+    .then(() => modbusPollingService.refreshDevices())
+    .catch((err) => console.error('Failed to refresh Modbus polling after equipment change:', err));
+}
 
 const router = express.Router();
 
@@ -128,6 +138,8 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
   global.broadcast('equipment_created', equipment);
 
   res.status(201).json(equipment);
+
+  refreshPolling();
 });
 
 // GET /api/equipment/:id - Get equipment details
@@ -225,6 +237,8 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   global.broadcast('equipment_updated', updated);
 
   res.json(updated);
+
+  refreshPolling();
 });
 
 // DELETE /api/equipment/:id - Delete equipment
@@ -248,6 +262,8 @@ router.delete('/:id', requireRole('admin'), (req, res) => {
   global.broadcast('equipment_deleted', { id: equipmentId });
 
   res.json({ message: 'Equipment deleted successfully' });
+
+  refreshPolling();
 });
 
 // POST /api/equipment/scan - Discover equipment (Modbus TCP Scanner)
