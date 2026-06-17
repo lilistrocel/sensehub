@@ -1,0 +1,29 @@
+# Dependencies (reinstalled via npm ci/install in build)
+node_modules
+
+# Version control
+.git
+.gitignore
+
+# Databases
+*.sqlite
+*.db
+
+# Logs
+*.log
+logs
+
+# Environment / secrets
+.env
+.env.local
+
+# Docs (README not needed in the image)
+*.md
+.dockerignore
+Dockerfile
+
+# Editor / OS cruft
+.vscode
+.idea
+.DS_Store
+*.swp

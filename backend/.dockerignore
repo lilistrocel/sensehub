@@ -1,0 +1,56 @@
+# Dependencies (reinstalled via npm ci in build)
+node_modules
+
+# Local runtime data dir (mounted as a volume at runtime)
+data
+
+# Version control
+.git
+.gitignore
+
+# Databases
+*.sqlite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs
+*.log
+logs
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Throwaway dev / one-off scripts (never part of the image)
+add-readings.js
+check-db-counts.js
+check-users.js
+create-admin.js
+create-test-zones.js
+debug-login.js
+probe_tuf2000b.js
+reset-admin*.js
+reset-db.js
+seed.js
+set-viewer-password.js
+test-bcrypt.js
+test-login-f131.js
+test-password.js
+verify-counts.js
+verify-password.js
+scripts/fix-fertigation-template.js
+scripts/fix-irrigation-automations.js
+
+# Docs / misc (not needed for the build)
+*.md
+.dockerignore
+Dockerfile
+
+# Editor / OS cruft
+.vscode
+.idea
+.DS_Store
+*.swp

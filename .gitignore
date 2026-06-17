@@ -7,6 +7,7 @@ build/
 
 # Database
 *.db
+*.sqlite
 *.db-journal
 *.db-wal
 *.db-shm
@@ -52,3 +53,33 @@ features.db
 
 # Stray screenshots not part of the codebase
 Screenshot*.png
+
+# Throwaway one-off dev scripts (root only, non-recursive)
+/reset-*.js
+/fix-*.js
+/check-*.js
+/create-operator.js
+/add-readings.js
+/update-status.js
+/set-viewer-password.js
+/test-backup.json
+
+# Throwaway one-off dev scripts (backend only, non-recursive)
+/backend/reset-*.js
+/backend/check-*.js
+/backend/create-admin.js
+/backend/create-test-zones.js
+/backend/debug-login.js
+/backend/probe_tuf2000b.js
+/backend/seed.js
+/backend/set-viewer-password.js
+/backend/test-bcrypt.js
+/backend/test-login-f131.js
+/backend/test-password.js
+/backend/verify-counts.js
+/backend/verify-password.js
+/backend/scripts/fix-fertigation-template.js
+/backend/scripts/fix-irrigation-automations.js
+
+# Coding-agent progress log (not source)
+claude-progress.txt
