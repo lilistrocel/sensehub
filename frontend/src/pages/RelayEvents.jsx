@@ -353,6 +353,7 @@ function EventsTable({ events, loading }) {
 }
 
 function SafetyConfigPanel({ config, equipment, onSaved, headers }) {
+  const { showError } = useToast();
   const [enabled, setEnabled] = useState(config?.enabled ?? true);
   const [interval, setInterval] = useState(config?.check_interval_seconds ?? 30);
   const [defaultMax, setDefaultMax] = useState(config?.default_max_on_seconds ?? 1500);
@@ -396,7 +397,7 @@ function SafetyConfigPanel({ config, equipment, onSaved, headers }) {
       if (!res.ok) throw new Error(data.error || 'Failed');
       onSaved(data);
     } catch (err) {
-      alert('Save failed: ' + err.message);
+      showError('Save failed: ' + err.message);
     } finally {
       setSaving(false);
     }

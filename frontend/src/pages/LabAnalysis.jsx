@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { useToast } from '../context/ToastContext';
 
 const API_BASE = '/api';
 
 export default function LabAnalysis() {
   const { token, user } = useAuth();
   const { formatDateTime } = useSettings();
+  const { showError, showSuccess } = useToast();
   const canEdit = user?.role === 'admin' || user?.role === 'operator';
 
   const [nutrients, setNutrients] = useState([]);
@@ -155,10 +157,15 @@ export default function LabAnalysis() {
   const handleDelete = async (id) => {
     if (!confirm('Delete this lab reading?')) return;
     try {
-      await fetch(`${API_BASE}/lab-readings/${id}`, { method: 'DELETE', headers });
+      const res = await fetch(`${API_BASE}/lab-readings/${id}`, { method: 'DELETE', headers });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || 'Failed to delete reading');
+      }
+      showSuccess('Lab reading deleted');
       fetchReadings();
     } catch (err) {
-      setError(err.message);
+      showError(err.message, 'Failed to delete reading');
     }
   };
 
@@ -184,9 +191,10 @@ export default function LabAnalysis() {
       });
       if (!res.ok) throw new Error('Failed to update');
       setEditingId(null);
+      showSuccess('Lab reading updated');
       fetchReadings();
     } catch (err) {
-      setError(err.message);
+      showError(err.message, 'Failed to update reading');
     }
   };
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { useToast } from '../context/ToastContext';
 
 const API_BASE = '/api';
 
@@ -954,6 +955,7 @@ function TanksTab({ headers, canEdit, formatDateTime }) {
  * Abort button. Hidden when idle.
  */
 function LiveDoseCycleBanner({ headers, canEdit }) {
+  const { showError, showSuccess } = useToast();
   const [status, setStatus] = useState(null);
   const [aborting, setAborting] = useState(false);
 
@@ -976,8 +978,15 @@ function LiveDoseCycleBanner({ headers, canEdit }) {
     if (!confirm('Abort the current dose cycle? All injector valves will be closed immediately.')) return;
     setAborting(true);
     try {
-      await fetch(`${API_BASE}/fertigation/dose-cycle/abort`, { method: 'POST', headers });
-    } catch (_) {} finally { setAborting(false); }
+      const r = await fetch(`${API_BASE}/fertigation/dose-cycle/abort`, { method: 'POST', headers });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        showError(e.error || 'Failed to abort dose cycle');
+      } else {
+        showSuccess('Dose cycle aborted — injector valves closed');
+      }
+    } catch (e) { showError('Failed to abort dose cycle: ' + e.message); }
+    finally { setAborting(false); }
   };
 
   const mmss = (s) => {
@@ -1561,6 +1570,7 @@ const STATUS_BADGE = {
 };
 
 function DoseProgramsTab({ headers, canEdit }) {
+  const { showError, showSuccess } = useToast();
   const [programs, setPrograms] = useState([]);
   const [tanks, setTanks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1584,8 +1594,12 @@ function DoseProgramsTab({ headers, canEdit }) {
   const publish = async (id) => {
     try {
       const r = await fetch(`${API_BASE}/fertigation/dose-programs/${id}/publish`, { method: 'POST', headers });
-      if (r.ok) load();
-    } catch (_) {}
+      if (r.ok) { showSuccess('Dose program published'); load(); }
+      else {
+        const e = await r.json().catch(() => ({}));
+        showError(e.error || 'Failed to publish dose program');
+      }
+    } catch (e) { showError('Failed to publish dose program: ' + e.message); }
   };
 
   if (loading) return <Spinner text="Loading dose programs..." />;
@@ -1947,6 +1961,7 @@ const ELEMENT_LABEL_PRETTY = {
 };
 
 function ElementTargetsTab({ headers, canEdit }) {
+  const { showError } = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingEl, setSavingEl] = useState(null);
@@ -1991,8 +2006,11 @@ function ElementTargetsTab({ headers, canEdit }) {
           next.push(saved);
           return next;
         });
+      } else {
+        const e = await r.json().catch(() => ({}));
+        showError(e.error || `Failed to save target for ${element}`);
       }
-    } catch (_) {} finally { setSavingEl(null); }
+    } catch (e) { showError(`Failed to save target for ${element}: ` + e.message); } finally { setSavingEl(null); }
   };
 
   if (loading) return <Spinner text="Loading element targets..." />;
