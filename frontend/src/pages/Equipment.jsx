@@ -2477,16 +2477,32 @@ function SlaveIdScannerModal({
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Select</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Slave ID</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Response Time</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sample Data</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Function Codes &amp; Sample Values</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {results.discovered.map((device) => (
                         <tr key={device.slaveId} className={`hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer ${selectedSlaves.includes(device.slaveId) ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`} onClick={() => handleSlaveToggle(device.slaveId)}>
                           <td className="px-4 py-3"><input type="checkbox" checked={selectedSlaves.includes(device.slaveId)} onChange={() => {}} className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700" /></td>
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{device.slaveId}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{device.responseTime}ms</td>
-                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 font-mono">{device.sampleData ? `[${device.sampleData.slice(0, 3).join(', ')}...]` : '-'}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white align-top">{device.slaveId}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 align-top">{device.responseTime}ms</td>
+                          <td className="px-4 py-3 text-sm align-top">
+                            {Array.isArray(device.functionCodes) && device.functionCodes.length > 0 ? (
+                              <div className="flex flex-col gap-1.5">
+                                {device.functionCodes.map((fc) => (
+                                  <div key={`${device.slaveId}-${fc.fc}-${fc.address}`} className="flex flex-wrap items-center gap-2">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-300">{fc.fc}</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{fc.label} @{fc.address}</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">{Array.isArray(fc.sample) ? `[${fc.sample.slice(0, 4).join(', ')}]` : String(fc.sample)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : device.sampleData ? (
+                              <span className="text-gray-500 dark:text-gray-400 font-mono">{`[${device.sampleData.slice(0, 3).join(', ')}...]`}</span>
+                            ) : (
+                              <span className="text-gray-500 dark:text-gray-400">responded (no readable registers)</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -4318,7 +4334,10 @@ export default function Equipment() {
         body: JSON.stringify({
           host: slaveScanConfig.host,
           port: parseInt(slaveScanConfig.port) || 502,
-          slaves: selectedSlaves.map(slaveId => ({ slaveId })),
+          slaves: selectedSlaves.map(slaveId => {
+            const discovered = slaveScanResults?.discovered?.find(d => d.slaveId === slaveId);
+            return { slaveId, functionCodes: discovered?.functionCodes };
+          }),
           namePrefix: 'Modbus Device'
         })
       });

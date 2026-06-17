@@ -1064,38 +1064,86 @@ router.post('/scan-slaves', requireRole('admin', 'operator'), async (req, res) =
   const totalToScan = endId - startId + 1;
   let scannedCount = 0;
 
-  // Scan function for a single slave ID
+  // Probe a single slave ID across multiple Modbus function codes.
+  // A slave is "responding" if ANY probe succeeds. We report which function
+  // codes answered and a small sample of values for each, so the operator can
+  // distinguish e.g. an FC04-only sensor (SHT20) from a holding-register device.
+  //
+  // Per-slave timing: probes run SEQUENTIALLY (the underlying client serialises
+  // requests per host:port anyway), so worst-case per-slave time is roughly
+  // (number of probes) * timeout when a slave is fully silent. We keep the probe
+  // set small (FC03/FC04/FC01 at addr 0, plus addr 1 only as a cheap fallback for
+  // FC03/FC04) and short-circuit each function code once it answers.
+  const FN_PROBES = [
+    { fc: 'FC03', label: 'Holding Registers', read: (id, addr) => modbusTcpClient.readHoldingRegisters(host, portNum, id, addr, 2, { timeout: timeoutMs, retries: 0 }) },
+    { fc: 'FC04', label: 'Input Registers', read: (id, addr) => modbusTcpClient.readInputRegisters(host, portNum, id, addr, 2, { timeout: timeoutMs, retries: 0 }) },
+    { fc: 'FC01', label: 'Coils', read: (id, addr) => modbusTcpClient.readCoils(host, portNum, id, addr, 4, { timeout: timeoutMs, retries: 0 }) }
+  ];
+  // Common starting addresses to try. Most maps start at 0; some start at 1.
+  const PROBE_ADDRESSES = [0, 1];
+
   const scanSlave = async (slaveId) => {
     const startTime = Date.now();
-    try {
-      // Try to read holding registers at address 0 (common identification area)
-      // Using a short timeout for quick scanning
-      const data = await modbusTcpClient.readHoldingRegisters(
-        host,
-        portNum,
-        slaveId,
-        0, // Starting address
-        1, // Read just 1 register to check if device responds
-        { timeout: timeoutMs, retries: 1 }
-      );
+    const functionCodes = [];
+    let firstSampleData = null;
 
-      const responseTime = Date.now() - startTime;
-      console.log(`[Modbus Scan] Slave ${slaveId} responded in ${responseTime}ms`);
+    for (const probe of FN_PROBES) {
+      let answered = false;
+      for (const addr of PROBE_ADDRESSES) {
+        try {
+          const data = await probe.read(slaveId, addr);
+          // A successful read (even an empty/zero array) means the slave answered.
+          functionCodes.push({
+            fc: probe.fc,
+            label: probe.label,
+            address: addr,
+            sample: Array.isArray(data) ? data.slice(0, 4) : data
+          });
+          if (firstSampleData === null && Array.isArray(data)) {
+            firstSampleData = data;
+          }
+          answered = true;
+          break; // This function code answered; no need to try further addresses for it
+        } catch (error) {
+          // Modbus exception responses (e.g. "Illegal data address") still prove
+          // the slave exists. node-modbus surfaces these as errors; treat the
+          // known exception messages as "device present but this FC/addr invalid".
+          const msg = String(error && error.message || '');
+          if (/Illegal (data )?(address|function)|Modbus exception/i.test(msg)) {
+            // Slave is present but doesn't support this FC at this address.
+            // Don't record it as a positive FC, but mark presence.
+            if (functionCodes.length === 0 && !answered) {
+              // remember presence via a sentinel only if nothing else answers
+              probe._exceptionSeen = true;
+            }
+          }
+          // otherwise: timeout / no response -> try next address / next FC
+        }
+      }
+    }
 
+    const responseTime = Date.now() - startTime;
+
+    const sawException = FN_PROBES.some((p) => p._exceptionSeen);
+    // reset sentinels for next slave
+    FN_PROBES.forEach((p) => { delete p._exceptionSeen; });
+
+    if (functionCodes.length > 0 || sawException) {
+      console.log(`[Modbus Scan] Slave ${slaveId} responded in ${responseTime}ms (FCs: ${functionCodes.map(f => f.fc).join(',') || 'exception-only'})`);
       return {
         slaveId,
         responding: true,
         responseTime,
-        sampleData: data
-      };
-    } catch (error) {
-      // Device didn't respond or error occurred
-      return {
-        slaveId,
-        responding: false,
-        error: error.message
+        functionCodes,
+        // Backward-compatible field: first successful register read sample
+        sampleData: firstSampleData
       };
     }
+
+    return {
+      slaveId,
+      responding: false
+    };
   };
 
   // Process slaves in batches for efficiency
@@ -1170,11 +1218,19 @@ router.post('/scan-slaves/create-bulk', requireRole('admin', 'operator'), (req, 
 
     try {
       const name = slave.name || `${namePrefix} ${slaveId}`;
+      // Build a hint describing which function codes answered during the scan,
+      // so the operator knows how to set up register mappings. We do NOT
+      // auto-populate register_mappings (register addresses/scaling are
+      // device-specific and unsafe to guess), only annotate the description.
+      let discoveryHint = '';
+      if (Array.isArray(slave.functionCodes) && slave.functionCodes.length > 0) {
+        discoveryHint = ` (responded to ${slave.functionCodes.map(f => `${f.fc} ${f.label}`).join(', ')})`;
+      }
       const result = db.prepare(
         'INSERT INTO equipment (name, description, type, protocol, address, slave_id, status, polling_interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         name,
-        slave.description || `Modbus device discovered at slave ID ${slaveId}`,
+        slave.description || `Modbus device discovered at slave ID ${slaveId}${discoveryHint}`,
         slave.type || 'sensor',
         'modbus',
         `${host}:${port}`,
