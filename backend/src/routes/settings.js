@@ -8,6 +8,11 @@ const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Resolve the live database file path the same way utils/database.js does, so
+// backup/restore/storage always point at the real DB (honours DB_PATH env in Docker).
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/sensehub.db');
+const DATA_DIR = path.dirname(DB_PATH);
+
 // Helper function to get network interfaces
 function getNetworkInfo() {
   const interfaces = os.networkInterfaces();
@@ -136,7 +141,7 @@ function getDirectorySize(dirPath) {
 router.get('/storage', requireRole('admin'), (req, res) => {
   try {
     // Get database file size
-    const dbPath = path.join(__dirname, '../../data/sensehub.db');
+    const dbPath = DB_PATH;
     let dbSize = 0;
     try {
       const dbStats = fs.statSync(dbPath);
@@ -146,7 +151,7 @@ router.get('/storage', requireRole('admin'), (req, res) => {
     }
 
     // Get data directory size (includes database and any other data files)
-    const dataDir = path.join(__dirname, '../../data');
+    const dataDir = DATA_DIR;
     const dataDirSize = getDirectorySize(dataDir);
 
     // Get logs directory size
@@ -168,12 +173,38 @@ router.get('/storage', requireRole('admin'), (req, res) => {
       }
     }
 
-    // Estimate total storage (in a real Pi deployment, we'd use disk stats)
-    // For development, we'll simulate reasonable values
-    const totalSpace = 32 * 1024 * 1024 * 1024; // 32 GB (typical SD card)
-    const usedBySystem = 8 * 1024 * 1024 * 1024; // 8 GB for OS
     const usedByApp = dataDirSize + logsDirSize;
-    const availableSpace = totalSpace - usedBySystem - usedByApp;
+
+    // Real disk stats for the filesystem holding the data directory.
+    // fs.statfsSync is available on Node 18.15+. Fall back to an estimate if not.
+    let totalSpace = 0;
+    let availableSpace = 0;
+    let usedSpace = 0;
+    let usedBySystem = 0;
+    let diskEstimated = false;
+
+    try {
+      if (typeof fs.statfsSync === 'function') {
+        const stat = fs.statfsSync(dataDir);
+        // bsize = block size, blocks = total, bavail = free for unprivileged user
+        const blockSize = stat.bsize;
+        totalSpace = stat.blocks * blockSize;
+        availableSpace = stat.bavail * blockSize;
+        usedSpace = totalSpace - (stat.bfree * blockSize);
+        // Everything used that isn't this app's data/logs we attribute to "system".
+        usedBySystem = Math.max(0, usedSpace - usedByApp);
+      } else {
+        throw new Error('fs.statfsSync unavailable');
+      }
+    } catch (e) {
+      // Graceful fallback: report what we actually know (app usage) and clearly
+      // flag the capacity figures as estimated rather than inventing exact values.
+      diskEstimated = true;
+      usedBySystem = 0;
+      usedSpace = usedByApp;
+      totalSpace = usedByApp; // only the portion we can measure
+      availableSpace = 0;
+    }
 
     res.json({
       database: {
@@ -191,11 +222,12 @@ router.get('/storage', requireRole('admin'), (req, res) => {
       tableStats,
       disk: {
         total: totalSpace,
-        used: usedBySystem + usedByApp,
+        used: usedSpace,
         available: availableSpace,
         usedByApp: usedByApp,
         usedBySystem: usedBySystem,
-        percentUsed: Math.round(((usedBySystem + usedByApp) / totalSpace) * 100)
+        percentUsed: totalSpace > 0 ? Math.round((usedSpace / totalSpace) * 100) : 0,
+        estimated: diskEstimated
       },
       timestamp: new Date().toISOString()
     });
@@ -239,30 +271,179 @@ router.put('/', requireRole('admin'), (req, res) => {
   res.json({ message: 'Settings updated' });
 });
 
-// POST /api/settings/backup - Create backup
-router.post('/backup', requireRole('admin'), (req, res) => {
-  // In production, this would create an actual backup
-  const backup = {
-    id: Date.now(),
-    created_at: new Date().toISOString(),
-    size: '2.5 MB',
-    status: 'completed'
-  };
+// The SQLite file magic header — first 16 bytes of every valid database file.
+const SQLITE_MAGIC = Buffer.from('SQLite format 3 ', 'binary');
 
-  res.json(backup);
-});
+// GET /api/settings/backup - Create a real backup of the live DB and stream it
+// to the client as a file download. Uses better-sqlite3's online backup API
+// (db.backup) which produces a consistent snapshot safely while the DB is in
+// use (it cooperates with WAL), writing to a temp file we then stream and clean up.
+router.get('/backup', requireRole('admin'), async (req, res) => {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `sensehub-backup-${ts}.db`;
+  const tmpPath = path.join(os.tmpdir(), `sensehub-backup-${Date.now()}-${process.pid}.db`);
 
-// POST /api/settings/restore - Restore from backup
-router.post('/restore', requireRole('admin'), (req, res) => {
-  const { backup_id, confirm } = req.body;
-
-  if (!confirm) {
-    return res.status(400).json({ error: 'Bad Request', message: 'Confirmation required' });
+  try {
+    // db.backup() returns a Promise and runs incrementally, yielding to the
+    // event loop between batches of pages, so it won't block on a large DB.
+    await db.backup(tmpPath);
+  } catch (error) {
+    console.error('Backup creation failed:', error);
+    try { fs.existsSync(tmpPath) && fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create backup' });
   }
 
-  // In production, this would restore from backup
-  res.json({ message: 'Restore initiated', backup_id });
+  let size = 0;
+  try { size = fs.statSync(tmpPath).size; } catch (e) { /* ignore */ }
+
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  if (size) res.setHeader('Content-Length', String(size));
+
+  const cleanup = () => {
+    try { fs.existsSync(tmpPath) && fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+  };
+
+  const stream = fs.createReadStream(tmpPath);
+  stream.on('error', (err) => {
+    console.error('Backup stream error:', err);
+    cleanup();
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to stream backup' });
+    } else {
+      res.destroy();
+    }
+  });
+  res.on('close', cleanup);
+  stream.pipe(res);
 });
+
+// POST /api/settings/restore - Restore the DB from an uploaded SQLite file.
+//
+// Approach & limitation: better-sqlite3 holds an open handle on the live DB
+// file for the lifetime of the process, so hot-swapping the file underneath it
+// is unsafe. The robust approach used here is:
+//   1. Validate the uploaded bytes are a real SQLite file (magic header) and
+//      can be opened as a DB containing our expected tables.
+//   2. Make a timestamped SAFETY COPY of the current live DB (never destroy the
+//      current DB without a backup first).
+//   3. Atomically replace the live DB file with the validated upload (and remove
+//      the now-stale WAL/SHM sidecar files so SQLite re-derives them on boot).
+//   4. Respond success instructing the client a restart is required, then
+//      process.exit(0). Docker's `restart: unless-stopped` policy relaunches the
+//      container, which reopens the freshly-restored DB file.
+// LIMITATION: this only works under a process supervisor that restarts the app
+// (Docker compose here). In a bare `node` dev run with no supervisor the file is
+// replaced and the process exits, but it won't auto-restart — the operator must
+// start it again manually. The DB is safely replaced regardless.
+//
+// The raw file is uploaded as application/octet-stream; express.raw() buffers it
+// into req.body (express.json() ignores non-JSON content types so it is untouched).
+router.post(
+  '/restore',
+  requireRole('admin'),
+  express.raw({ type: ['application/octet-stream', 'application/x-sqlite3'], limit: '512mb' }),
+  (req, res) => {
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'No backup file received. Upload the .db file as the raw request body (application/octet-stream).'
+      });
+    }
+
+    // 1. Validate SQLite magic header.
+    if (body.length < SQLITE_MAGIC.length || !body.subarray(0, SQLITE_MAGIC.length).equals(SQLITE_MAGIC)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Uploaded file is not a valid SQLite database (bad file header).'
+      });
+    }
+
+    // 2. Deeper validation: open the upload as a real SQLite DB and confirm it
+    //    contains the tables we expect, BEFORE touching the live DB.
+    const Database = require('better-sqlite3');
+    const stagingPath = path.join(DATA_DIR, `restore-upload-${Date.now()}.db`);
+    try {
+      fs.writeFileSync(stagingPath, body);
+    } catch (e) {
+      console.error('Restore: failed to write staging file:', e);
+      return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to stage uploaded file' });
+    }
+
+    const REQUIRED_TABLES = ['users', 'equipment', 'system_settings'];
+    try {
+      const verifyDb = new Database(stagingPath, { readonly: true, fileMustExist: true });
+      try {
+        verifyDb.pragma('schema_version'); // forces a read; throws if not a DB
+        const rows = verifyDb.prepare(
+          "SELECT name FROM sqlite_master WHERE type='table'"
+        ).all();
+        const tableNames = new Set(rows.map(r => r.name));
+        const missing = REQUIRED_TABLES.filter(t => !tableNames.has(t));
+        if (missing.length > 0) {
+          throw new Error(`backup is missing expected tables: ${missing.join(', ')}`);
+        }
+      } finally {
+        verifyDb.close();
+      }
+    } catch (e) {
+      try { fs.existsSync(stagingPath) && fs.unlinkSync(stagingPath); } catch (_) { /* ignore */ }
+      console.error('Restore validation failed:', e.message);
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `Uploaded file failed validation: ${e.message}`
+      });
+    }
+
+    // 3. Safety-backup the current live DB, then replace it with the upload.
+    const safetyTs = new Date().toISOString().replace(/[:.]/g, '-');
+    const safetyPath = path.join(DATA_DIR, `pre-restore-backup-${safetyTs}.db`);
+    try {
+      // Use the online backup API for a consistent copy of the live DB.
+      // db.backup is async; await it inside this sync handler via a small wrapper.
+      // (We must complete it before overwriting the file.)
+      // eslint-disable-next-line no-inner-declarations
+      const doSwap = async () => {
+        await db.backup(safetyPath);
+
+        // Replace the live DB file with the validated upload.
+        fs.copyFileSync(stagingPath, DB_PATH);
+        try { fs.unlinkSync(stagingPath); } catch (_) { /* ignore */ }
+
+        // Remove stale WAL/SHM so SQLite doesn't replay the old WAL over the new file.
+        for (const sidecar of [`${DB_PATH}-wal`, `${DB_PATH}-shm`]) {
+          try { fs.existsSync(sidecar) && fs.unlinkSync(sidecar); } catch (_) { /* ignore */ }
+        }
+      };
+
+      doSwap()
+        .then(() => {
+          console.log(`Restore complete. Safety backup at ${safetyPath}. Restarting process...`);
+          res.json({
+            success: true,
+            message: 'Restore complete. The system is restarting to load the restored database. You may need to log in again.',
+            safetyBackup: path.basename(safetyPath),
+            restarting: true
+          });
+          // Give the response time to flush, then exit so the supervisor (Docker)
+          // restarts us with the new DB file. SIGTERM handlers also run on exit.
+          setTimeout(() => process.exit(0), 750);
+        })
+        .catch((err) => {
+          console.error('Restore swap failed:', err);
+          try { fs.existsSync(stagingPath) && fs.unlinkSync(stagingPath); } catch (_) { /* ignore */ }
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Internal Server Error', message: 'Restore failed while applying backup. Live database was not modified.' });
+          }
+        });
+    } catch (error) {
+      console.error('Restore error:', error);
+      try { fs.existsSync(stagingPath) && fs.unlinkSync(stagingPath); } catch (_) { /* ignore */ }
+      return res.status(500).json({ error: 'Internal Server Error', message: 'Restore failed' });
+    }
+  }
+);
 
 // POST /api/settings/factory-reset - Factory reset
 router.post('/factory-reset', requireRole('admin'), (req, res) => {

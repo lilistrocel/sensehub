@@ -2240,20 +2240,44 @@ function BackupSettings() {
     setBackupLoading(true);
     setBackupMessage(null);
     try {
+      // The backup endpoint streams the real SQLite DB file as an attachment.
+      // Fetch it as a blob and trigger a browser download.
       const response = await fetch(`${API_BASE}/settings/backup`, {
-        method: 'POST',
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${token}`
         }
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create backup');
+        let msg = 'Failed to create backup';
+        try {
+          const data = await response.json();
+          msg = data.message || msg;
+        } catch (e) { /* non-JSON error */ }
+        throw new Error(msg);
       }
 
-      const data = await response.json();
-      setBackupMessage({ type: 'success', text: `Backup created successfully (ID: ${data.id})` });
+      // Derive filename from Content-Disposition, falling back to a timestamp.
+      let filename = `sensehub-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.db`;
+      const disposition = response.headers.get('Content-Disposition');
+      if (disposition) {
+        const match = /filename="?([^"]+)"?/.exec(disposition);
+        if (match && match[1]) filename = match[1];
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      const sizeMb = (blob.size / (1024 * 1024)).toFixed(2);
+      setBackupMessage({ type: 'success', text: `Backup downloaded: ${filename} (${sizeMb} MB)` });
     } catch (err) {
       setBackupMessage({ type: 'error', text: err.message });
     } finally {
@@ -2326,27 +2350,34 @@ function BackupSettings() {
     setRestoreError(null);
 
     try {
-      // In a real implementation, we would upload the file
-      // For now, simulate reading the file and calling the restore API
+      // Upload the chosen SQLite backup file as the raw request body. The backend
+      // validates it, safety-backs-up the current DB, swaps in the upload, and
+      // restarts the process to load the restored database.
       const response = await fetch(`${API_BASE}/settings/restore`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/octet-stream'
         },
-        body: JSON.stringify({
-          backup_id: restoreFile.name,
-          confirm: true
-        })
+        body: restoreFile
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Restore failed');
+        let msg = 'Restore failed';
+        try {
+          const data = await response.json();
+          msg = data.message || msg;
+        } catch (e) { /* non-JSON error */ }
+        throw new Error(msg);
       }
 
+      // Success: backend is restarting. Log the user out shortly so they
+      // re-authenticate against the restored database.
       setRestoreSuccess(true);
-      // In production, the system would restart here
+      setTimeout(() => {
+        logout();
+        navigate('/login');
+      }, 6000);
     } catch (err) {
       setRestoreError(err.message);
     } finally {
@@ -2372,7 +2403,8 @@ function BackupSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4">Create Backup</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Create a backup of your system configuration, including equipment, zones, automations, and settings.
+          Download a complete backup of the system database — including users, equipment, zones, automations,
+          readings, and all settings — as a single SQLite file you can store safely off-device.
         </p>
 
         {backupMessage && (
@@ -2584,8 +2616,12 @@ function BackupSettings() {
                   <svg className="mx-auto h-12 w-12 text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Restore Initiated</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">The system is being restored from backup...</p>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Restore Complete</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    The database has been restored and the system is restarting. A safety backup of your
+                    previous data was saved on the device. You will be redirected to the login screen shortly —
+                    please sign in again once the system is back online (this may take up to a minute).
+                  </p>
                 </div>
               ) : (
                 <>
@@ -2620,7 +2656,7 @@ function BackupSettings() {
                     <input
                       type="file"
                       id="backup-file-input"
-                      accept=".json,.zip,.backup"
+                      accept=".db,.sqlite,.sqlite3"
                       onChange={handleFileSelect}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-white text-sm"
                     />
