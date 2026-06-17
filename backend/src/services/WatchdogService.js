@@ -15,6 +15,7 @@
 
 const dns = require('dns');
 const { db } = require('../utils/database');
+const { broadcastNewAlert } = require('../utils/alertBroadcast');
 const { telegramService } = require('./TelegramService');
 
 // Auto-rearm: when a threshold automation should be firing but hasn't (the relay was
@@ -150,7 +151,7 @@ class WatchdogService {
         const msg = `System restarted after ${durStr} gap (last activity: ${lastEvent.created_at})`;
 
         logEvent.run('system', 'restart', 'restart', msg, null, gapSec);
-        db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${msg}`);
+        broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${msg}`));
 
         console.log(`[Watchdog] ${msg}`);
 
@@ -307,7 +308,7 @@ class WatchdogService {
       console.log(`[Watchdog] ${msg}`);
 
       // Log alert to DB immediately (always works, it's local)
-      db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${msg}`);
+      broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${msg}`));
 
       if (target === 'internet') {
         // Can't send Telegram — queue it for when internet returns
@@ -336,7 +337,7 @@ class WatchdogService {
       console.log(`[Watchdog] ${msg}`);
 
       // Log alert to DB
-      db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('info', ?, datetime('now'))").run(`Watchdog: ${msg}`);
+      broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('info', ?, datetime('now'))").run(`Watchdog: ${msg}`));
 
       if (target === 'internet') {
         // Internet just recovered — build a full outage report
@@ -462,7 +463,7 @@ class WatchdogService {
           : `Threshold Met But Not Fired: ${alert.name}`;
 
         db.prepare("UPDATE automations SET last_watchdog_alert = datetime('now') WHERE id = ?").run(alert.automationId);
-        db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${title} - ${alert.detail}`);
+        broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${title} - ${alert.detail}`));
         logEvent.run('automation', alert.name, alert.type, title, alert.detail, null);
 
         // Try sending immediately, queue on failure
@@ -499,9 +500,9 @@ class WatchdogService {
         const severity = eq.status === 'error' ? 'error' : 'warning';
         const title = `Equipment ${eq.status === 'error' ? 'Error' : 'Offline'}: ${eq.name}`;
         db.prepare("UPDATE equipment SET last_watchdog_alert = datetime('now') WHERE id = ?").run(eq.id);
-        db.prepare("INSERT INTO alerts (equipment_id, severity, message, created_at) VALUES (?, ?, ?, datetime('now'))").run(
+        broadcastNewAlert(db.prepare("INSERT INTO alerts (equipment_id, severity, message, created_at) VALUES (?, ?, ?, datetime('now'))").run(
           eq.id, eq.status === 'error' ? 'critical' : 'warning', `Watchdog: ${detail}`
-        );
+        ));
         const downSeconds = lastComm ? Math.round((now - lastComm) / 1000) : null;
         logEvent.run('equipment', eq.name, eq.status, title, detail, downSeconds);
 

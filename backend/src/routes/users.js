@@ -130,13 +130,26 @@ router.put('/:id', requireRole('admin'), (req, res) => {
   }
 });
 
-// DELETE /api/users/:id - Delete user (admin only)
+// DELETE /api/users/:id - Delete user (admin only, requires password confirmation)
 router.delete('/:id', requireRole('admin'), (req, res) => {
   const userId = req.params.id;
+  const { password } = req.body;
 
   // Prevent self-deletion
   if (parseInt(userId) === req.user.id) {
     return res.status(400).json({ error: 'Bad Request', message: 'Cannot delete your own account' });
+  }
+
+  // Require password confirmation
+  if (!password) {
+    return res.status(400).json({ error: 'Bad Request', message: 'Password required' });
+  }
+
+  // Verify the requesting admin's password
+  const admin = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+
+  if (!admin || !bcrypt.compareSync(password, admin.password_hash)) {
+    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid password' });
   }
 
   const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId);

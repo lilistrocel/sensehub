@@ -24,6 +24,8 @@ export default function Users() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [userToResetPassword, setUserToResetPassword] = useState(null);
   const [newPassword, setNewPassword] = useState('');
@@ -222,24 +224,36 @@ export default function Users() {
 
   const openDeleteConfirmation = (userToRemove) => {
     setUserToDelete(userToRemove);
+    setDeletePassword('');
+    setDeleteError('');
     setShowDeleteConfirm(true);
   };
 
   const closeDeleteConfirmation = () => {
     setShowDeleteConfirm(false);
     setUserToDelete(null);
+    setDeletePassword('');
+    setDeleteError('');
   };
 
   const handleDeleteUser = async () => {
     if (!userToDelete) return;
 
+    if (!deletePassword) {
+      setDeleteError('Your password is required to confirm deletion.');
+      return;
+    }
+
     setDeleteLoading(true);
+    setDeleteError('');
     try {
       const response = await fetch(`${API_BASE}/users/${userToDelete.id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: deletePassword })
       });
 
       if (!response.ok) {
@@ -248,15 +262,16 @@ export default function Users() {
       }
 
       // Success - close modal and refresh list
+      const deletedName = userToDelete.name;
       setShowDeleteConfirm(false);
       setUserToDelete(null);
-      setSuccessMessage(`User "${userToDelete.name}" deleted successfully!`);
+      setDeletePassword('');
+      setSuccessMessage(`User "${deletedName}" deleted successfully!`);
       setTimeout(() => setSuccessMessage(''), 5000);
       fetchUsers();
     } catch (err) {
-      setError(err.message);
-      setShowDeleteConfirm(false);
-      setUserToDelete(null);
+      // Keep the modal open so the admin can correct the password
+      setDeleteError(err.message);
     } finally {
       setDeleteLoading(false);
     }
@@ -660,6 +675,34 @@ export default function Users() {
                         This action cannot be undone.
                       </p>
                     </div>
+
+                    {deleteError && (
+                      <div role="alert" aria-live="assertive" className="mt-3 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">
+                        {deleteError}
+                      </div>
+                    )}
+
+                    <div className="mt-4">
+                      <label htmlFor="delete-confirm-password" className="block text-sm font-medium text-gray-700">
+                        Confirm with your password
+                      </label>
+                      <input
+                        type="password"
+                        name="delete-confirm-password"
+                        id="delete-confirm-password"
+                        value={deletePassword}
+                        onChange={(e) => {
+                          setDeletePassword(e.target.value);
+                          setDeleteError('');
+                        }}
+                        className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
+                        placeholder="Your account password"
+                        autoFocus
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Enter your own password to confirm this deletion.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -667,7 +710,7 @@ export default function Users() {
                 <button
                   type="button"
                   onClick={handleDeleteUser}
-                  disabled={deleteLoading}
+                  disabled={deleteLoading || !deletePassword}
                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {deleteLoading ? (

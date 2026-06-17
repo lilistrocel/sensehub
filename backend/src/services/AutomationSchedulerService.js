@@ -10,6 +10,7 @@
  */
 
 const { db } = require('../utils/database');
+const { broadcastNewAlert } = require('../utils/alertBroadcast');
 const { executeAutomation } = require('./AutomationExecutor');
 const { evaluateSkip } = require('./SkipEvaluator');
 
@@ -154,12 +155,12 @@ class AutomationSchedulerService {
       const n = updated?.consecutive_skips || 0;
       if (n === 3 || n === 6 || n === 12) {
         try {
-          db.prepare(
+          broadcastNewAlert(db.prepare(
             "INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))"
           ).run(
             n >= 12 ? 'critical' : 'warning',
             `Automation "${automation.name}" (id=${automation.id}) has skipped ${n} consecutive times. Verify the sensor reading driving the skip is correct.`,
-          );
+          ));
         } catch (err) {
           console.error('[Scheduler] Failed to write consecutive-skip alert:', err.message);
         }

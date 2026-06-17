@@ -5,6 +5,7 @@
  */
 
 const { db } = require('../utils/database');
+const { broadcastNewAlert } = require('../utils/alertBroadcast');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { relayTimerService } = require('./RelayTimerService');
 const { logRelayEvent } = require('./RelayEventLogger');
@@ -159,9 +160,9 @@ async function executeAutomation(automation, source = 'manual') {
     }
 
     if (action.type === 'alert') {
-      db.prepare(
+      broadcastNewAlert(db.prepare(
         "INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))"
-      ).run(action.severity || 'info', action.message || 'Automation triggered');
+      ).run(action.severity || 'info', action.message || 'Automation triggered'));
       executedActions.push({ type: 'alert', status: 'executed', message: action.message });
 
     } else if (action.type === 'log') {

@@ -513,6 +513,7 @@ class ModbusTcpClient {
    */
   async writeSingleRegister(host, port = 502, unitId = 1, address, value, options = {}) {
     return this.queueRequest(host, port, unitId, async (client) => {
+      client.setID(unitId);
       await client.writeRegister(address, value);
       return { address, value };
     }, options);
@@ -550,6 +551,7 @@ class ModbusTcpClient {
    */
   async writeMultipleRegisters(host, port = 502, unitId = 1, address, values, options = {}) {
     return this.queueRequest(host, port, unitId, async (client) => {
+      client.setID(unitId);
       await client.writeRegisters(address, values);
       return { address, quantity: values.length };
     }, options);

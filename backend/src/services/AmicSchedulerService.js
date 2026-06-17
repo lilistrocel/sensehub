@@ -26,6 +26,7 @@
  */
 
 const { db } = require('../utils/database');
+const { broadcastNewAlert } = require('../utils/alertBroadcast');
 const { amicService } = require('./AmicService');
 
 const TICK_MS = 60000;             // 60 s
@@ -104,14 +105,14 @@ class AmicSchedulerService {
         slot.last_fired = now.toISOString();
         dirty = true;
         try {
-          db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))")
-            .run('info', `[AMIC] Scheduled Calibration triggered at ${slot.hour}:${String(slot.minute).padStart(2,'0')}${label}`);
+          broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))")
+            .run('info', `[AMIC] Scheduled Calibration triggered at ${slot.hour}:${String(slot.minute).padStart(2,'0')}${label}`));
         } catch {}
       } catch (err) {
         console.error('[AmicScheduler] Failed to trigger Calibrate:', err.message);
         try {
-          db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))")
-            .run('warning', `[AMIC] Scheduled Calibration FAILED to trigger at ${slot.hour}:${String(slot.minute).padStart(2,'0')}: ${err.message}`);
+          broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))")
+            .run('warning', `[AMIC] Scheduled Calibration FAILED to trigger at ${slot.hour}:${String(slot.minute).padStart(2,'0')}: ${err.message}`));
         } catch {}
       }
     }
