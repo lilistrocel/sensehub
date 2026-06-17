@@ -557,6 +557,36 @@ class ModbusPollingService {
   }
 
   /**
+   * Compute Vapour Pressure Deficit (kPa) from a calibrated values map.
+   * Magnus/Tetens saturation-vapour-pressure equation.
+   * Returns { air, leaf } or null if temperature/humidity is missing/invalid.
+   *
+   * Air VPD is measured directly from the SHT20. Leaf VPD assumes the canopy
+   * sits LEAF_TEMP_OFFSET °C below air (horticultural standard ~2°C); it's an
+   * estimate unless an IR leaf-temperature sensor is added.
+   */
+  computeVPD(values) {
+    const LEAF_TEMP_OFFSET = 2; // °C below air for the leaf-VPD estimate
+
+    let tAir = null, rh = null;
+    for (const [name, v] of Object.entries(values)) {
+      if (!v || v.value == null || isNaN(v.value)) continue;
+      const n = name.toLowerCase();
+      if (n.includes('vpd')) continue; // never feed a derived value back in
+      if (tAir === null && /temp/.test(n)) tAir = Number(v.value);
+      else if (rh === null && /(humid|\brh\b)/.test(n)) rh = Number(v.value);
+    }
+    if (tAir === null || rh === null) return null;
+    if (rh < 0 || rh > 100) return null;
+
+    const svp = (t) => 0.6108 * Math.exp((17.27 * t) / (t + 237.3)); // kPa
+    const avp = svp(tAir) * (rh / 100);               // actual vapour pressure
+    const air  = Math.max(0, Math.round((svp(tAir) - avp) * 100) / 100);
+    const leaf = Math.max(0, Math.round((svp(tAir - LEAF_TEMP_OFFSET) - avp) * 100) / 100);
+    return { air, leaf };
+  }
+
+  /**
    * Update device with new readings
    */
   async updateDeviceWithReadings(equipmentId, state, readings) {
@@ -571,6 +601,7 @@ class ModbusPollingService {
       const isRelayDevice = equipment.type === 'relay' ||
         state.registerMappings.some(m => (m.type === 'coil' || parseInt(m.functionCode, 10) === 1));
 
+      const derivedReadings = []; // synthetic metrics (e.g. VPD) from calibrated values
       let lastReadingValue;
       if (isRelayDevice) {
         const relayStates = {};
@@ -631,6 +662,18 @@ class ModbusPollingService {
           const calibrated = this.applyCalibration(reading.value, equipment, mapping);
           values[reading.name] = { value: calibrated, unit: reading.unit || '' };
         }
+
+        // Derive VPD (kPa) — both Air and Leaf — when this device exposes
+        // air temperature and relative humidity. Each temp/RH device yields
+        // its own pair, so two SHT20s give two independent Air+Leaf readings.
+        const vpd = this.computeVPD(values);
+        if (vpd) {
+          values['VPD Air']  = { value: vpd.air,  unit: 'kPa' };
+          values['VPD Leaf'] = { value: vpd.leaf, unit: 'kPa' };
+          derivedReadings.push({ name: 'VPD Air',  value: vpd.air,  unit: 'kPa' });
+          derivedReadings.push({ name: 'VPD Leaf', value: vpd.leaf, unit: 'kPa' });
+        }
+
         lastReadingValue = JSON.stringify({ values });
       }
 
@@ -665,6 +708,14 @@ class ModbusPollingService {
             reading.unit,
             timestamp
           );
+        }
+
+        // Persist derived metrics — already calibrated, so insert directly
+        for (const d of derivedReadings) {
+          db.prepare(`
+            INSERT INTO readings (equipment_id, name, value, unit, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(equipmentId, d.name, d.value, d.unit, timestamp);
         }
       }
 
@@ -706,6 +757,17 @@ class ModbusPollingService {
               name: reading.name || null,
               value: calibrated,
               unit: reading.unit,
+              timestamp
+            });
+          }
+          // Broadcast derived metrics (VPD Air / VPD Leaf) live
+          for (const d of derivedReadings) {
+            global.broadcast('sensor_reading', {
+              equipment_id: equipmentId,
+              equipment_name: state.name,
+              name: d.name,
+              value: d.value,
+              unit: d.unit,
               timestamp
             });
           }
