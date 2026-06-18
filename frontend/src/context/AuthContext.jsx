@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -13,6 +13,65 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     checkSetupAndSession();
   }, []);
+
+  // Keep a live ref to the current token so the (install-once) fetch wrapper
+  // below can read it without being re-installed on every token change.
+  const tokenRef = useRef(token);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
+  // Global 401 interceptor: wrap window.fetch ONCE so every manual fetch() call
+  // across the ~270 call sites in the app is covered without touching them.
+  // When an authenticated request to an /api/ endpoint comes back 401, the
+  // backend session has expired -> tear down the local session, which makes
+  // ProtectedRoute redirect to /login. Auth endpoints are excluded so a bad
+  // login (also 401) does not bounce the user or create a logout loop.
+  useEffect(() => {
+    const originalFetch = window.fetch;
+
+    // Endpoints whose 401s must NOT trigger auto-logout (avoid loops / spurious
+    // logout on a failed login attempt while unauthenticated).
+    const isExemptUrl = (url) =>
+      url.includes('/api/auth/login') ||
+      url.includes('/api/auth/logout') ||
+      url.includes('/api/auth/setup-status') ||
+      url.includes('/api/auth/session');
+
+    const interceptedFetch = async (input, init) => {
+      const response = await originalFetch(input, init);
+
+      try {
+        if (response.status === 401) {
+          // Resolve the request URL across the possible `input` shapes.
+          const url =
+            typeof input === 'string'
+              ? input
+              : (input && input.url) || String(input || '');
+
+          // Only react to our own API, only when a token was present, and never
+          // on the auth endpoints handled by their own callers.
+          if (url.includes('/api/') && !isExemptUrl(url) && tokenRef.current) {
+            handleSessionExpired();
+          }
+        }
+      } catch (e) {
+        // Never let interceptor bookkeeping break the actual request flow.
+        console.error('Session-expiry interceptor error:', e);
+      }
+
+      return response;
+    };
+
+    window.fetch = interceptedFetch;
+
+    return () => {
+      // Restore only if no one else re-wrapped fetch after us.
+      if (window.fetch === interceptedFetch) {
+        window.fetch = originalFetch;
+      }
+    };
+  }, [handleSessionExpired]);
 
   const checkSetupAndSession = async () => {
     try {
@@ -105,6 +164,17 @@ export function AuthProvider({ children }) {
       setUser(null);
     }
   };
+
+  // Local session teardown used when the backend reports the session has
+  // expired (HTTP 401). Unlike logout() this does NOT call the logout endpoint
+  // (the token is already invalid) and never goes through the fetch wrapper, so
+  // it cannot trigger a logout loop. Clearing `user` causes ProtectedRoute in
+  // App.jsx to redirect to /login automatically (no hard navigation needed).
+  const handleSessionExpired = useCallback(() => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+  }, []);
 
   // Function to update user after setup completion
   const setUserAfterSetup = (newToken, newUser) => {

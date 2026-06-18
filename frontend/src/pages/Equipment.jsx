@@ -2699,7 +2699,8 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
         quantity: defaultQuantityForType('uint16'),
         scale: 1,
         offset: 0,
-        unit: ''
+        unit: '',
+        byteOrder: 'ABCD'
       }]
     }));
   };
@@ -2783,6 +2784,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
               scale: m.scale != null ? m.scale : 1,
               offset: m.offset != null ? m.offset : 0,
               unit: m.unit || '',
+              byteOrder: m.byteOrder || 'ABCD',
               functionCode: m.functionCode,
               enabled: m.enabled !== false
             };
@@ -3252,6 +3254,17 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                               className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                               title="Value added after scaling"
                             />
+                            <select
+                              value={mapping.byteOrder || 'ABCD'}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'byteOrder', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                              title="Byte/word order for 32-bit and float32 values (ignored for 16-bit/bool). ABCD = default (high word first, big-endian); CDAB = word swap; BADC = byte swap; DCBA = full reverse"
+                            >
+                              <option value="ABCD">Byte order: ABCD</option>
+                              <option value="CDAB">Byte order: CDAB</option>
+                              <option value="BADC">Byte order: BADC</option>
+                              <option value="DCBA">Byte order: DCBA</option>
+                            </select>
                           </div>
                         </div>
                       ))}
@@ -3368,7 +3381,8 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
         quantity: defaultQuantityForType('uint16'),
         scale: 1,
         offset: 0,
-        unit: ''
+        unit: '',
+        byteOrder: 'ABCD'
       }]
     }));
   };
@@ -3452,6 +3466,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
               scale: m.scale != null ? m.scale : 1,
               offset: m.offset != null ? m.offset : 0,
               unit: m.unit || '',
+              byteOrder: m.byteOrder || 'ABCD',
               functionCode: m.functionCode,
               enabled: m.enabled !== false
             };
@@ -3908,6 +3923,17 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                               className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                               title="Value added after scaling"
                             />
+                            <select
+                              value={mapping.byteOrder || 'ABCD'}
+                              onChange={(e) => handleUpdateRegisterMapping(index, 'byteOrder', e.target.value)}
+                              className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                              title="Byte/word order for 32-bit and float32 values (ignored for 16-bit/bool). ABCD = default (high word first, big-endian); CDAB = word swap; BADC = byte swap; DCBA = full reverse"
+                            >
+                              <option value="ABCD">Byte order: ABCD</option>
+                              <option value="CDAB">Byte order: CDAB</option>
+                              <option value="BADC">Byte order: BADC</option>
+                              <option value="DCBA">Byte order: DCBA</option>
+                            </select>
                           </div>
                         </div>
                       ))}
