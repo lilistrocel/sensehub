@@ -491,30 +491,30 @@ class ModbusPollingService {
 
     switch (dataType) {
       case 'uint16':
-        return data[0];
+        // 16-bit unsigned: data[0] is already 0..65535 from the Modbus reader.
+        return data[0] & 0xFFFF;
 
       case 'int16':
         return data[0] > 32767 ? data[0] - 65536 : data[0];
 
       case 'uint32':
         if (data.length >= 2) {
-          return (data[0] << 16) | data[1];
+          // Assemble the 4-byte word per byteOrder, then read as UNSIGNED.
+          // (Avoids JS bitwise ops which are signed-32 and would yield a
+          //  negative number when the high bit is set.)
+          return this.assemble32(data, mapping).readUInt32BE(0);
         }
-        return data[0];
+        return data[0] & 0xFFFF;
 
       case 'int32':
         if (data.length >= 2) {
-          const unsigned = (data[0] << 16) | data[1];
-          return unsigned > 2147483647 ? unsigned - 4294967296 : unsigned;
+          return this.assemble32(data, mapping).readInt32BE(0);
         }
-        return data[0];
+        return data[0] > 32767 ? data[0] - 65536 : data[0];
 
       case 'float32':
         if (data.length >= 2) {
-          const buffer = Buffer.alloc(4);
-          buffer.writeUInt16BE(data[0], 0);
-          buffer.writeUInt16BE(data[1], 2);
-          return buffer.readFloatBE(0);
+          return this.assemble32(data, mapping).readFloatBE(0);
         }
         return data[0];
 
@@ -524,6 +524,41 @@ class ModbusPollingService {
       default:
         return data[0];
     }
+  }
+
+  /**
+   * Assemble two 16-bit registers into a 4-byte big-endian Buffer, honoring
+   * the per-mapping byteOrder. The bytes A,B,C,D refer to the standard
+   * big-endian byte sequence of the value (A = most significant byte):
+   *   - data[0] (high word) = bytes A,B   (A = high byte, B = low byte)
+   *   - data[1] (low word)  = bytes C,D   (C = high byte, D = low byte)
+   *
+   * byteOrder values:
+   *   ABCD (default) - high word first, big-endian within word (current behavior)
+   *   CDAB           - word swap (low word first)
+   *   BADC           - byte swap within each word
+   *   DCBA           - full reverse
+   *
+   * The returned buffer is always laid out big-endian so callers can use
+   * readUInt32BE / readInt32BE / readFloatBE.
+   */
+  assemble32(data, mapping) {
+    const order = String(mapping.byteOrder || 'ABCD').toUpperCase();
+    // Source bytes in canonical big-endian (ABCD) order.
+    const A = (data[0] >> 8) & 0xFF; // high byte of high word
+    const B = data[0] & 0xFF;        // low byte of high word
+    const C = (data[1] >> 8) & 0xFF; // high byte of low word
+    const D = data[1] & 0xFF;        // low byte of low word
+
+    let bytes;
+    switch (order) {
+      case 'CDAB': bytes = [C, D, A, B]; break;
+      case 'BADC': bytes = [B, A, D, C]; break;
+      case 'DCBA': bytes = [D, C, B, A]; break;
+      case 'ABCD':
+      default:     bytes = [A, B, C, D]; break;
+    }
+    return Buffer.from(bytes);
   }
 
   /**

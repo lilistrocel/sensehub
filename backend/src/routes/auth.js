@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
@@ -171,10 +172,24 @@ router.post('/setup/quick', (req, res) => {
 
   // Create default admin account
   const defaultEmail = 'admin@sensehub.local';
-  const defaultPassword = 'admin123'; // Will need to change on first login
   const defaultName = 'Administrator';
 
-  const passwordHash = bcrypt.hashSync(defaultPassword, 10);
+  // SECURITY: Never use a hardcoded/known default password. This device may be
+  // reachable from the internet (Cloudflare tunnel), so a known password like
+  // "admin123" would be a trivial takeover vector. Generate a strong, random
+  // password instead. The plaintext is intentionally discarded after hashing —
+  // it is never returned to the client. The skip-setup flow auto-logs-in via the
+  // issued JWT below, so the user never needs to know this password; they are
+  // expected to set their own password while authenticated. NOTE: the normal
+  // /api/auth/change-password endpoint requires the current password (which is
+  // never disclosed), so it cannot be used here; instead the auto-logged-in
+  // admin sets a new password via the admin user-management endpoint
+  // (PUT /api/users/:id with a `password` field), which does not require the
+  // current password. See `mustChangePassword` in the response below.
+  // 32 random bytes -> 43-char URL-safe base64 string (no padding).
+  const randomPassword = crypto.randomBytes(32).toString('base64url');
+
+  const passwordHash = bcrypt.hashSync(randomPassword, 10);
 
   try {
     // Create admin user with default credentials
@@ -199,7 +214,14 @@ router.post('/setup/quick', (req, res) => {
       'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
     ).run('setup_completed', JSON.stringify(true));
 
-    // Mark as quick setup (so we can prompt for password change later)
+    // Mark as quick setup so a password change can be enforced later.
+    // NOTE: As of this change, nothing in the backend consumes this flag yet
+    // (no login/middleware check reads it). It is persisted so that a future
+    // enforcement (e.g. blocking actions until the admin sets a real password)
+    // can rely on it. The response below also exposes `mustChangePassword: true`
+    // so the frontend can immediately route the auto-logged-in admin to the
+    // change-password screen. The admin's current password is a random secret
+    // that is never disclosed, so the only way forward is to set a new one.
     db.prepare(
       'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
     ).run('quick_setup', JSON.stringify(true));
@@ -223,11 +245,11 @@ router.post('/setup/quick', (req, res) => {
         role: 'admin'
       },
       expiresAt,
-      defaultCredentials: {
-        email: defaultEmail,
-        password: defaultPassword,
-        note: 'Please change your password in Settings after login'
-      }
+      // SECURITY: The admin password is a random secret that is intentionally
+      // NOT returned. The client is auto-logged-in via `token` above and must
+      // set its own password while authenticated (via PUT /api/users/:id, which
+      // does not require the unknown current password).
+      mustChangePassword: true
     });
   } catch (error) {
     console.error('Quick setup error:', error);
