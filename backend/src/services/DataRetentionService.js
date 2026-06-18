@@ -23,7 +23,14 @@
  *   }
  */
 
-const { db } = require('../utils/database');
+const fs = require('fs');
+const path = require('path');
+const { db, dbPath: DB_PATH } = require('../utils/database');
+
+// Number of readings rows to delete per batch during compaction. Keeps each
+// DELETE transaction small so the WAL doesn't balloon before a checkpoint can
+// reclaim it — critical on disk-constrained deployments (e.g. Raspberry Pi).
+const READINGS_DELETE_BATCH = 25000;
 
 const CONFIG_KEY = 'data_retention_config';
 const DEFAULT_CONFIG = {
@@ -146,13 +153,45 @@ class DataRetentionService {
       (summary.automation_logs.rows_dropped || 0) +
       (summary.alerts.rows_dropped || 0);
     if (!cfg.dry_run && droppedRows > 10000) {
-      console.log(`[Retention] Reclaiming space via VACUUM (${droppedRows.toLocaleString()} rows dropped)`);
+      // VACUUM rebuilds the DB into a temp copy and can transiently need free
+      // space up to the current DB size. On a disk-constrained host that could
+      // fill the disk and fail mid-rebuild, so only VACUUM when there's clearly
+      // enough headroom. Measuring is best-effort: if we can't measure, skip.
+      let canVacuum = false;
       try {
-        db.exec('VACUUM');
-        summary.vacuumed = true;
+        const dbSize = fs.statSync(DB_PATH).size;
+        const stat = fs.statfsSync(path.dirname(DB_PATH));
+        const freeBytes = stat.bavail * stat.bsize;
+        if (freeBytes >= dbSize) {
+          canVacuum = true;
+        } else {
+          summary.vacuum_skipped = 'insufficient free space';
+          summary.vacuum_free_bytes = freeBytes;
+          summary.vacuum_db_bytes = dbSize;
+        }
       } catch (err) {
-        summary.vacuum_error = err.message;
+        summary.vacuum_skipped = `could not measure free space: ${err.message}`;
       }
+
+      if (canVacuum) {
+        console.log(`[Retention] Reclaiming space via VACUUM (${droppedRows.toLocaleString()} rows dropped)`);
+        try {
+          db.exec('VACUUM');
+          summary.vacuumed = true;
+        } catch (err) {
+          summary.vacuum_error = err.message;
+        }
+      } else {
+        console.log(`[Retention] Skipping VACUUM (${summary.vacuum_skipped}); truncating WAL instead`);
+        // Can't compact the main DB, but at least reclaim the WAL.
+        try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch {}
+      }
+    }
+
+    // Always bound the WAL after a retention run so the journal can't linger
+    // large after the night's deletes/checkpoints, even on dry runs or no-ops.
+    if (!cfg.dry_run) {
+      try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch {}
     }
 
     summary.finished_at = new Date().toISOString();
@@ -215,13 +254,29 @@ class DataRetentionService {
     });
     tx(aggregates);
 
-    // 3) Delete the raw rows we just archived
-    const del = db.prepare(`DELETE FROM readings WHERE date(timestamp) < ?`).run(cutoffStr);
+    // 3) Delete the raw rows we just archived, in bounded batches. A single
+    //    DELETE over millions of rows would grow the WAL by gigabytes before
+    //    commit and could refill a near-full disk. Deleting in chunks and
+    //    checkpointing (PASSIVE) between batches keeps the WAL bounded.
+    const delBatch = db.prepare(`
+      DELETE FROM readings
+      WHERE rowid IN (
+        SELECT rowid FROM readings WHERE date(timestamp) < ? LIMIT ${READINGS_DELETE_BATCH}
+      )
+    `);
+    let rowsDropped = 0;
+    for (;;) {
+      const res = delBatch.run(cutoffStr);
+      rowsDropped += res.changes;
+      if (res.changes === 0) break;
+      // Flush WAL pages back into the main DB so the WAL file stays small.
+      try { db.pragma('wal_checkpoint(PASSIVE)'); } catch {}
+    }
 
     return {
       eligible_rows: eligible.n,
       archived_buckets: aggregates.length,
-      rows_dropped: del.changes,
+      rows_dropped: rowsDropped,
       cutoff_date: cutoffStr,
     };
   }

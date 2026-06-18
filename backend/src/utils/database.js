@@ -15,6 +15,11 @@ try {
   db = new Database(dbPath, { verbose: process.env.NODE_ENV === 'development' ? console.log : null });
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  // Bound WAL growth (explicit default: ~1000 pages ≈ 4MB) and let concurrent
+  // writers (e.g. the live poller) wait rather than error during long-running
+  // maintenance like the nightly retention batched deletes / checkpoints.
+  db.pragma('wal_autocheckpoint = 1000');
+  db.pragma('busy_timeout = 30000');
   console.log(`Database connected: ${dbPath}`);
 } catch (error) {
   console.error('Failed to connect to database:', error);
@@ -1939,6 +1944,7 @@ initSchema();
 
 module.exports = {
   db,
+  dbPath,
   isConnected: () => db !== null,
   initSchema
 };
