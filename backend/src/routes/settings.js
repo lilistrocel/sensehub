@@ -272,7 +272,7 @@ router.put('/', requireRole('admin'), (req, res) => {
 });
 
 // The SQLite file magic header — first 16 bytes of every valid database file.
-const SQLITE_MAGIC = Buffer.from('SQLite format 3 ', 'binary');
+const SQLITE_MAGIC = Buffer.from('SQLite format 3\0', 'binary');
 
 // GET /api/settings/backup - Create a real backup of the live DB and stream it
 // to the client as a file download. Uses better-sqlite3's online backup API
@@ -282,6 +282,27 @@ router.get('/backup', requireRole('admin'), async (req, res) => {
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `sensehub-backup-${ts}.db`;
   const tmpPath = path.join(os.tmpdir(), `sensehub-backup-${Date.now()}-${process.pid}.db`);
+
+  // Safety precheck: db.backup() writes a full DB-sized temp copy. On this edge
+  // device the temp dir shares the (often nearly-full) data filesystem, so a
+  // blind copy can fill the disk and stall the database. Refuse unless there is
+  // comfortably more free space than the DB size.
+  try {
+    const dbBytes = fs.statSync(DB_PATH).size;
+    if (typeof fs.statfsSync === 'function') {
+      const st = fs.statfsSync(os.tmpdir());
+      const freeBytes = st.bavail * st.bsize;
+      const needed = Math.ceil(dbBytes * 1.1);
+      if (freeBytes < needed) {
+        return res.status(507).json({
+          error: 'Insufficient Storage',
+          message: `Not enough free disk space to create a backup. Need ~${Math.ceil(needed / 1048576)} MB free, but only ${Math.floor(freeBytes / 1048576)} MB available. Free up space (e.g. prune old readings) and try again.`
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Backup precheck failed:', e);
+  }
 
   try {
     // db.backup() returns a Promise and runs incrementally, yielding to the
