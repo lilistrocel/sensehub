@@ -176,7 +176,77 @@ router.delete('/:id', requireRole('admin', 'operator'), (req, res) => {
   res.json({ message: 'Automation deleted successfully' });
 });
 
-// POST /api/automations/:id/test - Test automation in simulation mode
+// Comparison operators shared by trigger/condition dry-run evaluation.
+// PURE — no side effects. Mirrors the operators used by the scheduler/executor.
+function _compare(a, op, b) {
+  switch (op) {
+    case 'gt':  return a > b;
+    case 'gte': return a >= b;
+    case 'lt':  return a < b;
+    case 'lte': return a <= b;
+    case 'eq':  return a === b;
+    case 'neq': return a !== b;
+    default:    return false;
+  }
+}
+
+// Extract a numeric reading for a given sensor/field name from an equipment's
+// stored last_reading. READ-ONLY: only reads equipment.last_reading from the DB,
+// never writes anything, never touches Modbus/relays. Mirrors the resolution
+// logic in AutomationSchedulerService._isThresholdMet so the dry-run sees the
+// same value the real scheduler would.
+// Returns { value: number|null, found: boolean }.
+function _resolveCurrentValue(equipmentId, sensorType) {
+  if (!equipmentId || !sensorType) return { value: null, found: false };
+  const equipment = db.prepare('SELECT last_reading FROM equipment WHERE id = ?').get(equipmentId);
+  if (!equipment || !equipment.last_reading) return { value: null, found: false };
+
+  let reading;
+  try {
+    reading = typeof equipment.last_reading === 'string'
+      ? JSON.parse(equipment.last_reading)
+      : equipment.last_reading;
+  } catch (e) {
+    return { value: null, found: false };
+  }
+
+  const extractNumber = (v) => {
+    if (v != null && typeof v === 'object' && v.value !== undefined) return parseFloat(v.value);
+    return parseFloat(v);
+  };
+
+  let currentValue = null;
+  if (reading[sensorType] !== undefined) {
+    currentValue = extractNumber(reading[sensorType]);
+  }
+  if ((currentValue === null || Number.isNaN(currentValue)) && reading.registers) {
+    for (const [key, val] of Object.entries(reading.registers)) {
+      if (key.toLowerCase().includes(String(sensorType).toLowerCase())) {
+        currentValue = extractNumber(val);
+        break;
+      }
+    }
+  }
+  if ((currentValue === null || Number.isNaN(currentValue)) && reading.values) {
+    for (const [key, val] of Object.entries(reading.values)) {
+      if (key.toLowerCase().includes(String(sensorType).toLowerCase())) {
+        currentValue = extractNumber(val);
+        break;
+      }
+    }
+  }
+
+  if (currentValue === null || Number.isNaN(currentValue)) return { value: null, found: false };
+  return { value: currentValue, found: true };
+}
+
+const _OP_SYM = { gt: '>', gte: '>=', lt: '<', lte: '<=', eq: '==', neq: '!=' };
+
+// POST /api/automations/:id/test - Dry-run an automation against CURRENT readings.
+// Genuinely evaluates the threshold trigger and conditions against the equipment's
+// latest stored readings and reports whether the automation WOULD fire. This path
+// is strictly read-only: it never actuates a relay/pump, sends a Modbus command,
+// or enqueues a real action. Actions are described, not executed.
 router.post('/:id/test', requireRole('admin', 'operator'), (req, res) => {
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(req.params.id);
 
@@ -219,12 +289,32 @@ router.post('/:id/test', requireRole('admin', 'operator'), (req, res) => {
     const equipment = triggerConfig.equipment_id
       ? db.prepare('SELECT * FROM equipment WHERE id = ?').get(triggerConfig.equipment_id)
       : null;
+    const sensorType = triggerConfig.sensor_type || 'temperature';
+    const operator = triggerConfig.operator || 'gt';
+    const threshold = parseFloat(triggerConfig.threshold_value);
+    const { value: currentValue, found } = _resolveCurrentValue(triggerConfig.equipment_id, sensorType);
+
+    let wouldTrigger = false;
+    let currentValueLabel;
+    if (!found) {
+      currentValueLabel = 'No current reading available';
+    } else if (Number.isNaN(threshold)) {
+      currentValueLabel = `${currentValue} (invalid threshold configured)`;
+    } else {
+      wouldTrigger = _compare(currentValue, operator, threshold);
+      currentValueLabel = `${currentValue}${triggerConfig.unit || ''}`;
+    }
+
+    // would_fire reflects the genuine evaluation against the latest reading.
+    triggerEvaluation.would_fire = wouldTrigger;
     triggerEvaluation.details = {
       equipment: equipment?.name || 'Any equipment',
-      sensor_type: triggerConfig.sensor_type || 'temperature',
-      condition: `${triggerConfig.operator || 'gt'} ${triggerConfig.threshold_value || 0}${triggerConfig.unit || ''}`,
-      current_value: 'N/A (simulated)',
-      would_trigger: 'Yes (simulated threshold met)'
+      sensor_type: sensorType,
+      condition: `${operator} ${triggerConfig.threshold_value || 0}${triggerConfig.unit || ''}`,
+      current_value: currentValueLabel,
+      would_trigger: found && !Number.isNaN(threshold)
+        ? (wouldTrigger ? 'Yes (threshold met)' : 'No (threshold not met)')
+        : 'Unknown (no reading)'
     };
   } else if (triggerConfig.type === 'manual') {
     triggerEvaluation.details = {
@@ -232,19 +322,61 @@ router.post('/:id/test', requireRole('admin', 'operator'), (req, res) => {
     };
   }
 
-  // Evaluate conditions (simulated)
-  const conditionResults = conditions.map((cond, idx) => ({
-    index: idx + 1,
-    field: cond.field,
-    operator: cond.operator,
-    expected_value: cond.value,
-    test_result: 'PASS (simulated)',
-    would_pass: true
-  }));
+  // Evaluate conditions against current readings (read-only).
+  // A condition may carry an equipment binding (equipment_id + sensor field/metric).
+  // When it does, we resolve the live value and compute a genuine pass/fail.
+  // When it does not (no equipment_id, or no current reading), we report the result
+  // as indeterminate rather than faking a PASS — would_pass is null in that case.
+  const conditionResults = conditions.map((cond, idx) => {
+    const sensorField = cond.field || cond.metric || cond.sensor_type;
+    const equipmentId = cond.equipment_id;
+    const threshold = parseFloat(cond.value);
+    const result = {
+      index: idx + 1,
+      field: cond.field,
+      operator: cond.operator,
+      expected_value: cond.value
+    };
+
+    if (!equipmentId || !sensorField) {
+      result.current_value = 'N/A (no equipment binding)';
+      result.would_pass = null;
+      result.test_result = 'INDETERMINATE (no equipment binding)';
+      return result;
+    }
+
+    const { value: currentValue, found } = _resolveCurrentValue(equipmentId, sensorField);
+    if (!found) {
+      result.current_value = 'No current reading available';
+      result.would_pass = null;
+      result.test_result = 'INDETERMINATE (no reading)';
+      return result;
+    }
+    if (Number.isNaN(threshold)) {
+      result.current_value = currentValue;
+      result.would_pass = null;
+      result.test_result = 'INDETERMINATE (invalid threshold)';
+      return result;
+    }
+
+    const ok = _compare(currentValue, cond.operator, threshold);
+    const opSym = _OP_SYM[cond.operator] || cond.operator;
+    result.current_value = currentValue;
+    result.would_pass = ok;
+    result.test_result = ok
+      ? `PASS (${currentValue} ${opSym} ${threshold})`
+      : `FAIL (${currentValue} not ${opSym} ${threshold})`;
+    return result;
+  });
 
   const conditionLogic = automation.condition_logic || 'AND';
+  // Indeterminate conditions (would_pass === null) are treated as NOT met so the
+  // dry-run never over-reports success. With AND, any indeterminate blocks; with OR,
+  // a confirmed true still wins.
   const allConditionsMet = conditionResults.length === 0 ||
-    (conditionLogic === 'AND' ? conditionResults.every(c => c.would_pass) : conditionResults.some(c => c.would_pass));
+    (conditionLogic === 'AND'
+      ? conditionResults.every(c => c.would_pass === true)
+      : conditionResults.some(c => c.would_pass === true));
 
   // Simulate actions (no real execution)
   const actionResults = actions.map((action, idx) => {
