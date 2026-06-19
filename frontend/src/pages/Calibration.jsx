@@ -31,6 +31,14 @@ export default function Calibration() {
   const [zones, setZones] = useState([]);
   const [adding, setAdding] = useState(false);
 
+  // Per-metric linear calibration (scale & offset) — the correction actually
+  // applied to readings at poll time. Keyed by the register mapping's `name`.
+  const [linearScale, setLinearScale] = useState('1');
+  const [linearOffset, setLinearOffset] = useState('0');
+  const [savedLinear, setSavedLinear] = useState({ scale: 1, offset: 0 });
+  const [linearMetrics, setLinearMetrics] = useState([]);
+  const [savingLinear, setSavingLinear] = useState(false);
+
   const formatLocalDatetime = (date) => {
     const d = new Date(date);
     d.setSeconds(0, 0);
@@ -84,6 +92,60 @@ export default function Calibration() {
   };
 
   useEffect(() => { fetchCalibration(); }, [equipmentId, metricName, labNutrient]);
+
+  // Load every metric's scale/offset for the selected device, then sync the
+  // editor to the currently-selected metric.
+  const fetchLinear = async () => {
+    if (!equipmentId) return;
+    try {
+      const res = await fetch(`${API_BASE}/calibration/${equipmentId}/linear`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        setLinearMetrics(json.metrics || []);
+      }
+    } catch { /* non-fatal */ }
+  };
+
+  useEffect(() => { fetchLinear(); }, [equipmentId]);
+
+  // Whenever the selected metric (or the loaded list) changes, reflect its
+  // saved scale/offset into the editor fields.
+  useEffect(() => {
+    const m = linearMetrics.find(x => x.name === metricName);
+    const scale = m ? m.scale : 1;
+    const offset = m ? m.offset : 0;
+    setSavedLinear({ scale, offset });
+    setLinearScale(String(scale));
+    setLinearOffset(String(offset));
+  }, [metricName, linearMetrics]);
+
+  const saveLinear = async (e) => {
+    e.preventDefault();
+    const scale = parseFloat(linearScale);
+    const offset = parseFloat(linearOffset);
+    if (isNaN(scale) || isNaN(offset)) { showError('Scale and offset must be numbers'); return; }
+    setSavingLinear(true);
+    try {
+      const res = await fetch(`${API_BASE}/calibration/${equipmentId}/${encodeURIComponent(metricName)}/linear`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ scale, offset })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Save failed');
+      }
+      const json = await res.json();
+      setSavedLinear({ scale: json.scale, offset: json.offset });
+      // Keep the per-device list in sync so other metrics keep their values.
+      setLinearMetrics(prev => prev.map(m => m.name === metricName ? { ...m, scale: json.scale, offset: json.offset } : m));
+      showSuccess(`Saved calibration for ${metricName}`);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      setSavingLinear(false);
+    }
+  };
 
   const recompute = async () => {
     setRecomputing(true);
@@ -249,6 +311,67 @@ export default function Calibration() {
             </select>
           </div>
         </div>
+      </div>
+
+      {/* Per-metric linear calibration (scale & offset) — applied to readings */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-4">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+          Linear Calibration — <span className="text-primary-600 dark:text-primary-400">{metricName || '(no metric)'}</span>
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          Applied to every reading of this metric: <code className="px-1 rounded bg-gray-100 dark:bg-gray-700">real = raw × scale + offset</code>.
+          Each metric on this device has its own scale/offset.
+        </p>
+        {canEdit ? (
+          <form onSubmit={saveLinear} className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Scale (multiplier)</label>
+              <input type="number" step="any" value={linearScale} onChange={e => setLinearScale(e.target.value)}
+                className="w-28 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Offset (added)</label>
+              <input type="number" step="any" value={linearOffset} onChange={e => setLinearOffset(e.target.value)}
+                className="w-28 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white" />
+            </div>
+            <button type="submit" disabled={savingLinear || !metricName}
+              className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+              {savingLinear ? 'Saving...' : 'Save Calibration'}
+            </button>
+            <span className="text-xs text-gray-400">
+              Saved: scale {savedLinear.scale}, offset {savedLinear.offset}
+            </span>
+          </form>
+        ) : (
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Scale <strong>{savedLinear.scale}</strong>, offset <strong>{savedLinear.offset}</strong>
+          </p>
+        )}
+
+        {linearMetrics.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
+                  <th className="pb-2 pr-3">Metric</th>
+                  <th className="pb-2 pr-3 text-right">Scale</th>
+                  <th className="pb-2 pr-3 text-right">Offset</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {linearMetrics.map(m => (
+                  <tr key={m.name}
+                    onClick={() => setMetricName(m.name)}
+                    className={`cursor-pointer text-gray-700 dark:text-gray-300 ${m.name === metricName ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}>
+                    <td className="py-2 pr-3">{m.name}{m.unit ? ` (${m.unit})` : ''}</td>
+                    <td className="py-2 pr-3 text-right">{m.scale}</td>
+                    <td className="py-2 pr-3 text-right">{m.offset}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
