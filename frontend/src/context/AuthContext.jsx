@@ -21,6 +21,20 @@ export function AuthProvider({ children }) {
     tokenRef.current = token;
   }, [token]);
 
+  // Local session teardown used when the backend reports the session has
+  // expired (HTTP 401). Unlike logout() this does NOT call the logout endpoint
+  // (the token is already invalid) and never goes through the fetch wrapper, so
+  // it cannot trigger a logout loop. Clearing `user` causes ProtectedRoute in
+  // App.jsx to redirect to /login automatically (no hard navigation needed).
+  // NOTE: must be declared BEFORE the interceptor effect that lists it as a
+  // dependency — a const in a deps array is evaluated during render, so a later
+  // declaration throws a temporal-dead-zone ReferenceError and blanks the app.
+  const handleSessionExpired = useCallback(() => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+  }, []);
+
   // Global 401 interceptor: wrap window.fetch ONCE so every manual fetch() call
   // across the ~270 call sites in the app is covered without touching them.
   // When an authenticated request to an /api/ endpoint comes back 401, the
@@ -164,17 +178,6 @@ export function AuthProvider({ children }) {
       setUser(null);
     }
   };
-
-  // Local session teardown used when the backend reports the session has
-  // expired (HTTP 401). Unlike logout() this does NOT call the logout endpoint
-  // (the token is already invalid) and never goes through the fetch wrapper, so
-  // it cannot trigger a logout loop. Clearing `user` causes ProtectedRoute in
-  // App.jsx to redirect to /login automatically (no hard navigation needed).
-  const handleSessionExpired = useCallback(() => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
-  }, []);
 
   // Function to update user after setup completion
   const setUserAfterSetup = (newToken, newUser) => {
