@@ -17,6 +17,22 @@ The custom firmware implements full standard Modbus RTU with bidirectional commu
 - **FC0F** — Write Multiple Coils (control multiple relays at once)
 - **FC03** — Read Holding Registers (device info)
 
+### Fail-Safe Behavior (firmware v2)
+
+The firmware protects the loads (pumps, chillers, fans, dosing) against a lost link. **Safe state = all relays OFF**, because every load on these boards is safe de-energized.
+
+| Protection | Behavior |
+|------------|----------|
+| **Comms-loss fail-safe** | If no valid Modbus request addressed to this slave arrives for **60 s** (`COMMS_TIMEOUT_MS`), all relays are forced OFF and latched off until communication returns. |
+| **Hardware watchdog** | If `loop()` hangs for **8 s** (`WDT_TIMEOUT_MS`), the ESP32 reboots. Relays power up OFF, so a reboot fails safe. |
+| **Field indication** | Two short beeps on boot; **one long beep** when the board enters fail-safe (comms lost). |
+
+**Why this matters:** SenseHub's server-side `RelaySafetyWatchdog` can only force a relay off while both SenseHub *and* the RS485 bus are alive. If the bus or gateway itself dies (as happened to the `.202` boards on 2026-06-08), the server can no longer reach the board — the firmware fail-safe is the only thing that can turn a stuck pump off. The two watchdogs are complementary; keep both.
+
+**Tuning:** SenseHub polls each board via FC01 every 15 s, so a live bus refreshes the 60 s window automatically (≈4 missed polls before it trips). If you shorten the poll interval, you may lower `COMMS_TIMEOUT_MS`, but keep it ≥ ~3× the poll interval so retries and transient hiccups don't trip it. Both timeouts are `#define`s at the top of the `.ino`.
+
+**Requires** Arduino-ESP32 core **3.x** (the `esp_task_wdt` config-struct API) and ModbusRTUSlave **v3.1.2+**.
+
 ---
 
 ## Hardware Specifications
@@ -245,7 +261,7 @@ curl -X POST http://localhost:3003/api/modbus/read/holding-registers \
   -H "Content-Type: application/json" \
   -d '{"host":"192.168.1.7","port":502,"unitId":1,"address":0,"quantity":4}'
 ```
-Response should include: firmware version (1), channels (6), slave ID, 0.
+Response should include: firmware version (**2** = fail-safe build; **1** = old build without fail-safe), channels (6), slave ID, 0. Reading holding register 0 is the quickest way to confirm a board has actually been re-flashed to v2.
 
 ---
 
@@ -271,12 +287,12 @@ sensehub/firmware/waveshare_modbus_slave/waveshare_modbus_slave.ino
 **Holding Registers (FC03):**
 | Address | Function | Default |
 |---------|----------|---------|
-| 0 | Firmware version | 1 |
+| 0 | Firmware version | 2 (fail-safe build) |
 | 1 | Number of channels | 6 |
 | 2 | Slave address | (configured) |
 | 3 | Reserved | 0 |
 
 ### Dependencies
 
-- Arduino ESP32 board support (`esp32:esp32` v3.x)
+- Arduino ESP32 board support (`esp32:esp32` **v3.x — required** by the v2 fail-safe watchdog API)
 - ModbusRTUSlave library (v3.1.2+)
