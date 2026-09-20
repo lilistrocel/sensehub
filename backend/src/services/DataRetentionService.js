@@ -41,6 +41,10 @@ const DEFAULT_CONFIG = {
   relay_events_retention_days: 60,
   automation_logs_retention_days: 30,
   alerts_retention_days: 90,
+  // High-volume operational tables. These were previously unpruned and grew
+  // without bound (request_log reached 672k rows / ~137MB over 6 months).
+  request_log_retention_days: 30,
+  network_usage_retention_days: 90,
   dry_run: false,
 };
 
@@ -128,6 +132,8 @@ class DataRetentionService {
       relay_events: {},
       automation_logs: {},
       alerts: {},
+      request_log: {},
+      network_usage: {},
     };
 
     // ----- readings: aggregate then drop -----
@@ -146,12 +152,24 @@ class DataRetentionService {
     // ----- alerts: prune only ACKNOWLEDGED alerts older than threshold -----
     summary.alerts = this._pruneAckedAlerts(cfg.alerts_retention_days, cfg.dry_run);
 
+    // ----- request_log: simple prune (HTTP access log, purely diagnostic) -----
+    summary.request_log = this._pruneByAge(
+      'request_log', 'created_at', cfg.request_log_retention_days, cfg.dry_run,
+    );
+
+    // ----- network_usage: simple prune (interface counters) -----
+    summary.network_usage = this._pruneByAge(
+      'network_usage', 'timestamp', cfg.network_usage_retention_days, cfg.dry_run,
+    );
+
     // ----- VACUUM after big deletes (only if we actually deleted something) -----
     const droppedRows =
       (summary.readings.rows_dropped || 0) +
       (summary.relay_events.rows_dropped || 0) +
       (summary.automation_logs.rows_dropped || 0) +
-      (summary.alerts.rows_dropped || 0);
+      (summary.alerts.rows_dropped || 0) +
+      (summary.request_log.rows_dropped || 0) +
+      (summary.network_usage.rows_dropped || 0);
     if (!cfg.dry_run && droppedRows > 10000) {
       // VACUUM rebuilds the DB into a temp copy and can transiently need free
       // space up to the current DB size. On a disk-constrained host that could
