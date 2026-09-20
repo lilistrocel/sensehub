@@ -19,6 +19,12 @@
  *     relay_events_retention_days: 60,
  *     automation_logs_retention_days: 30,
  *     alerts_retention_days: 90,             // acknowledged alerts only
+ *     info_alerts_retention_days: 90,        // UNacknowledged 'info' alerts (never acked, would grow forever)
+ *     request_log_retention_days: 30,
+ *     network_usage_retention_days: 90,
+ *     equipment_errors_retention_days: 30,
+ *     watchdog_events_retention_days: 90,
+ *     prune_expired_sessions: true,          // sessions past expires_at
  *     dry_run: false,                        // when true, logs what would be done without modifying anything
  *   }
  */
@@ -45,8 +51,20 @@ const DEFAULT_CONFIG = {
   // without bound (request_log reached 672k rows / ~137MB over 6 months).
   request_log_retention_days: 30,
   network_usage_retention_days: 90,
+  // Further unbounded event tables.
+  equipment_errors_retention_days: 30,
+  watchdog_events_retention_days: 90,
+  // Info-severity alerts are rarely acknowledged, so the acked-only alert
+  // prune never touches them; drop unacknowledged info alerts after this.
+  info_alerts_retention_days: 90,
+  // Sessions past expires_at are dead weight (auth already ignores them).
+  prune_expired_sessions: true,
   dry_run: false,
 };
+
+// Rows deleted per batch for the plain event-table prunes (same rationale as
+// READINGS_DELETE_BATCH: keep each transaction, and therefore the WAL, small).
+const PRUNE_DELETE_BATCH = 25000;
 
 class DataRetentionService {
   constructor() {
@@ -134,6 +152,10 @@ class DataRetentionService {
       alerts: {},
       request_log: {},
       network_usage: {},
+      equipment_errors: {},
+      watchdog_events: {},
+      sessions: {},
+      info_alerts: {},
     };
 
     // ----- readings: aggregate then drop -----
@@ -162,6 +184,24 @@ class DataRetentionService {
       'network_usage', 'timestamp', cfg.network_usage_retention_days, cfg.dry_run,
     );
 
+    // ----- equipment_errors: simple prune (per-poll error log) -----
+    summary.equipment_errors = this._pruneByAge(
+      'equipment_errors', 'created_at', cfg.equipment_errors_retention_days, cfg.dry_run,
+    );
+
+    // ----- watchdog_events: simple prune -----
+    summary.watchdog_events = this._pruneByAge(
+      'watchdog_events', 'created_at', cfg.watchdog_events_retention_days, cfg.dry_run,
+    );
+
+    // ----- sessions: drop rows whose expires_at is in the past -----
+    summary.sessions = cfg.prune_expired_sessions === false
+      ? { skipped: 'disabled', rows_dropped: 0 }
+      : this._pruneExpiredSessions(cfg.dry_run);
+
+    // ----- alerts: prune UNacknowledged info-severity alerts older than threshold -----
+    summary.info_alerts = this._pruneStaleInfoAlerts(cfg.info_alerts_retention_days, cfg.dry_run);
+
     // ----- VACUUM after big deletes (only if we actually deleted something) -----
     const droppedRows =
       (summary.readings.rows_dropped || 0) +
@@ -169,7 +209,11 @@ class DataRetentionService {
       (summary.automation_logs.rows_dropped || 0) +
       (summary.alerts.rows_dropped || 0) +
       (summary.request_log.rows_dropped || 0) +
-      (summary.network_usage.rows_dropped || 0);
+      (summary.network_usage.rows_dropped || 0) +
+      (summary.equipment_errors.rows_dropped || 0) +
+      (summary.watchdog_events.rows_dropped || 0) +
+      (summary.sessions.rows_dropped || 0) +
+      (summary.info_alerts.rows_dropped || 0);
     if (!cfg.dry_run && droppedRows > 10000) {
       // VACUUM rebuilds the DB into a temp copy and can transiently need free
       // space up to the current DB size. On a disk-constrained host that could
@@ -299,15 +343,51 @@ class DataRetentionService {
     };
   }
 
+  /**
+   * Generic prune: count, dry-run short-circuit, then delete in bounded batches
+   * (rowid IN (... LIMIT n)) with a PASSIVE WAL checkpoint between batches.
+   * `where` is a SQL predicate over the table; `params` are its bind values.
+   */
+  _pruneWhere(table, where, params, dryRun, extra = {}) {
+    const count = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`).get(...params);
+    if (count.n === 0) return { rows_dropped: 0 };
+    if (dryRun) return { eligible_rows: count.n, rows_dropped: 0, dry_run: true, ...extra };
+    const delBatch = db.prepare(`
+      DELETE FROM ${table}
+      WHERE rowid IN (SELECT rowid FROM ${table} WHERE ${where} LIMIT ${PRUNE_DELETE_BATCH})
+    `);
+    let rowsDropped = 0;
+    for (;;) {
+      const res = delBatch.run(...params);
+      rowsDropped += res.changes;
+      if (res.changes === 0) break;
+      try { db.pragma('wal_checkpoint(PASSIVE)'); } catch {}
+    }
+    return { rows_dropped: rowsDropped, ...extra };
+  }
+
   _pruneByAge(table, tsColumn, retentionDays, dryRun) {
     const cutoffDate = this._cutoffDate(retentionDays);
     const cutoffIso = cutoffDate.toISOString();
     const cutoffSql = cutoffIso.replace('T', ' ').slice(0, 19); // SQLite-friendly
-    const count = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE datetime(${tsColumn}) < datetime(?)`).get(cutoffSql);
-    if (count.n === 0) return { rows_dropped: 0 };
-    if (dryRun) return { eligible_rows: count.n, rows_dropped: 0, dry_run: true };
-    const r = db.prepare(`DELETE FROM ${table} WHERE datetime(${tsColumn}) < datetime(?)`).run(cutoffSql);
-    return { rows_dropped: r.changes, cutoff: cutoffSql };
+    return this._pruneWhere(
+      table, `datetime(${tsColumn}) < datetime(?)`, [cutoffSql], dryRun, { cutoff: cutoffSql },
+    );
+  }
+
+  /** sessions.expires_at is an ISO-8601 string (auth.js); datetime() parses it. */
+  _pruneExpiredSessions(dryRun) {
+    return this._pruneWhere('sessions', "datetime(expires_at) < datetime('now')", [], dryRun);
+  }
+
+  /** Unacknowledged 'info' alerts older than the cutoff (warning/critical are kept). */
+  _pruneStaleInfoAlerts(retentionDays, dryRun) {
+    const cutoffSql = this._cutoffDate(retentionDays).toISOString().replace('T', ' ').slice(0, 19);
+    return this._pruneWhere(
+      'alerts',
+      "severity = 'info' AND acknowledged = 0 AND datetime(created_at) < datetime(?)",
+      [cutoffSql], dryRun, { cutoff: cutoffSql },
+    );
   }
 
   _pruneAckedAlerts(retentionDays, dryRun) {

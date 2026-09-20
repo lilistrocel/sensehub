@@ -61,7 +61,28 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 // Middleware
-app.use(cors());
+// CORS: allow only a configurable origin list. CORS_ORIGINS is comma-separated
+// (e.g. "http://localhost:5173,https://hub.example.com"); "*" allows any origin.
+// Requests without an Origin header (curl, server-to-server, same-origin via
+// the nginx proxy) are not cross-origin and always pass through.
+const DEFAULT_CORS_ORIGINS = ['http://localhost:5173', 'http://localhost:3002'];
+const configuredOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+const allowedOrigins = configuredOrigins.length > 0 ? configuredOrigins : DEFAULT_CORS_ORIGINS;
+const allowAnyOrigin = allowedOrigins.includes('*');
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowAnyOrigin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // Not allowed: respond without CORS headers so the browser blocks it.
+    return callback(null, false);
+  },
+  credentials: true,
+}));
+console.log(`CORS origins: ${allowAnyOrigin ? '* (any)' : allowedOrigins.join(', ')}`);
 app.use(express.json());
 
 // Request logging middleware - logs to database for network analysis

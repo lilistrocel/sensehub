@@ -119,56 +119,30 @@ router.get('/overview', (req, res) => {
     return eq;
   });
 
-  // Historical readings for chart (filtered by time range, downsampled)
+  // Historical readings for chart (filtered by time range, downsampled).
+  // Bucket width scales with the range so every range yields ~150 points per
+  // series (24 h -> 10 min, 7 d -> 68 min, 30 d -> 288 min) instead of up to
+  // 288 five-minute buckets. Minimum 5 min. Rows keep equipment_name because
+  // the Dashboard chart/CSV export reads it per row.
   // Skip if client doesn't need chart data (saves ~400-650 KB per request)
   let chartReadings = [];
   if (includeChart) {
-    let chartQuery;
-    if (hoursAgo <= 1) {
-      // Raw data for <= 1 hour
-      chartQuery = `
-        SELECT r.equipment_id, r.value, r.unit, r.timestamp, r.name, e.name as equipment_name
-        FROM readings r
-        INNER JOIN equipment e ON r.equipment_id = e.id
-        WHERE r.timestamp >= ?
-        ORDER BY r.timestamp ASC`;
-    } else if (hoursAgo <= 24) {
-      // 5-minute buckets
-      chartQuery = `
-        SELECT r.equipment_id,
-          AVG(r.value) as value, r.unit, r.name,
-          strftime('%Y-%m-%d %H:', r.timestamp) || printf('%02d', (CAST(strftime('%M', r.timestamp) AS INTEGER) / 5) * 5) || ':00' as timestamp,
-          e.name as equipment_name
-        FROM readings r
-        INNER JOIN equipment e ON r.equipment_id = e.id
-        WHERE r.timestamp >= ?
-        GROUP BY r.equipment_id, COALESCE(r.name, ''), strftime('%Y-%m-%d %H:', r.timestamp) || printf('%02d', (CAST(strftime('%M', r.timestamp) AS INTEGER) / 5) * 5)
-        ORDER BY timestamp ASC`;
-    } else if (hoursAgo <= 168) {
-      // 1-hour buckets for <= 7 days
-      chartQuery = `
-        SELECT r.equipment_id,
-          AVG(r.value) as value, r.unit, r.name,
-          strftime('%Y-%m-%d %H:00:00', r.timestamp) as timestamp,
-          e.name as equipment_name
-        FROM readings r
-        INNER JOIN equipment e ON r.equipment_id = e.id
-        WHERE r.timestamp >= ?
-        GROUP BY r.equipment_id, COALESCE(r.name, ''), strftime('%Y-%m-%d %H', r.timestamp)
-        ORDER BY timestamp ASC`;
-    } else {
-      // 6-hour buckets for > 7 days
-      chartQuery = `
-        SELECT r.equipment_id,
-          AVG(r.value) as value, r.unit, r.name,
-          strftime('%Y-%m-%d ', r.timestamp) || printf('%02d', (CAST(strftime('%H', r.timestamp) AS INTEGER) / 6) * 6) || ':00:00' as timestamp,
-          e.name as equipment_name
-        FROM readings r
-        INNER JOIN equipment e ON r.equipment_id = e.id
-        WHERE r.timestamp >= ?
-        GROUP BY r.equipment_id, COALESCE(r.name, ''), strftime('%Y-%m-%d', r.timestamp) || (CAST(strftime('%H', r.timestamp) AS INTEGER) / 6)
-        ORDER BY timestamp ASC`;
-    }
+    const CHART_TARGET_POINTS = 150;
+    const bucketMinutes = Math.max(5, Math.ceil((hoursAgo * 60) / CHART_TARGET_POINTS));
+    const bucketSeconds = bucketMinutes * 60;
+    // Bucket on the unix epoch (integer division), then render the bucket
+    // start as 'YYYY-MM-DD HH:MM:SS' so the client parses it like before.
+    const bucketExpr = `(CAST(strftime('%s', r.timestamp) AS INTEGER) / ${bucketSeconds}) * ${bucketSeconds}`;
+    const chartQuery = `
+      SELECT r.equipment_id,
+        AVG(r.value) as value, r.unit, r.name,
+        datetime(${bucketExpr}, 'unixepoch') as timestamp,
+        e.name as equipment_name
+      FROM readings r
+      INNER JOIN equipment e ON r.equipment_id = e.id
+      WHERE r.timestamp >= ?
+      GROUP BY r.equipment_id, COALESCE(r.name, ''), ${bucketExpr}
+      ORDER BY timestamp ASC`;
     chartReadings = db.prepare(chartQuery).all(startTime);
   }
 
