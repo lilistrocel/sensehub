@@ -42,6 +42,7 @@
 const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { logRelayEvent } = require('./RelayEventLogger');
+const { automationArmingService } = require('./AutomationArmingService');
 
 class FertigationDoseScheduler {
   constructor() {
@@ -171,6 +172,19 @@ class FertigationDoseScheduler {
    *   dryRun           if true, computes schedule + logs but doesn't write coils
    */
   async startCycle({ programId, durationSeconds, automationId = null, dryRun = false }) {
+    // Emergency stop gate. A dose cycle is an unattended multi-minute program
+    // that keeps toggling injector valves on its own setTimeout timers, so it
+    // must not be startable while automations are disarmed — by an automation
+    // OR by the manual POST /api/fertigation/dose-cycle/start route, which
+    // surfaces this throw as a 400. A dry run writes no coils, so it is allowed.
+    if (!dryRun) {
+      const arming = automationArmingService.getState();
+      if (arming.disarmed) {
+        throw new Error(
+          `Automations are DISARMED (emergency stop)${automationArmingService.describe(arming)} — re-arm before starting a dose cycle`
+        );
+      }
+    }
     if (this._active) throw new Error('A fertigation dose cycle is already running');
     if (!programId || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
       throw new Error('startCycle: programId and positive durationSeconds required');

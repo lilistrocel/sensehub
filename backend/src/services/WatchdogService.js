@@ -17,6 +17,7 @@ const dns = require('dns');
 const { db } = require('../utils/database');
 const { broadcastNewAlert } = require('../utils/alertBroadcast');
 const { telegramService } = require('./TelegramService');
+const { automationArmingService } = require('./AutomationArmingService');
 
 // Auto-rearm: when a threshold automation should be firing but hasn't (the relay was
 // killed by the safety watchdog and the condition is still met, so no rising edge
@@ -375,6 +376,22 @@ class WatchdogService {
   // ─── Automation Checks ───
 
   async _checkMissedAutomations() {
+    // Emergency stop gate. Auto-rearm below re-EXECUTES threshold automations,
+    // which energises coils — it would silently undo an emergency stop within
+    // minutes. While disarmed every automation is deliberately not firing, so
+    // the "missed"/"met but not fired" alerts are noise about an operator's own
+    // action; the whole check is skipped rather than just the rearm (checking
+    // earlier also avoids burning _shouldRearm's rate-limit slots).
+    // Equipment / connectivity / service checks are unaffected.
+    const arming = automationArmingService.getState();
+    if (arming.disarmed) {
+      automationArmingService.noteSkip(
+        'watchdog_rearm',
+        `[Watchdog] Automations DISARMED — skipping missed-automation checks and auto-rearm${automationArmingService.describe(arming)}`
+      );
+      return;
+    }
+
     const automations = db.prepare('SELECT * FROM automations WHERE enabled = 1').all();
     const now = new Date();
     const alerts = [];

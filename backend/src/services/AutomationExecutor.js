@@ -10,6 +10,7 @@ const { modbusTcpClient } = require('./ModbusTcpClient');
 const { relayTimerService } = require('./RelayTimerService');
 const { logRelayEvent } = require('./RelayEventLogger');
 const { fertigationDoseScheduler } = require('./FertigationDoseScheduler');
+const { automationArmingService } = require('./AutomationArmingService');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -128,6 +129,20 @@ function evaluateDependencies(deps) {
  * @returns {Promise<{executedActions: Array, error: string|null}>}
  */
 async function executeAutomation(automation, source = 'manual') {
+  // Emergency stop backstop. Every known caller (scheduler, manual trigger
+  // route, watchdog auto-rearm) gates on the disarm flag itself; this is the
+  // single choke point that catches any caller added later. stopAllRelays()
+  // does NOT come through here — it calls executeControlAction directly — so
+  // the emergency stop itself still works while disarmed.
+  const arming = automationArmingService.getState();
+  if (arming.disarmed) {
+    automationArmingService.noteSkip(
+      'executor',
+      `[Automation] Automations DISARMED — refusing to execute "${automation?.name}" (id=${automation?.id}, source=${source})${automationArmingService.describe(arming)}`
+    );
+    return { executedActions: [], skipped: true, reason: 'automations_disarmed' };
+  }
+
   // Parse actions
   let actions;
   try {
@@ -233,8 +248,15 @@ async function executeAutomation(automation, source = 'manual') {
 
 /**
  * Execute a single control action (relay / equipment control).
+ *
+ * @param {object} action
+ * @param {object} automation - owning automation ({ id: null } for non-automation callers)
+ * @param {object} [options]
+ * @param {string} [options.eventSource] - relay_events / broadcast source label
+ *        for the immediate write (defaults to 'automation')
  */
-async function executeControlAction(action, automation) {
+async function executeControlAction(action, automation, options = {}) {
+  const eventSource = options.eventSource || 'automation';
   const targetEquipment = action.equipment_id
     ? db.prepare('SELECT * FROM equipment WHERE id = ?').get(action.equipment_id)
     : null;
@@ -273,15 +295,17 @@ async function executeControlAction(action, automation) {
         equipmentId: targetEquipment.id,
         channel: address,
         state: value,
-        source: 'automation',
+        source: eventSource,
         automationId: automation.id
       });
 
       // Log relay event for fertigation tracking
-      logRelayEvent(targetEquipment.id, address, value, 'automation', automation.id);
+      logRelayEvent(targetEquipment.id, address, value, eventSource, automation.id);
 
       // Schedule auto-off if duration_seconds is set and action is "on"
       if (action.duration_seconds && action.duration_seconds > 0 && value === true) {
+        // checkEnabled is deliberately NOT set: auto-off only ever de-energises,
+        // so disabling the automation must never cancel it and strand a relay ON.
         relayTimerService.scheduleOff(targetEquipment.id, address, action.duration_seconds, async () => {
           try {
             // Send OFF command with retry+verify for reliability
@@ -356,7 +380,7 @@ async function executeControlAction(action, automation) {
           } catch (err) {
             console.error(`[Automation] Auto-off failed for equipment ${targetEquipment.id} channel ${address}:`, err.message);
           }
-        });
+        }, { automationId: automation.id });
       }
 
       console.log(`[Automation] Relay control executed: equipment ${targetEquipment.id} ch ${address} -> ${value}`);
@@ -364,7 +388,12 @@ async function executeControlAction(action, automation) {
 
     try {
       if (action.delay_seconds && action.delay_seconds > 0) {
-        relayTimerService.scheduleDelayedStart(targetEquipment.id, address, action.delay_seconds, executeRelayAction);
+        // Gate the callback on the automation still being enabled only when this
+        // delayed action would turn the coil ON; a delayed OFF must always run.
+        relayTimerService.scheduleDelayedStart(targetEquipment.id, address, action.delay_seconds, executeRelayAction, {
+          automationId: automation.id,
+          checkEnabled: value === true
+        });
         return {
           type: 'control', status: 'scheduled', action: action.action,
           equipment: targetEquipment.name, channel: address,
@@ -417,7 +446,7 @@ async function executeControlAction(action, automation) {
         stagger_delay_seconds: null,  // prevent sub-action from re-processing
         delay_seconds: i === 0 ? action.delay_seconds : null  // only first channel gets the initial delay
       };
-      const result = await executeControlAction(channelAction, automation);
+      const result = await executeControlAction(channelAction, automation, options);
       results.push(result);
     }
     return { type: 'control', status: 'executed', action: action.action, equipment: targetEquipment.name, all_channels: true, stagger_delay_seconds: action.stagger_delay_seconds || null, channels: results };
@@ -602,7 +631,7 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
         } catch (err) {
           console.error('[Automation] Transition auto-off failed:', err.message);
         }
-      });
+      }, { automationId: automation.id });
     }
   };
 
@@ -612,7 +641,12 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
       // Unique key per action to avoid timer collisions when multiple transitions
       // on the same equipment share channels
       const delayKey = `transition_delay:${targetEquipment.id}:${automation.id}:${actionIdx}`;
-      relayTimerService.scheduleDelayedRaw(delayKey, action.delay_seconds, executeTransitions);
+      // Gate on the automation still being enabled only when this transition
+      // would energise at least one coil; an all-OFF transition must always run.
+      relayTimerService.scheduleDelayedRaw(delayKey, action.delay_seconds, executeTransitions, {
+        automationId: automation.id,
+        checkEnabled: action.transitions.some(t => !!t.state)
+      });
       return {
         type: 'transition', status: 'scheduled', equipment: targetEquipment.name,
         delay_seconds: action.delay_seconds, transitions: action.transitions.length
@@ -630,4 +664,94 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
   }
 }
 
-module.exports = { executeAutomation, evaluateDependencies, executeTransitionAction };
+/**
+ * Emergency stop — the operator's "stop everything".
+ *
+ * Order matters:
+ *   1. Cancel EVERY pending relay timer first, so nothing can re-energise a
+ *      coil in the seconds after we push it off.
+ *   2. Then drive every writable coil of every enabled relay equipment OFF,
+ *      reusing the normal control/off Modbus path (executeControlAction).
+ *
+ * A Modbus failure on one channel never aborts the rest — failures are
+ * collected and returned. Channels are written sequentially to avoid
+ * hammering the RS485 bus.
+ *
+ * @returns {Promise<{timersCancelled: number, channelsTurnedOff: number, doseCycleAborted: boolean, failures: Array}>}
+ */
+async function stopAllRelays() {
+  const timersCancelled = relayTimerService.cancelAllTimers();
+  console.log(`[Automation] Stop-all: cancelled ${timersCancelled} pending relay timer(s)`);
+
+  // A running fertigation dose cycle keeps its OWN setTimeout timers, which are
+  // not in the RelayTimerService map and would keep cycling injector valves.
+  let doseCycleAborted = false;
+  try {
+    if (fertigationDoseScheduler.isRunning()) {
+      doseCycleAborted = await fertigationDoseScheduler.abortCycle('stop-all requested');
+      console.log('[Automation] Stop-all: aborted the running fertigation dose cycle');
+    }
+  } catch (err) {
+    console.error('[Automation] Stop-all: failed to abort dose cycle:', err.message);
+  }
+
+  const failures = [];
+  let channelsTurnedOff = 0;
+
+  // NOT filtered by equipment.enabled: an emergency stop must reach a relay that
+  // is disabled in SenseHub but still physically energised.
+  const equipmentList = db.prepare('SELECT * FROM equipment').all();
+
+  for (const eq of equipmentList) {
+    // Relay equipment = anything exposing writable coils. Same definition the
+    // executor uses for an "all channels" control action.
+    let mappings = [];
+    try {
+      mappings = typeof eq.register_mappings === 'string'
+        ? JSON.parse(eq.register_mappings)
+        : (eq.register_mappings || []);
+    } catch (e) {}
+
+    const coils = Array.isArray(mappings)
+      ? mappings.filter(m => m.type === 'coil' && m.access === 'readwrite')
+      : [];
+    if (coils.length === 0) continue;
+
+    for (const coil of coils) {
+      const channel = parseInt(coil.register ?? coil.address, 10);
+      if (!Number.isFinite(channel)) {
+        failures.push({
+          equipment_id: eq.id, equipment: eq.name,
+          channel: coil.register ?? coil.address ?? null,
+          error: 'Invalid coil address in register_mappings'
+        });
+        continue;
+      }
+
+      const result = await executeControlAction(
+        {
+          type: 'control',
+          action: 'off',
+          equipment_id: eq.id,
+          channel,
+          channel_name: coil.label || coil.name || `Coil ${channel}`
+        },
+        { id: null, name: 'stop-all' },
+        { eventSource: 'stop_all' }
+      );
+
+      if (result.status === 'error') {
+        failures.push({ equipment_id: eq.id, equipment: eq.name, channel, error: result.error });
+        console.error(`[Automation] Stop-all: failed to turn off ${eq.name} ch ${channel}: ${result.error}`);
+      } else {
+        channelsTurnedOff++;
+      }
+    }
+  }
+
+  console.log(`[Automation] Stop-all complete: ${channelsTurnedOff} channel(s) off, ${failures.length} failure(s)`);
+
+  return { timersCancelled, channelsTurnedOff, doseCycleAborted, failures };
+}
+
+module.exports = { executeAutomation, evaluateDependencies, executeTransitionAction, stopAllRelays };

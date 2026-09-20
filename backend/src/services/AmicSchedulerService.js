@@ -28,6 +28,7 @@
 const { db } = require('../utils/database');
 const { broadcastNewAlert } = require('../utils/alertBroadcast');
 const { amicService } = require('./AmicService');
+const { automationArmingService } = require('./AutomationArmingService');
 
 const TICK_MS = 60000;             // 60 s
 const GRACE_WINDOW_MS = 5 * 60000; // fire if scheduled time was up to 5 min ago
@@ -71,6 +72,19 @@ class AmicSchedulerService {
   }
 
   async _tick() {
+    // Emergency stop gate. A scheduled Calibrate pulses the AMIC's command coil,
+    // which runs its sample/drain pumps unattended for minutes — an automatic
+    // actuation, so it stays parked while automations are disarmed. The manual
+    // AMIC trigger routes are deliberately NOT gated (attended operator action).
+    const arming = automationArmingService.getState();
+    if (arming.disarmed) {
+      automationArmingService.noteSkip(
+        'amic_scheduler',
+        `[AmicScheduler] Automations DISARMED — skipping scheduled cycles until re-armed${automationArmingService.describe(arming)}`
+      );
+      return;
+    }
+
     const schedule = amicService.getSchedule();
     if (!schedule.enabled) return;
 

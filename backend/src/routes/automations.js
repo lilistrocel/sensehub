@@ -1,7 +1,9 @@
 const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
-const { executeAutomation } = require('../services/AutomationExecutor');
+const { executeAutomation, stopAllRelays } = require('../services/AutomationExecutor');
+const { relayTimerService } = require('../services/RelayTimerService');
+const { automationArmingService } = require('../services/AutomationArmingService');
 
 const router = express.Router();
 
@@ -92,6 +94,96 @@ router.get('/templates', (req, res) => {
   } catch (err) {
     console.error('Error fetching automation templates:', err);
     res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// POST /api/automations/stop-all - Emergency stop.
+// Cancels every pending relay timer FIRST (so nothing re-energises behind us),
+// then drives every writable coil of every enabled relay equipment OFF.
+// Declared before the /:id routes so it can never be swallowed by them.
+router.post('/stop-all', requireRole('admin', 'operator'), async (req, res) => {
+  try {
+    const result = await stopAllRelays();
+    console.log(`[Automation] Stop-all requested by ${req.user?.email || 'unknown'}: ` +
+      `${result.timersCancelled} timer(s) cancelled, ${result.channelsTurnedOff} channel(s) off, ${result.failures.length} failure(s)`);
+    res.json(result);
+  } catch (err) {
+    console.error('[Automation] Stop-all failed:', err.message);
+    res.status(500).json({ error: 'Stop-all failed', message: err.message });
+  }
+});
+
+// GET /api/automations/timers - Pending in-memory relay timers (delayed starts,
+// auto-offs, transition reverts). Read-only, any authenticated role.
+// Declared before the /:id routes so it can never be swallowed by them.
+router.get('/timers', (req, res) => {
+  try {
+    res.json(relayTimerService.getActiveTimers());
+  } catch (err) {
+    console.error('Error fetching relay timers:', err);
+    res.status(500).json({ error: 'Failed to fetch relay timers' });
+  }
+});
+
+// POST /api/automations/emergency-stop - Stop everything AND disarm.
+// Same one-shot stop as /stop-all, but the disarm flag is set FIRST so no
+// scheduler, watchdog rearm or armed timer can re-energise a coil behind the
+// stop. Stays disarmed across a backend restart until re-armed (or until
+// autoReArmMinutes elapses). Declared before the /:id routes.
+// Body: { autoReArmMinutes?: number, reason?: string }
+router.post('/emergency-stop', requireRole('admin', 'operator'), async (req, res) => {
+  const requestedBy = req.user?.email || 'unknown';
+  const { autoReArmMinutes, reason } = req.body || {};
+
+  let armedState;
+  try {
+    // Disarm BEFORE stopping — a stop performed while still armed can be undone
+    // by the very next scheduler tick.
+    armedState = automationArmingService.disarm({
+      by: req.user?.email || null,
+      reason: typeof reason === 'string' && reason.trim() ? reason.trim() : null,
+      autoReArmMinutes,
+    });
+  } catch (err) {
+    console.error('[Automation] Emergency-stop failed to disarm:', err.message);
+    return res.status(500).json({ error: 'Emergency stop failed', message: `Could not disarm automations: ${err.message}` });
+  }
+
+  try {
+    const result = await stopAllRelays();
+    console.log(`[Automation] Emergency-stop requested by ${requestedBy}: ` +
+      `${result.timersCancelled} timer(s) cancelled, ${result.channelsTurnedOff} channel(s) off, ${result.failures.length} failure(s); ` +
+      `automations disarmed${armedState.autoReArmAt ? ` until ${armedState.autoReArmAt}` : ' until manually re-armed'}`);
+    res.json({ ...result, armedState });
+  } catch (err) {
+    // The disarm stands even if the coil sweep failed — staying stopped is the
+    // safe outcome, and the operator can retry the stop.
+    console.error('[Automation] Emergency-stop: stopAllRelays failed (automations remain disarmed):', err.message);
+    res.status(500).json({ error: 'Emergency stop failed', message: err.message, armedState });
+  }
+});
+
+// POST /api/automations/re-arm - Clear the emergency-stop disarm flag.
+// Declared before the /:id routes.
+router.post('/re-arm', requireRole('admin', 'operator'), (req, res) => {
+  try {
+    const armedState = automationArmingService.reArm({ by: req.user?.email || null });
+    console.log(`[Automation] Re-arm requested by ${req.user?.email || 'unknown'}`);
+    res.json(armedState);
+  } catch (err) {
+    console.error('[Automation] Re-arm failed:', err.message);
+    res.status(500).json({ error: 'Re-arm failed', message: err.message });
+  }
+});
+
+// GET /api/automations/armed-state - Current emergency-stop arming state.
+// Read-only, any authenticated role. Declared before the /:id routes.
+router.get('/armed-state', (req, res) => {
+  try {
+    res.json(automationArmingService.getState());
+  } catch (err) {
+    console.error('[Automation] Failed to read armed state:', err.message);
+    res.status(500).json({ error: 'Failed to read armed state', message: err.message });
   }
 });
 
@@ -509,6 +601,19 @@ router.post('/:id/trigger', requireRole('admin', 'operator'), async (req, res) =
 
   if (!automation) {
     return res.status(404).json({ error: 'Not Found', message: 'Automation not found' });
+  }
+
+  // Emergency stop gate: running an automation by hand is still running an
+  // automation. Direct equipment control (POST /api/equipment/:id/control)
+  // stays open so an operator can still intervene by hand during the stop.
+  const arming = automationArmingService.getState();
+  if (arming.disarmed) {
+    console.log(`[Automation] Manual trigger of "${automation.name}" refused — automations are disarmed (requested by ${req.user?.email || 'unknown'})`);
+    return res.status(409).json({
+      error: 'Automations disarmed',
+      message: 'An emergency stop is active. Re-arm automations before triggering this automation.',
+      armedState: arming,
+    });
   }
 
   let triggerConfig;

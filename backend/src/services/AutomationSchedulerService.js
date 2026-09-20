@@ -13,6 +13,7 @@ const { db } = require('../utils/database');
 const { broadcastNewAlert } = require('../utils/alertBroadcast');
 const { executeAutomation } = require('./AutomationExecutor');
 const { evaluateSkip } = require('./SkipEvaluator');
+const { automationArmingService } = require('./AutomationArmingService');
 
 class AutomationSchedulerService {
   constructor() {
@@ -67,6 +68,22 @@ class AutomationSchedulerService {
 
   async _tick() {
     try {
+      // Emergency stop gate. While disarmed nothing fires, however met the
+      // conditions are, until an operator re-arms (or autoReArmAt elapses).
+      const arming = automationArmingService.getState();
+      if (arming.disarmed) {
+        // Drop threshold edge memory so that on re-arm a still-met condition
+        // counts as a rising edge and re-establishes relay state — the same
+        // semantics as a fresh backend restart. Without this, a fan whose
+        // "temp > 30" was true throughout the stop would stay off for hours.
+        if (this._lastThresholdState.size) this._lastThresholdState.clear();
+        automationArmingService.noteSkip(
+          'scheduler',
+          `[Scheduler] Automations DISARMED — skipping ticks until re-armed${automationArmingService.describe(arming)}`
+        );
+        return;
+      }
+
       const automations = db.prepare(
         'SELECT * FROM automations WHERE enabled = 1'
       ).all();
