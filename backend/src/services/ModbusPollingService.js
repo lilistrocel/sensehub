@@ -14,6 +14,13 @@ const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 
 /**
+ * Errors that mean the whole device (not one register) is unreachable.
+ * When one of these is hit mid-cycle there is no point trying the remaining
+ * registers — each attempt would just burn another connect timeout.
+ */
+const CONNECTION_ERROR_RE = /ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|Port Not Open|Connection not found|Max reconnect/i;
+
+/**
  * Device polling state tracker
  */
 class DevicePollingState {
@@ -26,9 +33,17 @@ class DevicePollingState {
     this.registerMappings = this.parseRegisterMappings(equipment.register_mappings);
     this.writeOnly = !!equipment.write_only;
 
+    // Relay boards (any coil / FC01 mapping). The v2 relay firmware latches
+    // every relay OFF after 60 s without a Modbus frame addressed to it, and
+    // this service's coil poll is the only heartbeat — so these devices are
+    // NEVER paused. Same predicate as updateDeviceWithReadings().
+    this.hasCoils = this.registerMappings.some(
+      m => m && (m.type === 'coil' || parseInt(m.functionCode, 10) === 1)
+    );
+
     // Error tracking for exponential backoff
     this.consecutiveErrors = 0;
-    this.maxBackoffMs = 60000; // Max 1 minute backoff
+    this.maxBackoffMs = 600000; // Max 10 minute backoff for dead devices
     this.baseBackoffMs = 1000; // Start with 1 second
     this.lastErrorTime = null;
     this.isBackingOff = false;
@@ -226,9 +241,19 @@ class ModbusPollingService {
     this.pauseReason = reason;
     this.autoResumeAt = minutes ? new Date(Date.now() + minutes * 60000).toISOString() : null;
 
-    // Cancel every in-flight device timer, but keep the map entries so
-    // getStatus() still reports the real device inventory
+    // Cancel the timers of sensor devices, but keep the map entries so
+    // getStatus() still reports the real device inventory.
+    //
+    // SAFETY: relay boards (hasCoils) are deliberately left running. Their
+    // 15 s coil poll is the heartbeat that keeps the firmware fail-safe from
+    // latching every relay OFF — a pause longer than 60 s would otherwise drop
+    // all relays while the cache still said ON.
+    let heartbeatCount = 0;
     for (const state of this.devices.values()) {
+      if (state.hasCoils) {
+        if (!state.writeOnly) heartbeatCount++;
+        continue;
+      }
       if (state.timerId) {
         clearTimeout(state.timerId);
         state.timerId = null;
@@ -244,10 +269,23 @@ class ModbusPollingService {
     }
 
     console.log(`[Polling] Paused by ${by || 'unknown'}${reason ? ` (${reason})` : ''}` +
-      `${minutes ? ` - auto-resume in ${minutes} min` : ' - no auto-resume'}`);
+      `${minutes ? ` - auto-resume in ${minutes} min` : ' - no auto-resume'}` +
+      ` - ${heartbeatCount} relay board(s) keep heartbeat polling`);
 
     this.broadcastPauseState();
     return this.getStatus();
+  }
+
+  /**
+   * Number of enabled relay boards (hasCoils, readable) that keep polling
+   * through a pause as the firmware fail-safe heartbeat.
+   */
+  getHeartbeatDeviceCount() {
+    let n = 0;
+    for (const state of this.devices.values()) {
+      if (state.hasCoils && !state.writeOnly) n++;
+    }
+    return n;
   }
 
   /**
@@ -304,7 +342,8 @@ class ModbusPollingService {
         pausedBy: this.pausedBy,
         pauseReason: this.pauseReason,
         autoResumeAt: this.autoResumeAt,
-        deviceCount: this.devices.size
+        deviceCount: this.devices.size,
+        heartbeatDeviceCount: this.getHeartbeatDeviceCount()
       });
     }
   }
@@ -400,12 +439,14 @@ class ModbusPollingService {
    * Start polling a specific device
    */
   startDevicePolling(equipmentId) {
-    // Never (re)arm a timer while paused - the 30s refreshDevices() sweep
-    // calls this for new/changed devices and would otherwise resurrect polling
-    if (this.isPaused) return;
-
     const state = this.devices.get(equipmentId);
     if (!state) return;
+
+    // Never (re)arm a sensor timer while paused - the 30s refreshDevices()
+    // sweep calls this for new/changed devices and would otherwise resurrect
+    // polling. Relay boards (hasCoils) are exempt: their poll is the firmware
+    // fail-safe heartbeat and must keep running through a pause.
+    if (this.isPaused && !state.hasCoils) return;
 
     // Clear existing timer
     if (state.timerId) {
@@ -435,10 +476,13 @@ class ModbusPollingService {
    * Schedule the next poll for a device
    */
   scheduleNextPoll(equipmentId) {
-    if (!this.isRunning || this.isPaused) return;
+    if (!this.isRunning) return;
 
     const state = this.devices.get(equipmentId);
     if (!state) return;
+
+    // Paused: sensors stop here; relay boards keep their heartbeat cadence
+    if (this.isPaused && !state.hasCoils) return;
 
     const interval = state.getEffectiveInterval();
 
@@ -487,9 +531,17 @@ class ModbusPollingService {
       const readings = [];
       const { host, port } = addressInfo;
 
+      // Per-cycle error bookkeeping: we log ONE line per failed cycle (in
+      // handleDeviceError), never one per register.
+      let attempted = 0;
+      let failed = 0;
+      let lastRegError = null;
+      let connectionError = null;
+
       // Read each configured register mapping (skip disabled ones)
       for (const mapping of state.registerMappings) {
         if (mapping.enabled === false) continue;
+        attempted++;
         try {
           const regAddress = mapping.address ?? mapping.register;
           const value = await this.readRegister(host, port, state.slaveId, mapping);
@@ -504,21 +556,32 @@ class ModbusPollingService {
             });
           }
         } catch (regError) {
-          console.error(`[Polling] Error reading register ${mapping.address ?? mapping.register} on device ${equipmentId}:`, regError.message);
+          failed++;
+          lastRegError = regError;
+          // Device-level failure: the host is unreachable, so every remaining
+          // register would fail the same way. Bail out of the cycle now instead
+          // of paying a connect timeout per register.
+          if (CONNECTION_ERROR_RE.test(regError.message || '')) {
+            connectionError = regError;
+            break;
+          }
         }
       }
 
       // If we got any readings, update the device
       if (readings.length > 0) {
+        if (failed > 0) {
+          console.warn(`[Polling] Device ${equipmentId} (${state.name}): ${failed}/${attempted} register(s) failed this cycle: ${lastRegError?.message}`);
+        }
         await this.updateDeviceWithReadings(equipmentId, state, readings);
         state.recordSuccess();
       } else {
-        // No readings obtained - might be a transient error
-        throw new Error('No readings obtained from device');
+        // No readings obtained - surface the real cause (connection error if
+        // there was one) so the error log is useful
+        throw connectionError || lastRegError || new Error('No readings obtained from device');
       }
 
     } catch (error) {
-      console.error(`[Polling] Error polling device ${equipmentId}:`, error.message);
       state.recordError();
       await this.handleDeviceError(equipmentId, state, error);
     } finally {
@@ -554,7 +617,6 @@ class ModbusPollingService {
       this.broadcastDeviceStatus(equipmentId, state.name, 'online');
 
     } catch (error) {
-      console.error(`[Polling] Basic poll failed for device ${equipmentId}:`, error.message);
       state.recordError();
       await this.handleDeviceError(equipmentId, state, error);
     } finally {
@@ -995,20 +1057,25 @@ class ModbusPollingService {
         WHERE id = ?
       `).run(status, error.message, timestamp, equipmentId);
 
-      // Log error to equipment_errors table
-      db.prepare(`
-        INSERT INTO equipment_errors (equipment_id, error_type, message, details)
-        VALUES (?, 'connection', ?, ?)
-      `).run(
-        equipmentId,
-        error.message,
-        JSON.stringify({
-          consecutiveErrors: state.consecutiveErrors,
-          backoffDelay,
-          address: state.address,
-          slaveId: state.slaveId
-        })
-      );
+      // Log to equipment_errors on the FIRST failure and then every 20th, so a
+      // dead device doesn't insert a row every cycle (status / counters above
+      // are still updated every time).
+      const n = state.consecutiveErrors;
+      if (n === 1 || n % 20 === 0) {
+        db.prepare(`
+          INSERT INTO equipment_errors (equipment_id, error_type, message, details)
+          VALUES (?, 'connection', ?, ?)
+        `).run(
+          equipmentId,
+          error.message,
+          JSON.stringify({
+            consecutiveErrors: n,
+            backoffDelay,
+            address: state.address,
+            slaveId: state.slaveId
+          })
+        );
+      }
 
       // Broadcast error status
       if (global.broadcast) {
@@ -1023,7 +1090,8 @@ class ModbusPollingService {
         });
       }
 
-      console.log(`[Polling] Device ${equipmentId} error (${state.consecutiveErrors} consecutive). Next poll in ${backoffDelay}ms`);
+      // The single log line for this failed cycle
+      console.log(`[Polling] Device ${equipmentId} (${state.name}) poll failed: ${error.message} (${state.consecutiveErrors} consecutive). Next poll in ${backoffDelay}ms`);
 
     } catch (dbError) {
       console.error(`[Polling] Error handling device error for ${equipmentId}:`, dbError.message);
@@ -1059,6 +1127,7 @@ class ModbusPollingService {
         pollingInterval: state.pollingInterval,
         effectiveInterval: state.getEffectiveInterval(),
         registerMappings: state.registerMappings.length,
+        hasCoils: state.hasCoils,
         consecutiveErrors: state.consecutiveErrors,
         isBackingOff: state.isBackingOff,
         lastPollTime: state.lastPollTime,
@@ -1074,6 +1143,7 @@ class ModbusPollingService {
       pauseReason: this.pauseReason,
       autoResumeAt: this.autoResumeAt,
       deviceCount: this.devices.size,
+      heartbeatDeviceCount: this.getHeartbeatDeviceCount(),
       devices
     };
   }
