@@ -9,7 +9,7 @@ const ModbusRTU = require('modbus-serial');
 
 // Connection pool entry
 class ModbusConnection {
-  constructor(host, port, unitId = 1) {
+  constructor(host, port, unitId = 1, connectTimeout = 3000) {
     this.host = host;
     this.port = port;
     this.unitId = unitId;
@@ -19,24 +19,59 @@ class ModbusConnection {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000; // ms
+    // Upper bound on the TCP connect itself. modbus-serial's connectTCP has no
+    // bounded connect timeout (its `timeout` option is a persistent socket idle
+    // timer), and a SYN to a dead host can otherwise hang for the kernel's
+    // tcp_syn_retries window (~2 min).
+    this.connectTimeout = connectTimeout;
+    // In-flight connect promise so concurrent callers (e.g. several boards on
+    // one gateway being written in parallel) share a single connectTCP instead
+    // of racing multiple sockets on the same ModbusRTU instance.
+    this._connecting = null;
   }
 
   async connect() {
     if (this.connected) return true;
+    if (this._connecting) return this._connecting;
 
-    try {
-      await this.client.connectTCP(this.host, { port: this.port });
-      this.client.setID(this.unitId);
-      this.client.setTimeout(5000); // 5 second timeout
-      this.connected = true;
-      this.reconnectAttempts = 0;
-      console.log(`[Modbus] Connected to ${this.host}:${this.port} (unit ${this.unitId})`);
-      return true;
-    } catch (error) {
-      console.error(`[Modbus] Connection failed to ${this.host}:${this.port}:`, error.message);
-      this.connected = false;
-      throw error;
-    }
+    this._connecting = (async () => {
+      let timer = null;
+      try {
+        const connectPromise = this.client.connectTCP(this.host, { port: this.port });
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            const err = new Error(`TCP connect to ${this.host}:${this.port} timed out after ${this.connectTimeout}ms`);
+            err.code = 'ECONNTIMEOUT';
+            reject(err);
+          }, this.connectTimeout);
+        });
+        try {
+          await Promise.race([connectPromise, timeoutPromise]);
+        } catch (err) {
+          if (err.code === 'ECONNTIMEOUT') {
+            // Tear the half-open socket down so a late connect can't leak.
+            connectPromise.catch(() => {});
+            try { this.client.destroy(() => {}); } catch (e) {}
+          }
+          throw err;
+        }
+        this.client.setID(this.unitId);
+        this.client.setTimeout(5000); // 5 second timeout
+        this.connected = true;
+        this.reconnectAttempts = 0;
+        console.log(`[Modbus] Connected to ${this.host}:${this.port} (unit ${this.unitId})`);
+        return true;
+      } catch (error) {
+        console.error(`[Modbus] Connection failed to ${this.host}:${this.port}:`, error.message);
+        this.connected = false;
+        throw error;
+      } finally {
+        if (timer) clearTimeout(timer);
+        this._connecting = null;
+      }
+    })();
+
+    return this._connecting;
   }
 
   async disconnect() {
@@ -102,6 +137,7 @@ class ModbusTcpClient {
     this.config = {
       defaultTimeout: options.timeout || 5000,
       defaultRetries: options.retries || 3,
+      connectTimeout: options.connectTimeout || 3000,
       maxPoolSize: options.maxPoolSize || 10,
       idleTimeout: options.idleTimeout || 60000, // Close idle connections after 1 minute
       ...options
@@ -136,7 +172,7 @@ class ModbusTcpClient {
         this.removeOldestIdleConnection();
       }
 
-      connection = new ModbusConnection(host, port, unitId);
+      connection = new ModbusConnection(host, port, unitId, this.config.connectTimeout);
       this.connectionPool.set(key, connection);
       this.requestQueues.set(key, []);
       this.processing.set(key, false);

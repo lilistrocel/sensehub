@@ -5,7 +5,7 @@
  */
 
 const { db } = require('../utils/database');
-const { broadcastNewAlert } = require('../utils/alertBroadcast');
+const { createAlert } = require('../utils/alertBroadcast');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { relayTimerService } = require('./RelayTimerService');
 const { logRelayEvent } = require('./RelayEventLogger');
@@ -13,6 +13,97 @@ const { fertigationDoseScheduler } = require('./FertigationDoseScheduler');
 const { automationArmingService } = require('./AutomationArmingService');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Parse an equipment "host:port" address. Returns { host, port } or null when
+ * the address is missing/malformed (non-Modbus rows, blank addresses, bad port).
+ */
+function parseHostPort(address) {
+  const parts = String(address || '').trim().split(':');
+  if (parts.length !== 2) return null;
+  const host = parts[0].trim();
+  const port = parseInt(parts[1], 10);
+  if (!host || !Number.isFinite(port) || port <= 0 || port > 65535) return null;
+  return { host, port };
+}
+
+/**
+ * Group coil writes into contiguous address runs so each run can go out as a
+ * single FC15 (Write Multiple Coils) frame.
+ *
+ * @param {Array<{channel:number, state:boolean, name?:string}>} items
+ * @returns {Array<{start:number, values:boolean[], items:Array}>} runs, plus
+ *          the channel-sorted item list as `.sorted` on the returned array.
+ */
+function buildCoilRuns(items) {
+  const sorted = items
+    .map(t => ({ channel: parseInt(t.channel, 10), state: !!t.state, name: t.name || `Coil ${t.channel}` }))
+    .filter(t => Number.isFinite(t.channel))
+    .sort((a, b) => a.channel - b.channel);
+
+  const runs = [];
+  let current = null;
+  for (const t of sorted) {
+    if (current && t.channel === current.start + current.values.length) {
+      current.values.push(t.state);
+      current.items.push(t);
+    } else {
+      if (current) runs.push(current);
+      current = { start: t.channel, values: [t.state], items: [t] };
+    }
+  }
+  if (current) runs.push(current);
+  runs.sorted = sorted;
+  return runs;
+}
+
+/**
+ * Per-channel bookkeeping after a successful coil write: update the cached
+ * relayStates in equipment.last_reading, mark the equipment online, log a
+ * relay_events row and broadcast `relay_state_changed` for each channel.
+ *
+ * The broadcast payload shape ({equipmentId, channel, state, source,
+ * automationId}) is relied on by the frontend — keep it stable.
+ *
+ * @param {object} equipment - equipment row (id, last_reading)
+ * @param {Array<{channel:number, state:boolean}>} channelStates
+ * @param {object} opts
+ * @param {string} opts.source - relay_events / broadcast source label
+ * @param {number|null} opts.automationId
+ */
+function applyRelayCache(equipment, channelStates, { source, automationId = null }) {
+  // Re-read last_reading so we merge onto the freshest polled snapshot rather
+  // than a row that may have been fetched seconds (or a delay timer) ago.
+  let lastReading = {};
+  try {
+    const fresh = db.prepare('SELECT last_reading FROM equipment WHERE id = ?').get(equipment.id);
+    const raw = fresh ? fresh.last_reading : equipment.last_reading;
+    if (raw) lastReading = JSON.parse(raw);
+  } catch (e) {
+    try { if (equipment.last_reading) lastReading = JSON.parse(equipment.last_reading); } catch (e2) {}
+  }
+  if (!lastReading || typeof lastReading !== 'object') lastReading = {};
+  if (!lastReading.relayStates) lastReading.relayStates = {};
+  for (const { channel, state } of channelStates) {
+    lastReading.relayStates[channel] = state;
+  }
+
+  db.prepare(
+    "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
+  ).run(JSON.stringify(lastReading), equipment.id);
+
+  for (const { channel, state } of channelStates) {
+    global.broadcast('relay_state_changed', {
+      equipmentId: equipment.id,
+      channel,
+      state,
+      source,
+      automationId
+    });
+    // Log relay event for fertigation tracking
+    logRelayEvent(equipment.id, channel, state, source, automationId);
+  }
+}
 
 /**
  * Evaluate action dependencies. Returns { passed: bool, reason: string, evaluated: [...] }.
@@ -175,9 +266,14 @@ async function executeAutomation(automation, source = 'manual') {
     }
 
     if (action.type === 'alert') {
-      broadcastNewAlert(db.prepare(
-        "INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))"
-      ).run(action.severity || 'info', action.message || 'Automation triggered'));
+      // Default fingerprint = source|automation_id|message, so an alert automation
+      // firing repeatedly bumps occurrence_count instead of inserting a new row.
+      createAlert({
+        severity: action.severity || 'info',
+        source: 'automation',
+        automation_id: automation.id,
+        message: action.message || 'Automation triggered',
+      });
       executedActions.push({ type: 'alert', status: 'executed', message: action.message });
 
     } else if (action.type === 'log') {
@@ -262,13 +358,12 @@ async function executeControlAction(action, automation, options = {}) {
     : null;
 
   if (targetEquipment && action.channel != null) {
-    const addrParts = (targetEquipment.address || '').split(':');
-    if (addrParts.length !== 2) {
+    const hostPort = parseHostPort(targetEquipment.address);
+    if (!hostPort) {
       return { type: 'control', status: 'error', action: action.action, error: 'Invalid equipment address format' };
     }
 
-    const host = addrParts[0];
-    const port = parseInt(addrParts[1], 10);
+    const { host, port } = hostPort;
     const unitId = targetEquipment.slave_id || 1;
     const address = parseInt(action.channel, 10);
     const value = action.action === 'on' ? true : action.action === 'off' ? false : true;
@@ -281,26 +376,11 @@ async function executeControlAction(action, automation, options = {}) {
         await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
       }
 
-      // Update cached relay state
-      let lastReading = {};
-      try { if (targetEquipment.last_reading) lastReading = JSON.parse(targetEquipment.last_reading); } catch (e) {}
-      if (!lastReading.relayStates) lastReading.relayStates = {};
-      lastReading.relayStates[address] = value;
-
-      db.prepare(
-        "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
-      ).run(JSON.stringify(lastReading), targetEquipment.id);
-
-      global.broadcast('relay_state_changed', {
-        equipmentId: targetEquipment.id,
-        channel: address,
-        state: value,
+      // Update cached relay state, log relay event, broadcast relay_state_changed
+      applyRelayCache(targetEquipment, [{ channel: address, state: value }], {
         source: eventSource,
         automationId: automation.id
       });
-
-      // Log relay event for fertigation tracking
-      logRelayEvent(targetEquipment.id, address, value, eventSource, automation.id);
 
       // Schedule auto-off if duration_seconds is set and action is "on"
       if (action.duration_seconds && action.duration_seconds > 0 && value === true) {
@@ -487,12 +567,11 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
     return { type: 'transition', status: 'error', error: 'No transitions specified' };
   }
 
-  const addrParts = (targetEquipment.address || '').split(':');
-  if (addrParts.length !== 2) {
+  const hostPort = parseHostPort(targetEquipment.address);
+  if (!hostPort) {
     return { type: 'transition', status: 'error', error: 'Invalid equipment address' };
   }
-  const host = addrParts[0];
-  const port = parseInt(addrParts[1], 10);
+  const { host, port } = hostPort;
   const unitId = targetEquipment.slave_id || 1;
 
   // Helper that actually issues the FC15 writes
@@ -504,24 +583,9 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
       console.log(`[Automation] Cancelled ${cancelled} stale auto-revert(s) before new transition on equipment ${targetEquipment.id}`);
     }
 
-    // Sort transitions by channel address
-    const sorted = [...action.transitions]
-      .map(t => ({ channel: parseInt(t.channel, 10), state: !!t.state, name: t.name || `Coil ${t.channel}` }))
-      .sort((a, b) => a.channel - b.channel);
-
-    // Group into contiguous ranges
-    const groups = [];
-    let current = null;
-    for (const t of sorted) {
-      if (current && t.channel === current.start + current.values.length) {
-        current.values.push(t.state);
-        current.items.push(t);
-      } else {
-        if (current) groups.push(current);
-        current = { start: t.channel, values: [t.state], items: [t] };
-      }
-    }
-    if (current) groups.push(current);
+    // Sort transitions by channel address and group into contiguous FC15 runs
+    const groups = buildCoilRuns(action.transitions);
+    const sorted = groups.sorted;
 
     // Execute each group via FC15
     for (const g of groups) {
@@ -670,37 +734,56 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
  * Order matters:
  *   1. Cancel EVERY pending relay timer first, so nothing can re-energise a
  *      coil in the seconds after we push it off.
- *   2. Then drive every writable coil of every enabled relay equipment OFF,
- *      reusing the normal control/off Modbus path (executeControlAction).
+ *   2. Abort any running fertigation dose cycle (it owns its own timers).
+ *   3. Drive every writable coil of every Modbus relay equipment OFF.
  *
- * A Modbus failure on one channel never aborts the rest — failures are
- * collected and returned. Channels are written sequentially to avoid
- * hammering the RS485 bus.
+ * Coils are grouped per board (host:port:unitId) into contiguous runs and
+ * written with FC15 (Write Multiple Coils) — one frame per run instead of one
+ * FC05 per channel — using a short per-call timeout (2 s, 1 attempt) so a dead
+ * board costs seconds, not the default 5 s × 3 retries. Boards run under
+ * Promise.allSettled; boards sharing a gateway still serialise on the pooled
+ * host:port request queue, which is what the RS485 bus needs.
  *
- * @returns {Promise<{timersCancelled: number, channelsTurnedOff: number, doseCycleAborted: boolean, failures: Array}>}
+ * Rows that are not Modbus or have no parseable host:port address are listed
+ * under `skipped` rather than counted as failures.
+ *
+ * NOT filtered by equipment.enabled: an emergency stop must reach a relay that
+ * is disabled in SenseHub but still physically energised.
+ *
+ * @param {object} [options]
+ * @param {object} [options.progress] - if supplied, this object is mutated live
+ *        with the running summary so a caller that gives up waiting (HTTP
+ *        deadline) can report what has happened so far.
+ * @returns {Promise<StopAllSummary>}
+ *
+ * StopAllSummary = {
+ *   ok: boolean,                 // every attempted channel confirmed written
+ *   partial: boolean,            // some channel failed (or sweep still running)
+ *   attempted: number,           // channels we tried to write
+ *   succeeded: number,           // channels written OK (== channelsTurnedOff)
+ *   failed: [{ equipment_id, name, channels: number[], error }],
+ *   skipped: [{ equipment_id, name, reason }],
+ *   boardsTotal, boardsDone,
+ *   timersCancelled, doseCycleAborted,
+ *   channelsTurnedOff, failures  // legacy per-channel view for older clients
+ * }
  */
-async function stopAllRelays() {
-  const timersCancelled = relayTimerService.cancelAllTimers();
-  console.log(`[Automation] Stop-all: cancelled ${timersCancelled} pending relay timer(s)`);
+const STOP_ALL_WRITE_OPTIONS = { timeout: 2000, retries: 1 };
 
-  // A running fertigation dose cycle keeps its OWN setTimeout timers, which are
-  // not in the RelayTimerService map and would keep cycling injector valves.
-  let doseCycleAborted = false;
-  try {
-    if (fertigationDoseScheduler.isRunning()) {
-      doseCycleAborted = await fertigationDoseScheduler.abortCycle('stop-all requested');
-      console.log('[Automation] Stop-all: aborted the running fertigation dose cycle');
-    }
-  } catch (err) {
-    console.error('[Automation] Stop-all: failed to abort dose cycle:', err.message);
-  }
+function isConnectionLevelError(err) {
+  const m = String(err && err.message || '');
+  return /ECONN|EHOSTUNREACH|ENETUNREACH|timed out|Timed Out|Port Not Open|Connection not found|Max reconnect/i.test(m);
+}
 
-  const failures = [];
-  let channelsTurnedOff = 0;
-
-  // NOT filtered by equipment.enabled: an emergency stop must reach a relay that
-  // is disabled in SenseHub but still physically energised.
-  const equipmentList = db.prepare('SELECT * FROM equipment').all();
+/**
+ * Build the per-board work list for stopAllRelays from equipment rows.
+ * Pure (no I/O) so it can be unit-tested against real rows.
+ *
+ * @returns {{ boards: Array<{key, equipment, host, port, unitId, coils, runs}>, skipped: Array }}
+ */
+function planStopAll(equipmentList) {
+  const boards = new Map();
+  const skipped = [];
 
   for (const eq of equipmentList) {
     // Relay equipment = anything exposing writable coils. Same definition the
@@ -712,46 +795,180 @@ async function stopAllRelays() {
         : (eq.register_mappings || []);
     } catch (e) {}
 
-    const coils = Array.isArray(mappings)
-      ? mappings.filter(m => m.type === 'coil' && m.access === 'readwrite')
+    const coilMappings = Array.isArray(mappings)
+      ? mappings.filter(m => m && m.type === 'coil' && m.access === 'readwrite')
       : [];
-    if (coils.length === 0) continue;
+    if (coilMappings.length === 0) continue;
 
-    for (const coil of coils) {
+    if (String(eq.protocol || '').toLowerCase() !== 'modbus') {
+      skipped.push({ equipment_id: eq.id, name: eq.name, reason: `protocol '${eq.protocol || 'unknown'}' is not modbus` });
+      continue;
+    }
+    const hostPort = parseHostPort(eq.address);
+    if (!hostPort) {
+      skipped.push({ equipment_id: eq.id, name: eq.name, reason: `unparseable address '${eq.address || ''}'` });
+      continue;
+    }
+
+    const coils = [];
+    const badCoils = [];
+    for (const coil of coilMappings) {
       const channel = parseInt(coil.register ?? coil.address, 10);
       if (!Number.isFinite(channel)) {
-        failures.push({
-          equipment_id: eq.id, equipment: eq.name,
-          channel: coil.register ?? coil.address ?? null,
-          error: 'Invalid coil address in register_mappings'
-        });
+        badCoils.push(coil.register ?? coil.address ?? null);
         continue;
       }
+      coils.push({ channel, state: false, name: coil.label || coil.name || `Coil ${channel}` });
+    }
+    if (badCoils.length > 0) {
+      skipped.push({ equipment_id: eq.id, name: eq.name, reason: `invalid coil address(es) in register_mappings: ${badCoils.join(', ')}` });
+    }
+    if (coils.length === 0) continue;
 
-      const result = await executeControlAction(
-        {
-          type: 'control',
-          action: 'off',
-          equipment_id: eq.id,
-          channel,
-          channel_name: coil.label || coil.name || `Coil ${channel}`
-        },
-        { id: null, name: 'stop-all' },
-        { eventSource: 'stop_all' }
-      );
-
-      if (result.status === 'error') {
-        failures.push({ equipment_id: eq.id, equipment: eq.name, channel, error: result.error });
-        console.error(`[Automation] Stop-all: failed to turn off ${eq.name} ch ${channel}: ${result.error}`);
-      } else {
-        channelsTurnedOff++;
-      }
+    const unitId = eq.slave_id || 1;
+    const key = `${hostPort.host}:${hostPort.port}:${unitId}`;
+    let board = boards.get(key);
+    if (!board) {
+      board = { key, equipment: eq, host: hostPort.host, port: hostPort.port, unitId, coils: [] };
+      boards.set(key, board);
+    } else if (board.equipment.id !== eq.id) {
+      // Two equipment rows claim the same physical board — write both sets of
+      // coils but bookkeep under the first row's id, and note the overlap.
+      skipped.push({ equipment_id: eq.id, name: eq.name, reason: `shares board ${key} with equipment #${board.equipment.id}; coils written under that row` });
+    }
+    // Dedupe channels within a board
+    for (const c of coils) {
+      if (!board.coils.some(x => x.channel === c.channel)) board.coils.push(c);
     }
   }
 
-  console.log(`[Automation] Stop-all complete: ${channelsTurnedOff} channel(s) off, ${failures.length} failure(s)`);
-
-  return { timersCancelled, channelsTurnedOff, doseCycleAborted, failures };
+  const list = [...boards.values()];
+  for (const b of list) b.runs = buildCoilRuns(b.coils);
+  return { boards: list, skipped };
 }
 
-module.exports = { executeAutomation, evaluateDependencies, executeTransitionAction, stopAllRelays };
+async function stopAllRelays(options = {}) {
+  const summary = options.progress && typeof options.progress === 'object' ? options.progress : {};
+  Object.assign(summary, {
+    ok: false,
+    partial: true,
+    inProgress: true,
+    attempted: 0,
+    succeeded: 0,
+    failed: [],
+    skipped: [],
+    boardsTotal: 0,
+    boardsDone: 0,
+    timersCancelled: 0,
+    doseCycleAborted: false,
+    channelsTurnedOff: 0,
+    failures: [],
+    startedAt: new Date().toISOString(),
+  });
+
+  summary.timersCancelled = relayTimerService.cancelAllTimers();
+  console.log(`[Automation] Stop-all: cancelled ${summary.timersCancelled} pending relay timer(s)`);
+
+  // A running fertigation dose cycle keeps its OWN setTimeout timers, which are
+  // not in the RelayTimerService map and would keep cycling injector valves.
+  try {
+    if (fertigationDoseScheduler.isRunning()) {
+      summary.doseCycleAborted = await fertigationDoseScheduler.abortCycle('stop-all requested');
+      console.log('[Automation] Stop-all: aborted the running fertigation dose cycle');
+    }
+  } catch (err) {
+    console.error('[Automation] Stop-all: failed to abort dose cycle:', err.message);
+  }
+
+  const equipmentList = db.prepare(
+    'SELECT id, name, protocol, address, slave_id, write_only, register_mappings, last_reading FROM equipment'
+  ).all();
+  const { boards, skipped } = planStopAll(equipmentList);
+  summary.skipped = skipped;
+  summary.boardsTotal = boards.length;
+  for (const s of skipped) {
+    console.warn(`[Automation] Stop-all: skipping ${s.name} (#${s.equipment_id}): ${s.reason}`);
+  }
+
+  const recordFailure = (board, channels, error) => {
+    summary.failed.push({ equipment_id: board.equipment.id, name: board.equipment.name, channels, error });
+    for (const ch of channels) {
+      summary.failures.push({ equipment_id: board.equipment.id, equipment: board.equipment.name, channel: ch, error });
+    }
+    console.error(`[Automation] Stop-all: failed to turn off ${board.equipment.name} ch ${channels.join(',')}: ${error}`);
+  };
+
+  const stopBoard = async (board) => {
+    const { equipment, host, port, unitId, runs } = board;
+    const okChannels = [];
+    let abortError = null;
+
+    for (const run of runs) {
+      const channels = run.items.map(i => i.channel);
+      summary.attempted += channels.length;
+      if (abortError) {
+        // A connection-level failure on this board — don't burn another
+        // timeout per run on a board that isn't answering.
+        recordFailure(board, channels, abortError);
+        continue;
+      }
+      try {
+        if (equipment.write_only) {
+          await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, run.start, run.values);
+        } else {
+          await modbusTcpClient.writeMultipleCoils(host, port, unitId, run.start, run.values, STOP_ALL_WRITE_OPTIONS);
+        }
+        okChannels.push(...channels);
+        summary.succeeded += channels.length;
+        summary.channelsTurnedOff = summary.succeeded;
+        console.log(`[Automation] Stop-all FC15 sent: ${equipment.name} (#${equipment.id}) addr=${run.start} qty=${run.values.length} -> OFF`);
+      } catch (err) {
+        const msg = err && err.message ? err.message : String(err);
+        recordFailure(board, channels, msg);
+        if (isConnectionLevelError(err)) abortError = msg;
+      }
+    }
+
+    if (okChannels.length > 0) {
+      try {
+        applyRelayCache(equipment, okChannels.map(channel => ({ channel, state: false })), {
+          source: 'stop_all',
+          automationId: null
+        });
+      } catch (err) {
+        console.error(`[Automation] Stop-all: cache/broadcast update failed for ${equipment.name}:`, err.message);
+      }
+    }
+  };
+
+  const results = await Promise.allSettled(boards.map(async (board) => {
+    try {
+      await stopBoard(board);
+    } finally {
+      summary.boardsDone++;
+    }
+  }));
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].status === 'rejected') {
+      // stopBoard catches per-run errors; anything reaching here is unexpected.
+      const board = boards[i];
+      const msg = results[i].reason && results[i].reason.message ? results[i].reason.message : String(results[i].reason);
+      recordFailure(board, board.coils.map(c => c.channel), `unexpected: ${msg}`);
+    }
+  }
+
+  summary.inProgress = false;
+  summary.ok = summary.failed.length === 0;
+  summary.partial = !summary.ok;
+  summary.finishedAt = new Date().toISOString();
+
+  console.log(`[Automation] Stop-all complete: ${summary.succeeded}/${summary.attempted} channel(s) off across ${summary.boardsTotal} board(s), ${summary.failed.length} failure(s), ${summary.skipped.length} skipped`);
+
+  return summary;
+}
+
+module.exports = {
+  executeAutomation, evaluateDependencies, executeTransitionAction, stopAllRelays,
+  // exported for tests / reuse
+  planStopAll, buildCoilRuns, parseHostPort, applyRelayCache
+};

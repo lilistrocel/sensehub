@@ -97,16 +97,62 @@ router.get('/templates', (req, res) => {
   }
 });
 
+// Stop-all / emergency-stop share one HTTP deadline: the coil sweep is bounded
+// per board (2 s timeout, 1 attempt, 3 s connect) but a fleet of dead boards
+// can still add up. We answer within STOP_ALL_HTTP_DEADLINE_MS either way —
+// 200 with the final summary, or 202 with the summary-so-far while the sweep
+// keeps running — and broadcast `stop_all_progress` when the sweep finishes.
+const STOP_ALL_HTTP_DEADLINE_MS = 15000;
+const STOP_ALL_TIMED_OUT = Symbol('stop-all-deadline');
+
+/**
+ * Run stopAllRelays() under the HTTP deadline.
+ * @returns {Promise<{status: number, body: object}>}
+ */
+async function runStopAllWithDeadline(label, extra = {}) {
+  const progress = {};
+  const sweep = stopAllRelays({ progress });
+
+  // Broadcast the final summary once the sweep completes, whether or not the
+  // HTTP response has already gone out.
+  sweep.then(
+    (summary) => {
+      try { global.broadcast('stop_all_progress', { ...summary, ...extra, label, inProgress: false }); } catch (e) {}
+    },
+    (err) => {
+      console.error(`[Automation] ${label}: stopAllRelays failed:`, err.message);
+      try {
+        global.broadcast('stop_all_progress', { ...progress, ...extra, label, inProgress: false, partial: true, ok: false, error: err.message });
+      } catch (e) {}
+    }
+  );
+
+  let timer = null;
+  const deadline = new Promise(resolve => { timer = setTimeout(() => resolve(STOP_ALL_TIMED_OUT), STOP_ALL_HTTP_DEADLINE_MS); });
+  try {
+    const raced = await Promise.race([sweep, deadline]);
+    if (raced === STOP_ALL_TIMED_OUT) {
+      console.warn(`[Automation] ${label}: sweep still running after ${STOP_ALL_HTTP_DEADLINE_MS}ms — responding 202 with progress so far ` +
+        `(${progress.boardsDone}/${progress.boardsTotal} boards, ${progress.succeeded}/${progress.attempted} channels)`);
+      return { status: 202, body: { ...progress, ...extra, partial: true, inProgress: true } };
+    }
+    return { status: 200, body: { ...raced, ...extra } };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // POST /api/automations/stop-all - Emergency stop.
 // Cancels every pending relay timer FIRST (so nothing re-energises behind us),
-// then drives every writable coil of every enabled relay equipment OFF.
+// then drives every writable coil of every Modbus relay equipment OFF.
 // Declared before the /:id routes so it can never be swallowed by them.
 router.post('/stop-all', requireRole('admin', 'operator'), async (req, res) => {
   try {
-    const result = await stopAllRelays();
+    const { status, body } = await runStopAllWithDeadline('Stop-all');
     console.log(`[Automation] Stop-all requested by ${req.user?.email || 'unknown'}: ` +
-      `${result.timersCancelled} timer(s) cancelled, ${result.channelsTurnedOff} channel(s) off, ${result.failures.length} failure(s)`);
-    res.json(result);
+      `${body.timersCancelled} timer(s) cancelled, ${body.succeeded}/${body.attempted} channel(s) off, ${body.failed.length} failure(s)` +
+      (body.inProgress ? ' (still in progress)' : ''));
+    res.status(status).json(body);
   } catch (err) {
     console.error('[Automation] Stop-all failed:', err.message);
     res.status(500).json({ error: 'Stop-all failed', message: err.message });
@@ -150,11 +196,12 @@ router.post('/emergency-stop', requireRole('admin', 'operator'), async (req, res
   }
 
   try {
-    const result = await stopAllRelays();
+    const { status, body } = await runStopAllWithDeadline('Emergency-stop', { armedState });
     console.log(`[Automation] Emergency-stop requested by ${requestedBy}: ` +
-      `${result.timersCancelled} timer(s) cancelled, ${result.channelsTurnedOff} channel(s) off, ${result.failures.length} failure(s); ` +
+      `${body.timersCancelled} timer(s) cancelled, ${body.succeeded}/${body.attempted} channel(s) off, ${body.failed.length} failure(s)` +
+      (body.inProgress ? ' (still in progress)' : '') + '; ' +
       `automations disarmed${armedState.autoReArmAt ? ` until ${armedState.autoReArmAt}` : ' until manually re-armed'}`);
-    res.json({ ...result, armedState });
+    res.status(status).json(body);
   } catch (err) {
     // The disarm stands even if the coil sweep failed — staying stopped is the
     // safe outcome, and the operator can retry the stop.
