@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useSettings } from '../context/SettingsContext';
+import { useToast } from '../context/ToastContext';
+import { useThrottledError } from '../hooks/useThrottledError';
+import { usePendingRelayCommands } from '../hooks/usePendingRelayCommands';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { getChannelDisplayName } from '../utils/channelUtils';
 import {
   CATEGORIES,
@@ -208,6 +212,13 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
+  const { showError } = useToast();
+  // Background refreshes that fail repeatedly surface as one toast per minute, not one per tick.
+  const notifyBackgroundError = useThrottledError(showError);
+  // Relay commands accepted by the API but not yet confirmed by the device.
+  const { markPending, getPending } = usePendingRelayCommands(subscribe);
+  // Pending "All On"/"All Off" request awaiting user confirmation.
+  const [relayAllConfirm, setRelayAllConfirm] = useState(null);
   const { formatDateTime, formatTime, timezone } = useSettings();
   const [zones, setZones] = useState([]);
   const [selectedZoneId, setSelectedZoneId] = useState('');
@@ -262,8 +273,11 @@ export default function Dashboard() {
     try {
       const r = await fetch(`${API_BASE}/baselines/active`, { headers: { Authorization: `Bearer ${token}` } });
       if (r.ok) setBaselines(await r.json());
-    } catch (e) { /* silent */ }
-  }, [token]);
+      else if (r.status >= 500) notifyBackgroundError('Could not load consumption baselines', 'baselines');
+    } catch (e) {
+      notifyBackgroundError('Could not load consumption baselines', 'baselines');
+    }
+  }, [token, notifyBackgroundError]);
   useEffect(() => { if (token) fetchBaselines(); }, [token, fetchBaselines]);
 
   const addBaseline = async (equipmentId, metricName, label) => {
@@ -274,13 +288,22 @@ export default function Dashboard() {
         body: JSON.stringify({ metric_name: metricName, label }),
       });
       if (r.ok) { await fetchBaselines(); setShowAddBaseline(false); }
-    } catch (e) { /* silent */ }
+      else {
+        const err = await r.json().catch(() => ({}));
+        showError(err.error || err.message || 'Failed to add consumption baseline');
+      }
+    } catch (e) {
+      showError('Failed to add consumption baseline');
+    }
   };
   const removeBaseline = async (id) => {
     try {
-      await fetch(`${API_BASE}/baselines/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      const r = await fetch(`${API_BASE}/baselines/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) showError('Failed to remove consumption baseline');
       await fetchBaselines();
-    } catch (e) { /* silent */ }
+    } catch (e) {
+      showError('Failed to remove consumption baseline');
+    }
   };
 
   // Map of (equipment_id|metric_name) -> latest reading, for live delta computation
@@ -425,14 +448,25 @@ export default function Dashboard() {
     });
 
     const unsubscribeRelay = subscribe('relay_state_changed', (data) => {
+      if (!data) return;
+      const eqId = data.equipmentId ?? data.equipment_id;
       setEquipmentList(prev => prev.map(eq => {
-        if (eq.id === data.equipmentId && eq.last_reading) {
-          const updated = { ...eq, last_reading: { ...eq.last_reading } };
-          if (!updated.last_reading.relayStates) updated.last_reading.relayStates = {};
-          updated.last_reading.relayStates[data.channel] = data.state;
-          return updated;
+        if (eq.id !== eqId) return eq;
+        const updated = { ...eq, last_reading: { ...(eq.last_reading || {}) } };
+        const states = { ...(updated.last_reading.relayStates || {}) };
+        if (data.relayStates && typeof data.relayStates === 'object') {
+          // Polling readback: { relayStates: { "1": true, ... } }
+          Object.entries(data.relayStates).forEach(([ch, st]) => { states[ch] = !!st; });
+        } else if (data.allChannels) {
+          // Bulk command: every readwrite coil takes the new state
+          (eq.register_mappings || [])
+            .filter(m => m.type === 'coil' && m.access === 'readwrite')
+            .forEach(m => { states[parseInt(m.register ?? m.address, 10)] = !!data.state; });
+        } else if (data.channel !== undefined && data.channel !== null) {
+          states[data.channel] = !!data.state;
         }
-        return eq;
+        updated.last_reading.relayStates = states;
+        return updated;
       }));
     });
 
@@ -504,7 +538,10 @@ export default function Dashboard() {
         throw new Error(data.error || 'Failed to control relay channel');
       }
 
-      // Update local state
+      // Update local state (commanded value) and flag the channel as awaiting
+      // device confirmation until a relay_state_changed event or timeout clears it.
+      const target = equipmentList.find(eq => eq.id === equipmentId);
+      markPending(equipmentId, channelAddress, { writeOnly: !!target?.write_only });
       setEquipmentList(prev => prev.map(eq => {
         if (eq.id === equipmentId) {
           const updated = { ...eq, last_reading: { ...(eq.last_reading || {}) } };
@@ -515,7 +552,7 @@ export default function Dashboard() {
         return eq;
       }));
 
-      setControlMessage({ type: 'success', text: `Channel ${channelAddress} turned ${newState ? 'on' : 'off'}` });
+      setControlMessage({ type: 'success', text: `Channel ${channelAddress} command sent (${newState ? 'on' : 'off'})` });
       setTimeout(() => setControlMessage(null), 3000);
     } catch (err) {
       setControlMessage({ type: 'error', text: err.message });
@@ -524,7 +561,19 @@ export default function Dashboard() {
     }
   };
 
-  // Handle all-channels relay control
+  // Ask for confirmation before switching every channel on a relay board.
+  const requestRelayAllControl = (equipment, newState, relayChannels) => {
+    if (!canControl) return;
+    setRelayAllConfirm({
+      equipmentId: equipment.id,
+      equipmentName: equipment.name,
+      newState,
+      relayChannels,
+      channelNames: relayChannels.map(ch => ch.displayName || `Channel ${ch.address}`),
+    });
+  };
+
+  // Handle all-channels relay control (called after the user confirms)
   const handleRelayAllControl = async (equipmentId, newState, relayChannels) => {
     if (!canControl) return;
 
@@ -547,7 +596,9 @@ export default function Dashboard() {
         throw new Error(data.error || 'Failed to control all channels');
       }
 
-      // Update local state for all channels
+      // Update local state for all channels and flag them as awaiting confirmation
+      const target = equipmentList.find(eq => eq.id === equipmentId);
+      markPending(equipmentId, relayChannels.map(ch => ch.address), { writeOnly: !!target?.write_only });
       setEquipmentList(prev => prev.map(eq => {
         if (eq.id === equipmentId) {
           const updated = { ...eq, last_reading: { ...(eq.last_reading || {}) } };
@@ -560,7 +611,7 @@ export default function Dashboard() {
         return eq;
       }));
 
-      setControlMessage({ type: 'success', text: `All channels turned ${newState ? 'on' : 'off'}` });
+      setControlMessage({ type: 'success', text: `All channels command sent (${newState ? 'on' : 'off'})` });
       setTimeout(() => setControlMessage(null), 3000);
     } catch (err) {
       setControlMessage({ type: 'error', text: err.message });
@@ -593,8 +644,8 @@ export default function Dashboard() {
     fetch(`${API_BASE}/crops`, { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : [])
       .then(setActiveCrops)
-      .catch(() => {});
-  }, [token]);
+      .catch(err => notifyBackgroundError(`Could not load active crops: ${err.message}`, 'crops'));
+  }, [token, notifyBackgroundError]);
 
   // Fetch dashboard data
   useEffect(() => {
@@ -718,20 +769,20 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
 
-        {/* Zone Filter */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label htmlFor="zone-filter" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        {/* Toolbar: wraps at phone width; each control takes a full row below `sm` */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
+            <label htmlFor="zone-filter" className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0">
               Zone:
             </label>
             <select
               id="zone-filter"
               value={selectedZoneId}
               onChange={handleZoneChange}
-              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px] dark:bg-gray-700 dark:text-white"
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0 w-full sm:w-auto sm:min-w-[150px] dark:bg-gray-700 dark:text-white"
             >
               <option value="">All Zones</option>
               {zones.map((zone) => (
@@ -743,15 +794,15 @@ export default function Dashboard() {
           </div>
 
           {/* Time Range Selector */}
-          <div className="flex items-center gap-2">
-            <label htmlFor="time-range" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
+            <label htmlFor="time-range" className="text-sm font-medium text-gray-700 dark:text-gray-300 shrink-0">
               Time Range:
             </label>
             <select
               id="time-range"
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
-              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[150px] dark:bg-gray-700 dark:text-white"
+              className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-0 w-full sm:w-auto sm:min-w-[150px] dark:bg-gray-700 dark:text-white"
             >
               {timeRangeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -765,7 +816,7 @@ export default function Dashboard() {
           <button
             onClick={handleRefresh}
             disabled={isRefreshing || loading}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 w-full sm:w-auto ${
               isRefreshing || loading
                 ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -1444,14 +1495,14 @@ export default function Dashboard() {
                           {canControl && relayChannels.length > 1 && (
                             <div className="flex gap-2 mb-2">
                               <button
-                                onClick={() => handleRelayAllControl(equipment.id, true, relayChannels)}
+                                onClick={() => requestRelayAllControl(equipment, true, relayChannels)}
                                 disabled={controlLoading[`${equipment.id}_all`]}
                                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
                               >
                                 {controlLoading[`${equipment.id}_all`] ? 'Working...' : 'All On'}
                               </button>
                               <button
-                                onClick={() => handleRelayAllControl(equipment.id, false, relayChannels)}
+                                onClick={() => requestRelayAllControl(equipment, false, relayChannels)}
                                 disabled={controlLoading[`${equipment.id}_all`]}
                                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-600 text-white hover:bg-gray-700 disabled:opacity-50 transition-colors"
                               >
@@ -1464,16 +1515,25 @@ export default function Dashboard() {
                             const isOn = !!relayStates[ch.address];
                             const loadingKey = `${equipment.id}_${ch.address}`;
                             const isLoading = controlLoading[loadingKey];
+                            // Command accepted by the API but not yet confirmed by the device
+                            const pendingEntry = getPending(equipment.id, ch.address);
+                            const isPending = !!pendingEntry && !isLoading;
+                            const pendingWriteOnly = isPending && pendingEntry.writeOnly;
+                            const pendingTitle = pendingWriteOnly
+                              ? 'Command sent (device has no readback)'
+                              : 'Command sent, awaiting confirmation';
                             return (
                               <button
                                 key={ch.address}
                                 onClick={() => canControl && handleRelayChannelControl(equipment.id, ch.address, !isOn)}
                                 disabled={isLoading || !canControl}
+                                title={isPending ? pendingTitle : undefined}
+                                aria-label={isPending ? `${ch.displayName}: ${pendingTitle}` : undefined}
                                 className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                                   isOn
                                     ? 'bg-green-100 text-green-800 border border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700'
                                     : 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600'
-                                } ${canControl ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'} disabled:opacity-50`}
+                                } ${isPending && !pendingWriteOnly ? 'ring-2 ring-amber-400 dark:ring-amber-500 animate-pulse' : ''} ${canControl ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'} disabled:opacity-50`}
                               >
                                 <span className="truncate mr-2">{ch.displayName}</span>
                                 {isLoading ? (
@@ -1481,8 +1541,12 @@ export default function Dashboard() {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                   </svg>
+                                ) : pendingWriteOnly ? (
+                                  <span className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 flex-shrink-0">sent</span>
                                 ) : (
-                                  <span className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ${isOn ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                                  <span className={`w-3.5 h-3.5 rounded-full flex-shrink-0 ${
+                                    isPending ? 'bg-amber-400' : isOn ? 'bg-green-500' : 'bg-gray-400'
+                                  }`}></span>
                                 )}
                               </button>
                             );
@@ -1742,6 +1806,28 @@ export default function Dashboard() {
           )}
         </>
       )}
+
+      {/* Confirm bulk relay switching */}
+      <ConfirmDialog
+        open={!!relayAllConfirm}
+        title={relayAllConfirm ? `Turn all channels ${relayAllConfirm.newState ? 'ON' : 'OFF'}?` : ''}
+        body={relayAllConfirm ? (
+          <>
+            This will switch every relay channel on <strong>{relayAllConfirm.equipmentName}</strong>
+            {' '}{relayAllConfirm.newState ? 'on' : 'off'} ({relayAllConfirm.channelNames.length} channels):
+          </>
+        ) : null}
+        items={relayAllConfirm?.channelNames || []}
+        variant={relayAllConfirm?.newState ? 'primary' : 'danger'}
+        confirmLabel={relayAllConfirm ? `Turn all ${relayAllConfirm.newState ? 'on' : 'off'}` : 'Confirm'}
+        busy={relayAllConfirm ? !!controlLoading[`${relayAllConfirm.equipmentId}_all`] : false}
+        onCancel={() => setRelayAllConfirm(null)}
+        onConfirm={() => {
+          const req = relayAllConfirm;
+          setRelayAllConfirm(null);
+          if (req) handleRelayAllControl(req.equipmentId, req.newState, req.relayChannels);
+        }}
+      />
     </div>
   );
 }

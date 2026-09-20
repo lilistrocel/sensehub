@@ -43,15 +43,21 @@ export default function RelayEvents() {
     try {
       const res = await fetch(`${API_BASE}/equipment`, { headers });
       if (res.ok) setEquipment(await res.json());
-    } catch {}
-  }, [headers]);
+      else showError('Could not load equipment list');
+    } catch (err) {
+      showError(`Could not load equipment list: ${err.message}`);
+    }
+  }, [headers, showError]);
 
   const loadStats = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/relay-events/stats`, { headers });
       if (res.ok) setStats(await res.json());
-    } catch {}
-  }, [headers]);
+      else showError('Could not load relay event statistics');
+    } catch (err) {
+      showError(`Could not load relay event statistics: ${err.message}`);
+    }
+  }, [headers, showError]);
 
   const loadRuns = useCallback(async () => {
     setLoading(true);
@@ -89,8 +95,11 @@ export default function RelayEvents() {
     try {
       const res = await fetch(`${API_BASE}/relay-events/safety-config`, { headers });
       if (res.ok) setSafetyConfig(await res.json());
-    } catch {}
-  }, [headers]);
+      else showError('Could not load relay safety configuration');
+    } catch (err) {
+      showError(`Could not load relay safety configuration: ${err.message}`);
+    }
+  }, [headers, showError]);
 
   useEffect(() => { loadEquipment(); loadStats(); loadSafetyConfig(); }, [loadEquipment, loadStats, loadSafetyConfig]);
   useEffect(() => {

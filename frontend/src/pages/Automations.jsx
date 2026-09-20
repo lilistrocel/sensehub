@@ -2,8 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getChannelDisplayName } from '../utils/channelUtils';
 import { useSettings } from '../context/SettingsContext';
+import { useToast } from '../context/ToastContext';
 
 const API_BASE = '/api';
+
+/**
+ * Parse an equipment row's register_mappings (JSON string or array) into an
+ * array. Used during render, where a toast cannot be raised; a malformed value
+ * is logged once per call and treated as "no mappings".
+ */
+const parseRegisterMappings = (eq) => {
+  if (!eq || !eq.register_mappings) return [];
+  try {
+    const m = typeof eq.register_mappings === 'string' ? JSON.parse(eq.register_mappings) : eq.register_mappings;
+    return Array.isArray(m) ? m : [];
+  } catch (err) {
+    console.warn(`Malformed register_mappings on equipment ${eq.id ?? '?'}:`, err.message);
+    return [];
+  }
+};
 
 // Status badge for enabled/disabled
 function EnabledBadge({ enabled }) {
@@ -49,6 +66,7 @@ function TriggerBadge({ triggerConfig }) {
 
 // Automation Builder Modal
 function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, isNew = false }) {
+  const { showError } = useToast();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -157,7 +175,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
         headers: { 'Authorization': `Bearer ${token}` },
       }).then(r => r.ok ? r.json() : []).then(list => {
         setDosePrograms(Array.isArray(list) ? list : []);
-      }).catch(() => {});
+      }).catch((err) => showError(`Could not load dose programs: ${err.message}`));
     }
   }, [isOpen, token]);
 
@@ -317,7 +335,9 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
               ? JSON.parse(selectedEq.register_mappings)
               : (selectedEq?.register_mappings || []);
             mapping = mappings.find(m => String(m.register ?? m.address) === ch);
-          } catch {}
+          } catch (err) {
+            showError(`Could not read channel mappings for ${selectedEq?.name || 'the selected equipment'}: ${err.message}`);
+          }
           return { channel: parseInt(ch), state: v, name: mapping ? getChannelDisplayName(mapping) : `Coil ${ch}` };
         });
       if (transitions.length === 0) return;
@@ -1156,7 +1176,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     <button
                       type="button"
                       onClick={addCondition}
-                      className="px-3 py-1 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
+                      className="px-3 py-2 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
                     >
                       Add
                     </button>
@@ -1262,7 +1282,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                             <button
                               type="button"
                               onClick={() => setEditingDepsForAction(editingDepsForAction === idx ? null : idx)}
-                              className={`px-2 py-1 text-xs rounded ${editingDepsForAction === idx ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}
+                              className={`px-2 py-2 text-xs rounded ${editingDepsForAction === idx ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}
                               title="Edit dependencies"
                             >
                               🔒 Deps
@@ -1390,15 +1410,8 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                         {/* Channel selector - shown when selected equipment has coil register mappings */}
                         {(() => {
                           const selectedEq = equipment.find(eq => eq.id === parseInt(controlEquipmentId));
-                          let relayChannels = [];
-                          if (selectedEq) {
-                            try {
-                              const mappings = typeof selectedEq.register_mappings === 'string'
-                                ? JSON.parse(selectedEq.register_mappings)
-                                : (selectedEq.register_mappings || []);
-                              relayChannels = mappings.filter(m => m.type === 'coil' && m.access === 'readwrite');
-                            } catch (e) {}
-                          }
+                          const relayChannels = parseRegisterMappings(selectedEq)
+                            .filter(m => m.type === 'coil' && m.access === 'readwrite');
                           if (relayChannels.length === 0) return null;
                           return (
                             <div>
@@ -1513,7 +1526,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                     <button
                       type="button"
                       onClick={addAction}
-                      className={`px-3 py-1 text-sm text-white rounded ${editingActionIndex !== null ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'}`}
+                      className={`px-3 py-2 text-sm text-white rounded ${editingActionIndex !== null ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'}`}
                     >
                       {editingActionIndex !== null ? 'Save' : 'Add'}
                     </button>
@@ -1521,7 +1534,7 @@ function AutomationBuilderModal({ isOpen, onClose, automation, token, onSave, is
                       <button
                         type="button"
                         onClick={cancelEditAction}
-                        className="px-3 py-1 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                        className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                       >
                         Cancel
                       </button>
@@ -1734,15 +1747,9 @@ function TransitionEditor({ equipment, equipmentId, setEquipmentId, states, setS
   });
 
   const selectedEq = sensors.find(eq => eq.id === parseInt(equipmentId));
-  let coils = [];
-  if (selectedEq) {
-    try {
-      const mappings = typeof selectedEq.register_mappings === 'string'
-        ? JSON.parse(selectedEq.register_mappings)
-        : (selectedEq.register_mappings || []);
-      coils = mappings.filter(m => m.type === 'coil' && m.access === 'readwrite').sort((a, b) => (a.register ?? a.address) - (b.register ?? b.address));
-    } catch {}
-  }
+  const coils = parseRegisterMappings(selectedEq)
+    .filter(m => m.type === 'coil' && m.access === 'readwrite')
+    .sort((a, b) => (a.register ?? a.address) - (b.register ?? b.address));
 
   const setCoil = (addr, val) => {
     setStates({ ...states, [addr]: val });
@@ -1796,15 +1803,15 @@ function TransitionEditor({ equipment, equipmentId, setEquipmentId, states, setS
                   <p className="text-[10px] text-gray-400">addr {addr}</p>
                   <div className="flex gap-1 mt-1">
                     <button type="button" onClick={() => setCoil(addr, true)}
-                      className={`flex-1 px-2 py-1 text-xs rounded ${current === true ? 'bg-green-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-green-100 dark:hover:bg-green-900/30'}`}>
+                      className={`flex-1 px-2 py-2 text-xs rounded ${current === true ? 'bg-green-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-green-100 dark:hover:bg-green-900/30'}`}>
                       ON
                     </button>
                     <button type="button" onClick={() => setCoil(addr, false)}
-                      className={`flex-1 px-2 py-1 text-xs rounded ${current === false ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-red-100 dark:hover:bg-red-900/30'}`}>
+                      className={`flex-1 px-2 py-2 text-xs rounded ${current === false ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-red-100 dark:hover:bg-red-900/30'}`}>
                       OFF
                     </button>
                     <button type="button" onClick={() => clearCoil(addr)}
-                      className={`flex-1 px-2 py-1 text-xs rounded ${current === undefined ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
+                      className={`flex-1 px-2 py-2 text-xs rounded ${current === undefined ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
                       —
                     </button>
                   </div>
@@ -1834,15 +1841,9 @@ function DependencyEditor({ action, equipmentList, onChange, onClose }) {
 
   const sensors = equipmentList.filter(e => e.type !== 'relay');
   const selectedEq = sensors.find(e => e.id === parseInt(newDep.equipment_id));
-  let availableMetrics = [];
-  if (selectedEq) {
-    try {
-      const m = typeof selectedEq.register_mappings === 'string'
-        ? JSON.parse(selectedEq.register_mappings)
-        : (selectedEq.register_mappings || []);
-      availableMetrics = m.filter(x => x.type !== 'coil').map(x => x.name);
-    } catch {}
-  }
+  const availableMetrics = parseRegisterMappings(selectedEq)
+    .filter(x => x.type !== 'coil')
+    .map(x => x.name);
 
   const addDep = () => {
     if (newDep.type === 'lab_reading') {
@@ -1961,7 +1962,7 @@ function DependencyEditor({ action, equipmentList, onChange, onClose }) {
             className="w-16 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white" />
         </div>
         <button type="button" onClick={addDep}
-          className="px-3 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700">
+          className="px-3 py-2 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700">
           Add
         </button>
       </div>
@@ -2003,6 +2004,7 @@ function getScheduleDescription(tc) {
 
 // Template Manager Modal - CRUD for automation templates
 function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
+  const { showError } = useToast();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2156,7 +2158,9 @@ function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
               ? JSON.parse(selectedEq.register_mappings)
               : (selectedEq?.register_mappings || []);
             mapping = mappings.find(m => String(m.register ?? m.address) === ch);
-          } catch {}
+          } catch (err) {
+            showError(`Could not read channel mappings for ${selectedEq?.name || 'the selected equipment'}: ${err.message}`);
+          }
           return { channel: parseInt(ch), state: v, name: mapping ? getChannelDisplayName(mapping) : `Coil ${ch}` };
         });
       if (transitions.length === 0) return;
@@ -2468,14 +2472,8 @@ function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
                       {/* Channel selector */}
                       {(() => {
                         const selectedEq = equipment.find(eq => eq.id === parseInt(newControlEquipmentId));
-                        let relayChannels = [];
-                        if (selectedEq) {
-                          try {
-                            const mappings = typeof selectedEq.register_mappings === 'string'
-                              ? JSON.parse(selectedEq.register_mappings) : (selectedEq.register_mappings || []);
-                            relayChannels = mappings.filter(m => m.type === 'coil' && m.access === 'readwrite');
-                          } catch (e) {}
-                        }
+                        const relayChannels = parseRegisterMappings(selectedEq)
+                          .filter(m => m.type === 'coil' && m.access === 'readwrite');
                         if (relayChannels.length === 0) return null;
                         return (
                           <div>
@@ -3215,6 +3213,7 @@ function AutomationDetailModal({ isOpen, onClose, automation, onEdit, token }) {
 export default function Automations() {
   const { token, user } = useAuth();
   const { formatDateTime } = useSettings();
+  const { showError } = useToast();
   const [automations, setAutomations] = useState([]);
   const [doseProgramsById, setDoseProgramsById] = useState({});
   const [loading, setLoading] = useState(true);
@@ -3240,7 +3239,7 @@ export default function Automations() {
       const m = {};
       for (const p of (Array.isArray(list) ? list : [])) m[p.id] = p;
       setDoseProgramsById(m);
-    }).catch(() => {});
+    }).catch((err) => showError(`Could not load dose programs: ${err.message}`));
   }, [token]);
 
   const fetchAutomations = async () => {
@@ -3288,6 +3287,7 @@ export default function Automations() {
       await fetchAutomations();
     } catch (err) {
       console.error('Toggle error:', err);
+      showError(`Could not toggle "${automation.name}": ${err.message}`);
     }
   };
 

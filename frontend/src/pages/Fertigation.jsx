@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
+import { useThrottledError } from '../hooks/useThrottledError';
 
 const API_BASE = '/api';
 
@@ -52,6 +53,7 @@ export default function Fertigation() {
 
 /* ─── Consumption Tab ─── */
 function ConsumptionTab({ headers, formatDateTime }) {
+  const { showError: showConsumptionError } = useToast();
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
   const [from, setFrom] = useState(weekAgo);
@@ -62,7 +64,9 @@ function ConsumptionTab({ headers, formatDateTime }) {
 
   const fetchSummary = useCallback(() => {
     fetch(`${API_BASE}/fertigation/consumption/summary`, { headers })
-      .then(r => r.json()).then(setSummary).catch(() => {});
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(setSummary)
+      .catch(err => showConsumptionError(`Could not load consumption summary: ${err.message}`));
   }, []);
 
   const fetchConsumption = useCallback(() => {
@@ -439,7 +443,7 @@ function MixturesTab({ headers, canEdit }) {
               <input value={newIngredient} onChange={e => setNewIngredient(e.target.value)}
                 placeholder="New ingredient..."
                 className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-36" />
-              <button type="submit" className="px-2 py-1 bg-primary-600 text-white text-xs rounded hover:bg-primary-700">Add</button>
+              <button type="submit" className="px-2 py-2 bg-primary-600 text-white text-xs rounded hover:bg-primary-700">Add</button>
             </form>
           )}
         </div>
@@ -478,8 +482,8 @@ function MixturesTab({ headers, canEdit }) {
                     </div>
                     {canEdit && (
                       <div className="flex gap-1">
-                        <button onClick={() => startEdit(mix)} className="px-2 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">Edit</button>
-                        <button onClick={() => deleteMixture(mix.id)} className="px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">Delete</button>
+                        <button onClick={() => startEdit(mix)} className="px-2 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">Edit</button>
+                        <button onClick={() => deleteMixture(mix.id)} className="px-2 py-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">Delete</button>
                       </div>
                     )}
                   </div>
@@ -692,18 +696,18 @@ function ChannelConfigTab({ headers, canEdit }) {
                       <td className="px-4 py-3 text-sm text-right">
                         {isEditing ? (
                           <div className="flex justify-end gap-2">
-                            <button onClick={() => handleSave(ch.equipment_id, ch.channel)} className="px-3 py-1 bg-primary-600 text-white text-xs rounded hover:bg-primary-700">Save</button>
-                            <button onClick={() => setEditKey(null)} className="px-3 py-1 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs rounded hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
+                            <button onClick={() => handleSave(ch.equipment_id, ch.channel)} className="px-3 py-2 bg-primary-600 text-white text-xs rounded hover:bg-primary-700">Save</button>
+                            <button onClick={() => setEditKey(null)} className="px-3 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs rounded hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
                           </div>
                         ) : (
                           <div className="flex justify-end gap-2">
                             <button onClick={() => startEdit(ch.equipment_id, ch.channel, ch.config)}
-                              className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+                              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600">
                               {ch.config ? 'Edit' : 'Configure'}
                             </button>
                             {ch.config && (
                               <button onClick={() => handleDelete(ch.equipment_id, ch.channel)}
-                                className="px-3 py-1 text-red-600 dark:text-red-400 text-xs hover:bg-red-50 dark:hover:bg-red-900/20 rounded">Remove</button>
+                                className="px-3 py-2 text-red-600 dark:text-red-400 text-xs hover:bg-red-50 dark:hover:bg-red-900/20 rounded">Remove</button>
                             )}
                           </div>
                         )}
@@ -722,6 +726,7 @@ function ChannelConfigTab({ headers, canEdit }) {
 
 /* ─── Event Log Tab ─── */
 function EventLogTab({ headers, formatDateTime }) {
+  const { showError: showEventLogError } = useToast();
   const [events, setEvents] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -732,7 +737,10 @@ function EventLogTab({ headers, formatDateTime }) {
   const pageSize = 50;
 
   useEffect(() => {
-    fetch(`${API_BASE}/equipment`, { headers }).then(r => r.json()).then(setEquipment).catch(() => {});
+    fetch(`${API_BASE}/equipment`, { headers })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(setEquipment)
+      .catch(err => showEventLogError(`Could not load equipment list: ${err.message}`));
   }, []);
 
   const fetchEvents = useCallback(() => {
@@ -794,7 +802,7 @@ function EventLogTab({ headers, formatDateTime }) {
               <p className="text-sm text-gray-500 dark:text-gray-400">{total} total events</p>
               <div className="flex gap-2">
                 <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                  className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">Previous</button>
+                  className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">Previous</button>
                 <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">Page {page + 1} of {totalPages}</span>
                 <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
                   className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">Next</button>
@@ -959,13 +967,19 @@ function LiveDoseCycleBanner({ headers, canEdit }) {
   const [status, setStatus] = useState(null);
   const [aborting, setAborting] = useState(false);
 
+  const notifyPollError = useThrottledError(showError);
+
   useEffect(() => {
     let mounted = true;
     const poll = async () => {
       try {
         const r = await fetch(`${API_BASE}/fertigation/dose-cycle/status`, { headers });
         if (r.ok && mounted) setStatus(await r.json());
-      } catch (_) {}
+        else if (!r.ok && r.status >= 500) notifyPollError('Could not read dose-cycle status', 'dose-cycle-status');
+      } catch (_) {
+        // 2 s poll: one toast per minute at most, not one per tick
+        notifyPollError('Could not read dose-cycle status', 'dose-cycle-status');
+      }
     };
     poll();
     const id = setInterval(poll, 2000);
@@ -1068,6 +1082,7 @@ function LiveDoseCycleBanner({ headers, canEdit }) {
  * cycle actually inject?"
  */
 function DoseCycleHistory({ headers, formatDateTime }) {
+  const { showError } = useToast();
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1077,8 +1092,11 @@ function DoseCycleHistory({ headers, formatDateTime }) {
     try {
       const r = await fetch(`${API_BASE}/fertigation/dose-cycle/history?limit=30`, { headers });
       if (r.ok) setRows(await r.json());
-    } catch (_) {} finally { setLoading(false); }
-  }, [headers]);
+      else showError('Could not load dose-cycle history');
+    } catch (err) {
+      showError(`Could not load dose-cycle history: ${err.message}`);
+    } finally { setLoading(false); }
+  }, [headers, showError]);
 
   useEffect(() => { if (open) load(); }, [open, load]);
 
@@ -1157,12 +1175,17 @@ function TankCard({ tank, expanded, onExpand, canEdit, onRefill, onEdit, headers
     ? `${tank.equipment_name || `eq#${tank.equipment_id}`} · Ch ${tank.channel}`
     : 'Unassigned';
 
+  const { showError: showTankError } = useToast();
+
   const fetchDetail = useCallback(async () => {
     try {
       const r = await fetch(`${API_BASE}/fertigation/tanks/${tank.id}`, { headers });
       if (r.ok) setDetail(await r.json());
-    } catch (_) {}
-  }, [headers, tank.id]);
+      else showTankError(`Could not load details for ${tank.name || 'tank'}`);
+    } catch (err) {
+      showTankError(`Could not load details for ${tank.name || 'tank'}: ${err.message}`);
+    }
+  }, [headers, tank.id, tank.name, showTankError]);
 
   const fetchPreview = useCallback(async (vOverride, wOverride) => {
     try {
@@ -1179,9 +1202,13 @@ function TankCard({ tank, expanded, onExpand, canEdit, onRefill, onEdit, headers
         // First load: seed the inputs from server-detected values so the user sees them.
         if (vOverride === undefined && (venturi === '' || venturi == null) && p.venturi_lpm) setVenturi(String(p.venturi_lpm));
         if (wOverride === undefined && (water === '' || water == null) && p.water_lpm) setWater(String(p.water_lpm));
+      } else {
+        showTankError(`Could not compute ppm preview for ${tank.name || 'tank'}`);
       }
-    } catch (_) {}
-  }, [headers, tank.id, venturi, water]);
+    } catch (err) {
+      showTankError(`Could not compute ppm preview for ${tank.name || 'tank'}: ${err.message}`);
+    }
+  }, [headers, tank.id, tank.name, venturi, water, showTankError]);
 
   useEffect(() => { if (expanded) { fetchDetail(); fetchPreview(); } /* eslint-disable-next-line */ }, [expanded]);
 
@@ -1586,8 +1613,10 @@ function DoseProgramsTab({ headers, canEdit }) {
       ]);
       setPrograms(Array.isArray(p) ? p : []);
       setTanks(Array.isArray(t) ? t : []);
-    } catch (_) {} finally { setLoading(false); }
-  }, [headers]);
+    } catch (err) {
+      showError(`Could not load dose programs: ${err.message}`);
+    } finally { setLoading(false); }
+  }, [headers, showError]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1654,6 +1683,7 @@ function DoseProgramsTab({ headers, canEdit }) {
 }
 
 function DoseProgramCard({ program, tanks, expanded, onExpand, canEdit, onEdit, onPublish, headers }) {
+  const { showError: showProgramError } = useToast();
   const [preview, setPreview] = useState(null);
   const tanksById = React.useMemo(() => {
     const m = {};
@@ -1666,7 +1696,7 @@ function DoseProgramCard({ program, tanks, expanded, onExpand, canEdit, onEdit, 
     fetch(`${API_BASE}/fertigation/dose-programs/${program.id}/ppm-preview`, { headers })
       .then(r => r.ok ? r.json() : null)
       .then(setPreview)
-      .catch(() => {});
+      .catch(err => showProgramError(`Could not load ppm preview for ${program.name || 'program'}: ${err.message}`));
   }, [expanded, program.id, headers]);
 
   const elements = preview?.total_irrigation_ppm
@@ -1758,12 +1788,12 @@ function DoseProgramCard({ program, tanks, expanded, onExpand, canEdit, onEdit, 
           {canEdit && (
             <div className="flex items-center gap-2 mt-3">
               <button onClick={onEdit}
-                className="px-3 py-1 border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-200 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-200 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
                 Edit
               </button>
               {program.status !== 'published' && (
                 <button onClick={onPublish}
-                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded">
+                  className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs rounded">
                   Publish
                 </button>
               )}
@@ -1971,8 +2001,11 @@ function ElementTargetsTab({ headers, canEdit }) {
     try {
       const r = await fetch(`${API_BASE}/fertigation/element-targets?crop_assignment_id=null`, { headers });
       if (r.ok) setRows(await r.json());
-    } catch (_) {} finally { setLoading(false); }
-  }, [headers]);
+      else showError('Could not load element targets');
+    } catch (err) {
+      showError(`Could not load element targets: ${err.message}`);
+    } finally { setLoading(false); }
+  }, [headers, showError]);
 
   useEffect(() => { load(); }, [load]);
 

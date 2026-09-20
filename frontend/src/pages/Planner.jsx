@@ -418,7 +418,10 @@ function PlanDiscussion({ planId, planStatus, canControl, headers, showError, sh
     try {
       const res = await fetch(`${API_BASE}/planner/plans/${planId}/clarifications`, { headers });
       if (res.ok) setThread(await res.json());
-    } catch (_) {} finally { setLoading(false); }
+      else showError?.('Could not load plan discussion');
+    } catch (err) {
+      showError?.(`Could not load plan discussion: ${err.message}`);
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { if (planId) load(); /* eslint-disable-next-line */ }, [planId]);

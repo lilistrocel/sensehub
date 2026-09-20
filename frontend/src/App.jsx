@@ -86,6 +86,11 @@ function PublicRoute({ children }) {
   return children;
 }
 
+// Single source of truth for whether the /debug route exists. Sidebar.jsx
+// applies the identical rule (import.meta.env.DEV && role === 'admin') so the
+// nav item is never shown for a route that is not mounted.
+const DEBUG_ROUTE_ENABLED = !!import.meta.env.DEV;
+
 // Admin-only route wrapper (authenticated AND role === 'admin').
 // Used to gate developer/diagnostic routes away from operators and viewers.
 function AdminRoute({ children }) {
@@ -315,7 +320,7 @@ function AppRoutes() {
       {/* Debug/diagnostics: dev builds only, and admin-only even there.
           In production builds (import.meta.env.DEV === false) the route is not
           mounted at all, so it falls through to the 404 handler. */}
-      {import.meta.env.DEV && (
+      {DEBUG_ROUTE_ENABLED && (
         <Route
           path="/debug"
           element={

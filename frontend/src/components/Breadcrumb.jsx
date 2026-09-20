@@ -9,6 +9,20 @@ const routeConfig = {
   '/automations': { name: 'Automations', icon: 'automations' },
   '/alerts': { name: 'Alerts', icon: 'alerts' },
   '/settings': { name: 'Settings', icon: 'settings' },
+  '/cameras': { name: 'Cameras', icon: 'cameras' },
+  '/templates': { name: 'Templates', icon: 'templates' },
+  '/planner': { name: 'Planner', icon: 'planner' },
+  '/tasks': { name: 'Tasks', icon: 'tasks' },
+  '/fertigation': { name: 'Fertigation', icon: 'fertigation' },
+  '/amic': { name: 'AMIC Analyzer', icon: 'amic' },
+  '/reports': { name: 'Reports', icon: 'reports' },
+  // Route path unchanged; the page is presented as "Data Export" in navigation.
+  '/analytics': { name: 'Data Export', icon: 'analytics' },
+  '/lab-analysis': { name: 'Lab Analysis', icon: 'lab' },
+  '/calibration': { name: 'Calibration', icon: 'calibration' },
+  '/agronomist': { name: 'Agronomist', icon: 'agronomist' },
+  '/relay-events': { name: 'Relay Events', icon: 'relay-events' },
+  '/debug': { name: 'Debug', icon: 'debug' },
 };
 
 // Settings sub-routes

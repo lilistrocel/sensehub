@@ -1,9 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useAuthedImage } from '../hooks/useAuthedImage';
 
 const API_BASE = '/api';
 const SNAPSHOT_REFRESH_INTERVAL = 30000; // 30s
+const STALE_CAPTURE_MS = 24 * 60 * 60 * 1000; // 24 h
+
+/**
+ * Live snapshot thumbnail. /api/cameras/:id/snapshot sits behind the bearer-token
+ * auth middleware, so a plain <img src> gets a 401; we fetch it with the token
+ * and render the resulting object URL instead.
+ */
+function CameraSnapshot({ cameraId, tick, alt }) {
+  const { src, loading, error } = useAuthedImage(
+    `${API_BASE}/cameras/${cameraId}/snapshot?t=${tick}`
+  );
+
+  if (src) {
+    return <img src={src} alt={alt} className="w-full h-full object-cover" />;
+  }
+  return (
+    <div className="w-full h-full flex items-center justify-center" aria-live="polite">
+      <p className="text-gray-500 text-sm px-4 text-center">
+        {loading ? 'Loading snapshot...' : (error ? `Snapshot unavailable (${error})` : 'Snapshot unavailable')}
+      </p>
+    </div>
+  );
+}
 
 export default function Cameras() {
   const { token, user } = useAuth();
@@ -68,8 +92,12 @@ export default function Cameras() {
         const map = {};
         data.forEach(s => { map[s.camera_id] = s; });
         setStoredSnapshots(map);
+      } else {
+        showError('Could not load stored snapshots');
       }
-    } catch {}
+    } catch (err) {
+      showError(`Could not load stored snapshots: ${err.message}`);
+    }
   };
 
   const fetchCameraHistory = async (cameraId) => {
@@ -78,8 +106,26 @@ export default function Cameras() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) return await res.json();
-    } catch {}
+      showError('Could not load snapshot history');
+    } catch (err) {
+      showError(`Could not load snapshot history: ${err.message}`);
+    }
     return [];
+  };
+
+  // "Last capture" wording: none yet / fresh / stale (> 24 h old)
+  const captureInfo = (snap) => {
+    if (!snap || !snap.captured_at) return { text: 'No capture yet', stale: false, none: true };
+    const age = Date.now() - new Date(snap.captured_at).getTime();
+    if (Number.isNaN(age)) return { text: `Last capture: ${formatDate(snap.captured_at)}`, stale: false };
+    if (age > STALE_CAPTURE_MS) {
+      const days = Math.floor(age / (24 * 60 * 60 * 1000));
+      return {
+        text: `Stale capture: last saved ${formatDate(snap.captured_at)} (${days >= 1 ? `${days} day${days === 1 ? '' : 's'}` : 'over 24 h'} ago)`,
+        stale: true,
+      };
+    }
+    return { text: `Last capture: ${formatDate(snap.captured_at)}`, stale: false };
   };
 
   const handleCapture = async (camera) => {
@@ -293,12 +339,7 @@ export default function Cameras() {
               >
                 {camera.status === 'online' ? (
                   <>
-                    <img
-                      src={`${API_BASE}/cameras/${camera.id}/snapshot?t=${snapshotTick}`}
-                      alt={camera.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
+                    <CameraSnapshot cameraId={camera.id} tick={snapshotTick} alt={camera.name} />
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
                       <svg className="w-12 h-12 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M8 5v14l11-7z" />
@@ -340,11 +381,16 @@ export default function Cameras() {
                 </div>
 
                 {/* Last stored snapshot info */}
-                {storedSnapshots[camera.id] && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    Last capture: {formatDate(storedSnapshots[camera.id].captured_at)}
-                  </p>
-                )}
+                {(() => {
+                  const info = captureInfo(storedSnapshots[camera.id]);
+                  return (
+                    <p className={`text-xs mt-1 ${
+                      info.stale ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'
+                    }`}>
+                      {info.text}
+                    </p>
+                  );
+                })()}
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">

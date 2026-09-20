@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
+import { useWebSocket } from '../context/WebSocketContext';
 import { usePollingState, formatCountdown } from '../hooks/usePollingState';
 
 const API_BASE = '/api';
@@ -44,6 +45,18 @@ const TIMERS_POLL_INTERVAL_MS = 10000;
 
 // Minimum gap between the equipment-name lookups used to label those timers.
 const EQUIPMENT_NAME_REFRESH_MS = 60000;
+
+// The stop endpoints answer within 15 s: 200 with the final summary, or 202
+// with the summary-so-far while the relay sweep keeps running, in which case
+// the final summary arrives as a `stop_all_progress` WebSocket event. If that
+// event never comes, give up after this long and report the stop unconfirmed.
+const STOP_CONFIRM_TIMEOUT_MS = 60000;
+
+// Board progress carried by a 202 body or a stop_all_progress event.
+const stopProgressOf = (data) => ({
+  boardsDone: Number(data?.boardsDone) || 0,
+  boardsTotal: Number(data?.boardsTotal) || 0
+});
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -97,10 +110,14 @@ const stopErrorMessage = (status, data) => {
 
 export default function Layout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // NOTE on the header: the two stop buttons must survive a 390 px phone with
+  // the body's overflow hidden, so the control group wraps under the breadcrumb
+  // rather than clipping, and everything non-safety hides below lg:.
   const { user, token } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const { formatDateTime } = useSettings();
   const { showSuccess, showError, addToast } = useToast();
+  const { subscribe } = useWebSocket();
   const polling = usePollingState();
   const isAdmin = user?.role === 'admin';
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
@@ -126,6 +143,19 @@ export default function Layout({ children }) {
   // null when idle, otherwise 'stop-all' | 'emergency' - identifies which of the
   // two buttons is in flight while disabling both (no interleaved stops).
   const [stopBusy, setStopBusy] = useState(null);
+  // { boardsDone, boardsTotal } while a stop the backend answered 202 for is
+  // still sweeping boards; null otherwise. Drives the "Stopping… (n/m)" label.
+  const [stopProgress, setStopProgress] = useState(null);
+  // The 202-pending stop awaiting its stop_all_progress summary:
+  // { kind, label, suffix, timeoutId, progress }. A ref, not state: the
+  // WebSocket listener and the safety timeout must read the latest value
+  // without being re-subscribed on every render.
+  const pendingStopRef = useRef(null);
+  // True from the moment a stop request is sent until it is fully reported.
+  // Lets a final summary that overtakes its own 202 response be kept rather
+  // than dropped (the sweep can finish a few ms after the HTTP deadline).
+  const stopInFlightRef = useRef(false);
+  const earlyStopSummaryRef = useRef(null);
   const [stopMenuOpen, setStopMenuOpen] = useState(false);
   const stopMenuRef = useRef(null);
   const [armedState, setArmedState] = useState(ARMED_STATE_DEFAULT);
@@ -277,20 +307,48 @@ export default function Layout({ children }) {
   // still be energised, so that toast stays until dismissed by hand (duration 0).
   const reportStopResult = useCallback((data, label, suffix = '') => {
     const timersCancelled = Number(data.timersCancelled) || 0;
-    const channelsTurnedOff = Number(data.channelsTurnedOff) || 0;
-    const failures = Array.isArray(data.failures) ? data.failures : [];
+    const channelsTurnedOff = Number(data.channelsTurnedOff ?? data.succeeded) || 0;
     const doseNote = data.doseCycleAborted ? ' Fertigation dose cycle aborted.' : '';
 
-    if (failures.length > 0) {
-      const detail = failures
+    // Per-board failures (`failed`) name the board; fall back to the legacy
+    // per-channel list (`failures`) for an older backend.
+    const failedBoards = Array.isArray(data.failed) ? data.failed : [];
+    const legacyFailures = Array.isArray(data.failures) ? data.failures : [];
+    let detail = '';
+    let failedSummary = '';
+    if (failedBoards.length > 0) {
+      detail = failedBoards
+        .map((f) => {
+          const name = f.name || `equipment #${f.equipment_id}`;
+          const channels = Array.isArray(f.channels) && f.channels.length > 0 ? ` ch ${f.channels.join(', ')}` : '';
+          return `${name}${channels}${f.error ? ` (${f.error})` : ''}`;
+        })
+        .join('; ');
+      failedSummary = plural(failedBoards.length, 'board');
+    } else if (legacyFailures.length > 0) {
+      detail = legacyFailures
         .map(f => `${f.equipment || `equipment #${f.equipment_id}`} channel ${f.channel ?? '?'}`)
         .join('; ');
+      failedSummary = plural(legacyFailures.length, 'channel');
+    }
+
+    const counts = `${plural(channelsTurnedOff, 'channel')} switched off, ${plural(timersCancelled, 'timer')} cancelled.${doseNote}`;
+
+    if (detail) {
       addToast({
         type: 'error',
         title: `${label} INCOMPLETE`,
         duration: 0,
-        message: `${plural(channelsTurnedOff, 'channel')} switched off, ${plural(timersCancelled, 'timer')} cancelled.${doseNote} `
-          + `${plural(failures.length, 'channel')} did NOT turn off and may still be energised: ${detail}. Check them physically.${suffix}`
+        message: `${counts} ${failedSummary} did NOT confirm all channels off and may still be energised: ${detail}. Check them physically.${suffix}`
+      });
+    } else if (data.ok === false || data.partial || data.error) {
+      // The sweep aborted or never finished without naming a board.
+      addToast({
+        type: 'error',
+        title: `${label} INCOMPLETE`,
+        duration: 0,
+        message: `${counts} The relay sweep did not complete${data.error ? ` (${data.error})` : ''}. `
+          + `Relays may still be energised - stop them at the panel.${suffix}`
       });
     } else {
       showSuccess(
@@ -300,14 +358,88 @@ export default function Layout({ children }) {
     }
   }, [showSuccess, addToast]);
 
+  // Settle a 202-pending stop. `data` is the final stop_all_progress summary,
+  // or null when the safety timeout fired first - in which case the stop is
+  // reported UNCONFIRMED rather than assumed complete.
+  const finishPendingStop = useCallback((data) => {
+    const pending = pendingStopRef.current;
+    if (!pending) return;
+    pendingStopRef.current = null;
+    stopInFlightRef.current = false;
+    earlyStopSummaryRef.current = null;
+    clearTimeout(pending.timeoutId);
+    setStopProgress(null);
+    setStopBusy(null);
+
+    if (data) {
+      if (data.armedState) applyArmedState(data.armedState);
+      reportStopResult(data, pending.label, pending.suffix);
+    } else {
+      const { boardsDone, boardsTotal } = pending.progress;
+      addToast({
+        type: 'error',
+        title: `${pending.label} UNCONFIRMED`,
+        duration: 0,
+        message: `The controller accepted the stop but never reported the result `
+          + `(${boardsDone}/${boardsTotal} boards confirmed before it went quiet). `
+          + `Relays may still be energised - check them at the panel.${pending.suffix}`
+      });
+    }
+
+    fetchPendingTimers();
+    if (pending.kind === 'emergency') fetchArmedState();
+  }, [applyArmedState, reportStopResult, addToast, fetchPendingTimers, fetchArmedState]);
+
+  // Park a stop that came back 202 until its summary arrives (or the safety
+  // timeout gives up). Returns true if the summary had already overtaken the
+  // response and the stop is therefore settled immediately.
+  const beginPendingStop = useCallback((kind, label, suffix, data) => {
+    const timeoutId = setTimeout(() => finishPendingStop(null), STOP_CONFIRM_TIMEOUT_MS);
+    pendingStopRef.current = { kind, label, suffix, timeoutId, progress: stopProgressOf(data) };
+    setStopProgress(stopProgressOf(data));
+
+    const early = earlyStopSummaryRef.current;
+    if (early) {
+      finishPendingStop(early);
+      return true;
+    }
+    return false;
+  }, [finishPendingStop]);
+
+  // stop_all_progress listener. Ignores events for stops this client did not
+  // start (another operator's stop is reported to them, not here).
+  const handleStopProgress = useCallback((data) => {
+    if (!data || typeof data !== 'object') return;
+    const pending = pendingStopRef.current;
+
+    if (!pending) {
+      // Final summary arrived before our own 202 did - keep it for beginPendingStop.
+      if (stopInFlightRef.current && !data.inProgress) earlyStopSummaryRef.current = data;
+      return;
+    }
+
+    if (data.inProgress) {
+      pending.progress = stopProgressOf(data);
+      setStopProgress(pending.progress);
+      return;
+    }
+    finishPendingStop(data);
+  }, [finishPendingStop]);
+
   // Stop all: one-shot. Stops what is running now and cancels pending timers,
   // but leaves automations armed - they may re-fire on their own schedule.
   // Deliberately NO confirmation dialog: a delayed stop is worse than an
   // accidental one, and an accidental stop is recoverable by re-running the
   // automation. Double-firing is prevented by the button's disabled state.
   const handleStopAll = useCallback(async () => {
+    const suffix = ' Automations stay armed and may re-fire.';
     setStopMenuOpen(false);
     setStopBusy('stop-all');
+    stopInFlightRef.current = true;
+    earlyStopSummaryRef.current = null;
+    // Set when the backend answered 202: the sweep is still running and the
+    // button stays in "Stopping…" until stop_all_progress settles it.
+    let pending = false;
     try {
       const response = await fetch(`${API_BASE}/automations/stop-all`, {
         method: 'POST',
@@ -323,25 +455,40 @@ export default function Layout({ children }) {
         return;
       }
 
-      reportStopResult(data, 'Stop all', ' Automations stay armed and may re-fire.');
+      if (response.status === 202 || data.inProgress) {
+        pending = !beginPendingStop('stop-all', 'Stop all', suffix, data);
+        return;
+      }
+
+      reportStopResult(data, 'Stop all', suffix);
     } catch (err) {
       showError(
         `Could not reach the controller (${err.message || 'network error'}). Nothing is confirmed stopped - use the physical panel.`,
         'Stop all FAILED'
       );
     } finally {
-      setStopBusy(null);
-      fetchPendingTimers();
+      if (!pending) {
+        stopInFlightRef.current = false;
+        earlyStopSummaryRef.current = null;
+        setStopBusy(null);
+        fetchPendingTimers();
+      }
     }
-  }, [token, showError, reportStopResult, fetchPendingTimers]);
+  }, [token, showError, reportStopResult, beginPendingStop, fetchPendingTimers]);
 
   // Emergency stop: everything "stop all" does, plus disarming automations so
   // nothing re-fires until re-armed. `duration` is one entry of
   // EMERGENCY_RE_ARM_DURATIONS; minutes 0 means "until manually re-armed".
   const handleEmergencyStop = useCallback(async (duration) => {
     const autoReArmMinutes = Number(duration?.minutes) || 0;
+    const suffix = autoReArmMinutes > 0
+      ? ` Automations are disarmed for ${duration?.label?.toLowerCase() || `${autoReArmMinutes} minutes`}.`
+      : ' Automations stay disarmed until you re-arm them.';
     setStopMenuOpen(false);
     setStopBusy('emergency');
+    stopInFlightRef.current = true;
+    earlyStopSummaryRef.current = null;
+    let pending = false;
     try {
       const response = await fetch(`${API_BASE}/automations/emergency-stop`, {
         method: 'POST',
@@ -354,6 +501,9 @@ export default function Layout({ children }) {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        // A 500 here can still carry armedState: the disarm stands even when
+        // the sweep failed, and the banner must say so.
+        if (data.armedState) applyArmedState(data.armedState);
         showError(stopErrorMessage(response.status, data), 'Emergency stop FAILED');
         return;
       }
@@ -362,24 +512,27 @@ export default function Layout({ children }) {
       // next poll - the operator must see the disarm land immediately.
       if (data.armedState) applyArmedState(data.armedState);
 
-      reportStopResult(
-        data,
-        'Emergency stop',
-        autoReArmMinutes > 0
-          ? ` Automations are disarmed for ${duration?.label?.toLowerCase() || `${autoReArmMinutes} minutes`}.`
-          : ' Automations stay disarmed until you re-arm them.'
-      );
+      if (response.status === 202 || data.inProgress) {
+        pending = !beginPendingStop('emergency', 'Emergency stop', suffix, data);
+        return;
+      }
+
+      reportStopResult(data, 'Emergency stop', suffix);
     } catch (err) {
       showError(
         `Could not reach the controller (${err.message || 'network error'}). Nothing is confirmed stopped and automations may still be armed - use the physical panel.`,
         'Emergency stop FAILED'
       );
     } finally {
-      setStopBusy(null);
-      fetchPendingTimers();
-      fetchArmedState();
+      if (!pending) {
+        stopInFlightRef.current = false;
+        earlyStopSummaryRef.current = null;
+        setStopBusy(null);
+        fetchPendingTimers();
+        fetchArmedState();
+      }
     }
-  }, [token, showError, reportStopResult, applyArmedState, fetchPendingTimers, fetchArmedState]);
+  }, [token, showError, reportStopResult, applyArmedState, beginPendingStop, fetchPendingTimers, fetchArmedState]);
 
   const handleReArm = useCallback(async () => {
     setReArmBusy(true);
@@ -415,6 +568,23 @@ export default function Layout({ children }) {
       fetchArmedState();
     }
   }, [token, showSuccess, showError, applyArmedState, fetchArmedState]);
+
+  // Final (or interim) summaries for a stop that came back 202. Subscribed for
+  // the component's whole life so a summary can never slip past between the
+  // 202 response and a later subscription.
+  useEffect(() => {
+    const unsubscribe = subscribe('stop_all_progress', handleStopProgress);
+    return () => unsubscribe();
+  }, [subscribe, handleStopProgress]);
+
+  // Unmount: drop the safety timeout of a still-pending stop so it cannot fire
+  // setState on a dead component. The stop itself continues on the backend.
+  useEffect(() => () => {
+    if (pendingStopRef.current) {
+      clearTimeout(pendingStopRef.current.timeoutId);
+      pendingStopRef.current = null;
+    }
+  }, []);
 
   // Close the pause-duration popover on outside click or Escape.
   useEffect(() => {
@@ -623,22 +793,29 @@ export default function Layout({ children }) {
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top header */}
-        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4 md:px-6">
-          <div className="flex items-center justify-between">
+        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 md:px-6 md:py-4">
+          {/* The row wraps: when the breadcrumb cannot keep at least 10rem
+              beside the control group (phones, tablets), the controls drop to
+              a second line instead of overflowing the clipped body and hiding
+              E-STOP. */}
+          <div className="flex flex-wrap items-center justify-between gap-y-2">
             {/* Spacer for mobile menu button */}
-            <div className="w-10 md:hidden" />
+            <div className="w-10 shrink-0 md:hidden" />
 
             {/* Breadcrumb navigation */}
-            <div className="flex-1 ml-4 md:ml-0">
+            <div className="grow shrink basis-40 min-w-0 ml-4 md:ml-0">
               <Breadcrumb />
             </div>
 
-            {/* User info and status */}
-            <div className="flex items-center space-x-4">
-              {/* Dark mode toggle */}
+            {/* User info and status. Safety buttons are always shown; the
+                lower-priority items hide below lg: so the two stops fit a
+                390 px phone, and a tablet beside the 256 px sidebar, on one
+                line with room to tap. */}
+            <div className="flex flex-wrap items-center justify-end gap-2 md:gap-4 min-w-0 ml-auto">
+              {/* Dark mode toggle (desktop only - theme is also in Settings) */}
               <button
                 onClick={toggleTheme}
-                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="hidden lg:block p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
                 aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
@@ -714,7 +891,7 @@ export default function Layout({ children }) {
                       className="absolute right-0 mt-2 w-64 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-2"
                     >
                       <p className="px-3 pb-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
-                        Stops all Modbus polling. Automations and relay safety keep running on last-known values.
+                        Pauses sensor polling. Relay boards keep their 15 s heartbeat poll so the firmware fail-safe cannot trip.
                       </p>
                       <p className="px-3 pt-2 pb-1 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
                         Pause for
@@ -737,7 +914,7 @@ export default function Layout({ children }) {
 
               {/* Armed relay timers + emergency stop */}
               {(canEmergencyStop || pendingTimers.length > 0) && (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {/* Pending relay timers - hidden entirely when nothing is armed */}
                   {pendingTimers.length > 0 && (
                     <div className="relative" ref={timersMenuRef}>
@@ -799,7 +976,7 @@ export default function Layout({ children }) {
                     <button
                       onClick={handleStopAll}
                       disabled={Boolean(stopBusy)}
-                      className="flex items-center px-3 py-2 text-sm font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/60 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="flex items-center min-h-[44px] px-3 py-2 text-sm font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/60 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                       title="Stop all - switches every relay OFF and cancels all pending timers. Automations stay armed and may re-fire."
                       aria-label="Stop all: switch relays off and cancel pending timers, leaving automations armed"
                     >
@@ -808,7 +985,9 @@ export default function Layout({ children }) {
                         <rect x="6" y="6" width="12" height="12" rx="2" />
                       </svg>
                       <span className="ml-2 whitespace-nowrap">
-                        {stopBusy === 'stop-all' ? 'Stopping…' : <>Stop<span className="hidden sm:inline"> All</span></>}
+                        {stopBusy === 'stop-all'
+                          ? (stopProgress ? `Stopping… (${stopProgress.boardsDone}/${stopProgress.boardsTotal})` : 'Stopping…')
+                          : <>Stop<span className="hidden sm:inline"> All</span></>}
                       </span>
                     </button>
                   )}
@@ -820,7 +999,7 @@ export default function Layout({ children }) {
                       <button
                         onClick={() => setStopMenuOpen(open => !open)}
                         disabled={Boolean(stopBusy)}
-                        className={`flex items-center px-3 py-2 text-sm font-bold uppercase tracking-wide text-white bg-red-600 dark:bg-red-700 border border-red-700 dark:border-red-600 rounded-lg shadow-sm hover:bg-red-700 dark:hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed${
+                        className={`flex items-center min-h-[44px] px-3 py-2 text-sm font-bold uppercase tracking-wide text-white bg-red-600 dark:bg-red-700 border border-red-700 dark:border-red-600 rounded-lg shadow-sm hover:bg-red-700 dark:hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed${
                           armedState.disarmed ? ' ring-2 ring-red-400 dark:ring-red-500 ring-offset-1 dark:ring-offset-gray-800' : ''
                         }`}
                         title={armedState.disarmed
@@ -836,7 +1015,7 @@ export default function Layout({ children }) {
                         </svg>
                         <span className="ml-2 whitespace-nowrap">
                           {stopBusy === 'emergency'
-                            ? 'Stopping…'
+                            ? (stopProgress ? `Stopping… (${stopProgress.boardsDone}/${stopProgress.boardsTotal})` : 'Stopping…')
                             : <><span className="hidden sm:inline">Emergency </span><span className="sm:hidden">E-</span>Stop</>}
                         </span>
                         {armedState.disarmed && (
@@ -880,14 +1059,14 @@ export default function Layout({ children }) {
               )}
 
               {/* Cloud status indicator */}
-              <div className="flex items-center text-sm" title={cloudDisplay.title}>
-                <span className={`w-2 h-2 rounded-full ${cloudDisplay.color} mr-2`}></span>
-                <span className="hidden sm:inline text-gray-500 dark:text-gray-400">{cloudDisplay.text}</span>
+              <div className="flex items-center text-sm shrink-0" title={cloudDisplay.title} aria-label={cloudDisplay.title}>
+                <span className={`w-2 h-2 rounded-full ${cloudDisplay.color} lg:mr-2`}></span>
+                <span className="hidden lg:inline text-gray-500 dark:text-gray-400">{cloudDisplay.text}</span>
               </div>
 
-              {/* User badge */}
-              <div className="hidden md:flex items-center">
-                <span className="text-sm text-gray-500 dark:text-gray-400 mr-2">{user?.name}</span>
+              {/* User badge (role pill from lg:, name from xl:) */}
+              <div className="hidden lg:flex items-center">
+                <span className="hidden xl:inline text-sm text-gray-500 dark:text-gray-400 mr-2">{user?.name}</span>
                 <span className="px-2 py-1 text-xs font-medium rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 capitalize">
                   {user?.role}
                 </span>
@@ -954,7 +1133,7 @@ export default function Layout({ children }) {
               </svg>
               <span>
                 <span className="font-semibold">Sensor polling is paused.</span>{' '}
-                No new readings are being recorded. Automations and relay safety continue on last-known values.
+                Sensor readings are not being recorded. Relay boards keep their 15 s heartbeat poll so the firmware fail-safe cannot trip.
               </span>
               {polling.pausedBy && (
                 <span className="text-amber-700 dark:text-amber-300/80">— paused by {polling.pausedBy}</span>

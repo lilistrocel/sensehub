@@ -4,19 +4,41 @@ import { useToast } from '../context/ToastContext';
 
 const API_BASE = '/api';
 
-// Default: soil meter EC against EC nutrient
-const DEFAULT_EQUIPMENT_ID = 7;
-const DEFAULT_METRIC = 'Conductivity (EC)';
+// Preferred default: an EC sensor calibrated against the EC lab nutrient.
+// The equipment itself is derived from the fetched list (first device whose
+// register mappings include this metric, else the first non-relay device);
+// the user's last choice is remembered in localStorage.
+const PREFERRED_METRIC = 'Conductivity (EC)';
 const DEFAULT_NUTRIENT = 'EC';
+const STORAGE_KEY = 'calibration:lastSelection';
+
+const parseMappings = (eq) => {
+  if (!eq || !eq.register_mappings) return [];
+  try {
+    const m = typeof eq.register_mappings === 'string' ? JSON.parse(eq.register_mappings) : eq.register_mappings;
+    return Array.isArray(m) ? m : [];
+  } catch {
+    return [];
+  }
+};
+
+const readSavedSelection = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
 
 export default function Calibration() {
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
 
   const [equipmentList, setEquipmentList] = useState([]);
-  const [equipmentId, setEquipmentId] = useState(DEFAULT_EQUIPMENT_ID);
-  const [metricName, setMetricName] = useState(DEFAULT_METRIC);
-  const [labNutrient, setLabNutrient] = useState(DEFAULT_NUTRIENT);
+  const [equipmentId, setEquipmentId] = useState(() => readSavedSelection()?.equipmentId ?? '');
+  const [metricName, setMetricName] = useState(() => readSavedSelection()?.metricName ?? '');
+  const [labNutrient, setLabNutrient] = useState(() => readSavedSelection()?.labNutrient ?? DEFAULT_NUTRIENT);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,29 +73,59 @@ export default function Calibration() {
 
   useEffect(() => {
     fetch(`${API_BASE}/equipment`, { headers })
-      .then(r => r.json())
-      .then(setEquipmentList)
-      .catch(() => {});
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(list => {
+        const arr = Array.isArray(list) ? list : [];
+        setEquipmentList(arr);
+        if (arr.length === 0) setLoading(false);
+      })
+      .catch(err => { setLoading(false); showError(`Could not load equipment list: ${err.message}`); });
     fetch(`${API_BASE}/zones`, { headers })
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then(setZones)
-      .catch(() => {});
+      .catch(err => showError(`Could not load zones: ${err.message}`));
   }, []);
+
+  // Derive the default equipment once the list arrives (only when nothing valid
+  // is selected): prefer the first device exposing the EC metric, else the
+  // first non-relay device.
+  useEffect(() => {
+    if (equipmentList.length === 0) return;
+    const candidates = equipmentList.filter(e => e.type !== 'relay');
+    const stillValid = equipmentId !== '' && candidates.some(e => e.id === parseInt(equipmentId));
+    if (stillValid) return;
+    const withEc = candidates.find(e => parseMappings(e).some(m => m.name === PREFERRED_METRIC));
+    const chosen = withEc || candidates[0] || equipmentList[0];
+    if (chosen) {
+      setEquipmentId(chosen.id);
+      if (withEc) setMetricName(PREFERRED_METRIC);
+    } else {
+      setLoading(false);
+    }
+  }, [equipmentList]);
+
+  // Remember the last choice (storage may be unavailable in private mode)
+  useEffect(() => {
+    if (equipmentId === '' || !metricName) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ equipmentId, metricName, labNutrient }));
+    } catch { /* storage unavailable */ }
+  }, [equipmentId, metricName, labNutrient]);
 
   // Set default metric when equipment changes
   useEffect(() => {
     const eq = equipmentList.find(e => e.id === parseInt(equipmentId));
-    if (eq && eq.register_mappings) {
-      try {
-        const mappings = typeof eq.register_mappings === 'string'
-          ? JSON.parse(eq.register_mappings)
-          : eq.register_mappings;
-        // Try to keep current metric if it exists, otherwise pick first sensor
-        if (!mappings.some(m => m.name === metricName)) {
-          const firstSensor = mappings.find(m => m.type !== 'coil');
-          if (firstSensor) setMetricName(firstSensor.name);
-        }
-      } catch {}
+    if (!eq) return;
+    const mappings = parseMappings(eq);
+    if (mappings.length === 0 && eq.register_mappings) {
+      showError(`Could not read register mappings for ${eq.name || 'the selected equipment'}`);
+      return;
+    }
+    // Try to keep current metric if it exists, otherwise prefer EC, then first sensor
+    if (!mappings.some(m => m.name === metricName)) {
+      const preferred = mappings.find(m => m.name === PREFERRED_METRIC);
+      const firstSensor = preferred || mappings.find(m => m.type !== 'coil');
+      if (firstSensor) setMetricName(firstSensor.name);
     }
   }, [equipmentId, equipmentList]);
 

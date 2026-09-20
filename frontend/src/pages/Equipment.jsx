@@ -6,7 +6,10 @@ import { useBreadcrumb } from '../components/Breadcrumb';
 import { getUserFriendlyError } from '../utils/errorHandler';
 import { getChannelDisplayName } from '../utils/channelUtils';
 import { useSettings } from '../context/SettingsContext';
+import { useToast } from '../context/ToastContext';
 import ErrorMessage from '../components/ErrorMessage';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { usePendingRelayCommands } from '../hooks/usePendingRelayCommands';
 
 const API_BASE = '/api';
 
@@ -1731,7 +1734,7 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
                           {!errorLog.resolved && canControl && (
                             <button
                               onClick={() => handleResolveError(errorLog.id)}
-                              className="ml-2 px-2 py-1 text-xs text-green-700 bg-green-100 rounded hover:bg-green-200 transition-colors"
+                              className="ml-2 px-2 py-2 text-xs text-green-700 bg-green-100 rounded hover:bg-green-200 transition-colors"
                               title="Mark as resolved"
                             >
                               Resolve
@@ -1771,6 +1774,12 @@ function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, use
 // Supports write-only mode for devices that can't send Modbus responses (e.g. RS485 DE/RE pin issue)
 function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }) {
   const { formatDateTime } = useSettings();
+  const { subscribe } = useWebSocket();
+  // Commands accepted by the API but not yet confirmed by the device (cleared by
+  // a relay_state_changed WebSocket event for the channel, or after 20 s).
+  const { markPending, getPending } = usePendingRelayCommands(subscribe);
+  // Pending "All On"/"All Off" awaiting user confirmation: true | false | null
+  const [confirmAll, setConfirmAll] = useState(null);
   const [loading, setLoading] = useState(false);
   const [coilStates, setCoilStates] = useState([]);
   const [error, setError] = useState(null);
@@ -1955,13 +1964,14 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
         throw new Error(data.error || 'Failed to write coil');
       }
 
-      // Update local state
+      // Update local state with the commanded value and flag it as unconfirmed
+      markPending(equipment.id, channel.address, { writeOnly: writeOnlyMode });
       setCoilStates(prev => prev.map(c =>
         c.address === channel.address ? { ...c, state: newState } : c
       ));
 
-      const confirmText = writeOnlyMode ? ' (command sent)' : '';
-      setMessage({ type: 'success', text: `${getChannelDisplayName(channel)} turned ${newState ? 'ON' : 'OFF'}${confirmText}` });
+      const confirmText = writeOnlyMode ? ' (command sent, no readback)' : ' (command sent, awaiting confirmation)';
+      setMessage({ type: 'success', text: `${getChannelDisplayName(channel)} ${newState ? 'ON' : 'OFF'}${confirmText}` });
       setLastCommunication(new Date());
       setConnectionStatus({ connected: true, lastActivity: Date.now() });
 
@@ -2023,10 +2033,11 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
         throw new Error(data.error || 'Failed to write coils');
       }
 
-      // Update all local states to ON
+      // Update all local states to ON (commanded) and flag them as unconfirmed
+      markPending(equipment.id, coilStates.map(c => c.address), { writeOnly: writeOnlyMode });
       setCoilStates(prev => prev.map(c => ({ ...c, state: true })));
 
-      setMessage({ type: 'success', text: 'All relays turned ON' });
+      setMessage({ type: 'success', text: writeOnlyMode ? 'All relays ON (command sent)' : 'All relays ON (command sent, awaiting confirmation)' });
       setLastCommunication(new Date());
       setConnectionStatus({ connected: true, lastActivity: Date.now() });
 
@@ -2085,10 +2096,11 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
         throw new Error(data.error || 'Failed to write coils');
       }
 
-      // Update all local states to OFF
+      // Update all local states to OFF (commanded) and flag them as unconfirmed
+      markPending(equipment.id, coilStates.map(c => c.address), { writeOnly: writeOnlyMode });
       setCoilStates(prev => prev.map(c => ({ ...c, state: false })));
 
-      setMessage({ type: 'success', text: 'All relays turned OFF' });
+      setMessage({ type: 'success', text: writeOnlyMode ? 'All relays OFF (command sent)' : 'All relays OFF (command sent, awaiting confirmation)' });
       setLastCommunication(new Date());
       setConnectionStatus({ connected: true, lastActivity: Date.now() });
 
@@ -2238,7 +2250,7 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
               {canControl && (
                 <div className="mb-4 flex gap-3">
                   <button
-                    onClick={handleAllOn}
+                    onClick={() => setConfirmAll(true)}
                     disabled={actionLoading.allOn || actionLoading.allOff}
                     className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                   >
@@ -2257,7 +2269,7 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                     )}
                   </button>
                   <button
-                    onClick={handleAllOff}
+                    onClick={() => setConfirmAll(false)}
                     disabled={actionLoading.allOn || actionLoading.allOff}
                     className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-gray-600 rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                   >
@@ -2280,24 +2292,38 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
 
               {/* Relay Channels Grid */}
               <div className="space-y-2 max-h-80 overflow-y-auto">
-                {coilStates.map((channel) => (
+                {coilStates.map((channel) => {
+                  const pendingEntry = getPending(equipment?.id, channel.address);
+                  const isPending = !!pendingEntry && !actionLoading[channel.address];
+                  const pendingWriteOnly = isPending && pendingEntry.writeOnly;
+                  const pendingTitle = pendingWriteOnly
+                    ? 'Command sent (device has no readback)'
+                    : 'Command sent, awaiting confirmation';
+                  return (
                   <div
                     key={channel.address}
+                    title={isPending ? pendingTitle : undefined}
                     className={`flex items-center justify-between p-3 rounded-lg border ${
                       channel.state
                         ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                         : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
-                    }`}
+                    } ${isPending && !pendingWriteOnly ? 'ring-2 ring-amber-400 dark:ring-amber-500 animate-pulse' : ''}`}
                   >
                     <div className="flex items-center gap-3">
                       {/* State indicator */}
                       <div className={`w-3 h-3 rounded-full ${
+                        isPending && !pendingWriteOnly ? 'bg-amber-400' :
                         channel.state ? 'bg-green-500 shadow-sm shadow-green-500' : 'bg-gray-400'
                       }`}></div>
                       <div>
                         <div className="font-medium text-gray-900 dark:text-white">{getChannelDisplayName(channel)}</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           {channel.label ? `${channel.name} \u00b7 ` : ''}Address: {channel.address}
+                          {isPending && (
+                            <span className={`ml-2 ${pendingWriteOnly ? 'text-gray-500 dark:text-gray-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                              {pendingWriteOnly ? 'sent' : 'awaiting confirmation'}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2339,7 +2365,8 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
@@ -2355,6 +2382,29 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
           </div>
         </div>
       </div>
+
+      {/* Confirm bulk relay switching */}
+      <ConfirmDialog
+        open={confirmAll !== null}
+        title={`Turn all relays ${confirmAll ? 'ON' : 'OFF'}?`}
+        body={(
+          <>
+            This will switch every relay on <strong>{equipment?.name || 'this device'}</strong>
+            {' '}{confirmAll ? 'on' : 'off'} ({coilStates.length} channels):
+          </>
+        )}
+        items={coilStates.map(c => getChannelDisplayName(c))}
+        variant={confirmAll ? 'primary' : 'danger'}
+        confirmLabel={`Turn all ${confirmAll ? 'on' : 'off'}`}
+        busy={!!(actionLoading.allOn || actionLoading.allOff)}
+        onCancel={() => setConfirmAll(null)}
+        onConfirm={() => {
+          const state = confirmAll;
+          setConfirmAll(null);
+          if (state === true) handleAllOn();
+          else if (state === false) handleAllOff();
+        }}
+      />
     </div>
   );
 }
@@ -3103,7 +3153,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
+                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                         title="Import from JSON"
                       >
                         Import
@@ -3113,7 +3163,7 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                         type="button"
                         onClick={handleExportMappings}
                         disabled={formData.register_mappings.length === 0}
-                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Export to JSON"
                       >
                         Export
@@ -3772,7 +3822,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
+                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                         title="Import from JSON"
                       >
                         Import
@@ -3782,7 +3832,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                         type="button"
                         onClick={handleExportMappings}
                         disabled={formData.register_mappings.length === 0}
-                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Export to JSON"
                       >
                         Export
@@ -3981,6 +4031,7 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
 export default function Equipment() {
   const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
+  const { showError, showSuccess } = useToast();
   const { formatDateTime } = useSettings();
   const { id: urlEquipmentId } = useParams();
   const navigate = useNavigate();
@@ -4343,7 +4394,7 @@ export default function Equipment() {
       }
     } catch (err) {
       setSlaveScanProgress(null);
-      alert('Scan failed: ' + err.message);
+      showError(`Scan failed: ${err.message}`);
     }
   };
 
@@ -4374,7 +4425,7 @@ export default function Equipment() {
       }
 
       const data = await response.json();
-      alert(`Successfully created ${data.count} equipment entries!`);
+      showSuccess(`Created ${data.count} equipment entries`);
 
       // Close modal and refresh
       setShowSlaveScanner(false);
@@ -4383,7 +4434,7 @@ export default function Equipment() {
       setSelectedSlaves([]);
       await fetchData();
     } catch (err) {
-      alert('Failed to create equipment: ' + err.message);
+      showError(`Failed to create equipment: ${err.message}`);
     }
   };
 
@@ -4427,7 +4478,7 @@ export default function Equipment() {
       }
     } catch (err) {
       console.error('Error adding device:', err);
-      alert(`Failed to add device: ${err.message}`);
+      showError(`Failed to add device: ${err.message}`);
     } finally {
       setAddingDevice(null);
     }
@@ -5025,7 +5076,7 @@ export default function Equipment() {
               <button
                 onClick={goToFirstPage}
                 disabled={currentPage === 1}
-                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
+                className="px-2 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
                 title="First page"
               >
                 «
@@ -5033,7 +5084,7 @@ export default function Equipment() {
               <button
                 onClick={goToPrevPage}
                 disabled={currentPage === 1}
-                className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
+                className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
                 title="Previous page"
               >
                 ‹ Prev
@@ -5060,7 +5111,7 @@ export default function Equipment() {
                     <button
                       key={pageNum}
                       onClick={() => goToPage(pageNum)}
-                      className={`px-3 py-1 text-sm border rounded ${
+                      className={`px-3 py-2 text-sm border rounded ${
                         currentPage === pageNum
                           ? 'bg-primary-600 text-white border-primary-600'
                           : 'border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300'
@@ -5075,7 +5126,7 @@ export default function Equipment() {
               <button
                 onClick={goToNextPage}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
+                className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
                 title="Next page"
               >
                 Next ›
@@ -5083,7 +5134,7 @@ export default function Equipment() {
               <button
                 onClick={goToLastPage}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
+                className="px-2 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300"
                 title="Last page"
               >
                 »

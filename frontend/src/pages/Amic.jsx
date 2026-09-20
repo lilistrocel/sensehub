@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useThrottledError } from '../hooks/useThrottledError';
 
 const API_BASE = '/api';
 
@@ -64,14 +65,20 @@ export default function Amic() {
     try {
       const res = await fetch(`${API_BASE}/amic/channels`, { headers });
       if (res.ok) setChannels(await res.json());
-    } catch {}
+      else showError('Could not load AMIC channel configuration');
+    } catch (err) {
+      showError(`Could not load AMIC channel configuration: ${err.message}`);
+    }
   };
 
   const fetchZones = async () => {
     try {
       const res = await fetch(`${API_BASE}/zones`, { headers });
       if (res.ok) setZones(await res.json());
-    } catch {}
+      else showError('Could not load zones');
+    } catch (err) {
+      showError(`Could not load zones: ${err.message}`);
+    }
   };
 
   useEffect(() => {
@@ -503,8 +510,11 @@ function ScheduledCalibrations({ isAdmin, headers }) {
     try {
       const res = await fetch(`${API_BASE}/amic/schedule`, { headers });
       if (res.ok) setData(await res.json());
-    } catch {}
-  }, [headers]);
+      else showError('Could not load calibration schedule');
+    } catch (err) {
+      showError(`Could not load calibration schedule: ${err.message}`);
+    }
+  }, [headers, showError]);
 
   React.useEffect(() => {
     load();
@@ -727,6 +737,9 @@ function PumpTimings({ status, isAdmin, headers, onUpdate }) {
 }
 
 function CycleHistory({ headers }) {
+  const { showError } = useToast();
+  // 30 s poll: throttle to one toast per minute rather than one per tick
+  const notifyPollError = useThrottledError(showError);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [liveTrace, setLiveTrace] = useState(null);
@@ -739,13 +752,18 @@ function CycleHistory({ headers }) {
         if (res.ok && !cancelled) setHistory(await res.json());
         const lt = await fetch(`${API_BASE}/amic/live-trace`, { headers });
         if (lt.ok && !cancelled) setLiveTrace(await lt.json());
-      } catch {}
+        if ((!res.ok && res.status >= 500) || (!lt.ok && lt.status >= 500)) {
+          notifyPollError('Could not load AMIC cycle history', 'amic-cycle-history');
+        }
+      } catch (err) {
+        if (!cancelled) notifyPollError(`Could not load AMIC cycle history: ${err.message}`, 'amic-cycle-history');
+      }
       finally { if (!cancelled) setLoading(false); }
     };
     load();
     const t = setInterval(load, 30000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [headers]);
+  }, [headers, notifyPollError]);
 
   const fmtDuration = (sec) => {
     if (sec == null) return '—';

@@ -136,31 +136,67 @@ const TasksIcon = () => (
   </svg>
 );
 
-const navItems = [
-  { name: 'Dashboard', path: '/', icon: DashboardIcon },
-  { name: 'Equipment', path: '/equipment', icon: EquipmentIcon },
-  { name: 'Cameras', path: '/cameras', icon: CameraIcon },
-  { name: 'Zones', path: '/zones', icon: ZonesIcon },
-  { name: 'Automations', path: '/automations', icon: AutomationsIcon },
-  { name: 'Fertigation', path: '/fertigation', icon: FertigationIcon },
-  { name: 'Lab Analysis', path: '/lab-analysis', icon: LabIcon },
-  { name: 'AMIC Analyzer', path: '/amic', icon: AmicIcon },
-  { name: 'Agronomist', path: '/agronomist', icon: AgronomistIcon },
-  { name: 'Planner', path: '/planner', icon: PlannerIcon },
-  { name: 'Tasks', path: '/tasks', icon: TasksIcon },
-  { name: 'Templates', path: '/templates', icon: TemplatesIcon },
-  { name: 'Calibration', path: '/calibration', icon: CalibrationIcon },
-  { name: 'Reports', path: '/reports', icon: ReportsIcon },
-  { name: 'Analytics', path: '/analytics', icon: AnalyticsIcon },
-  { name: 'Alerts', path: '/alerts', icon: AlertsIcon },
-  { name: 'Relay Events', path: '/relay-events', icon: RelayEventsIcon },
-  { name: 'Settings', path: '/settings', icon: SettingsIcon },
-  { name: 'Debug', path: '/debug', icon: DebugIcon },
+// Navigation grouped into sections. Items with `visible(user)` are gated;
+// everything else is shown to every authenticated user (role gating unchanged).
+const navSections = [
+  {
+    title: 'Operate',
+    items: [
+      { name: 'Dashboard', path: '/', icon: DashboardIcon },
+      { name: 'Equipment', path: '/equipment', icon: EquipmentIcon },
+      { name: 'Zones', path: '/zones', icon: ZonesIcon },
+      { name: 'Cameras', path: '/cameras', icon: CameraIcon },
+      { name: 'Alerts', path: '/alerts', icon: AlertsIcon },
+    ],
+  },
+  {
+    title: 'Automate',
+    items: [
+      { name: 'Automations', path: '/automations', icon: AutomationsIcon },
+      { name: 'Templates', path: '/templates', icon: TemplatesIcon },
+      { name: 'Planner', path: '/planner', icon: PlannerIcon },
+      { name: 'Tasks', path: '/tasks', icon: TasksIcon },
+      { name: 'Fertigation', path: '/fertigation', icon: FertigationIcon },
+      { name: 'AMIC Analyzer', path: '/amic', icon: AmicIcon },
+    ],
+  },
+  {
+    title: 'Analyse',
+    items: [
+      { name: 'Reports', path: '/reports', icon: ReportsIcon },
+      { name: 'Data Export', path: '/analytics', icon: AnalyticsIcon },
+      { name: 'Lab Analysis', path: '/lab-analysis', icon: LabIcon },
+      { name: 'Calibration', path: '/calibration', icon: CalibrationIcon },
+      { name: 'Agronomist', path: '/agronomist', icon: AgronomistIcon },
+      { name: 'Relay Events', path: '/relay-events', icon: RelayEventsIcon },
+    ],
+  },
+  {
+    title: 'System',
+    items: [
+      { name: 'Settings', path: '/settings', icon: SettingsIcon },
+      // /debug is only mounted in dev builds (see App.jsx) and only for admins,
+      // so the link must follow the exact same rule or it 404s in production.
+      {
+        name: 'Debug',
+        path: '/debug',
+        icon: DebugIcon,
+        visible: (user) => import.meta.env.DEV && user?.role === 'admin',
+      },
+    ],
+  },
 ];
 
 export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  const visibleSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => (typeof item.visible === 'function' ? item.visible(user) : true)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   const handleLogout = async () => {
     await logout();
@@ -192,23 +228,36 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto" aria-label="Sidebar navigation">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.path}
-            onClick={handleNavClick}
-            className={({ isActive }) =>
-              `flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
-                isActive
-                  ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
-              }`
-            }
-          >
-            <item.icon />
-            <span className="ml-3">{item.name}</span>
-          </NavLink>
+      <nav className="flex-1 px-2 py-3 overflow-y-auto" aria-label="Sidebar navigation">
+        {visibleSections.map((section, sectionIdx) => (
+          <div key={section.title} className={sectionIdx > 0 ? 'mt-4' : ''}>
+            <h2
+              className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 select-none"
+              id={`nav-section-${section.title.toLowerCase()}`}
+            >
+              {section.title}
+            </h2>
+            <div className="space-y-1" role="group" aria-labelledby={`nav-section-${section.title.toLowerCase()}`}>
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.path}
+                  end={item.path === '/'}
+                  onClick={handleNavClick}
+                  className={({ isActive }) =>
+                    `flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                      isActive
+                        ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+                    }`
+                  }
+                >
+                  <item.icon />
+                  <span className="ml-3">{item.name}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
