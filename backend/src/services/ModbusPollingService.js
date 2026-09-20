@@ -123,6 +123,14 @@ class ModbusPollingService {
     this.isRunning = false;
     this.refreshInterval = null;
     this.deviceRefreshIntervalMs = 30000; // Check for device changes every 30 seconds
+
+    // Pause state (in-memory only - a backend restart resumes polling)
+    this.isPaused = false;
+    this.pausedAt = null;
+    this.pausedBy = null;
+    this.pauseReason = null;
+    this.autoResumeAt = null;
+    this.autoResumeTimer = null;
   }
 
   /**
@@ -169,6 +177,10 @@ class ModbusPollingService {
       this.refreshInterval = null;
     }
 
+    // Clear any pause state so a stop/start cycle never leaves the service
+    // stuck in a stale "paused" condition
+    this.clearPauseState();
+
     // Stop all device polling
     for (const [equipmentId, state] of this.devices) {
       this.stopDevicePolling(equipmentId);
@@ -176,6 +188,125 @@ class ModbusPollingService {
 
     this.devices.clear();
     console.log('[Polling] Service stopped');
+  }
+
+  /**
+   * Temporarily pause all automatic polling.
+   *
+   * Unlike stop(), this keeps the device inventory intact (and the 30s refresh
+   * sweep running) so resume() can pick straight back up. Pause state lives in
+   * memory only - a backend restart resumes polling by design.
+   *
+   * A safety-net auto-resume timer un-pauses after autoResumeMinutes so a
+   * forgotten pause can't silently kill data collection.
+   *
+   * @param {Object} options
+   * @param {string} options.by - Who requested the pause (email/name)
+   * @param {string} options.reason - Optional free-text reason
+   * @param {number} options.autoResumeMinutes - Minutes until auto-resume (1-480).
+   *                 0/null/non-finite disables auto-resume. Defaults to 30.
+   */
+  pause({ by = null, reason = null, autoResumeMinutes = 30 } = {}) {
+    if (this.isPaused) {
+      console.log('[Polling] Service already paused');
+      return { alreadyPaused: true, ...this.getStatus() };
+    }
+
+    // Resolve the auto-resume window. 0 / null / garbage = no auto-resume.
+    let minutes = Number(autoResumeMinutes);
+    if (!minutes || !Number.isFinite(minutes)) {
+      minutes = null;
+    } else {
+      minutes = Math.min(480, Math.max(1, minutes));
+    }
+
+    this.isPaused = true;
+    this.pausedAt = new Date().toISOString();
+    this.pausedBy = by;
+    this.pauseReason = reason;
+    this.autoResumeAt = minutes ? new Date(Date.now() + minutes * 60000).toISOString() : null;
+
+    // Cancel every in-flight device timer, but keep the map entries so
+    // getStatus() still reports the real device inventory
+    for (const state of this.devices.values()) {
+      if (state.timerId) {
+        clearTimeout(state.timerId);
+        state.timerId = null;
+      }
+    }
+
+    // Arm the safety-net auto-resume
+    if (minutes) {
+      this.autoResumeTimer = setTimeout(() => {
+        this.autoResumeTimer = null;
+        this.resume({ by: 'auto-resume' });
+      }, minutes * 60000);
+    }
+
+    console.log(`[Polling] Paused by ${by || 'unknown'}${reason ? ` (${reason})` : ''}` +
+      `${minutes ? ` - auto-resume in ${minutes} min` : ' - no auto-resume'}`);
+
+    this.broadcastPauseState();
+    return this.getStatus();
+  }
+
+  /**
+   * Resume automatic polling after a pause
+   *
+   * @param {Object} options
+   * @param {string} options.by - Who requested the resume ('auto-resume' for the safety net)
+   */
+  resume({ by = null } = {}) {
+    if (!this.isPaused) {
+      console.log('[Polling] Service not paused');
+      return { alreadyRunning: true, ...this.getStatus() };
+    }
+
+    this.clearPauseState();
+
+    // Reschedule every known device (startDevicePolling clears + reschedules).
+    // If the service isn't running, leave everything stopped.
+    if (this.isRunning) {
+      for (const equipmentId of this.devices.keys()) {
+        this.startDevicePolling(equipmentId);
+      }
+    }
+
+    console.log(`[Polling] Resumed by ${by || 'unknown'} - ${this.devices.size} devices rescheduled`);
+
+    this.broadcastPauseState();
+    return this.getStatus();
+  }
+
+  /**
+   * Reset all pause state and cancel the auto-resume timer
+   */
+  clearPauseState() {
+    if (this.autoResumeTimer) {
+      clearTimeout(this.autoResumeTimer);
+      this.autoResumeTimer = null;
+    }
+    this.isPaused = false;
+    this.pausedAt = null;
+    this.pausedBy = null;
+    this.pauseReason = null;
+    this.autoResumeAt = null;
+  }
+
+  /**
+   * Broadcast the current pause state to connected UI clients
+   */
+  broadcastPauseState() {
+    if (global.broadcast) {
+      global.broadcast('polling_state_changed', {
+        isPaused: this.isPaused,
+        pausedAt: this.pausedAt,
+        pausedBy: this.pausedBy,
+        pauseReason: this.pauseReason,
+        autoResumeAt: this.autoResumeAt,
+        deviceCount: this.devices.size
+      });
+    }
   }
 
   /**
@@ -269,6 +400,10 @@ class ModbusPollingService {
    * Start polling a specific device
    */
   startDevicePolling(equipmentId) {
+    // Never (re)arm a timer while paused - the 30s refreshDevices() sweep
+    // calls this for new/changed devices and would otherwise resurrect polling
+    if (this.isPaused) return;
+
     const state = this.devices.get(equipmentId);
     if (!state) return;
 
@@ -300,12 +435,19 @@ class ModbusPollingService {
    * Schedule the next poll for a device
    */
   scheduleNextPoll(equipmentId) {
-    if (!this.isRunning) return;
+    if (!this.isRunning || this.isPaused) return;
 
     const state = this.devices.get(equipmentId);
     if (!state) return;
 
     const interval = state.getEffectiveInterval();
+
+    // Drop any timer already armed for this device so a poll that was still
+    // in flight across a pause/resume can't leave two chains running
+    if (state.timerId) {
+      clearTimeout(state.timerId);
+      state.timerId = null;
+    }
 
     state.timerId = setTimeout(async () => {
       await this.pollDevice(equipmentId);
@@ -926,6 +1068,11 @@ class ModbusPollingService {
 
     return {
       isRunning: this.isRunning,
+      isPaused: this.isPaused,
+      pausedAt: this.pausedAt,
+      pausedBy: this.pausedBy,
+      pauseReason: this.pauseReason,
+      autoResumeAt: this.autoResumeAt,
       deviceCount: this.devices.size,
       devices
     };
@@ -933,6 +1080,10 @@ class ModbusPollingService {
 
   /**
    * Force poll a specific device (manual trigger)
+   *
+   * Intentionally works while paused: a single-device read is an explicit
+   * operator action, and pausing is often done precisely to free the RS485 bus
+   * for manual probing.
    */
   async forcePoll(equipmentId) {
     const state = this.devices.get(equipmentId);

@@ -315,8 +315,14 @@ router.get('/services', requireRole('admin'), async (req, res) => {
   services.push({
     name: 'Modbus Polling',
     type: 'internal',
-    status: modbusPollingService.isRunning ? 'online' : 'offline',
-    details: { deviceCount: modbusPollingService.devices ? modbusPollingService.devices.size : 0 }
+    status: modbusPollingService.isPaused
+      ? 'paused'
+      : (modbusPollingService.isRunning ? 'online' : 'offline'),
+    details: {
+      deviceCount: modbusPollingService.devices ? modbusPollingService.devices.size : 0,
+      paused: !!modbusPollingService.isPaused,
+      autoResumeAt: modbusPollingService.autoResumeAt || null
+    }
   });
 
   services.push({

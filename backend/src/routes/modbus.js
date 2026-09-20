@@ -489,6 +489,54 @@ router.post('/polling/stop', requireRole('admin'), async (req, res) => {
 });
 
 /**
+ * POST /api/modbus/polling/pause
+ * Temporarily pause all automatic polling (in-memory only - a restart resumes).
+ * Body: { autoResumeMinutes?: number (default 30, 0/null = no auto-resume), reason?: string }
+ */
+router.post('/polling/pause', requireRole('admin'), (req, res) => {
+  try {
+    const { autoResumeMinutes, reason } = req.body || {};
+
+    const result = modbusPollingService.pause({
+      by: req.user?.email || req.user?.name || 'admin',
+      reason: reason || null,
+      // Honour an explicit 0/null as "no auto-resume", default to 30 when absent
+      autoResumeMinutes: autoResumeMinutes === undefined ? 30 : autoResumeMinutes
+    });
+
+    res.json({
+      success: true,
+      message: result.alreadyPaused ? 'Polling already paused' : 'Polling paused',
+      ...result
+    });
+  } catch (error) {
+    console.error('[Modbus API] Polling pause error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/modbus/polling/resume
+ * Resume automatic polling after a pause
+ */
+router.post('/polling/resume', requireRole('admin'), (req, res) => {
+  try {
+    const result = modbusPollingService.resume({
+      by: req.user?.email || req.user?.name || 'admin'
+    });
+
+    res.json({
+      success: true,
+      message: result.alreadyRunning ? 'Polling was not paused' : 'Polling resumed',
+      ...result
+    });
+  } catch (error) {
+    console.error('[Modbus API] Polling resume error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /api/modbus/polling/refresh
  * Refresh device list (pick up new devices or config changes)
  */
