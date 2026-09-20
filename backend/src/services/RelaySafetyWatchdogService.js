@@ -24,7 +24,7 @@
  */
 
 const { db } = require('../utils/database');
-const { broadcastNewAlert } = require('../utils/alertBroadcast');
+const { createAlert } = require('../utils/alertBroadcast');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { logRelayEvent } = require('./RelayEventLogger');
 
@@ -283,11 +283,16 @@ class RelaySafetyWatchdogService {
       : 'global default';
     const detail = `Channel was ON for ${elapsedSec}s (threshold ${thresholdSec}s, ${basisLabel}). Originally turned ON at ${on_time}` +
       (auto_name ? ` by automation #${on_auto_id} "${auto_name}"` : '') + '. Watchdog force-OFF complete.';
-    try {
-      broadcastNewAlert(db.prepare(
-        "INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))"
-      ).run('warning', `[Safety] Force-OFF ${equipment_name} ch ${channel}: ${detail}`));
-    } catch {}
+    // Fingerprint on equipment+channel: the detail embeds elapsed seconds / timestamps,
+    // so repeated force-OFFs of the same channel collapse into one open alert.
+    createAlert({
+      severity: 'warning',
+      source: 'relay_safety',
+      equipment_id,
+      automation_id: on_auto_id ?? null,
+      fingerprint: `relay_force_off:${equipment_id}:${channel}`,
+      message: `[Safety] Force-OFF ${equipment_name} ch ${channel}: ${detail}`,
+    });
 
     // Broadcast for live UI
     try {

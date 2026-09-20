@@ -798,8 +798,11 @@ const initSchema = () => {
     );
 
     -- Create indexes for performance
-    CREATE INDEX IF NOT EXISTS idx_readings_equipment ON readings(equipment_id);
-    CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp);
+    -- idx_readings_equipment (prefix of idx_readings_equip_time) and idx_readings_timestamp
+    -- (identical to idx_readings_ts, created in the analytics block below) were redundant
+    -- and are dropped on startup. Do NOT re-add them.
+    DROP INDEX IF EXISTS idx_readings_equipment;
+    DROP INDEX IF EXISTS idx_readings_timestamp;
     CREATE INDEX IF NOT EXISTS idx_readings_equip_time ON readings(equipment_id, timestamp);
     CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged);
     CREATE INDEX IF NOT EXISTS idx_automation_logs_automation ON automation_logs(automation_id);
@@ -871,6 +874,29 @@ const initSchema = () => {
     if (!cols.includes('live_mv_samples'))  db.exec("ALTER TABLE amic_cycle_history ADD COLUMN live_mv_samples INTEGER DEFAULT 0");
   } catch (err) {
     console.error('amic_cycle_history live mV columns migration failed:', err.message);
+  }
+
+  // Alert de-duplication columns (see utils/alertBroadcast.js createAlert()).
+  // fingerprint identifies a recurring condition; open (unacknowledged) rows with the
+  // same fingerprint are collapsed into one row with occurrence_count / last_seen_at.
+  try {
+    const alertCols = db.pragma('table_info(alerts)').map(c => c.name);
+    if (!alertCols.includes('fingerprint'))      db.exec('ALTER TABLE alerts ADD COLUMN fingerprint TEXT');
+    if (!alertCols.includes('occurrence_count')) db.exec('ALTER TABLE alerts ADD COLUMN occurrence_count INTEGER DEFAULT 1');
+    if (!alertCols.includes('last_seen_at'))     db.exec('ALTER TABLE alerts ADD COLUMN last_seen_at TEXT');
+    if (!alertCols.includes('source'))           db.exec('ALTER TABLE alerts ADD COLUMN source TEXT');
+    if (!alertCols.includes('automation_id'))    db.exec('ALTER TABLE alerts ADD COLUMN automation_id INTEGER');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_alerts_open_fp ON alerts(fingerprint) WHERE acknowledged = 0');
+  } catch (err) {
+    console.error('alerts dedupe columns migration failed:', err.message);
+  }
+
+  // Agronomist provider-error classification (billing / auth / rate_limit / other).
+  try {
+    const reportCols = db.pragma('table_info(agronomist_reports)').map(c => c.name);
+    if (!reportCols.includes('error_class')) db.exec('ALTER TABLE agronomist_reports ADD COLUMN error_class TEXT');
+  } catch (err) {
+    console.error('agronomist_reports error_class migration failed:', err.message);
   }
 
   // Add calibration columns to existing equipment table if they don't exist

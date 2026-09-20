@@ -1,52 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
+
+const PAGE_SIZE = 100;
 
 export default function Alerts() {
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
   const { formatDateTime, formatRelativeTime } = useSettings();
   const [alerts, setAlerts] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [unacknowledgedCount, setUnacknowledgedCount] = useState(0);
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [acknowledgingAll, setAcknowledgingAll] = useState(false);
   const [error, setError] = useState(null);
   const [severityFilter, setSeverityFilter] = useState('all');
-  const [acknowledgedFilter, setAcknowledgedFilter] = useState('all');
+  const [acknowledgedFilter, setAcknowledgedFilter] = useState('unacknowledged');
   const [equipmentFilter, setEquipmentFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchAlerts = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/alerts', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+  const buildQuery = useCallback((offset) => {
+    const params = new URLSearchParams();
+    params.set('limit', String(PAGE_SIZE));
+    params.set('offset', String(offset));
+    if (acknowledgedFilter === 'unacknowledged') params.set('acknowledged', 'false');
+    if (acknowledgedFilter === 'acknowledged') params.set('acknowledged', 'true');
+    if (severityFilter !== 'all') params.set('severity', severityFilter);
+    if (equipmentFilter !== 'all' && equipmentFilter !== 'none') params.set('equipment_id', equipmentFilter);
+    return params.toString();
+  }, [acknowledgedFilter, severityFilter, equipmentFilter]);
 
+  const fetchAlerts = useCallback(async ({ append = false } = {}) => {
+    const offset = append ? alerts.length : 0;
+    try {
+      if (append) setLoadingMore(true); else setLoading(true);
+      const response = await fetch(`/api/alerts?${buildQuery(offset)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch alerts');
       }
-
       const data = await response.json();
-      setAlerts(data);
+      // Backwards compatibility: tolerate a bare array from an older backend.
+      const items = Array.isArray(data) ? data : (data.items || []);
+      setAlerts((prev) => (append ? [...prev, ...items] : items));
+      setTotal(Array.isArray(data) ? items.length : (data.total ?? items.length));
+      setUnacknowledgedCount(Array.isArray(data) ? items.filter((a) => !a.acknowledged).length : (data.unacknowledged ?? 0));
       setError(null);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, buildQuery, alerts.length]);
 
   const fetchEquipment = async () => {
     try {
       const response = await fetch('/api/equipment', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       if (response.ok) {
         const data = await response.json();
         setEquipment(data);
@@ -57,9 +74,14 @@ export default function Alerts() {
   };
 
   useEffect(() => {
-    fetchAlerts();
     fetchEquipment();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  useEffect(() => {
+    fetchAlerts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, severityFilter, acknowledgedFilter, equipmentFilter]);
 
   const handleAcknowledge = async (alertId) => {
     try {
@@ -70,16 +92,50 @@ export default function Alerts() {
           'Content-Type': 'application/json',
         },
       });
-
       if (!response.ok) {
         throw new Error('Failed to acknowledge alert');
       }
-
-      // Refresh alerts list
       fetchAlerts();
       showSuccess('Alert acknowledged');
     } catch (err) {
       showError(err.message, 'Failed to acknowledge alert');
+    }
+  };
+
+  const handleAcknowledgeAll = async () => {
+    const scope = [];
+    if (severityFilter !== 'all') scope.push(`severity "${severityFilter}"`);
+    if (equipmentFilter !== 'all' && equipmentFilter !== 'none') {
+      const eq = equipment.find((e) => String(e.id) === equipmentFilter);
+      scope.push(`equipment "${eq?.name || equipmentFilter}"`);
+    }
+    const scopeText = scope.length ? ` matching ${scope.join(' and ')}` : '';
+    if (!window.confirm(`Acknowledge ALL ${unacknowledgedCount.toLocaleString()} open alerts${scopeText}? This cannot be undone.`)) {
+      return;
+    }
+    const body = {};
+    if (severityFilter !== 'all') body.severity = severityFilter;
+    if (equipmentFilter !== 'all' && equipmentFilter !== 'none') body.equipment_id = Number(equipmentFilter);
+    try {
+      setAcknowledgingAll(true);
+      const response = await fetch('/api/alerts/acknowledge-all', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to acknowledge alerts');
+      }
+      showSuccess(`Acknowledged ${Number(data.acknowledged || 0).toLocaleString()} alerts`);
+      fetchAlerts();
+    } catch (err) {
+      showError(err.message, 'Failed to acknowledge alerts');
+    } finally {
+      setAcknowledgingAll(false);
     }
   };
 
@@ -115,52 +171,28 @@ export default function Alerts() {
     }
   };
 
-  // Filter alerts
+  // Client-side refinements on the loaded page (server handles severity / status / equipment id)
   const filteredAlerts = alerts.filter((alert) => {
-    // Filter by severity
-    if (severityFilter !== 'all' && alert.severity !== severityFilter) {
+    if (equipmentFilter === 'none' && alert.equipment_id) {
       return false;
     }
-
-    // Filter by acknowledged status
-    if (acknowledgedFilter === 'acknowledged' && !alert.acknowledged) {
-      return false;
-    }
-    if (acknowledgedFilter === 'unacknowledged' && alert.acknowledged) {
-      return false;
-    }
-
-    // Filter by equipment
-    if (equipmentFilter !== 'all') {
-      if (equipmentFilter === 'none') {
-        // Show alerts with no equipment
-        if (alert.equipment_id) {
-          return false;
-        }
-      } else {
-        // Show alerts for specific equipment
-        if (String(alert.equipment_id) !== equipmentFilter) {
-          return false;
-        }
-      }
-    }
-
-    // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
         alert.message.toLowerCase().includes(query) ||
         (alert.equipment_name && alert.equipment_name.toLowerCase().includes(query)) ||
-        (alert.zone_name && alert.zone_name.toLowerCase().includes(query))
+        (alert.zone_name && alert.zone_name.toLowerCase().includes(query)) ||
+        (alert.source && alert.source.toLowerCase().includes(query))
       );
     }
-
     return true;
   });
 
   const canAcknowledge = user?.role === 'admin' || user?.role === 'operator';
+  const hasMore = alerts.length < total;
+  const collapsedDuplicates = alerts.reduce((sum, a) => sum + Math.max((a.occurrence_count || 1) - 1, 0), 0);
 
-  if (loading) {
+  if (loading && alerts.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -173,7 +205,7 @@ export default function Alerts() {
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
         <p className="text-red-800 dark:text-red-200">Error: {error}</p>
         <button
-          onClick={fetchAlerts}
+          onClick={() => fetchAlerts()}
           className="mt-2 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 underline"
         >
           Try again
@@ -184,17 +216,32 @@ export default function Alerts() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Alerts</h1>
-        <button
-          onClick={fetchAlerts}
-          className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
-        >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {canAcknowledge && unacknowledgedCount > 0 && (
+            <button
+              onClick={handleAcknowledgeAll}
+              disabled={acknowledgingAll}
+              className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Acknowledge every open alert matching the current severity / equipment filter"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              {acknowledgingAll ? 'Acknowledging...' : 'Acknowledge all'}
+            </button>
+          )}
+          <button
+            onClick={() => fetchAlerts()}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -205,7 +252,7 @@ export default function Alerts() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search</label>
             <input
               type="text"
-              placeholder="Search alerts..."
+              placeholder="Search loaded alerts..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
@@ -235,9 +282,9 @@ export default function Alerts() {
               onChange={(e) => setAcknowledgedFilter(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
             >
-              <option value="all">All Alerts</option>
               <option value="unacknowledged">Unacknowledged</option>
               <option value="acknowledged">Acknowledged</option>
+              <option value="all">All Alerts</option>
             </select>
           </div>
 
@@ -264,26 +311,22 @@ export default function Alerts() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Alerts</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{alerts.length}</p>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Matching Filters</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{total.toLocaleString()}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Critical</p>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Unacknowledged (all)</p>
+          <p className="text-2xl font-bold text-blue-600">{unacknowledgedCount.toLocaleString()}</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Critical (loaded)</p>
           <p className="text-2xl font-bold text-red-600">
             {alerts.filter((a) => a.severity === 'critical').length}
           </p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Warning</p>
-          <p className="text-2xl font-bold text-amber-600">
-            {alerts.filter((a) => a.severity === 'warning').length}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Unacknowledged</p>
-          <p className="text-2xl font-bold text-blue-600">
-            {alerts.filter((a) => !a.acknowledged).length}
-          </p>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Repeats collapsed (loaded)</p>
+          <p className="text-2xl font-bold text-amber-600">{collapsedDuplicates.toLocaleString()}</p>
         </div>
       </div>
 
@@ -319,79 +362,112 @@ export default function Alerts() {
               {filteredAlerts.length === 0 ? (
                 <tr>
                   <td colSpan={canAcknowledge ? 6 : 5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                    {alerts.length === 0 ? 'No alerts in the system.' : 'No alerts match your filters.'}
+                    {alerts.length === 0
+                      ? (acknowledgedFilter === 'unacknowledged' ? 'No open alerts. Everything is acknowledged.' : 'No alerts in the system.')
+                      : 'No alerts match your search.'}
                   </td>
                 </tr>
               ) : (
-                filteredAlerts.map((alert) => (
-                  <tr key={alert.id} className={alert.acknowledged ? 'bg-gray-50 dark:bg-gray-900' : ''}>
-                    <td className="px-6 py-4">
-                      <div className="flex items-start">
-                        <span className="flex-shrink-0 mr-3">{getSeverityIcon(alert.severity)}</span>
-                        <span className="text-sm text-gray-900 dark:text-white">{alert.message}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityBadge(alert.severity)}`}>
-                        {alert.severity}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {alert.equipment_name || alert.zone_name || '-'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400" title={formatDateTime(alert.created_at)}>
-                      {formatRelativeTime(alert.created_at)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {alert.acknowledged ? (
-                        <div className="flex flex-col">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                            Acknowledged
-                          </span>
-                          {alert.acknowledged_by_name && (
-                            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              by {alert.acknowledged_by_name}
-                            </span>
-                          )}
+                filteredAlerts.map((alert) => {
+                  const repeats = alert.occurrence_count || 1;
+                  return (
+                    <tr key={alert.id} className={alert.acknowledged ? 'bg-gray-50 dark:bg-gray-900' : ''}>
+                      <td className="px-6 py-4">
+                        <div className="flex items-start">
+                          <span className="flex-shrink-0 mr-3">{getSeverityIcon(alert.severity)}</span>
+                          <div className="min-w-0">
+                            <span className="text-sm text-gray-900 dark:text-white">{alert.message}</span>
+                            {repeats > 1 && (
+                              <span
+                                className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200 align-middle"
+                                title={`This condition has recurred ${repeats.toLocaleString()} times since it was first raised`}
+                              >
+                                &times;{repeats.toLocaleString()}
+                              </span>
+                            )}
+                            {alert.source && (
+                              <span className="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">source: {alert.source}</span>
+                            )}
+                          </div>
                         </div>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
-                          <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                          </svg>
-                          Pending
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityBadge(alert.severity)}`}>
+                          {alert.severity}
                         </span>
-                      )}
-                    </td>
-                    {canAcknowledge && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {!alert.acknowledged && (
-                          <button
-                            onClick={() => handleAcknowledge(alert.id)}
-                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-                          >
-                            Acknowledge
-                          </button>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          {alert.equipment_name || alert.zone_name || '-'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <div title={formatDateTime(alert.created_at)}>{formatRelativeTime(alert.created_at)}</div>
+                        {repeats > 1 && alert.last_seen_at && (
+                          <div className="text-xs text-gray-400 dark:text-gray-500" title={formatDateTime(alert.last_seen_at)}>
+                            last seen {formatRelativeTime(alert.last_seen_at)}
+                          </div>
                         )}
                       </td>
-                    )}
-                  </tr>
-                ))
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {alert.acknowledged ? (
+                          <div className="flex flex-col">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                              Acknowledged
+                            </span>
+                            {alert.acknowledged_by_name && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                by {alert.acknowledged_by_name}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
+                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                            </svg>
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                      {canAcknowledge && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {!alert.acknowledged && (
+                            <button
+                              onClick={() => handleAcknowledge(alert.id)}
+                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                            >
+                              Acknowledge
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-50 dark:bg-gray-900 px-6 py-3 border-t border-gray-200 dark:border-gray-700">
+        <div className="bg-gray-50 dark:bg-gray-900 px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Showing {filteredAlerts.length} of {alerts.length} alerts
+            Showing {filteredAlerts.length.toLocaleString()} of {total.toLocaleString()} alerts
+            {searchQuery && filteredAlerts.length !== alerts.length ? ` (${alerts.length.toLocaleString()} loaded)` : ''}
           </p>
+          {hasMore && (
+            <button
+              onClick={() => fetchAlerts({ append: true })}
+              disabled={loadingMore}
+              className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading...' : `Load more (${Math.min(PAGE_SIZE, total - alerts.length).toLocaleString()})`}
+            </button>
+          )}
         </div>
       </div>
     </div>

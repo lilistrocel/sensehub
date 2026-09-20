@@ -10,7 +10,7 @@
  */
 
 const { db } = require('../utils/database');
-const { broadcastNewAlert } = require('../utils/alertBroadcast');
+const { createAlert } = require('../utils/alertBroadcast');
 const { executeAutomation } = require('./AutomationExecutor');
 const { evaluateSkip } = require('./SkipEvaluator');
 const { automationArmingService } = require('./AutomationArmingService');
@@ -171,16 +171,14 @@ class AutomationSchedulerService {
       const updated = db.prepare('SELECT consecutive_skips FROM automations WHERE id = ?').get(automation.id);
       const n = updated?.consecutive_skips || 0;
       if (n === 3 || n === 6 || n === 12) {
-        try {
-          broadcastNewAlert(db.prepare(
-            "INSERT INTO alerts (severity, message, created_at) VALUES (?, ?, datetime('now'))"
-          ).run(
-            n >= 12 ? 'critical' : 'warning',
-            `Automation "${automation.name}" (id=${automation.id}) has skipped ${n} consecutive times. Verify the sensor reading driving the skip is correct.`,
-          ));
-        } catch (err) {
-          console.error('[Scheduler] Failed to write consecutive-skip alert:', err.message);
-        }
+        // One open alert per automation; escalating thresholds update it in place.
+        createAlert({
+          severity: n >= 12 ? 'critical' : 'warning',
+          source: 'scheduler',
+          automation_id: automation.id,
+          fingerprint: `automation_consecutive_skips:${automation.id}`,
+          message: `Automation "${automation.name}" (id=${automation.id}) has skipped ${n} consecutive times. Verify the sensor reading driving the skip is correct.`,
+        });
       }
       return;
     }
