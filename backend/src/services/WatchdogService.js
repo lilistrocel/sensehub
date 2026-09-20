@@ -15,7 +15,7 @@
 
 const dns = require('dns');
 const { db } = require('../utils/database');
-const { broadcastNewAlert } = require('../utils/alertBroadcast');
+const { createAlert } = require('../utils/alertBroadcast');
 const { telegramService } = require('./TelegramService');
 const { automationArmingService } = require('./AutomationArmingService');
 
@@ -63,6 +63,24 @@ class WatchdogService {
     // Rolling window of recent auto-rearm fires per automation id, in ms.
     // _rearmHistory[autoId] = [ms, ms, ...] (only kept for the trailing hour).
     this._rearmHistory = new Map();
+
+    // Equipment ids we have already told Telegram are down. A device gets one
+    // "went down" message on first detection, then at most one digest per 24 h
+    // (gated by equipment.last_watchdog_alert), and one "recovered" message
+    // when it is next seen online. Seeded from the DB on start().
+    this._eqDownNotified = new Set();
+
+    // Throttle for low-value debug lines: key -> last log time (ms)
+    this._lastDebugLog = new Map();
+  }
+
+  /** Log `msg` at most once per `everyMs` for the given key. */
+  _debugThrottled(key, msg, everyMs = 30 * 60 * 1000) {
+    const now = Date.now();
+    const last = this._lastDebugLog.get(key) || 0;
+    if (now - last < everyMs) return;
+    this._lastDebugLog.set(key, now);
+    console.log(msg);
   }
 
   /** Returns true if we should rearm this automation, false if rate-limited.
@@ -87,6 +105,7 @@ class WatchdogService {
 
     // Seed connectivity state and detect restart gaps
     this._seedConnState();
+    this._seedEquipmentDownState();
     this._detectRestartGap();
 
     // First check after 30s (let other services boot)
@@ -108,6 +127,25 @@ class WatchdogService {
     }
     this.running = false;
     console.log('[Watchdog] Service stopped');
+  }
+
+  /**
+   * Seed _eqDownNotified with devices that are currently down AND were already
+   * alerted on (last_watchdog_alert set) so a restart doesn't re-send "went
+   * down" for them. Only currently-down rows are seeded: seeding every row
+   * with a stale last_watchdog_alert would fire a burst of bogus "recovered"
+   * messages on the first tick.
+   */
+  _seedEquipmentDownState() {
+    try {
+      const rows = db.prepare(
+        "SELECT id FROM equipment WHERE enabled = 1 AND status IN ('offline', 'error') AND last_watchdog_alert IS NOT NULL"
+      ).all();
+      for (const r of rows) this._eqDownNotified.add(r.id);
+      if (rows.length) console.log(`[Watchdog] Seeded ${rows.length} equipment id(s) as already-notified down`);
+    } catch (err) {
+      console.error('[Watchdog] Failed to seed equipment down state:', err.message);
+    }
   }
 
   _seedConnState() {
@@ -152,7 +190,7 @@ class WatchdogService {
         const msg = `System restarted after ${durStr} gap (last activity: ${lastEvent.created_at})`;
 
         logEvent.run('system', 'restart', 'restart', msg, null, gapSec);
-        broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${msg}`));
+        createAlert({ severity: 'warning', source: 'watchdog', fingerprint: 'system_restart', message: `Watchdog: ${msg}` });
 
         console.log(`[Watchdog] ${msg}`);
 
@@ -309,7 +347,7 @@ class WatchdogService {
       console.log(`[Watchdog] ${msg}`);
 
       // Log alert to DB immediately (always works, it's local)
-      broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${msg}`));
+      createAlert({ severity: 'warning', source: 'watchdog', fingerprint: `connectivity_down:${target}`, message: `Watchdog: ${msg}` });
 
       if (target === 'internet') {
         // Can't send Telegram — queue it for when internet returns
@@ -338,7 +376,7 @@ class WatchdogService {
       console.log(`[Watchdog] ${msg}`);
 
       // Log alert to DB
-      broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('info', ?, datetime('now'))").run(`Watchdog: ${msg}`));
+      createAlert({ severity: 'info', source: 'watchdog', fingerprint: `connectivity_up:${target}`, message: `Watchdog: ${msg}` });
 
       if (target === 'internet') {
         // Internet just recovered — build a full outage report
@@ -428,6 +466,36 @@ class WatchdogService {
         triggerConfig._automation_id = auto.id;
         const missedInfo = this._isThresholdMissedButMet(triggerConfig, lastRun, graceMinutes, now);
         if (missedInfo.missed) {
+          // What relay states does this automation want? Alert/log-only
+          // automations have none — they must NEVER be re-executed (that would
+          // just re-send the alert), so they only get a throttled watchdog alert.
+          const desired = this._desiredRelayStates(auto.actions);
+          if (desired.length === 0) {
+            if (lastAlert && (now - lastAlert) < 3600000) continue;
+            alerts.push({
+              automationId: auto.id,
+              name: auto.name,
+              type: 'threshold_met_not_fired',
+              detail: missedInfo.detail,
+            });
+            continue;
+          }
+
+          // If every relay the automation would touch is ALREADY in the desired
+          // state there is nothing to re-fire: the automation (or an operator)
+          // did its job and the relays simply stayed put. Re-executing would
+          // burn a rate-limit slot and, with an "off" automation, spam relay
+          // events. Unknown cache (write-only boards, missing relayStates) or
+          // toggle actions fall through to the existing rearm behaviour.
+          const match = this._relayStatesMatch(desired);
+          if (match.allMatch) {
+            this._debugThrottled(
+              `rearm-match-${auto.id}`,
+              `[Watchdog] "${auto.name}": threshold met but all ${match.checked} relay(s) already in desired state - skipping rearm`
+            );
+            continue;
+          }
+
           // Auto-rearm: re-fire the automation if the condition is still met. This
           // covers the rising-edge gap left behind when the safety watchdog force-OFFs
           // a relay while its triggering condition is still true — without this,
@@ -480,7 +548,15 @@ class WatchdogService {
           : `Threshold Met But Not Fired: ${alert.name}`;
 
         db.prepare("UPDATE automations SET last_watchdog_alert = datetime('now') WHERE id = ?").run(alert.automationId);
-        broadcastNewAlert(db.prepare("INSERT INTO alerts (severity, message, created_at) VALUES ('warning', ?, datetime('now'))").run(`Watchdog: ${title} - ${alert.detail}`));
+        createAlert({
+          severity: 'warning',
+          source: 'watchdog',
+          automation_id: alert.automationId,
+          fingerprint: alert.type === 'schedule_missed'
+            ? `watchdog_missed:${alert.automationId}`
+            : `watchdog_rearm:${alert.automationId}`,
+          message: `Watchdog: ${title} - ${alert.detail}`,
+        });
         logEvent.run('automation', alert.name, alert.type, title, alert.detail, null);
 
         // Try sending immediately, queue on failure
@@ -498,28 +574,48 @@ class WatchdogService {
   }
 
   async _checkEquipmentHealth() {
-    const equipment = db.prepare("SELECT * FROM equipment WHERE status IN ('offline', 'error')").all();
+    // Disabled devices are intentionally not polled, so they are never "down"
+    const equipment = db.prepare(
+      "SELECT * FROM equipment WHERE status IN ('offline', 'error') AND enabled = 1"
+    ).all();
     const now = new Date();
+    const DIGEST_MS = 24 * 3600000;
+    const downIds = new Set();
 
     for (const eq of equipment) {
-      const lastAlert = eq.last_watchdog_alert ? this._parseUtcTimestamp(eq.last_watchdog_alert) : null;
-      if (lastAlert && (now - lastAlert) < 3600000) continue;
-
       const lastComm = eq.last_communication ? this._parseUtcTimestamp(eq.last_communication) : null;
+      // Heard from it in the last 5 min: treat as flapping, not down (yet)
       if (lastComm && (now - lastComm) < 300000) continue;
 
+      downIds.add(eq.id);
+
+      const alreadyNotified = this._eqDownNotified.has(eq.id);
+      const lastAlert = eq.last_watchdog_alert ? this._parseUtcTimestamp(eq.last_watchdog_alert) : null;
+      // First detection → notify now. After that → at most one digest per 24 h.
+      if (alreadyNotified && lastAlert && (now - lastAlert) < DIGEST_MS) continue;
+
       const downDuration = lastComm ? this._formatDuration(now - lastComm) : 'unknown';
+      const errText = eq.error_log || eq.error_message;
       const detail = eq.status === 'error'
-        ? `Equipment "${eq.name}" has errors. Last communication: ${downDuration} ago.${eq.error_message ? `\nError: ${eq.error_message}` : ''}`
+        ? `Equipment "${eq.name}" has errors. Last communication: ${downDuration} ago.${errText ? `\nError: ${errText}` : ''}`
         : `Equipment "${eq.name}" is offline. Last communication: ${downDuration} ago.`;
 
       try {
         const severity = eq.status === 'error' ? 'error' : 'warning';
-        const title = `Equipment ${eq.status === 'error' ? 'Error' : 'Offline'}: ${eq.name}`;
+        const kind = alreadyNotified ? 'Still Down' : (eq.status === 'error' ? 'Error' : 'Offline');
+        const title = `Equipment ${kind}: ${eq.name}`;
         db.prepare("UPDATE equipment SET last_watchdog_alert = datetime('now') WHERE id = ?").run(eq.id);
-        broadcastNewAlert(db.prepare("INSERT INTO alerts (equipment_id, severity, message, created_at) VALUES (?, ?, ?, datetime('now'))").run(
-          eq.id, eq.status === 'error' ? 'critical' : 'warning', `Watchdog: ${detail}`
-        ));
+
+        // One open (unacknowledged) alerts row per device: the stable fingerprint
+        // makes createAlert bump occurrence_count on each digest instead of
+        // stacking a new row while the first is still unread.
+        createAlert({
+          severity: eq.status === 'error' ? 'critical' : 'warning',
+          source: 'watchdog',
+          equipment_id: eq.id,
+          fingerprint: `equipment_offline:${eq.id}`,
+          message: `Watchdog: ${detail}`,
+        });
         const downSeconds = lastComm ? Math.round((now - lastComm) / 1000) : null;
         logEvent.run('equipment', eq.name, eq.status, title, detail, downSeconds);
 
@@ -528,12 +624,165 @@ class WatchdogService {
         } catch {
           this._queueNotification(title, detail, severity);
         }
+        this._eqDownNotified.add(eq.id);
 
-        console.log(`[Watchdog] Equipment alert sent: ${eq.name} (${eq.status})`);
+        console.log(`[Watchdog] Equipment ${alreadyNotified ? 'digest' : 'alert'} sent: ${eq.name} (${eq.status})`);
       } catch (err) {
         console.error(`[Watchdog] Failed to send equipment alert for "${eq.name}":`, err.message);
       }
     }
+
+    // Recovery: anything we reported down that is no longer in the down set
+    for (const id of [...this._eqDownNotified]) {
+      if (downIds.has(id)) continue;
+      let eq = null;
+      try { eq = db.prepare('SELECT * FROM equipment WHERE id = ?').get(id); } catch (_) {}
+
+      // Deleted or disabled: forget it quietly — "recovered" would be misleading
+      if (!eq || !eq.enabled) {
+        this._eqDownNotified.delete(id);
+        continue;
+      }
+      // Still offline/error but heard from within 5 min: flapping, wait
+      if (eq.status === 'offline' || eq.status === 'error') continue;
+
+      this._eqDownNotified.delete(id);
+      const lastAlert = eq.last_watchdog_alert ? this._parseUtcTimestamp(eq.last_watchdog_alert) : null;
+      const msg = `Equipment "${eq.name}" is back online${lastAlert ? ` (alerted ${this._formatDuration(now - lastAlert)} ago)` : ''}.`;
+      const title = `Equipment Recovered: ${eq.name}`;
+      try {
+        logEvent.run('equipment', eq.name, 'recovered', title, msg, null);
+        createAlert({
+          severity: 'info',
+          source: 'watchdog',
+          equipment_id: eq.id,
+          fingerprint: `equipment_recovered:${eq.id}`,
+          message: `Watchdog: ${msg}`,
+        });
+        try {
+          await telegramService.sendAlert(title, msg, 'info');
+        } catch {
+          this._queueNotification(title, msg, 'info');
+        }
+        console.log(`[Watchdog] Equipment recovered: ${eq.name}`);
+      } catch (err) {
+        console.error(`[Watchdog] Failed to send recovery notice for "${eq.name}":`, err.message);
+      }
+    }
+  }
+
+  // ─── Relay-state helpers (auto-rearm) ───
+
+  /**
+   * Coil channel addresses an "all channels" control action would touch —
+   * same filter as AutomationExecutor's all-channels mode.
+   */
+  _coilChannels(equipmentId) {
+    let mappings = [];
+    try {
+      const eq = db.prepare('SELECT register_mappings FROM equipment WHERE id = ?').get(equipmentId);
+      if (!eq) return [];
+      mappings = typeof eq.register_mappings === 'string'
+        ? JSON.parse(eq.register_mappings)
+        : (eq.register_mappings || []);
+    } catch (_) { return []; }
+    if (!Array.isArray(mappings)) return [];
+    return mappings
+      .filter(m => m && m.type === 'coil' && m.access === 'readwrite')
+      .map(m => parseInt(m.register ?? m.address, 10))
+      .filter(Number.isFinite);
+  }
+
+  /**
+   * Relay states an automation's actions would leave behind.
+   * Returns [{ equipment_id, channel, state }] where state is a boolean, or
+   * null for a 'toggle' control action (desired state depends on current).
+   *
+   * Handles the two relay-writing action shapes from AutomationExecutor:
+   *   { type:'control', equipment_id, channel|null(all channels), action:'on'|'off'|'toggle' }
+   *   { type:'transition', equipment_id, transitions:[{ channel, state }] }
+   * Alert/log/other actions contribute nothing, so an empty result means the
+   * automation does not drive relays at all.
+   */
+  _desiredRelayStates(actions) {
+    let list = actions;
+    if (typeof list === 'string') {
+      try { list = JSON.parse(list); } catch (_) { return []; }
+    }
+    if (!Array.isArray(list)) return [];
+
+    const out = [];
+    for (const a of list) {
+      if (!a || typeof a !== 'object') continue;
+      const equipmentId = parseInt(a.equipment_id, 10);
+      if (!Number.isFinite(equipmentId)) continue;
+
+      if (a.type === 'control') {
+        const state = a.action === 'on' ? true : a.action === 'off' ? false : null;
+        if (a.channel != null) {
+          const channel = parseInt(a.channel, 10);
+          if (Number.isFinite(channel)) out.push({ equipment_id: equipmentId, channel, state });
+        } else {
+          for (const channel of this._coilChannels(equipmentId)) {
+            out.push({ equipment_id: equipmentId, channel, state });
+          }
+        }
+      } else if (a.type === 'transition' && Array.isArray(a.transitions)) {
+        for (const t of a.transitions) {
+          if (!t) continue;
+          const channel = parseInt(t.channel, 10);
+          if (Number.isFinite(channel)) out.push({ equipment_id: equipmentId, channel, state: !!t.state });
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Compare desired relay states with the cached hardware state in
+   * equipment.last_reading.relayStates (written by the 15 s coil poll and by
+   * AutomationExecutor on every write).
+   *
+   * @param {Array} desired  output of _desiredRelayStates
+   * @param {Function} [getEquipment]  optional row lookup (for tests)
+   * @returns {{ allMatch: boolean, checked: number, unknown: number, mismatched: Array }}
+   *   allMatch is true ONLY when every entry has a known cached state that
+   *   equals the desired one. Any unknown (no relayStates on the row, e.g. a
+   *   write-only board; channel absent; toggle action) → allMatch = false so the
+   *   caller keeps the pre-existing rearm behaviour.
+   */
+  _relayStatesMatch(desired, getEquipment) {
+    const lookup = getEquipment || ((id) => db.prepare('SELECT id, last_reading FROM equipment WHERE id = ?').get(id));
+    const cache = new Map(); // equipment_id -> relayStates object | null
+    const result = { allMatch: desired.length > 0, checked: 0, unknown: 0, mismatched: [] };
+
+    for (const d of desired) {
+      if (!cache.has(d.equipment_id)) {
+        let states = null;
+        try {
+          const row = lookup(d.equipment_id);
+          if (row && row.last_reading) {
+            const parsed = typeof row.last_reading === 'string' ? JSON.parse(row.last_reading) : row.last_reading;
+            if (parsed && parsed.relayStates && typeof parsed.relayStates === 'object') states = parsed.relayStates;
+          }
+        } catch (_) { states = null; }
+        cache.set(d.equipment_id, states);
+      }
+      const states = cache.get(d.equipment_id);
+      const actual = states ? states[String(d.channel)] : undefined;
+
+      if (d.state === null || actual === undefined || actual === null) {
+        result.unknown++;
+        result.allMatch = false;
+        continue;
+      }
+      result.checked++;
+      if (!!actual !== d.state) {
+        result.allMatch = false;
+        result.mismatched.push({ ...d, actual: !!actual });
+      }
+    }
+    return result;
   }
 
   // ─── Schedule Helpers ───
