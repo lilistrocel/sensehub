@@ -60,8 +60,43 @@ export default function Agronomist() {
   const [showSettings, setShowSettings] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
   const [memory, setMemory] = useState(null);
+  const [retrying, setRetrying] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  const ERROR_CLASS_LABELS = {
+    billing: 'billing',
+    auth: 'auth',
+    rate_limit: 'rate limit',
+    other: 'error',
+  };
+  const ERROR_CLASS_TITLES = {
+    billing: 'Anthropic credit balance exhausted',
+    auth: 'Anthropic API key rejected',
+    rate_limit: 'Anthropic rate limit hit',
+    other: 'Last agronomist report failed',
+  };
+
+  const retryNow = async () => {
+    setRetrying(true);
+    try {
+      const res = await fetch(`${API_BASE}/agronomist/retry-now`, { method: 'POST', headers, body: JSON.stringify({}) });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        showSuccess("Today's report already exists — schedule resumed");
+      } else if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      } else {
+        showSuccess('Report generated — schedule resumed');
+        if (data.report) setSelectedReport(data.report);
+      }
+    } catch (err) {
+      showError('Retry failed: ' + err.message);
+    } finally {
+      setRetrying(false);
+      await Promise.all([fetchReports(), fetchConfig()]);
+    }
+  };
 
   const fetchReports = async () => {
     setLoading(true);
@@ -231,6 +266,42 @@ export default function Agronomist() {
         </div>
       )}
 
+      {/* Provider failure banner */}
+      {config?.health && (config.health.paused || config.health.consecutiveFailures > 0) && (
+        <div className={`mb-4 p-3 rounded-lg border text-sm ${
+          config.health.paused
+            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200'
+            : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+        }`}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <strong>{ERROR_CLASS_TITLES[config.health.lastErrorClass] || ERROR_CLASS_TITLES.other}</strong>
+              {' '}
+              <span className="opacity-80">
+                ({config.health.consecutiveFailures} consecutive failure{config.health.consecutiveFailures === 1 ? '' : 's'}
+                {config.health.lastFailureAt ? `, last at ${config.health.lastFailureAt} UTC` : ''})
+              </span>
+              {config.health.paused && (
+                <p className="mt-1">{config.health.pauseReason}</p>
+              )}
+              {config.health.lastErrorMessage && (
+                <pre className="mt-2 text-xs whitespace-pre-wrap bg-white/50 dark:bg-black/20 p-2 rounded max-h-32 overflow-y-auto">{config.health.lastErrorMessage}</pre>
+              )}
+            </div>
+            {canControl && (
+              <button
+                onClick={retryNow}
+                disabled={retrying || generating || !config.api_key_present}
+                className="shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg bg-white dark:bg-gray-800 border border-current hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Run today's report immediately; a success resumes the schedule"
+              >
+                {retrying ? 'Retrying...' : 'Retry now'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Settings panel */}
       {showSettings && config && isAdmin && (
         <SettingsPanel config={config} zones={zones} equipment={equipment} onSave={saveConfig} onWeeklyRollup={runWeeklyRollup} onClose={() => setShowSettings(false)} />
@@ -264,7 +335,14 @@ export default function Agronomist() {
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-900 dark:text-white">{r.report_date}</span>
-                        {r.status === 'failure' && <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 rounded">error</span>}
+                        {r.status === 'failure' && (
+                          <span
+                            className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 rounded"
+                            title={r.error || 'Generation failed'}
+                          >
+                            {ERROR_CLASS_LABELS[r.error_class] || ERROR_CLASS_LABELS.other}
+                          </span>
+                        )}
                       </div>
                       {r.opinion && (
                         <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{r.opinion}</p>
@@ -282,7 +360,14 @@ export default function Agronomist() {
           {selectedReport ? (
             selectedReport.status === 'failure' ? (
               <div className="bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                <h2 className="text-base font-semibold text-red-700 dark:text-red-300">Generation failed for {selectedReport.report_date}</h2>
+                <h2 className="text-base font-semibold text-red-700 dark:text-red-300">
+                  Generation failed for {selectedReport.report_date}
+                  {selectedReport.error_class && (
+                    <span className="ml-2 text-xs px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 rounded align-middle">
+                      {ERROR_CLASS_LABELS[selectedReport.error_class] || selectedReport.error_class}
+                    </span>
+                  )}
+                </h2>
                 <pre className="mt-3 text-xs whitespace-pre-wrap bg-red-50 dark:bg-red-900/20 p-3 rounded text-red-800 dark:text-red-200">{selectedReport.error}</pre>
               </div>
             ) : (

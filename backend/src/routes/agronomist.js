@@ -4,13 +4,42 @@ const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/agronomist/config — current config + key-present flag
+// GET /api/agronomist/config — current config + key-present flag + provider health
 router.get('/config', (req, res) => {
   const cfg = agronomistService.getConfig();
   res.json({
     ...cfg,
     api_key_present: !!process.env.ANTHROPIC_API_KEY,
+    health: agronomistService.getHealth(),
   });
+});
+
+// GET /api/agronomist/health — provider failure state (consecutive failures, pause flag)
+router.get('/health', (req, res) => {
+  res.json({
+    api_key_present: !!process.env.ANTHROPIC_API_KEY,
+    ...agronomistService.getHealth(),
+  });
+});
+
+// POST /api/agronomist/retry-now — run today's daily report immediately, bypassing the
+// scheduler's billing/auth pause. A success clears the pause on its own; a failure
+// returns the classified error so the UI can show it.
+router.post('/retry-now', requireRole('admin', 'operator'), async (req, res) => {
+  const { date } = req.body || {};
+  try {
+    const report = await agronomistService.generateDailyReport(date || null, { force: false });
+    res.json({ ok: true, report, health: agronomistService.getHealth() });
+  } catch (err) {
+    if (err.code === 'ALREADY_EXISTS') {
+      return res.status(409).json({ error: err.message, code: 'ALREADY_EXISTS', health: agronomistService.getHealth() });
+    }
+    res.status(502).json({
+      error: err.message,
+      error_class: err.errorClass || agronomistService.classifyProviderError(err),
+      health: agronomistService.getHealth(),
+    });
+  }
 });
 
 // PUT /api/agronomist/config — update config (admin only)

@@ -8,6 +8,9 @@
  */
 
 const { agronomistService } = require('./AgronomistService');
+const { createAlert } = require('../utils/alertBroadcast');
+
+const PROVIDER_ALERT_FINGERPRINT = 'agronomist_provider_error';
 
 class AgronomistSchedulerService {
   constructor() {
@@ -17,6 +20,41 @@ class AgronomistSchedulerService {
     this.running = false;
     this._tickInProgress = false;
     this._lastFiredKey = null; // dedupe within the same minute
+    this._pauseLoggedFor = null; // lastFailureAt of the pause window we already logged
+  }
+
+  /**
+   * Returns true (and logs once per pause window) when scheduled runs should be
+   * skipped because the provider keeps rejecting us for billing/auth reasons.
+   * The window resets when a new failure lands or the config is re-saved.
+   */
+  _isPaused(kind) {
+    const health = agronomistService.getHealth();
+    if (!health.paused) {
+      this._pauseLoggedFor = null;
+      return false;
+    }
+    const windowKey = `${health.lastFailureAt}|${health.configUpdatedAt}`;
+    if (this._pauseLoggedFor !== windowKey) {
+      this._pauseLoggedFor = windowKey;
+      console.warn(`[Agronomist] Skipping ${kind} run — ${health.pauseReason}`);
+      this._raiseProviderAlert(health);
+    }
+    return true;
+  }
+
+  _raiseProviderAlert(health) {
+    if (!health?.lastErrorClass) return;
+    const label = { billing: 'Anthropic credit balance exhausted', auth: 'Anthropic API key rejected',
+                    rate_limit: 'Anthropic rate limit hit', other: 'Anthropic API error' }[health.lastErrorClass] || 'Anthropic API error';
+    createAlert({
+      severity: health.paused ? 'critical' : 'warning',
+      source: 'agronomist',
+      fingerprint: PROVIDER_ALERT_FINGERPRINT,
+      message: `[Agronomist] ${label} — ${health.consecutiveFailures} consecutive failed report(s)` +
+        (health.paused ? '; scheduled runs paused until settings are saved or Retry now succeeds' : '') +
+        `. Last error: ${String(health.lastErrorMessage || '').slice(0, 300)}`,
+    });
   }
 
   start() {
@@ -63,6 +101,7 @@ class AgronomistSchedulerService {
       const dailyKey = `daily:${minuteKey}`;
       if (this._lastFiredKey !== dailyKey) {
         this._lastFiredKey = dailyKey;
+        if (this._isPaused('daily')) return;
         const dateStr = `${now.year}-${String(now.month).padStart(2, '0')}-${String(now.day).padStart(2, '0')}`;
         console.log(`[Agronomist] Firing daily report for ${dateStr}`);
         try {
@@ -73,6 +112,9 @@ class AgronomistSchedulerService {
             console.log(`[Agronomist] Daily report for ${dateStr} already exists, skipping`);
           } else {
             console.error(`[Agronomist] Daily report for ${dateStr} failed:`, err.message);
+            // Surface provider problems as one deduped alert (billing/auth/rate_limit).
+            const cls = err.errorClass || agronomistService.classifyProviderError(err);
+            if (cls !== 'other') this._raiseProviderAlert(agronomistService.getHealth());
           }
         }
       }
@@ -87,6 +129,7 @@ class AgronomistSchedulerService {
       const weeklyKey = `weekly:${minuteKey}`;
       if (this._lastFiredKey !== weeklyKey) {
         this._lastFiredKey = weeklyKey;
+        if (this._isPaused('weekly')) return;
         console.log('[Agronomist] Firing weekly rollup');
         try {
           const result = await agronomistService.runWeeklyRollup();

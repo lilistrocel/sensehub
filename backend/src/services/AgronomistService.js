@@ -140,10 +140,108 @@ class AgronomistService {
       reference_soil_equipment_id: merged.reference_soil_equipment_id || null,
       system_prompt_override: merged.system_prompt_override || null,
     };
+    // updated_at is stamped so the scheduler can tell "config was re-saved after the
+    // last provider failure" — saving settings re-enables a paused schedule.
     db.prepare(
-      "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      "INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP"
     ).run(DEFAULT_CONFIG_KEY, JSON.stringify(persisted));
     return merged;
+  }
+
+  /** UTC 'YYYY-MM-DD HH:MM:SS' timestamp of the last config save (system_settings.updated_at), or null. */
+  getConfigUpdatedAt() {
+    try {
+      const row = db.prepare('SELECT updated_at FROM system_settings WHERE key = ?').get(DEFAULT_CONFIG_KEY);
+      return row?.updated_at || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // -------- provider-error classification / health --------
+
+  /**
+   * Classify an Anthropic SDK / HTTP error into a coarse bucket.
+   *   'billing'    — HTTP 400 mentioning credit balance (account out of credits)
+   *   'auth'       — HTTP 401 / 403 (bad or revoked API key)
+   *   'rate_limit' — HTTP 429
+   *   'other'      — everything else (network, 5xx, schema, parse errors, ...)
+   * @param {any} err
+   * @returns {'billing'|'auth'|'rate_limit'|'other'}
+   */
+  classifyProviderError(err) {
+    const status = Number(err?.status ?? err?.statusCode ?? err?.response?.status ?? NaN);
+    const text = String(err?.message || err || '');
+    if (status === 400 && /credit balance/i.test(text)) return 'billing';
+    if (/credit balance is too low/i.test(text)) return 'billing';
+    if (status === 401 || status === 403) return 'auth';
+    if (status === 429) return 'rate_limit';
+    return 'other';
+  }
+
+  /**
+   * Health summary for the UI + scheduler.
+   * `paused` is true when the last 3 reports were billing/auth failures AND the config
+   * has not been re-saved since the last failure (saving config clears the pause).
+   * @returns {{consecutiveFailures:number,lastErrorClass:string|null,lastErrorMessage:string|null,
+   *            lastFailureAt:string|null,lastSuccessAt:string|null,paused:boolean,
+   *            pauseReason:string|null,configUpdatedAt:string|null}}
+   */
+  getHealth() {
+    const out = {
+      consecutiveFailures: 0,
+      lastErrorClass: null,
+      lastErrorMessage: null,
+      lastFailureAt: null,
+      lastSuccessAt: null,
+      paused: false,
+      pauseReason: null,
+      configUpdatedAt: null,
+    };
+    try {
+      const recent = db.prepare(`
+        SELECT status, error, error_class, generated_at
+        FROM agronomist_reports
+        ORDER BY generated_at DESC, id DESC
+        LIMIT 20
+      `).all();
+      const lastOk = db.prepare(
+        "SELECT generated_at FROM agronomist_reports WHERE status = 'success' ORDER BY generated_at DESC LIMIT 1"
+      ).get();
+      out.lastSuccessAt = lastOk?.generated_at || null;
+      // Failures since the last success (all failures if there has never been a success).
+      out.consecutiveFailures = (recent[0]?.status === 'failure')
+        ? db.prepare(
+            "SELECT COUNT(*) AS n FROM agronomist_reports WHERE status = 'failure' AND (? IS NULL OR generated_at > ?)"
+          ).get(out.lastSuccessAt, out.lastSuccessAt).n
+        : 0;
+      const lastFail = recent.find(r => r.status === 'failure');
+      if (lastFail) {
+        out.lastErrorClass = lastFail.error_class || this.classifyProviderError({ message: lastFail.error });
+        out.lastErrorMessage = lastFail.error || null;
+        out.lastFailureAt = lastFail.generated_at || null;
+      }
+      out.configUpdatedAt = this.getConfigUpdatedAt();
+
+      const lastThree = recent.slice(0, 3);
+      const allHardFailures = lastThree.length === 3 && lastThree.every(r =>
+        r.status === 'failure' &&
+        ['billing', 'auth'].includes(r.error_class || this.classifyProviderError({ message: r.error }))
+      );
+      if (allHardFailures) {
+        const configNewer = out.configUpdatedAt && out.lastFailureAt && out.configUpdatedAt > out.lastFailureAt;
+        if (!configNewer) {
+          out.paused = true;
+          out.pauseReason = `Scheduled runs paused after ${out.consecutiveFailures} consecutive ${out.lastErrorClass} failures. ` +
+            (out.lastErrorClass === 'billing'
+              ? 'Top up the Anthropic account, then save the agronomist settings (or click Retry now) to resume.'
+              : 'Fix the API key in the backend environment, then save the agronomist settings (or click Retry now) to resume.');
+        }
+      }
+    } catch (err) {
+      console.error('[Agronomist] getHealth failed:', err.message);
+    }
+    return out;
   }
 
   _client_or_throw() {
@@ -879,18 +977,21 @@ class AgronomistService {
       });
     } catch (err) {
       // Persist the failure so it shows up in the UI for debugging
+      const errorClass = this.classifyProviderError(err);
       db.prepare(`
         INSERT INTO agronomist_reports
-          (report_date, model, input_snapshot, summary, full_markdown, status, error)
-        VALUES (?, ?, ?, ?, ?, 'failure', ?)
+          (report_date, model, input_snapshot, summary, full_markdown, status, error, error_class)
+        VALUES (?, ?, ?, ?, ?, 'failure', ?, ?)
         ON CONFLICT(report_date) DO UPDATE SET
           generated_at = CURRENT_TIMESTAMP,
           model = excluded.model,
           input_snapshot = excluded.input_snapshot,
           status = 'failure',
-          error = excluded.error
+          error = excluded.error,
+          error_class = excluded.error_class
       `).run(date, cfg.model || DEFAULT_MODEL, JSON.stringify(snapshot),
-            '', '', String(err?.message || err));
+            '', '', String(err?.message || err), errorClass);
+      if (err && typeof err === 'object' && !err.errorClass) err.errorClass = errorClass;
       throw err;
     }
 
@@ -926,7 +1027,8 @@ class AgronomistService {
         cache_read_tokens = excluded.cache_read_tokens,
         cache_creation_tokens = excluded.cache_creation_tokens,
         status = 'success',
-        error = NULL
+        error = NULL,
+        error_class = NULL
     `).run(
       date,
       response.model || cfg.model || DEFAULT_MODEL,
@@ -1122,7 +1224,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
 
   listReports(limit = 30, offset = 0) {
     return db.prepare(`
-      SELECT id, report_date, generated_at, model, opinion, summary, status, error,
+      SELECT id, report_date, generated_at, model, opinion, summary, status, error, error_class,
              input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens
       FROM agronomist_reports
       ORDER BY report_date DESC
