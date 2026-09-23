@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useBreadcrumb } from '../components/Breadcrumb';
 import { getUserFriendlyError } from '../utils/errorHandler';
-import { getChannelDisplayName } from '../utils/channelUtils';
+import { getChannelDisplayName, getInterlockPartner, getInterlockPartnerLabel, hasInterlockPair, applyInterlockChange } from '../utils/channelUtils';
+import InterlockBadge, { ALL_ON_INTERLOCK_TITLE } from '../components/InterlockBadge';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
 import ErrorMessage from '../components/ErrorMessage';
@@ -1807,6 +1808,8 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
   };
 
   const relayChannels = getRelayChannels();
+  // Boards with an interlocked pair must never be switched "All On".
+  const interlockPairPresent = hasInterlockPair(equipment?.register_mappings);
 
   // Parse Modbus connection details from equipment address
   const parseModbusAddress = () => {
@@ -1991,6 +1994,10 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
   // All On
   const handleAllOn = async () => {
     if (!canControl || coilStates.length === 0) return;
+    if (interlockPairPresent) {
+      setMessage({ type: 'error', text: ALL_ON_INTERLOCK_TITLE });
+      return;
+    }
 
     setActionLoading(prev => ({ ...prev, allOn: true }));
     setMessage(null);
@@ -2250,8 +2257,9 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
               {canControl && (
                 <div className="mb-4 flex gap-3">
                   <button
-                    onClick={() => setConfirmAll(true)}
-                    disabled={actionLoading.allOn || actionLoading.allOff}
+                    onClick={() => { if (!interlockPairPresent) setConfirmAll(true); }}
+                    disabled={actionLoading.allOn || actionLoading.allOff || interlockPairPresent}
+                    title={interlockPairPresent ? ALL_ON_INTERLOCK_TITLE : undefined}
                     className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                   >
                     {actionLoading.allOn ? (
@@ -2294,6 +2302,7 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {coilStates.map((channel) => {
                   const pendingEntry = getPending(equipment?.id, channel.address);
+                  const interlockPartnerLabel = getInterlockPartnerLabel(equipment?.register_mappings, channel.address);
                   const isPending = !!pendingEntry && !actionLoading[channel.address];
                   const pendingWriteOnly = isPending && pendingEntry.writeOnly;
                   const pendingTitle = pendingWriteOnly
@@ -2316,7 +2325,10 @@ function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }
                         channel.state ? 'bg-green-500 shadow-sm shadow-green-500' : 'bg-gray-400'
                       }`}></div>
                       <div>
-                        <div className="font-medium text-gray-900 dark:text-white">{getChannelDisplayName(channel)}</div>
+                        <div className="font-medium text-gray-900 dark:text-white flex items-center gap-1.5">
+                          {getChannelDisplayName(channel)}
+                          {interlockPartnerLabel && <InterlockBadge partnerLabel={interlockPartnerLabel} />}
+                        </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           {channel.label ? `${channel.name} \u00b7 ` : ''}Address: {channel.address}
                           {isPending && (
@@ -2758,6 +2770,9 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
   // Handle updating a register mapping
   const handleUpdateRegisterMapping = (index, field, value) => {
     setFormData(prev => {
+      if (field === 'interlockWith') {
+        return { ...prev, register_mappings: applyInterlockChange(prev.register_mappings, index, value) };
+      }
       const updated = [...prev.register_mappings];
       updated[index] = { ...updated[index], [field]: value };
       // Auto-derive quantity (word count) when the data type changes.
@@ -3270,6 +3285,27 @@ function AddEquipmentModal({ isOpen, onClose, onSuccess, token }) {
                               <option value="readwrite">Read/Write</option>
                             </select>
                           </div>
+                          {mapping.type === 'coil' && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <label className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap flex items-center gap-1" title="Hard interlock: the two channels can never be ON at the same time. Energising one first switches the other OFF (verified by read-back).">
+                                <InterlockBadge partnerLabel={getInterlockPartnerLabel(formData.register_mappings, mapping.register)} />
+                                Interlock with
+                              </label>
+                              <select
+                                value={getInterlockPartner(formData.register_mappings, mapping.register) ?? ''}
+                                onChange={(e) => handleUpdateRegisterMapping(index, 'interlockWith', e.target.value)}
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
+                              >
+                                <option value="">None</option>
+                                {formData.register_mappings
+                                  .map((m, i) => ({ m, i }))
+                                  .filter(({ m, i }) => i !== index && m.type === 'coil' && String(m.register ?? '') !== '' && String(m.register) !== String(mapping.register))
+                                  .map(({ m, i }) => (
+                                    <option key={i} value={m.register}>{getChannelDisplayName(m)} (reg {m.register})</option>
+                                  ))}
+                              </select>
+                            </div>
+                          )}
                           <div className="grid grid-cols-2 gap-2 mt-2">
                             <input
                               type="number"
@@ -3440,6 +3476,9 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
   // Handle updating a register mapping
   const handleUpdateRegisterMapping = (index, field, value) => {
     setFormData(prev => {
+      if (field === 'interlockWith') {
+        return { ...prev, register_mappings: applyInterlockChange(prev.register_mappings, index, value) };
+      }
       const updated = [...prev.register_mappings];
       updated[index] = { ...updated[index], [field]: value };
       // Auto-derive quantity (word count) when the data type changes.
@@ -3939,6 +3978,27 @@ function EditEquipmentModal({ isOpen, onClose, equipment, onSuccess, token }) {
                               <option value="readwrite">Read/Write</option>
                             </select>
                           </div>
+                          {mapping.type === 'coil' && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <label className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap flex items-center gap-1" title="Hard interlock: the two channels can never be ON at the same time. Energising one first switches the other OFF (verified by read-back).">
+                                <InterlockBadge partnerLabel={getInterlockPartnerLabel(formData.register_mappings, mapping.register)} />
+                                Interlock with
+                              </label>
+                              <select
+                                value={getInterlockPartner(formData.register_mappings, mapping.register) ?? ''}
+                                onChange={(e) => handleUpdateRegisterMapping(index, 'interlockWith', e.target.value)}
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
+                              >
+                                <option value="">None</option>
+                                {formData.register_mappings
+                                  .map((m, i) => ({ m, i }))
+                                  .filter(({ m, i }) => i !== index && m.type === 'coil' && String(m.register ?? '') !== '' && String(m.register) !== String(mapping.register))
+                                  .map(({ m, i }) => (
+                                    <option key={i} value={m.register}>{getChannelDisplayName(m)} (reg {m.register})</option>
+                                  ))}
+                              </select>
+                            </div>
+                          )}
                           <div className="grid grid-cols-2 gap-2 mt-2">
                             <input
                               type="number"

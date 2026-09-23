@@ -7,7 +7,7 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "db:init": "node src/utils/initDb.js",
-    "test": "jest",
+    "test": "node --test test/*.test.js",
     "lint": "eslint src/"
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getChannelDisplayName } from '../utils/channelUtils';
+import { getChannelDisplayName, getInterlockPairs, getInterlockPartnerLabel } from '../utils/channelUtils';
+import InterlockBadge from '../components/InterlockBadge';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
 
@@ -1754,6 +1755,11 @@ function TransitionEditor({ equipment, equipmentId, setEquipmentId, states, setS
   const setCoil = (addr, val) => {
     setStates({ ...states, [addr]: val });
   };
+  // Interlocked pairs where this frame would energise both — the backend
+  // rejects such a save (400); warn inline before the user gets that far.
+  const interlockConflicts = getInterlockPairs(selectedEq?.register_mappings)
+    .filter(([a, b]) => states[a] === true && states[b] === true)
+    .map(([a, b]) => `${getChannelDisplayName(coils.find(c => (c.register ?? c.address) == a) || {})} (ch ${a}) and ${getChannelDisplayName(coils.find(c => (c.register ?? c.address) == b) || {})} (ch ${b})`);
   const clearCoil = (addr) => {
     const next = { ...states };
     delete next[addr];
@@ -1788,6 +1794,12 @@ function TransitionEditor({ equipment, equipmentId, setEquipmentId, states, setS
         </div>
       </div>
 
+      {interlockConflicts.length > 0 && (
+        <div className="mb-3 p-2 rounded border border-red-300 bg-red-50 text-red-800 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300 text-xs">
+          Interlock: {interlockConflicts.join('; ')} can never be ON at the same time. This transition will be rejected.
+        </div>
+      )}
+
       {coils.length > 0 && (
         <div>
           <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Channels — pick the target state for each (skip = leave alone)</p>
@@ -1797,8 +1809,11 @@ function TransitionEditor({ equipment, equipmentId, setEquipmentId, states, setS
               const current = states[addr];
               return (
                 <div key={addr} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded p-2">
-                  <p className="text-xs font-medium text-gray-900 dark:text-white truncate" title={getChannelDisplayName(c)}>
-                    {getChannelDisplayName(c)}
+                  <p className="text-xs font-medium text-gray-900 dark:text-white truncate flex items-center gap-1" title={getChannelDisplayName(c)}>
+                    <span className="truncate">{getChannelDisplayName(c)}</span>
+                    {getInterlockPartnerLabel(selectedEq?.register_mappings, addr) && (
+                      <InterlockBadge partnerLabel={getInterlockPartnerLabel(selectedEq?.register_mappings, addr)} />
+                    )}
                   </p>
                   <p className="text-[10px] text-gray-400">addr {addr}</p>
                   <div className="flex gap-1 mt-1">
@@ -2241,7 +2256,11 @@ function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
         })
       });
 
-      if (!response.ok) throw new Error('Failed to save template');
+      if (!response.ok) {
+        let msg = 'Failed to save template';
+        try { const data = await response.json(); msg = data.message || data.error || msg; } catch {}
+        throw new Error(msg);
+      }
       const result = await response.json();
 
       if (!isNew && result.propagated_to > 0) {

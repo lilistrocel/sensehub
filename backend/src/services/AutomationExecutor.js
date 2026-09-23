@@ -11,6 +11,7 @@ const { relayTimerService } = require('./RelayTimerService');
 const { logRelayEvent } = require('./RelayEventLogger');
 const { fertigationDoseScheduler } = require('./FertigationDoseScheduler');
 const { automationArmingService } = require('./AutomationArmingService');
+const interlock = require('./RelayInterlockService');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -370,6 +371,17 @@ async function executeControlAction(action, automation, options = {}) {
 
     // Helper: execute the relay write + cache update + broadcast + auto-off scheduling
     const executeRelayAction = async () => {
+      // Hard interlock: an ON write must first drive the partner channel OFF
+      // and confirm it by read-back. Throws InterlockViolation (logged +
+      // critical alert) and never falls through to the energising write.
+      const cacheStates = [{ channel: address, state: value }];
+      if (value === true) {
+        const guard = await interlock.guardEnergise(targetEquipment, address, modbusTcpClient, {
+          source: eventSource, automationId: automation.id
+        });
+        if (guard.partner !== null) cacheStates.push({ channel: guard.partner, state: false });
+      }
+
       if (targetEquipment.write_only) {
         await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, value);
       } else {
@@ -377,7 +389,7 @@ async function executeControlAction(action, automation, options = {}) {
       }
 
       // Update cached relay state, log relay event, broadcast relay_state_changed
-      applyRelayCache(targetEquipment, [{ channel: address, state: value }], {
+      applyRelayCache(targetEquipment, cacheStates, {
         source: eventSource,
         automationId: automation.id
       });
@@ -509,6 +521,17 @@ async function executeControlAction(action, automation, options = {}) {
       return { type: 'control', status: 'executed', action: action.action, note: 'No coil mappings found on equipment' };
     }
 
+    // "All channels ON" would energise both members of an interlock pair — refuse outright.
+    if (action.action !== 'off' && interlock.hasInterlockPairs(targetEquipment)) {
+      const [a, b] = interlock.getInterlockPairs(targetEquipment)[0];
+      const err = new interlock.InterlockViolation(
+        `Interlock: "All channels ON" refused on ${targetEquipment.name} — ch ${a} and ch ${b} can never be ON at the same time`,
+        { equipment_id: targetEquipment.id, channels: [a, b] }
+      );
+      interlock.reportViolation(targetEquipment, a, err, { source: eventSource, automationId: automation.id });
+      return { type: 'control', status: 'error', action: action.action, equipment: targetEquipment.name, all_channels: true, error: err.message };
+    }
+
     // Execute each coil as a separate per-channel action with optional stagger
     const staggerMs = (action.stagger_delay_seconds && action.stagger_delay_seconds > 0)
       ? action.stagger_delay_seconds * 1000
@@ -583,6 +606,13 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
       console.log(`[Automation] Cancelled ${cancelled} stale auto-revert(s) before new transition on equipment ${targetEquipment.id}`);
     }
 
+    // Hard interlock: the frame must not energise both members of a pair, and
+    // every partner of a channel being energised is driven OFF + read back
+    // BEFORE the frame goes out. Throws InterlockViolation (logged + alert).
+    const partnersOff = await interlock.guardWriteSet(targetEquipment, action.transitions, modbusTcpClient, {
+      source: 'automation_transition', automationId: automation.id
+    });
+
     // Sort transitions by channel address and group into contiguous FC15 runs
     const groups = buildCoilRuns(action.transitions);
     const sorted = groups.sorted;
@@ -609,9 +639,21 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
     for (const t of sorted) {
       lastReading.relayStates[t.channel] = t.state;
     }
+    for (const p of partnersOff) {
+      if (!sorted.some(t => t.channel === p)) lastReading.relayStates[p] = false;
+    }
     db.prepare(
       "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
     ).run(JSON.stringify(lastReading), targetEquipment.id);
+
+    // Interlock partners switched OFF ahead of the frame (not part of the frame itself)
+    for (const p of partnersOff) {
+      if (sorted.some(t => t.channel === p)) continue;
+      logRelayEvent(targetEquipment.id, p, false, 'interlock', automation.id);
+      global.broadcast('relay_state_changed', {
+        equipmentId: targetEquipment.id, channel: p, state: false, source: 'interlock', automationId: automation.id
+      });
+    }
 
     // Log each individual relay event and broadcast
     for (const t of sorted) {

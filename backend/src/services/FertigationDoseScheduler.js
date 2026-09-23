@@ -41,6 +41,7 @@
 
 const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
+const interlock = require('./RelayInterlockService');
 const { logRelayEvent } = require('./RelayEventLogger');
 const { automationArmingService } = require('./AutomationArmingService');
 
@@ -218,7 +219,7 @@ class FertigationDoseScheduler {
     const equipmentById = {};
     for (const t of schedule.tanks) {
       if (!equipmentById[t.equipment_id]) {
-        const eq = db.prepare('SELECT id, address, slave_id, write_only FROM equipment WHERE id = ?').get(t.equipment_id);
+        const eq = db.prepare('SELECT id, name, address, slave_id, write_only, register_mappings FROM equipment WHERE id = ?').get(t.equipment_id);
         if (!eq) throw new Error(`Equipment ${t.equipment_id} not found for tank ${t.tank_name}`);
         const [host, portStr] = (eq.address || '').split(':');
         const port = parseInt(portStr, 10);
@@ -252,6 +253,10 @@ class FertigationDoseScheduler {
       valveStates[`${tank.equipment_id}:${tank.channel}`] = state;
       if (dryRun) return;
       try {
+        // Hard interlock: partner OFF + read-back before energising a valve coil.
+        if (state === true) {
+          await interlock.guardEnergise(eq, tank.channel, modbusTcpClient, { source: 'dose_program', automationId });
+        }
         if (eq.write_only) {
           await modbusTcpClient.writeSingleCoilFireAndForget(eq.host, eq.port, eq.unitId, tank.channel, state);
         } else {

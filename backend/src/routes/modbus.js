@@ -9,6 +9,27 @@ const router = express.Router();
 const { modbusTcpClient } = require('../services/ModbusTcpClient');
 const { modbusPollingService } = require('../services/ModbusPollingService');
 const { requireRole } = require('../middleware/auth');
+const interlock = require('../services/RelayInterlockService');
+
+// Interlock bookkeeping for raw writes: the partner was switched OFF ahead of
+// the requested write — reflect that in the cached relay state + broadcast.
+function noteInterlockPartnerOff(owner, partner) {
+  try {
+    const { db } = require('../utils/database');
+    const { logRelayEvent } = require('../services/RelayEventLogger');
+    const fresh = db.prepare('SELECT last_reading FROM equipment WHERE id = ?').get(owner.id);
+    let reading = {};
+    try { if (fresh && fresh.last_reading) reading = JSON.parse(fresh.last_reading); } catch (e) {}
+    if (!reading || typeof reading !== 'object') reading = {};
+    if (!reading.relayStates) reading.relayStates = {};
+    reading.relayStates[partner] = false;
+    db.prepare("UPDATE equipment SET last_reading = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(reading), owner.id);
+    logRelayEvent(owner.id, partner, false, 'interlock');
+    if (global.broadcast) global.broadcast('relay_state_changed', { equipmentId: owner.id, channel: partner, state: false, source: 'interlock', automationId: null });
+  } catch (e) {
+    console.error('[Interlock] raw-write partner bookkeeping failed:', e.message);
+  }
+}
 
 // Helper to validate IP address
 const isValidIp = (ip) => {
@@ -219,6 +240,23 @@ router.post('/write/coil', requireRole('admin', 'operator'), validateModbusParam
       return res.status(400).json({ error: 'value must be a boolean (true/false)' });
     }
 
+    // Hard interlock: if this target is a registered equipment row, an ON
+    // write must first drive the partner OFF and confirm it by read-back.
+    if (value === true) {
+      const owner = interlock.findEquipmentByModbusTarget(host, port, unitId);
+      if (owner) {
+        try {
+          const guard = await interlock.guardEnergise(owner, address, modbusTcpClient, { source: 'modbus_raw' });
+          if (guard.partner !== null) noteInterlockPartnerOff(owner, guard.partner);
+        } catch (err) {
+          if (err instanceof interlock.InterlockViolation) {
+            return res.status(409).json({ error: err.message, code: err.code, details: err.details });
+          }
+          throw err;
+        }
+      }
+    }
+
     const result = await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
 
     res.json({
@@ -292,6 +330,24 @@ router.post('/write/coils', requireRole('admin', 'operator'), validateModbusPara
 
     if (!values.every(v => typeof v === 'boolean')) {
       return res.status(400).json({ error: 'all values must be booleans (true/false)' });
+    }
+
+    // Hard interlock for the whole frame (see /write/coil).
+    if (values.some(v => v === true)) {
+      const owner = interlock.findEquipmentByModbusTarget(host, port, unitId);
+      if (owner) {
+        const writes = {};
+        values.forEach((v, i) => { writes[address + i] = v; });
+        try {
+          const partnersOff = await interlock.guardWriteSet(owner, writes, modbusTcpClient, { source: 'modbus_raw' });
+          for (const p of partnersOff) if (writes[p] === undefined) noteInterlockPartnerOff(owner, p);
+        } catch (err) {
+          if (err instanceof interlock.InterlockViolation) {
+            return res.status(409).json({ error: err.message, code: err.code, details: err.details });
+          }
+          throw err;
+        }
+      }
     }
 
     const result = await modbusTcpClient.writeMultipleCoils(host, port, unitId, address, values);

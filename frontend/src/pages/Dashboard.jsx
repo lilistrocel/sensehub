@@ -7,7 +7,8 @@ import { useToast } from '../context/ToastContext';
 import { useThrottledError } from '../hooks/useThrottledError';
 import { usePendingRelayCommands } from '../hooks/usePendingRelayCommands';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { getChannelDisplayName } from '../utils/channelUtils';
+import { getChannelDisplayName, getInterlockPartnerLabel, hasInterlockPair } from '../utils/channelUtils';
+import InterlockBadge, { ALL_ON_INTERLOCK_TITLE } from '../components/InterlockBadge';
 import {
   CATEGORIES,
   CATEGORY_MAP,
@@ -1429,6 +1430,7 @@ export default function Dashboard() {
                     }));
                   const relayStates = equipment.last_reading?.relayStates || {};
                   const isRelayBoard = relayChannels.length > 0;
+                  const interlockPairPresent = hasInterlockPair(equipment.register_mappings);
 
                   return (
                     <div key={equipment.id} className="px-6 py-4">
@@ -1495,9 +1497,10 @@ export default function Dashboard() {
                           {canControl && relayChannels.length > 1 && (
                             <div className="flex gap-2 mb-2">
                               <button
-                                onClick={() => requestRelayAllControl(equipment, true, relayChannels)}
-                                disabled={controlLoading[`${equipment.id}_all`]}
-                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+                                onClick={() => { if (!interlockPairPresent) requestRelayAllControl(equipment, true, relayChannels); }}
+                                disabled={controlLoading[`${equipment.id}_all`] || interlockPairPresent}
+                                title={interlockPairPresent ? ALL_ON_INTERLOCK_TITLE : undefined}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                               >
                                 {controlLoading[`${equipment.id}_all`] ? 'Working...' : 'All On'}
                               </button>
@@ -1522,12 +1525,16 @@ export default function Dashboard() {
                             const pendingTitle = pendingWriteOnly
                               ? 'Command sent (device has no readback)'
                               : 'Command sent, awaiting confirmation';
+                            const interlockPartnerLabel = getInterlockPartnerLabel(equipment.register_mappings, ch.address);
+                            const interlockTitle = interlockPartnerLabel
+                              ? `Interlocked with ${interlockPartnerLabel}: turning this on switches the partner off`
+                              : undefined;
                             return (
                               <button
                                 key={ch.address}
                                 onClick={() => canControl && handleRelayChannelControl(equipment.id, ch.address, !isOn)}
                                 disabled={isLoading || !canControl}
-                                title={isPending ? pendingTitle : undefined}
+                                title={isPending ? pendingTitle : interlockTitle}
                                 aria-label={isPending ? `${ch.displayName}: ${pendingTitle}` : undefined}
                                 className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                                   isOn
@@ -1535,7 +1542,10 @@ export default function Dashboard() {
                                     : 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600'
                                 } ${isPending && !pendingWriteOnly ? 'ring-2 ring-amber-400 dark:ring-amber-500 animate-pulse' : ''} ${canControl ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'} disabled:opacity-50`}
                               >
-                                <span className="truncate mr-2">{ch.displayName}</span>
+                                <span className="truncate mr-2 flex items-center gap-1 min-w-0">
+                                  <span className="truncate">{ch.displayName}</span>
+                                  {interlockPartnerLabel && <InterlockBadge partnerLabel={interlockPartnerLabel} />}
+                                </span>
                                 {isLoading ? (
                                   <svg className="animate-spin h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

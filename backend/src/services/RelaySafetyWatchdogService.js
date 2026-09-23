@@ -27,6 +27,7 @@ const { db } = require('../utils/database');
 const { createAlert } = require('../utils/alertBroadcast');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { logRelayEvent } = require('./RelayEventLogger');
+const interlock = require('./RelayInterlockService');
 
 const CONFIG_KEY = 'relay_safety_config';
 
@@ -92,6 +93,14 @@ class RelaySafetyWatchdogService {
     const cfg = this.getConfig();
     if (!cfg.enabled) return [];
 
+    // Interlock conflict sweep over the cached relay states (the poller runs
+    // the same check on fresh hardware reads; this is the redundant net).
+    try {
+      await this._interlockSweep();
+    } catch (err) {
+      console.error('[RelaySafetyWatchdog] interlock sweep error:', err.message);
+    }
+
     // For each (equipment_id, channel), grab the latest relay_event. If it's an ON event
     // older than threshold, the channel is stuck-on.
     const stuck = db.prepare(`
@@ -142,6 +151,19 @@ class RelaySafetyWatchdogService {
       console.warn(`[RelaySafetyWatchdog] Force-OFF acted on ${acted.length} stuck channel(s):`, acted);
     }
     return acted;
+  }
+
+  /** Force OFF any interlock pair whose cached relay states show both ON. */
+  async _interlockSweep() {
+    const rows = db.prepare("SELECT * FROM equipment WHERE register_mappings LIKE '%interlockWith%'").all();
+    for (const row of rows) {
+      if (!interlock.hasInterlockPairs(row)) continue;
+      let states = {};
+      try { states = (JSON.parse(row.last_reading || '{}') || {}).relayStates || {}; } catch { continue; }
+      if (interlock.checkHardwareConflict(row, states).length === 0) continue;
+      console.error(`[RelaySafetyWatchdog] interlock conflict on ${row.name} (#${row.id}) in cached state — forcing OFF`);
+      await interlock.resolveHardwareConflict(row, states, modbusTcpClient, { source: 'relay_safety' });
+    }
   }
 
   /** Pick the threshold for this stuck channel.

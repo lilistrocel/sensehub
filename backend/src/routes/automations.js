@@ -4,6 +4,9 @@ const { requireRole } = require('../middleware/auth');
 const { executeAutomation, stopAllRelays } = require('../services/AutomationExecutor');
 const { relayTimerService } = require('../services/RelayTimerService');
 const { automationArmingService } = require('../services/AutomationArmingService');
+const { validateAutomationActions } = require('../services/RelayInterlockService');
+
+const lookupEquipment = (id) => db.prepare('SELECT * FROM equipment WHERE id = ?').get(id) || null;
 
 const router = express.Router();
 
@@ -61,6 +64,13 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
     } catch (e) {
       // fallback to request body values
     }
+  }
+
+  // Hard interlock: refuse to save an automation that would energise both
+  // members of an interlocked relay pair.
+  const interlockError = validateAutomationActions(finalActions, lookupEquipment);
+  if (interlockError) {
+    return res.status(400).json({ error: 'Bad Request', message: interlockError, code: 'INTERLOCK_VIOLATION' });
   }
 
   const result = db.prepare(
@@ -282,6 +292,17 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
       finalConditionLogic = template.condition_logic || 'AND';
       finalActions = template.actions;
     }
+  }
+
+  // Hard interlock validation on the actions that will actually be stored.
+  try {
+    const parsedActions = typeof finalActions === 'string' ? JSON.parse(finalActions || '[]') : (finalActions || []);
+    const interlockError = validateAutomationActions(parsedActions, lookupEquipment);
+    if (interlockError) {
+      return res.status(400).json({ error: 'Bad Request', message: interlockError, code: 'INTERLOCK_VIOLATION' });
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'Bad Request', message: `Invalid actions: ${e.message}` });
   }
 
   db.prepare(

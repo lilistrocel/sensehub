@@ -12,6 +12,7 @@
 
 const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
+const interlock = require('./RelayInterlockService');
 
 /**
  * Errors that mean the whole device (not one register) is unreachable.
@@ -847,6 +848,21 @@ class ModbusPollingService {
         for (const reading of readings) {
           const addr = reading.registerAddress;
           relayStates[addr] = reading.value === 1;
+        }
+
+        // Hard interlock watchdog: both members of a pair ON in hardware is a
+        // fault — force BOTH OFF (verified by read-back) and raise a critical alert.
+        try {
+          if (interlock.checkHardwareConflict(equipment, relayStates).length > 0) {
+            const { turnedOff } = await interlock.resolveHardwareConflict(equipment, relayStates, modbusTcpClient, { source: 'polling' });
+            for (const ch of turnedOff) {
+              relayStates[ch] = false;
+              const r = readings.find(x => x.registerAddress === ch);
+              if (r) r.value = 0;
+            }
+          }
+        } catch (e) {
+          console.error(`[Interlock] conflict check failed for ${equipment.name}:`, e.message);
         }
         lastReadingValue = JSON.stringify({ relayStates });
 

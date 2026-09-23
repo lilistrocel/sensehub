@@ -1,6 +1,9 @@
 const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
+const { validateAutomationActions } = require('../services/RelayInterlockService');
+
+const lookupEquipment = (id) => db.prepare('SELECT * FROM equipment WHERE id = ?').get(id) || null;
 
 const router = express.Router();
 
@@ -188,6 +191,10 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
     if (!actions || !Array.isArray(actions) || actions.length === 0) {
       return res.status(400).json({ error: 'At least one action is required' });
     }
+    const interlockError = validateAutomationActions(actions, lookupEquipment);
+    if (interlockError) {
+      return res.status(400).json({ error: interlockError, message: interlockError, code: 'INTERLOCK_VIOLATION' });
+    }
 
     const result = db.prepare(`
       INSERT INTO automation_templates
@@ -236,6 +243,13 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
       parameters, agent_usage_notes, default_trigger_type, instantiation_trigger,
       target_effects,
     } = req.body;
+
+    if (Array.isArray(actions)) {
+      const interlockError = validateAutomationActions(actions, lookupEquipment);
+      if (interlockError) {
+        return res.status(400).json({ error: interlockError, message: interlockError, code: 'INTERLOCK_VIOLATION' });
+      }
+    }
 
     // Update the template
     db.prepare(`

@@ -4,6 +4,7 @@ const { requireRole } = require('../middleware/auth');
 const { modbusTcpClient } = require('../services/ModbusTcpClient');
 const { modbusPollingService } = require('../services/ModbusPollingService');
 const { logRelayEvent } = require('../services/RelayEventLogger');
+const interlock = require('../services/RelayInterlockService');
 
 // Reload the polling service's device list so newly added / changed / removed
 // equipment takes effect immediately. Defensive: never let a refresh failure
@@ -785,6 +786,20 @@ router.post('/:id/relay/control', requireRole('admin', 'operator'), async (req, 
   const port = parseInt(addrParts[1], 10);
   const unitId = equipment.slave_id || 1;
 
+  // Hard interlock: partner OFF + read-back before any ON write.
+  let partnerOff = null;
+  if (value === true) {
+    try {
+      const guard = await interlock.guardEnergise(equipment, address, modbusTcpClient, { source: 'manual' });
+      partnerOff = guard.partner;
+    } catch (err) {
+      if (err instanceof interlock.InterlockViolation) {
+        return res.status(409).json({ error: err.message, code: err.code, details: err.details });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   try {
     let result;
     if (equipment.write_only) {
@@ -802,6 +817,11 @@ router.post('/:id/relay/control', requireRole('admin', 'operator'), async (req, 
     } catch (e) {}
     if (!lastReading.relayStates) lastReading.relayStates = {};
     lastReading.relayStates[address] = value;
+    if (partnerOff !== null) {
+      lastReading.relayStates[partnerOff] = false;
+      logRelayEvent(equipment.id, partnerOff, false, 'interlock');
+      global.broadcast('relay_state_changed', { equipmentId: equipment.id, channel: partnerOff, state: false, source: 'interlock', automationId: null });
+    }
 
     db.prepare(
       "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
@@ -858,6 +878,17 @@ router.post('/:id/relay/all', requireRole('admin', 'operator'), async (req, res)
   const coilMappings = mappings.filter(m => m.type === 'coil' && m.access === 'readwrite');
   if (coilMappings.length === 0) {
     return res.status(400).json({ error: 'No relay coil mappings found for this equipment' });
+  }
+
+  // Hard interlock: "all ON" would energise both members of a pair — refuse.
+  if (value === true && interlock.hasInterlockPairs(equipment)) {
+    const [a, b] = interlock.getInterlockPairs(equipment)[0];
+    const err = new interlock.InterlockViolation(
+      `Interlock: "All channels ON" refused on ${equipment.name} — "${interlock.labelFor(equipment, a)}" (ch ${a}) and "${interlock.labelFor(equipment, b)}" (ch ${b}) can never be ON at the same time`,
+      { equipment_id: equipment.id, channels: [a, b] }
+    );
+    interlock.reportViolation(equipment, a, err, { source: 'manual_all' });
+    return res.status(409).json({ error: err.message, code: err.code, details: err.details });
   }
 
   // Parse Modbus connection info
