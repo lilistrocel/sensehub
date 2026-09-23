@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useAuthedImage } from '../hooks/useAuthedImage';
+import PtzControls from '../components/PtzControls';
 
 const API_BASE = '/api';
 const SNAPSHOT_REFRESH_INTERVAL = 30000; // 30s
@@ -335,7 +336,8 @@ export default function Cameras() {
               {/* Snapshot thumbnail */}
               <div
                 className="relative bg-gray-900 aspect-video cursor-pointer group"
-                onClick={() => camera.status === 'online' && setShowLiveModal(camera)}
+                onClick={() => setShowLiveModal(camera)}
+                title="Open live view"
               >
                 {camera.status === 'online' ? (
                   <>
@@ -377,6 +379,11 @@ export default function Cameras() {
                     {camera.error_message && (
                       <p className="text-red-500 text-xs mt-1 truncate" title={camera.error_message}>{camera.error_message}</p>
                     )}
+                    {/unreachable/i.test(camera.error_message || '') && (
+                      <p className="text-amber-600 dark:text-amber-400 text-xs mt-1" data-testid="dhcp-tip">
+                        Tip: if the camera uses DHCP its IP may have changed — give it a DHCP reservation or static IP, then update the address here.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -400,6 +407,10 @@ export default function Cameras() {
                       {capturing === camera.id ? 'Capturing...' : 'Capture Now'}
                     </button>
                   )}
+                  <button onClick={() => setShowLiveModal(camera)}
+                    className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
+                    {canManage ? 'Live / PTZ' : 'Live'}
+                  </button>
                   <button onClick={() => openHistory(camera)}
                     className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
                     History
@@ -449,7 +460,7 @@ export default function Cameras() {
       {/* Edit Camera Modal */}
       <Modal show={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Camera">
         <form onSubmit={handleEdit}>
-          <div className="px-6 py-4"><FormFields form={form} setForm={setForm} isEdit={true} /></div>
+          <div className="px-6 py-4"><FormFields form={form} setForm={setForm} isEdit={true} hasPassword={!!selectedCamera?.has_password} /></div>
           <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 flex justify-end gap-3">
             <button type="button" onClick={() => setShowEditModal(false)}
               className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500">
@@ -484,18 +495,27 @@ export default function Cameras() {
 
       {/* Live View Modal */}
       {showLiveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90">
-          <div className="relative w-full max-w-5xl mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white text-xl font-semibold">{showLiveModal.name}</h2>
-              <button onClick={() => setShowLiveModal(null)}
-                className="text-gray-400 hover:text-white p-2">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-90" role="dialog" aria-modal="true" aria-label={`${showLiveModal.name} live view`}>
+          <div className="relative w-full max-w-6xl mx-auto px-4 py-4 min-h-full flex flex-col justify-center">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-white text-xl font-semibold truncate">{showLiveModal.name}</h2>
+              <button onClick={() => setShowLiveModal(null)} aria-label="Close live view"
+                className="text-gray-400 hover:text-white p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <LivePlayer camera={showLiveModal} />
+            <div className="flex flex-col lg:flex-row gap-4 lg:items-start">
+              <div className="flex-1 min-w-0">
+                <LivePlayer camera={showLiveModal} lastSeen={storedSnapshots[showLiveModal.id]?.captured_at} formatDate={formatDate} />
+              </div>
+              {canManage && (
+                <div className="lg:w-80 shrink-0">
+                  <PtzControls camera={showLiveModal} token={token} showError={showError} showSuccess={showSuccess} />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -566,7 +586,7 @@ export default function Cameras() {
 // cursor jumps out of the field while typing. State is passed in via props.
 const inputCls = "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white";
 
-function FormFields({ form, setForm, isEdit }) {
+function FormFields({ form, setForm, isEdit, hasPassword }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -620,8 +640,13 @@ function FormFields({ form, setForm, isEdit }) {
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
           <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
             autoComplete="new-password"
-            placeholder={isEdit ? '(unchanged if empty)' : ''}
+            placeholder={isEdit ? (hasPassword ? '(unchanged if empty)' : 'Not saved — enter to enable PTZ') : ''}
             className={inputCls} />
+          {isEdit && !hasPassword && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              No password is saved for this camera. PTZ falls back to the go2rtc stream password; save it here so it keeps working.
+            </p>
+          )}
         </div>
       </div>
       <div>
@@ -658,27 +683,65 @@ function Modal({ show, onClose, title, children }) {
   );
 }
 
-// MSE live player component with MJPEG fallback
-function LivePlayer({ camera }) {
+// MSE live player component with MJPEG fallback.
+// Failure handling: go2rtc answers the MSE websocket with {"type":"error"} (and
+// closes) when it cannot reach the camera; a stalled first frame (10 s), an MJPEG
+// <img> error, or a WS failure all land in the same "unreachable" state with a
+// Retry button — never an endless spinner.
+const FIRST_FRAME_TIMEOUT_MS = 10000;
+
+function LivePlayer({ camera, lastSeen, formatDate }) {
   const videoRef = useRef(null);
   const wsRef = useRef(null);
+  const timeoutRef = useRef(null);
   const [mode, setMode] = useState('mse'); // 'mse' | 'mjpeg'
-  const [error, setError] = useState(null);
+  const [phase, setPhase] = useState('connecting'); // connecting | playing | failed
+  const [failReason, setFailReason] = useState(null);
+  const [attempt, setAttempt] = useState(0);
+  const gotFrameRef = useRef(false);
+
+  const fail = useCallback((reason) => {
+    gotFrameRef.current = false;
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    if (wsRef.current) { try { wsRef.current.close(); } catch {} wsRef.current = null; }
+    setFailReason(reason || 'Stream failed');
+    setPhase('failed');
+  }, []);
+
+  const armFirstFrameTimeout = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      if (!gotFrameRef.current) fail('No video received');
+    }, FIRST_FRAME_TIMEOUT_MS);
+  }, [fail]);
+
+  const markPlaying = useCallback(() => {
+    gotFrameRef.current = true;
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    setPhase('playing');
+  }, []);
 
   useEffect(() => {
-    if (mode === 'mse') {
-      startMSE();
-    }
+    gotFrameRef.current = false;
+    setPhase('connecting');
+    setFailReason(null);
+    armFirstFrameTimeout();
+    if (mode === 'mse') startMSE();
     return () => {
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
     };
-  }, [mode, camera.go2rtc_name]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, camera.go2rtc_name, attempt]);
+
+  const retry = () => {
+    setAttempt(a => a + 1);
+  };
 
   const startMSE = () => {
-    setError(null);
     const video = videoRef.current;
     if (!video || !window.MediaSource) {
       setMode('mjpeg');
@@ -687,21 +750,39 @@ function LivePlayer({ camera }) {
 
     const ms = new MediaSource();
     video.src = URL.createObjectURL(ms);
+    const onPlaying = () => markPlaying();
+    video.addEventListener('playing', onPlaying, { once: true });
+    video.addEventListener('loadeddata', onPlaying, { once: true });
 
     ms.addEventListener('sourceopen', () => {
       const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/camera-stream/api/ws?src=${encodeURIComponent(camera.go2rtc_name)}`;
-      const ws = new WebSocket(wsUrl);
+      let ws;
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch (e) {
+        fail('WebSocket connection failed');
+        return;
+      }
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
 
       let sb = null;
       let queue = [];
 
+      ws.onopen = () => {
+        // Ask go2rtc for the MSE stream (codecs we can play)
+        try { ws.send(JSON.stringify({ type: 'mse', value: 'avc1.640029,avc1.64002A,avc1.640033,hvc1.1.6.L153.B0,mp4a.40.2,mp4a.40.5,flac,opus' })); } catch {}
+      };
+
       ws.onmessage = (ev) => {
         if (typeof ev.data === 'string') {
-          // Codec info message from go2rtc
           try {
             const msg = JSON.parse(ev.data);
+            if (msg.type === 'error') {
+              // e.g. "mse: streams: dial tcp 192.168.1.102:554: connect: no route to host"
+              fail(String(msg.value || 'Stream error'));
+              return;
+            }
             if (msg.type === 'mse' && msg.value) {
               // msg.value is the codec string e.g. "video/mp4; codecs=\"avc1.640029\""
               if (!sb) {
@@ -715,7 +796,6 @@ function LivePlayer({ camera }) {
                   });
                 } catch (e) {
                   console.warn('[MSE] addSourceBuffer failed:', e);
-                  setError('MSE codec not supported');
                   setMode('mjpeg');
                 }
               }
@@ -741,26 +821,72 @@ function LivePlayer({ camera }) {
       };
 
       ws.onerror = () => {
-        setError('WebSocket connection failed');
-        setMode('mjpeg');
+        if (!gotFrameRef.current) fail('WebSocket connection failed');
       };
 
       ws.onclose = () => {
-        // Don't switch to mjpeg on normal close
+        if (wsRef.current === ws && !gotFrameRef.current) fail('Stream closed before any video arrived');
       };
     });
 
     video.play().catch(() => {});
   };
 
+  const lastSeenText = lastSeen ? `last seen ${formatDate ? formatDate(lastSeen) : lastSeen}` : 'no snapshot on record';
+  // go2rtc reports "wrong user/pass" when the camera answers but rejects the RTSP credentials
+  const authProblem = /user\/pass|unauthori[sz]ed|401/i.test(failReason || '');
+  const headline = authProblem
+    ? 'Camera rejected the stream credentials — check the saved password'
+    : `Camera unreachable — ${lastSeenText}`;
+
+  const failedPanel = (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/95 text-center px-4 rounded-lg"
+      role="alert"
+      data-testid="live-unreachable"
+    >
+      <svg className="w-10 h-10 text-red-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+      </svg>
+      <p className="text-white font-medium">{headline}</p>
+      {failReason && <p className="text-gray-400 text-xs mt-1 max-w-md break-words" title={failReason}>{failReason}</p>}
+      <button
+        type="button"
+        onClick={retry}
+        className="mt-3 min-h-[44px] px-5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
+      >
+        Retry
+      </button>
+    </div>
+  );
+
+  const connectingPanel = (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/70 pointer-events-none" aria-live="polite">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-2" />
+      <p className="text-gray-200 text-sm">Connecting to {camera.name}…</p>
+    </div>
+  );
+
   if (mode === 'mjpeg') {
-    const mjpegUrl = `/camera-stream/api/frame.mp4?src=${encodeURIComponent(camera.go2rtc_name)}`;
+    const mjpegUrl = `/camera-stream/api/frame.mp4?src=${encodeURIComponent(camera.go2rtc_name)}&t=${attempt}`;
     return (
       <div>
-        <img src={mjpegUrl} alt={camera.name} className="w-full rounded-lg bg-black" />
+        <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+          {phase !== 'failed' && (
+            <img
+              src={mjpegUrl}
+              alt={camera.name}
+              className="w-full h-full object-contain bg-black"
+              onLoad={markPlaying}
+              onError={() => fail('MJPEG stream failed')}
+            />
+          )}
+          {phase === 'connecting' && connectingPanel}
+          {phase === 'failed' && failedPanel}
+        </div>
         <div className="flex items-center gap-4 mt-3">
           <span className="text-gray-400 text-sm">MJPEG fallback mode</span>
-          <button onClick={() => setMode('mse')} className="text-blue-400 text-sm hover:underline">
+          <button onClick={() => setMode('mse')} className="text-blue-400 text-sm hover:underline min-h-[44px]">
             Try MSE again
           </button>
         </div>
@@ -770,13 +896,14 @@ function LivePlayer({ camera }) {
 
   return (
     <div>
-      <video ref={videoRef} autoPlay muted playsInline className="w-full rounded-lg bg-black" />
-      {error && (
-        <p className="text-yellow-400 text-sm mt-2">{error}</p>
-      )}
+      <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+        <video ref={videoRef} autoPlay muted playsInline className="w-full h-full bg-black" data-testid="live-video" />
+        {phase === 'connecting' && connectingPanel}
+        {phase === 'failed' && failedPanel}
+      </div>
       <div className="flex items-center gap-4 mt-3">
-        <span className="text-gray-400 text-sm">MSE live stream</span>
-        <button onClick={() => setMode('mjpeg')} className="text-blue-400 text-sm hover:underline">
+        <span className="text-gray-400 text-sm">{phase === 'playing' ? 'MSE live stream' : phase === 'failed' ? 'Live stream unavailable' : 'MSE live stream'}</span>
+        <button onClick={() => setMode('mjpeg')} className="text-blue-400 text-sm hover:underline min-h-[44px]">
           Switch to MJPEG
         </button>
       </div>

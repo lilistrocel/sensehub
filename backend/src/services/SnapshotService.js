@@ -50,13 +50,13 @@ class SnapshotService {
     this._cleanup();
   }
 
-  async _captureOne(camera) {
+  async _captureOne(camera, { force = false } = {}) {
     if (!cameraStreamService.ready) {
       console.warn('[Snapshot] go2rtc not ready, skipping capture');
       return;
     }
 
-    const { buffer } = await cameraStreamService.getSnapshot(camera.go2rtc_name);
+    const { buffer } = await cameraStreamService.getSnapshot(camera.go2rtc_name, { force });
     if (!buffer || buffer.length === 0) {
       throw new Error('Empty snapshot');
     }
@@ -119,7 +119,7 @@ class SnapshotService {
   async captureNow(cameraId) {
     const camera = db.prepare('SELECT * FROM cameras WHERE id = ?').get(cameraId);
     if (!camera) throw new Error('Camera not found');
-    await this._captureOne(camera);
+    await this._captureOne(camera, { force: true });
   }
 }
 

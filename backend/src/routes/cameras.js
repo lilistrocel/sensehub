@@ -4,6 +4,8 @@ const fs = require('fs');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
 const { cameraStreamService } = require('../services/CameraStreamService');
+const { ptzService, PtzError } = require('../services/PtzService');
+const { cameraCredentials } = require('../services/CameraCredentials');
 
 const router = express.Router();
 
@@ -41,6 +43,7 @@ router.get('/', (req, res) => {
   // Add stream URLs and strip passwords from response
   cameras.forEach(cam => {
     cam.streams = cameraStreamService.getStreamUrls(cam.go2rtc_name);
+    cam.has_password = !!cam.password;
     delete cam.password;
   });
 
@@ -82,6 +85,7 @@ router.get('/:id', (req, res) => {
   ).all(req.params.id);
 
   camera.streams = cameraStreamService.getStreamUrls(camera.go2rtc_name);
+  camera.has_password = !!camera.password;
   delete camera.password;
 
   res.json({ ...camera, zones });
@@ -184,7 +188,8 @@ router.put('/:id', requireRole('admin', 'operator'), async (req, res) => {
     stream_url ?? camera.stream_url,
     snapshot_url ?? camera.snapshot_url,
     username ?? camera.username,
-    password ?? camera.password,
+    // Write-only field: blank/undefined means "keep the stored password"
+    (typeof password === 'string' && password.length > 0) ? password : camera.password,
     manufacturer ?? camera.manufacturer,
     model ?? camera.model,
     ip_address ?? camera.ip_address,
@@ -195,12 +200,15 @@ router.put('/:id', requireRole('admin', 'operator'), async (req, res) => {
   );
 
   const updated = db.prepare('SELECT * FROM cameras WHERE id = ?').get(req.params.id);
+  cameraCredentials.invalidate(updated.id);
+  ptzService.clearAuthState(updated.id);
 
   // Re-sync with go2rtc if stream config changed
   if (cameraStreamService.ready) {
     try {
       if (updated.enabled) {
         await cameraStreamService.addStream(updated);
+        await cameraStreamService.probeCamera(updated);
       } else {
         await cameraStreamService.removeStream(updated.go2rtc_name);
         db.prepare("UPDATE cameras SET status = 'offline', updated_at = datetime('now') WHERE id = ?")
@@ -213,6 +221,7 @@ router.put('/:id', requireRole('admin', 'operator'), async (req, res) => {
 
   const result = db.prepare('SELECT * FROM cameras WHERE id = ?').get(req.params.id);
   result.streams = cameraStreamService.getStreamUrls(result.go2rtc_name);
+  result.has_password = !!result.password;
   delete result.password;
 
   global.broadcast('camera_updated', result);
@@ -257,7 +266,7 @@ router.post('/:id/test', requireRole('admin', 'operator'), async (req, res) => {
     await cameraStreamService.addStream(camera);
 
     // Try to grab a snapshot — proves the RTSP source is reachable
-    const { buffer } = await cameraStreamService.getSnapshot(camera.go2rtc_name);
+    const { buffer } = await cameraStreamService.getSnapshot(camera.go2rtc_name, { force: true });
 
     db.prepare("UPDATE cameras SET status = 'online', error_message = NULL, updated_at = datetime('now') WHERE id = ?")
       .run(camera.id);
@@ -311,6 +320,110 @@ router.post('/:id/capture', requireRole('admin', 'operator'), async (req, res) =
     res.json({ success: true, message: 'Snapshot captured' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PTZ (Hikvision ISAPI) — viewers may read status/presets; admin+operator may move
+// ---------------------------------------------------------------------------
+
+const loadCamera = (req, res, next) => {
+  const camera = db.prepare('SELECT * FROM cameras WHERE id = ?').get(req.params.id);
+  if (!camera) {
+    return res.status(404).json({ error: 'Not Found', message: 'Camera not found' });
+  }
+  req.camera = camera;
+  next();
+};
+
+const ptzErrorStatus = (err) => {
+  if (!(err instanceof PtzError)) return 500;
+  if (err.status === 'unreachable') return 503;
+  if (err.status === 'rate_limited') return 429;
+  if (err.httpStatus === 400) return 400;
+  return 502; // auth / camera-side error
+};
+
+const sendPtzError = (res, err, cameraName) => {
+  if (!(err instanceof PtzError)) {
+    console.error(`[PTZ] ${cameraName}:`, err);
+    return res.status(500).json({ status: 'error', message: err.message || 'PTZ request failed' });
+  }
+  if (err.status !== 'rate_limited') console.warn(`[PTZ] ${cameraName}: ${err.status} — ${err.message}`);
+  res.status(ptzErrorStatus(err)).json(err.toJSON());
+};
+
+// GET /api/cameras/:id/ptz/status - reachability probe (2 s) + capabilities
+router.get('/:id/ptz/status', loadCamera, async (req, res) => {
+  try {
+    const info = await ptzService.getStatus(req.camera);
+    res.json(info);
+  } catch (err) {
+    sendPtzError(res, err, req.camera.name);
+  }
+});
+
+// GET /api/cameras/:id/ptz/presets
+router.get('/:id/ptz/presets', loadCamera, async (req, res) => {
+  try {
+    res.json(await ptzService.getPresets(req.camera));
+  } catch (err) {
+    sendPtzError(res, err, req.camera.name);
+  }
+});
+
+// POST /api/cameras/:id/ptz/move {pan,tilt,zoom} (-100..100, 0 = stop)
+router.post('/:id/ptz/move', requireRole('admin', 'operator'), loadCamera, async (req, res) => {
+  const { pan, tilt, zoom } = req.body || {};
+  for (const [k, v] of Object.entries({ pan, tilt, zoom })) {
+    if (v !== undefined && v !== null && !Number.isFinite(Number(v))) {
+      return res.status(400).json({ status: 'error', message: `${k} must be a number between -100 and 100` });
+    }
+  }
+  try {
+    res.json(await ptzService.move(req.camera, { pan, tilt, zoom }));
+  } catch (err) {
+    sendPtzError(res, err, req.camera.name);
+  }
+});
+
+// POST /api/cameras/:id/ptz/stop
+router.post('/:id/ptz/stop', requireRole('admin', 'operator'), loadCamera, async (req, res) => {
+  try {
+    res.json(await ptzService.stop(req.camera));
+  } catch (err) {
+    sendPtzError(res, err, req.camera.name);
+  }
+});
+
+// POST /api/cameras/:id/ptz/presets/:pid/goto
+router.post('/:id/ptz/presets/:pid/goto', requireRole('admin', 'operator'), loadCamera, async (req, res) => {
+  try {
+    res.json(await ptzService.gotoPreset(req.camera, req.params.pid));
+  } catch (err) {
+    sendPtzError(res, err, req.camera.name);
+  }
+});
+
+// PUT /api/cameras/:id/ptz/presets/:pid {name} - save current position as preset
+router.put('/:id/ptz/presets/:pid', requireRole('admin', 'operator'), loadCamera, async (req, res) => {
+  try {
+    const name = req.body && req.body.name;
+    if (name !== undefined && typeof name !== 'string') {
+      return res.status(400).json({ status: 'error', message: 'name must be a string' });
+    }
+    res.json(await ptzService.savePreset(req.camera, req.params.pid, name));
+  } catch (err) {
+    sendPtzError(res, err, req.camera.name);
+  }
+});
+
+// DELETE /api/cameras/:id/ptz/presets/:pid
+router.delete('/:id/ptz/presets/:pid', requireRole('admin', 'operator'), loadCamera, async (req, res) => {
+  try {
+    res.json(await ptzService.deletePreset(req.camera, req.params.pid));
+  } catch (err) {
+    sendPtzError(res, err, req.camera.name);
   }
 });
 
