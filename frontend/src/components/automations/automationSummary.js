@@ -1,0 +1,616 @@
+/**
+ * Pure helpers for the Automations page: parse rows, build the one-line
+ * "WHEN → WHAT" summary from trigger + actions, classify rules into farm
+ * sections, mirror the backend hysteresis pairing (AutomationGuards.js,
+ * read-only) and compute schedule previews. No React, no fetch.
+ */
+import { getChannelDisplayName } from '../../utils/channelUtils';
+import { toEpochMs } from '../../utils/freshness';
+
+// ---------------------------------------------------------------------------
+// Parsing
+// ---------------------------------------------------------------------------
+
+export function parseJson(raw, fallback) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch { return fallback; }
+}
+
+/** Register mappings of an equipment row as an array (JSON string or array). */
+export function parseRegisterMappings(eq) {
+  if (!eq || !eq.register_mappings) return [];
+  const m = parseJson(eq.register_mappings, []);
+  return Array.isArray(m) ? m : [];
+}
+
+export function isEnabled(auto) {
+  return auto?.enabled === 1 || auto?.enabled === true;
+}
+
+/** Normalise an automation row into plain objects. */
+export function parseAutomation(auto) {
+  const trigger = parseJson(auto?.trigger_config, {}) || {};
+  const conditions = parseJson(auto?.conditions, []);
+  const actions = parseJson(auto?.actions, []);
+  const skipConditions = parseJson(auto?.skip_conditions, []);
+  return {
+    trigger: typeof trigger === 'object' ? trigger : {},
+    conditions: Array.isArray(conditions) ? conditions : [],
+    actions: Array.isArray(actions) ? actions : [],
+    skipConditions: Array.isArray(skipConditions) ? skipConditions : [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Equipment index: id -> { name, status, enabled, coils: Map(reg -> label), metrics[] }
+// ---------------------------------------------------------------------------
+
+const toReg = (v) => {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : null;
+};
+
+export function buildEquipmentIndex(equipmentList) {
+  const index = new Map();
+  for (const eq of Array.isArray(equipmentList) ? equipmentList : []) {
+    if (!eq || eq.id === undefined) continue;
+    const mappings = parseRegisterMappings(eq);
+    const coils = new Map();
+    const metrics = [];
+    for (const m of mappings) {
+      if (!m) continue;
+      const reg = toReg(m.register ?? m.address);
+      if (m.type === 'coil') {
+        if (reg !== null) coils.set(reg, { label: getChannelDisplayName(m), access: m.access, mapping: m });
+      } else {
+        metrics.push({ name: m.name, label: m.label || m.name, unit: m.unit || '', register: reg });
+      }
+    }
+    index.set(Number(eq.id), {
+      id: Number(eq.id),
+      name: eq.name || `Equipment #${eq.id}`,
+      type: eq.type,
+      status: eq.status,
+      enabled: eq.enabled === 1 || eq.enabled === true,
+      coils,
+      metrics,
+      mappings,
+      row: eq,
+    });
+  }
+  return index;
+}
+
+export function equipmentLabel(equipIndex, id) {
+  const e = equipIndex?.get(Number(id));
+  return e ? e.name : `Equipment #${id}`;
+}
+
+export function channelLabel(equipIndex, eqId, channel) {
+  const e = equipIndex?.get(Number(eqId));
+  const reg = toReg(channel);
+  const c = e && reg !== null ? e.coils.get(reg) : null;
+  return c ? c.label : `Channel ${channel}`;
+}
+
+/** Writable coils of an equipment as [{ register, label }] sorted by register. */
+export function writableCoils(equipIndex, eqId) {
+  const e = equipIndex?.get(Number(eqId));
+  if (!e) return [];
+  return [...e.coils.entries()]
+    .filter(([, c]) => c.access === 'readwrite')
+    .map(([register, c]) => ({ register, label: c.label, mapping: c.mapping }))
+    .sort((a, b) => a.register - b.register);
+}
+
+// ---------------------------------------------------------------------------
+// WHEN
+// ---------------------------------------------------------------------------
+
+export const OP_SYM = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=', neq: '≠' };
+
+const METRIC_SHORT = {
+  temperature: 'Temp',
+  humidity: 'RH',
+  'substrate moisture': 'VWC',
+  'substrate temperature': 'Substrate temp',
+  'water temperature': 'Water temp',
+};
+
+export function metricShort(sensorType) {
+  const s = String(sensorType || '').trim();
+  return METRIC_SHORT[s.toLowerCase()] || s || 'value';
+}
+
+export function formatValueUnit(value, unit) {
+  const v = value === undefined || value === null || value === '' ? '?' : String(value);
+  const u = String(unit || '').trim();
+  return u ? `${v} ${u}` : v;
+}
+
+export function describeThreshold(trigger, equipIndex, { long = false } = {}) {
+  const op = OP_SYM[trigger?.operator] || trigger?.operator || '>';
+  const metric = long ? (trigger?.sensor_type || 'value') : metricShort(trigger?.sensor_type);
+  const sensor = long && trigger?.equipment_id ? ` (${equipmentLabel(equipIndex, trigger.equipment_id)})` : '';
+  return `${metric}${sensor} ${op} ${formatValueUnit(trigger?.threshold_value, trigger?.unit)}`;
+}
+
+const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const pad2 = (n) => String(n).padStart(2, '0');
+
+export function describeSchedule(trigger, { long = false } = {}) {
+  const type = trigger?.schedule_type || 'daily';
+  const time = trigger?.time || '08:00';
+  if (type === 'once') {
+    if (!trigger?.run_at) return long ? 'One-time (date not set)' : 'Once (unset)';
+    const d = new Date(trigger.run_at);
+    if (Number.isNaN(d.getTime())) return `Once ${trigger.run_at}`;
+    const mon = d.toLocaleString('en-GB', { month: 'short' });
+    return `Once ${d.getDate()} ${mon} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+  if (type === 'daily') return long ? `Daily at ${time}` : `Daily ${time}`;
+  if (type === 'weekly') {
+    const dow = parseInt(trigger?.day_of_week ?? 1, 10);
+    const day = long ? DAY_LONG[dow] : DAY_SHORT[dow];
+    return long ? `Every ${day || 'Monday'} at ${time}` : `${day || 'Mon'} ${time}`;
+  }
+  if (type === 'hourly') {
+    const minute = pad2(parseInt(trigger?.minute ?? 0, 10) || 0);
+    return long ? `Every hour at :${minute}` : `Hourly :${minute}`;
+  }
+  if (type === 'custom') return trigger?.cron ? `Cron ${trigger.cron}` : 'Cron (unset)';
+  return 'Schedule';
+}
+
+export function describeWhen(trigger, equipIndex, opts = {}) {
+  const type = trigger?.type || 'manual';
+  if (type === 'threshold') return describeThreshold(trigger, equipIndex, opts);
+  if (type === 'schedule') return describeSchedule(trigger, opts);
+  if (type === 'event') return 'Event';
+  return 'Manual';
+}
+
+export const TRIGGER_LABELS = { manual: 'Manual', schedule: 'Schedule', threshold: 'Threshold', event: 'Event' };
+
+// ---------------------------------------------------------------------------
+// WHAT
+// ---------------------------------------------------------------------------
+
+export function formatDuration(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return '';
+  if (s < 60) return `${s} s`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rest = s % 60;
+  const parts = [];
+  if (h) parts.push(`${h} h`);
+  if (m) parts.push(`${m} min`);
+  if (rest) parts.push(`${rest} s`);
+  return parts.join(' ');
+}
+
+/**
+ * Flatten actions into relay targets: one entry per (equipment, channel, action).
+ * "All channels" control actions expand to every writable coil; transitions
+ * map each channel's state. Duplicates (same key) keep the first occurrence.
+ */
+export function collectTargets(actions, equipIndex) {
+  const out = [];
+  const seen = new Set();
+  const push = (eqId, channel, action, extra) => {
+    const key = `${eqId}:${channel}:${action}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const e = equipIndex?.get(Number(eqId));
+    out.push({
+      eqId: Number(eqId),
+      eqName: e ? e.name : (extra.equipment_name || `Equipment #${eqId}`),
+      channel,
+      label: e ? channelLabel(equipIndex, eqId, channel) : (extra.channel_name || `Channel ${channel}`),
+      action,
+      value: extra.value ?? null,
+      duration: Number(extra.duration_seconds) > 0 ? Number(extra.duration_seconds) : null,
+      delay: Number(extra.delay_seconds) > 0 ? Number(extra.delay_seconds) : null,
+      online: e ? (e.enabled && e.status === 'online') : null,
+    });
+  };
+
+  for (const a of Array.isArray(actions) ? actions : []) {
+    if (!a || typeof a !== 'object') continue;
+    const eqId = parseInt(a.equipment_id, 10);
+    if (!Number.isFinite(eqId)) continue;
+    if (a.type === 'transition' && Array.isArray(a.transitions)) {
+      for (const t of a.transitions) {
+        const ch = toReg(t.channel);
+        if (ch === null) continue;
+        push(eqId, ch, t.state ? 'on' : 'off', { ...a, channel_name: t.name, value: null });
+      }
+    } else if (a.type === 'control') {
+      const action = a.action || 'on';
+      if (a.channel === null || a.channel === undefined || a.channel === '') {
+        const coils = writableCoils(equipIndex, eqId);
+        if (coils.length) {
+          for (const c of coils) push(eqId, c.register, action, a);
+        } else {
+          push(eqId, '*', action, { ...a, channel_name: 'all channels' });
+        }
+      } else {
+        const ch = toReg(a.channel);
+        if (ch !== null) push(eqId, ch, action, a);
+      }
+    }
+  }
+  return out;
+}
+
+/** "01-03-05 Big Fan" -> "big fan"; "Irrigation Zone 1" -> "irrigation zone". */
+export function kindOf(label) {
+  let s = String(label || '').trim();
+  s = s.replace(/^[\d\s\-–—/&.,()]+/, '');
+  s = s.replace(/[\s\-–—#]*\d+\s*$/, '');
+  s = s.trim().toLowerCase();
+  return s || String(label || 'channel').toLowerCase();
+}
+
+export function pluralize(kind, n) {
+  if (n === 1) return kind;
+  return /s$/.test(kind) ? kind : `${kind}s`;
+}
+
+const ACTION_WORD = { on: 'ON', off: 'OFF', toggle: 'TOGGLE', set: 'SET' };
+
+export function describeTargets(targets) {
+  if (!targets.length) return '';
+  const byAction = new Map();
+  for (const t of targets) {
+    if (!byAction.has(t.action)) byAction.set(t.action, []);
+    byAction.get(t.action).push(t);
+  }
+  const parts = [];
+  for (const [action, list] of byAction) {
+    const word = ACTION_WORD[action] || action.toUpperCase();
+    const segs = new Map();
+    for (const t of list) {
+      const key = `${kindOf(t.label)}|${t.duration || ''}|${t.value ?? ''}`;
+      if (!segs.has(key)) segs.set(key, { kind: kindOf(t.label), duration: t.duration, value: t.value, items: [] });
+      segs.get(key).items.push(t);
+    }
+    const suffix = (dur, value) => `${action === 'set' && value !== null && value !== undefined ? ` ${value}` : ''}${dur ? ` ${formatDuration(dur)}` : ''}`;
+    if (segs.size <= 3) {
+      for (const seg of segs.values()) {
+        const subject = seg.items.length === 1 ? seg.items[0].label : `${seg.items.length} ${pluralize(seg.kind, seg.items.length)}`;
+        parts.push(`${subject} ${word}${suffix(seg.duration, seg.value)}`);
+      }
+    } else {
+      const durations = list.map(t => t.duration || 0);
+      const max = Math.max(...durations);
+      const min = Math.min(...durations);
+      const durText = max > 0 ? (max === min ? ` ${formatDuration(max)}` : ` up to ${formatDuration(max)}`) : '';
+      parts.push(`${list.length} relays ${word}${durText}`);
+    }
+  }
+  return parts.join(', ');
+}
+
+export function describeWhat(actions, equipIndex) {
+  const list = Array.isArray(actions) ? actions : [];
+  if (!list.length) return 'no actions';
+  const parts = [];
+  const relayText = describeTargets(collectTargets(list, equipIndex));
+  if (relayText) parts.push(relayText);
+  const alerts = list.filter(a => a?.type === 'alert');
+  const logs = list.filter(a => a?.type === 'log');
+  if (alerts.length === 1) parts.push(`${alerts[0].severity || 'info'} alert`);
+  else if (alerts.length > 1) parts.push(`${alerts.length} alerts`);
+  if (logs.length === 1) parts.push('log entry');
+  else if (logs.length > 1) parts.push(`${logs.length} log entries`);
+  const unknown = list.filter(a => a && !['alert', 'log', 'control', 'transition'].includes(a.type));
+  if (unknown.length) parts.push(`${unknown.length} other action${unknown.length > 1 ? 's' : ''}`);
+  return parts.join(' + ') || 'no actions';
+}
+
+/**
+ * @returns {{ when: string, what: string, text: string, long: string, triggerType: string }}
+ */
+export function summarizeAutomation(auto, equipIndex) {
+  const { trigger, actions } = parseAutomation(auto);
+  const when = describeWhen(trigger, equipIndex);
+  const what = describeWhat(actions, equipIndex);
+  const long = `${describeWhen(trigger, equipIndex, { long: true })} → ${what}`;
+  return { when, what, text: `${when} → ${what}`, long, triggerType: trigger?.type || 'manual' };
+}
+
+/** Same summary for the builder's in-progress form data (objects, not JSON). */
+export function summarizeForm(formData, equipIndex) {
+  return summarizeAutomation({ trigger_config: formData.trigger_config, actions: formData.actions }, equipIndex);
+}
+
+// ---------------------------------------------------------------------------
+// Classification + row state
+// ---------------------------------------------------------------------------
+
+export const CATEGORY_ORDER = ['climate', 'irrigation', 'alerts', 'manual', 'other'];
+export const CATEGORY_LABELS = {
+  climate: 'Climate',
+  irrigation: 'Irrigation & fertigation',
+  alerts: 'Alerts & logs',
+  manual: 'Manual',
+  other: 'Other',
+};
+
+const IRRIGATION_EQUIPMENT_IDS = new Set([1, 2]);
+
+export function classifyAutomation(auto) {
+  const { trigger, actions } = parseAutomation(auto);
+  if (/^\s*climate/i.test(auto?.name || '')) return 'climate';
+  const touchesIrrigation = actions.some(a => a && (a.type === 'control' || a.type === 'transition') && IRRIGATION_EQUIPMENT_IDS.has(parseInt(a.equipment_id, 10)));
+  if (auto?.dose_program_id || touchesIrrigation) return 'irrigation';
+  if (actions.length > 0 && actions.every(a => a && (a.type === 'alert' || a.type === 'log'))) return 'alerts';
+  if ((trigger?.type || 'manual') === 'manual') return 'manual';
+  return 'other';
+}
+
+export const TRIGGER_ORDER = ['threshold', 'schedule', 'manual', 'event'];
+
+/** Names of targeted equipment that is disabled or not online. */
+export function offlineTargets(auto, equipIndex) {
+  const { actions } = parseAutomation(auto);
+  const names = new Set();
+  for (const a of actions) {
+    if (!a || (a.type !== 'control' && a.type !== 'transition')) continue;
+    const e = equipIndex?.get(parseInt(a.equipment_id, 10));
+    if (!e) continue;
+    if (!e.enabled || e.status !== 'online') names.add(e.name);
+  }
+  return [...names];
+}
+
+export function findDuplicateNames(automations) {
+  const counts = new Map();
+  for (const a of automations || []) {
+    const k = String(a?.name || '').trim().toLowerCase();
+    if (!k) continue;
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const dupes = new Set();
+  for (const [k, n] of counts) if (n > 1) dupes.add(k);
+  return dupes;
+}
+
+export function relativeTime(ts, now = Date.now()) {
+  const ms = toEpochMs(ts);
+  if (ms === null) return 'never';
+  const diff = Math.max(0, now - ms);
+  const s = Math.round(diff / 1000);
+  if (s < 45) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} h ago`;
+  const d = Math.round(h / 24);
+  if (d < 60) return `${d} d ago`;
+  const mo = Math.round(d / 30);
+  return `${mo} mo ago`;
+}
+
+// ---------------------------------------------------------------------------
+// Hysteresis pairing — mirrors backend/src/services/AutomationGuards.js
+// (actionChannelMap / toThresholdRule / opposingChannels / checkPair).
+// Read-only: used to show "Pairs with #89 ..." under a threshold rule.
+// ---------------------------------------------------------------------------
+
+export function actionChannelMap(actions, getEquipment) {
+  const map = new Map();
+  if (!Array.isArray(actions)) return map;
+  for (const a of actions) {
+    if (!a || typeof a !== 'object') continue;
+    const eqId = parseInt(a.equipment_id, 10);
+    if (!Number.isFinite(eqId)) continue;
+    if (a.type === 'transition' && Array.isArray(a.transitions)) {
+      for (const t of a.transitions) {
+        const ch = parseInt(t.channel, 10);
+        if (!Number.isFinite(ch)) continue;
+        map.set(`${eqId}:${ch}`, t.state ? 'on' : 'off');
+      }
+    } else if (a.type === 'control' && (a.action === 'on' || a.action === 'off')) {
+      if (a.channel === null || a.channel === undefined || a.channel === '') {
+        let expanded = false;
+        if (typeof getEquipment === 'function') {
+          const row = getEquipment(eqId);
+          const mappings = row ? parseRegisterMappings(row) : null;
+          if (Array.isArray(mappings)) {
+            for (const m of mappings) {
+              if (!m || m.type !== 'coil' || m.access !== 'readwrite') continue;
+              const ch = parseInt(m.register ?? m.address, 10);
+              if (Number.isFinite(ch)) { map.set(`${eqId}:${ch}`, a.action); expanded = true; }
+            }
+          }
+        }
+        if (!expanded) map.set(`${eqId}:*`, a.action);
+      } else {
+        const ch = parseInt(a.channel, 10);
+        if (Number.isFinite(ch)) map.set(`${eqId}:${ch}`, a.action);
+      }
+    }
+  }
+  return map;
+}
+
+export function toThresholdRule(row, getEquipment) {
+  if (!row) return null;
+  const trigger = parseJson(row.trigger_config, {}) || {};
+  if (trigger.type !== 'threshold') return null;
+  const threshold = Number(trigger.threshold_value);
+  if (!Number.isFinite(threshold)) return null;
+  const eqId = parseInt(trigger.equipment_id, 10);
+  const metric = String(trigger.sensor_type || '').trim().toLowerCase();
+  if (!metric) return null;
+  return {
+    id: row.id ?? null,
+    name: row.name || `automation ${row.id}`,
+    enabled: row.enabled === undefined ? true : !!row.enabled,
+    metricKey: `${Number.isFinite(eqId) ? eqId : '?'}:${metric}`,
+    operator: String(trigger.operator || 'gt').toLowerCase(),
+    threshold,
+    unit: trigger.unit || '',
+    channels: actionChannelMap(parseJson(row.actions, []), getEquipment),
+  };
+}
+
+const isUp = (op) => op === 'gt' || op === 'gte';
+const isDown = (op) => op === 'lt' || op === 'lte';
+
+export function opposingChannels(a, b) {
+  const out = [];
+  for (const [key, aAction] of a.channels) {
+    const [eq, ch] = key.split(':');
+    let bAction = b.channels.get(key);
+    if (bAction === undefined) bAction = b.channels.get(`${eq}:*`);
+    if (bAction === undefined && ch === '*') {
+      for (const [bk, bv] of b.channels) if (bk.startsWith(`${eq}:`)) { bAction = bv; break; }
+    }
+    if (bAction !== undefined && bAction !== aAction) out.push({ key, aAction, bAction });
+  }
+  return out;
+}
+
+/** true when the ON/OFF pair's thresholds are crossed (backend would 400). */
+function pairCrossed(onRule, offRule) {
+  if (isUp(onRule.operator) && isDown(offRule.operator)) return !(onRule.threshold > offRule.threshold);
+  if (isDown(onRule.operator) && isUp(offRule.operator)) return !(onRule.threshold < offRule.threshold);
+  return false;
+}
+
+/**
+ * Find the opposite rules paired with `candidate` on the same metric and
+ * channels. Mirrors validateHysteresis' candidate/other selection.
+ * @returns {Array<{ partner: object, role: 'on'|'off', crossed: boolean, channels: string[] }>}
+ */
+export function findHysteresisPartners(candidate, others, getEquipment) {
+  const rule = toThresholdRule(candidate, getEquipment);
+  if (!rule || rule.channels.size === 0) return [];
+  const out = [];
+  for (const row of others || []) {
+    if (!row || (candidate.id != null && Number(row.id) === Number(candidate.id))) continue;
+    if (!(row.enabled === 1 || row.enabled === true)) continue;
+    const other = toThresholdRule(row, getEquipment);
+    if (!other || other.metricKey !== rule.metricKey) continue;
+    const opposing = opposingChannels(rule, other);
+    if (!opposing.length) continue;
+    const ruleOn = opposing.filter(c => c.aAction === 'on');
+    const ruleOff = opposing.filter(c => c.aAction === 'off');
+    if (ruleOn.length) out.push({ partner: other, role: 'off', crossed: pairCrossed(rule, other), channels: ruleOn.map(c => c.key) });
+    if (ruleOff.length) out.push({ partner: other, role: 'on', crossed: pairCrossed(other, rule), channels: ruleOff.map(c => c.key) });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Schedule preview (client-side, browser local time)
+// ---------------------------------------------------------------------------
+
+function parseCronField(field, min, max) {
+  const set = new Set();
+  if (field === undefined || field === null) return null;
+  for (const part of String(field).trim().split(',')) {
+    const m = /^(\*|\d+)(?:-(\d+))?(?:\/(\d+))?$/.exec(part.trim());
+    if (!m) return null;
+    let lo = m[1] === '*' ? min : parseInt(m[1], 10);
+    let hi = m[1] === '*' ? max : (m[2] !== undefined ? parseInt(m[2], 10) : lo);
+    const step = m[3] !== undefined ? parseInt(m[3], 10) : 1;
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || !Number.isFinite(step) || step <= 0) return null;
+    if (lo < min || hi > max || lo > hi) return null;
+    for (let v = lo; v <= hi; v += step) set.add(v);
+  }
+  return set.size ? set : null;
+}
+
+export function parseCron(expr) {
+  const fields = String(expr || '').trim().split(/\s+/);
+  if (fields.length !== 5) return null;
+  const minute = parseCronField(fields[0], 0, 59);
+  const hour = parseCronField(fields[1], 0, 23);
+  const dom = parseCronField(fields[2], 1, 31);
+  const month = parseCronField(fields[3], 1, 12);
+  const dow = parseCronField(fields[4].replace(/\b7\b/, '0'), 0, 6);
+  if (!minute || !hour || !dom || !month || !dow) return null;
+  return { minute, hour, dom, month, dow, domStar: fields[2] === '*', dowStar: fields[4] === '*' };
+}
+
+function nextCronRun(cron, now) {
+  const start = new Date(now.getTime());
+  start.setSeconds(0, 0);
+  const hours = [...cron.hour].sort((a, b) => a - b);
+  const minutes = [...cron.minute].sort((a, b) => a - b);
+  for (let dayOffset = 0; dayOffset < 400; dayOffset++) {
+    const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + dayOffset);
+    if (!cron.month.has(day.getMonth() + 1)) continue;
+    const domOk = cron.dom.has(day.getDate());
+    const dowOk = cron.dow.has(day.getDay());
+    // Standard cron: if both dom and dow are restricted, either may match.
+    const dayOk = cron.domStar && cron.dowStar ? true : cron.domStar ? dowOk : cron.dowStar ? domOk : (domOk || dowOk);
+    if (!dayOk) continue;
+    for (const h of hours) {
+      for (const m of minutes) {
+        const cand = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m, 0, 0);
+        if (cand.getTime() > now.getTime()) return cand;
+      }
+    }
+  }
+  return null;
+}
+
+/** Next fire time for a schedule trigger, or null when it cannot be computed. */
+export function nextScheduleRun(trigger, now = new Date()) {
+  if (!trigger || trigger.type !== 'schedule') return null;
+  const type = trigger.schedule_type || 'daily';
+  const [hh, mm] = String(trigger.time || '08:00').split(':').map(n => parseInt(n, 10));
+  if (type === 'once') {
+    if (!trigger.run_at) return null;
+    const d = new Date(trigger.run_at);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (type === 'daily') {
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+    if (d <= now) d.setDate(d.getDate() + 1);
+    return d;
+  }
+  if (type === 'weekly') {
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    const dow = parseInt(trigger.day_of_week ?? 1, 10);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+    let delta = (dow - d.getDay() + 7) % 7;
+    if (delta === 0 && d <= now) delta = 7;
+    d.setDate(d.getDate() + delta);
+    return d;
+  }
+  if (type === 'hourly') {
+    const minute = parseInt(trigger.minute ?? 0, 10) || 0;
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), minute, 0, 0);
+    if (d <= now) d.setHours(d.getHours() + 1);
+    return d;
+  }
+  if (type === 'custom') {
+    const cron = parseCron(trigger.cron);
+    return cron ? nextCronRun(cron, now) : null;
+  }
+  return null;
+}
+
+export function formatNextRun(date, now = new Date()) {
+  if (!date) return null;
+  const diffMs = date.getTime() - now.getTime();
+  const mins = Math.round(diffMs / 60000);
+  let rel;
+  if (mins < 1) rel = 'now';
+  else if (mins < 60) rel = `in ${mins} min`;
+  else if (mins < 48 * 60) rel = `in ${Math.round(mins / 60)} h`;
+  else rel = `in ${Math.round(mins / 1440)} d`;
+  const sameDay = date.toDateString() === now.toDateString();
+  const dayPart = sameDay ? 'today' : `${DAY_SHORT[date.getDay()]} ${date.getDate()} ${date.toLocaleString('en-GB', { month: 'short' })}`;
+  return `${dayPart} ${pad2(date.getHours())}:${pad2(date.getMinutes())} (${rel})`;
+}
