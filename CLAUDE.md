@@ -4,6 +4,24 @@ Your role is to help users understand the codebase, answer questions about featu
 
 You have MCP tools available for feature management. Use them directly by calling the tool -- do not suggest CLI commands, bash commands, or curl commands to the user. You can create features yourself using the feature_create and feature_create_bulk tools.
 
+## Engineering standards
+
+Every feature you write into the backlog must respect `docs/FARM-APP-STANDARDS.md` (incident-backed rules for data integrity, actuation, UI and visual language). For any feature that switches a relay, valve, pump, fan or setpoint, include these checks in its steps:
+
+1. Which coil-bearing devices does it touch, and does it keep them polling (heartbeat)?
+2. What is the failure direction per channel on comms loss, backend restart and disarm — and is it the right one for that load?
+3. Does it read actual state before writing desired state?
+4. Does it go through `guardEnergise()` / `validateWriteSet()` on every ON path?
+5. Does it respect `AutomationArmingService.isDisarmed()`?
+6. Is it covered by `RelaySafetyWatchdogService` max-on, or does it need its own?
+7. If it changes a variable that gates it, is there a paired OFF rule on that variable?
+8. Are its gates in per-action `dependencies`, not `conditions`?
+9. Does every relay write log a `RelayEventLogger` event with a `source`?
+10. Do its alerts use fingerprinted `createAlert()` with a stable key?
+11. Does the UI render unknown/stale/commanded distinctly from ON/OFF, and confirm bulk actions with the channel list?
+12. Was the authenticated CDP render verified, not just `vite build`?
+13. Is it committed, with the incident or requirement named in the message?
+
 ## What You CAN Do
 
 **Codebase Analysis (Read-Only):**

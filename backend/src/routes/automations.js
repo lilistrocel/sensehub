@@ -5,8 +5,29 @@ const { executeAutomation, stopAllRelays } = require('../services/AutomationExec
 const { relayTimerService } = require('../services/RelayTimerService');
 const { automationArmingService } = require('../services/AutomationArmingService');
 const { validateAutomationActions } = require('../services/RelayInterlockService');
+const { clampActions, resolveRelayLimits, validateHysteresis } = require('../services/AutomationGuards');
 
 const lookupEquipment = (id) => db.prepare('SELECT * FROM equipment WHERE id = ?').get(id) || null;
+
+// Server caps for action durations / delays (system_settings key `relay_limits`,
+// defaults: max_duration_seconds 21600, max_delay_seconds 3600).
+function getRelayLimits() {
+  try {
+    const row = db.prepare("SELECT value FROM system_settings WHERE key = 'relay_limits'").get();
+    return resolveRelayLimits(row ? row.value : null);
+  } catch (e) {
+    return resolveRelayLimits(null);
+  }
+}
+
+// Hysteresis guard: an ON rule's threshold must sit strictly beyond the OFF
+// rule's on the same sensor metric when both switch the same relay channel(s).
+// Returns null when fine, else a violation descriptor for a 400.
+function checkHysteresis(candidate) {
+  if (candidate.enabled === false || candidate.enabled === 0) return null;
+  const others = db.prepare('SELECT id, name, enabled, trigger_config, actions FROM automations WHERE enabled = 1').all();
+  return validateHysteresis(candidate, others, lookupEquipment);
+}
 
 const router = express.Router();
 
@@ -73,6 +94,17 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
     return res.status(400).json({ error: 'Bad Request', message: interlockError, code: 'INTERLOCK_VIOLATION' });
   }
 
+  // Server caps: silently clamp durations / delays and report what was capped.
+  const clamped = clampActions(finalActions, getRelayLimits());
+  finalActions = clamped.actions;
+
+  // Hysteresis: reject ON/OFF threshold pairs on the same metric + channels whose
+  // thresholds are crossed (e.g. ON > 28 with OFF < 29).
+  const hysteresis = checkHysteresis({ id: null, name, trigger_config: trigger_config || {}, actions: finalActions, enabled: true });
+  if (hysteresis) {
+    return res.status(400).json({ error: 'Bad Request', message: hysteresis.message, code: hysteresis.code, details: hysteresis });
+  }
+
   const result = db.prepare(
     'INSERT INTO automations (name, description, trigger_config, conditions, condition_logic, actions, priority, template_id, dose_program_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
@@ -88,7 +120,7 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
   );
 
   const automation = db.prepare('SELECT * FROM automations WHERE id = ?').get(result.lastInsertRowid);
-  res.status(201).json(automation);
+  res.status(201).json({ ...automation, capped: clamped.capped });
 });
 
 // GET /api/automations/templates - Get automation templates (from DB)
@@ -294,12 +326,27 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
     }
   }
 
-  // Hard interlock validation on the actions that will actually be stored.
+  // Hard interlock validation on the actions that will actually be stored,
+  // then server caps (clamp) and the hysteresis guard.
+  let cappedFields = [];
   try {
     const parsedActions = typeof finalActions === 'string' ? JSON.parse(finalActions || '[]') : (finalActions || []);
     const interlockError = validateAutomationActions(parsedActions, lookupEquipment);
     if (interlockError) {
       return res.status(400).json({ error: 'Bad Request', message: interlockError, code: 'INTERLOCK_VIOLATION' });
+    }
+    const clamped = clampActions(parsedActions, getRelayLimits());
+    cappedFields = clamped.capped;
+    finalActions = JSON.stringify(clamped.actions);
+
+    const finalTrigger = trigger_config ? trigger_config : automation.trigger_config;
+    const finalEnabled = enabled !== undefined ? !!enabled : !!automation.enabled;
+    const hysteresis = checkHysteresis({
+      id: parseInt(automationId, 10), name: name ?? automation.name,
+      trigger_config: finalTrigger, actions: clamped.actions, enabled: finalEnabled,
+    });
+    if (hysteresis) {
+      return res.status(400).json({ error: 'Bad Request', message: hysteresis.message, code: hysteresis.code, details: hysteresis });
     }
   } catch (e) {
     return res.status(400).json({ error: 'Bad Request', message: `Invalid actions: ${e.message}` });
@@ -322,7 +369,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   );
 
   const updated = db.prepare('SELECT * FROM automations WHERE id = ?').get(automationId);
-  res.json(updated);
+  res.json({ ...updated, capped: cappedFields });
 });
 
 // DELETE /api/automations/:id - Delete automation

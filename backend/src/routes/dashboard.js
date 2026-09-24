@@ -1,7 +1,138 @@
 const express = require('express');
 const { db } = require('../utils/database');
+const { modbusPollingService } = require('../services/ModbusPollingService');
+const { automationArmingService } = require('../services/AutomationArmingService');
+const sb = require('../services/StatusBoardHelpers');
 
 const router = express.Router();
+
+// ---------------------------------------------------------------------------
+// GET /api/dashboard/status-board — one call for everything above the fold on
+// the operator dashboard. Cached server-side for 5 s (cheap to hit from many
+// tabs). Pure grouping / unknown / stale logic lives in StatusBoardHelpers.
+// ---------------------------------------------------------------------------
+const STATUS_BOARD_CACHE_MS = 5000;
+let statusBoardCache = { at: 0, body: null };
+
+function readTimezone() {
+  try {
+    const row = db.prepare("SELECT value FROM system_settings WHERE key = 'timezone'").get();
+    if (!row || !row.value) return process.env.TZ || 'UTC';
+    const parsed = JSON.parse(row.value);
+    return (parsed && parsed.timezone) || process.env.TZ || 'UTC';
+  } catch (e) {
+    return process.env.TZ || 'UTC';
+  }
+}
+
+function buildStatusBoard() {
+  const nowMs = Date.now();
+  const equipment = db.prepare(`
+    SELECT id, name, type, enabled, write_only, status, polling_interval_ms, last_communication, last_reading, register_mappings
+    FROM equipment ORDER BY id ASC
+  `).all();
+
+  // Newest relay_events row per channel (indexed lookup per channel is far
+  // cheaper than a MAX(id) GROUP BY over the whole table).
+  const lastEventStmt = db.prepare(`
+    SELECT state, source, created_at, confirmed FROM relay_events
+    WHERE equipment_id = ? AND channel = ?
+    ORDER BY created_at DESC, id DESC LIMIT 1
+  `);
+  const lastEventFor = (equipmentId, channel) => {
+    try { return lastEventStmt.get(equipmentId, channel) || null; } catch (e) { return null; }
+  };
+
+  const climate = sb.buildClimate(equipment, nowMs);
+  const relayGroups = sb.buildRelayGroups(equipment, lastEventFor, nowMs);
+
+  // Automations
+  const enabledCount = db.prepare('SELECT COUNT(*) AS c FROM automations WHERE enabled = 1').get().c;
+  let disarmed;
+  try { disarmed = automationArmingService.getState(); } catch (e) { disarmed = { disarmed: true, reason: e.message }; }
+  const recent = db.prepare(`
+    SELECT al.automation_id, a.name, al.triggered_at, al.status, al.message
+    FROM automation_logs al JOIN automations a ON a.id = al.automation_id
+    ORDER BY al.triggered_at DESC, al.id DESC LIMIT 8
+  `).all().map(r => ({
+    automation_id: r.automation_id,
+    name: r.name,
+    ts: sb.toIso(r.triggered_at),
+    trigger_type: sb.triggerTypeFromLogMessage(r.message),
+    ok: r.status === 'success',
+    status: r.status,
+    message: r.message,
+  }));
+  const climateRules = db.prepare(`
+    SELECT id, name, enabled, last_run, run_count FROM automations WHERE name LIKE 'Climate%' ORDER BY id ASC
+  `).all().map(r => ({ id: r.id, name: r.name, enabled: !!r.enabled, last_run: sb.toIso(r.last_run), run_count: r.run_count || 0 }));
+
+  // Alerts (open = unacknowledged)
+  const alertCounts = db.prepare(`
+    SELECT
+      SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS critical,
+      SUM(CASE WHEN severity = 'warning'  THEN 1 ELSE 0 END) AS warning,
+      SUM(CASE WHEN severity = 'info'     THEN 1 ELSE 0 END) AS info
+    FROM alerts WHERE acknowledged = 0
+  `).get();
+  const latestAlerts = db.prepare(`
+    SELECT id, severity, message, created_at, last_seen_at, occurrence_count
+    FROM alerts WHERE acknowledged = 0
+    ORDER BY COALESCE(last_seen_at, created_at) DESC, id DESC LIMIT 3
+  `).all().map(a => ({
+    id: a.id, severity: a.severity, message: a.message,
+    ts: sb.toIso(a.last_seen_at || a.created_at), occurrence_count: a.occurrence_count || 1,
+  }));
+
+  // System
+  const enabledEquipment = equipment.filter(e => e.enabled);
+  let pollingPaused = false, heartbeatDeviceCount = 0;
+  try { pollingPaused = !!modbusPollingService.isPaused; heartbeatDeviceCount = modbusPollingService.getHeartbeatDeviceCount(); } catch (e) {}
+  let camera = null;
+  try {
+    const cam = db.prepare('SELECT id, name, status, updated_at FROM cameras WHERE enabled = 1 ORDER BY id ASC LIMIT 1').get();
+    if (cam) camera = { id: cam.id, name: cam.name, status: cam.status, lastSeen: sb.toIso(cam.updated_at) };
+  } catch (e) {}
+
+  return {
+    now: new Date(nowMs).toISOString(),
+    timezone: readTimezone(),
+    climate,
+    relayGroups,
+    automations: { enabled: enabledCount, disarmed, recent, climateRules },
+    alerts: {
+      critical: alertCounts.critical || 0,
+      warning: alertCounts.warning || 0,
+      info: alertCounts.info || 0,
+      latest: latestAlerts,
+    },
+    system: {
+      pollingPaused,
+      heartbeatDeviceCount,
+      devicesOnline: enabledEquipment.filter(e => e.status === 'online').length,
+      devicesTotal: enabledEquipment.length,
+      disabledDevices: equipment.filter(e => !e.enabled).map(e => e.id),
+      camera,
+    },
+  };
+}
+
+router.get('/status-board', (req, res) => {
+  try {
+    const now = Date.now();
+    if (statusBoardCache.body && now - statusBoardCache.at < STATUS_BOARD_CACHE_MS) {
+      res.set('X-Cache', 'HIT');
+      return res.json(statusBoardCache.body);
+    }
+    const body = buildStatusBoard();
+    statusBoardCache = { at: now, body };
+    res.set('X-Cache', 'MISS');
+    res.json(body);
+  } catch (err) {
+    console.error('[Dashboard] status-board failed:', err.message);
+    res.status(500).json({ error: 'status-board failed', message: err.message });
+  }
+});
 
 /**
  * Build a map of equipment_id -> Set of disabled register names.

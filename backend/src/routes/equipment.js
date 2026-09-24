@@ -5,6 +5,19 @@ const { modbusTcpClient } = require('../services/ModbusTcpClient');
 const { modbusPollingService } = require('../services/ModbusPollingService');
 const { logRelayEvent } = require('../services/RelayEventLogger');
 const interlock = require('../services/RelayInterlockService');
+const readback = require('../services/RelayReadback');
+const { applyRelayCache } = require('../services/RelayStateCache');
+const { relayTimerService } = require('../services/RelayTimerService');
+const { clampSeconds, resolveRelayLimits } = require('../services/AutomationGuards');
+
+function getRelayLimits() {
+  try {
+    const row = db.prepare("SELECT value FROM system_settings WHERE key = 'relay_limits'").get();
+    return resolveRelayLimits(row ? row.value : null);
+  } catch (e) {
+    return resolveRelayLimits(null);
+  }
+}
 
 // Reload the polling service's device list so newly added / changed / removed
 // equipment takes effect immediately. Defensive: never let a refresh failure
@@ -800,51 +813,87 @@ router.post('/:id/relay/control', requireRole('admin', 'operator'), async (req, 
     }
   }
 
+  // Optional auto-off for manual ON writes, clamped to the server cap.
+  const capped = [];
+  let durationSeconds = null;
+  if (value === true && req.body.duration_seconds !== undefined && req.body.duration_seconds !== null) {
+    const limits = getRelayLimits();
+    const c = clampSeconds(req.body.duration_seconds, limits.max_duration_seconds);
+    if (c.capped) capped.push({ field: 'duration_seconds', requested: Number(req.body.duration_seconds), capped_to: c.value });
+    durationSeconds = Number(c.value) > 0 ? Number(c.value) : null;
+  }
+
+  const userEmail = req.user?.email || null;
+  const target = { host, port, unitId };
+
   try {
-    let result;
-    if (equipment.write_only) {
-      // Fire-and-forget mode: send FC05, catch timeout, assume success
-      result = await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, value);
-    } else {
-      // Normal mode: send FC05 and expect response
-      result = await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
+    // write -> read back (FC01) -> retry once on disagreement -> alert on disagreement
+    const sendWrite = async () => {
+      if (equipment.write_only) {
+        // Fire-and-forget mode: send FC05, catch timeout, assume success
+        await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, value);
+      } else {
+        // Normal mode: send FC05 and expect response
+        await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
+      }
+    };
+    await sendWrite();
+    const rb = await readback.confirmCoilWrite(modbusTcpClient, target, address, value, {
+      writeOnly: !!equipment.write_only, retry: sendWrite
+    });
+    if (rb.source === 'readback' && !rb.confirmed) {
+      readback.reportUnconfirmed(equipment, address, value, rb.readback, { source: 'manual', userEmail });
+    } else if (rb.source === 'readback_failed') {
+      console.warn(`[Relay] read-back unavailable for ${equipment.name} ch ${address} (manual ${value ? 'ON' : 'OFF'}) — logged as unconfirmed`);
     }
 
-    // Update cached relay state in last_reading
-    let lastReading = {};
-    try {
-      if (equipment.last_reading) lastReading = JSON.parse(equipment.last_reading);
-    } catch (e) {}
-    if (!lastReading.relayStates) lastReading.relayStates = {};
-    lastReading.relayStates[address] = value;
+    // Interlock partner was driven OFF + read back by guardEnergise()
     if (partnerOff !== null) {
-      lastReading.relayStates[partnerOff] = false;
-      logRelayEvent(equipment.id, partnerOff, false, 'interlock');
-      global.broadcast('relay_state_changed', { equipmentId: equipment.id, channel: partnerOff, state: false, source: 'interlock', automationId: null });
+      applyRelayCache(equipment, [{ channel: partnerOff, requested: false, readback: false, confirmed: true }], {
+        source: 'interlock', automationId: null, userEmail
+      });
     }
 
-    db.prepare(
-      "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
-    ).run(JSON.stringify(lastReading), equipment.id);
-
-    // Broadcast state change
-    global.broadcast('relay_state_changed', {
-      equipmentId: equipment.id,
-      channel: address,
-      state: value,
-      writeOnly: !!equipment.write_only,
-      confirmed: result.confirmed !== false
+    // Cache the READ-BACK value, log relay event (confirmed / readback_state / user_email), broadcast
+    applyRelayCache(equipment, [{ channel: address, requested: value, readback: rb.readback, confirmed: rb.confirmed }], {
+      source: 'manual', automationId: null, userEmail
     });
 
-    // Log relay event for fertigation tracking
-    logRelayEvent(equipment.id, address, value, 'manual');
+    // Manual auto-off (clamped): OFF write with the same read-back discipline
+    if (durationSeconds) {
+      relayTimerService.scheduleOff(equipment.id, address, durationSeconds, async () => {
+        try {
+          const sendOff = async () => {
+            if (equipment.write_only) await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, false);
+            else await modbusTcpClient.writeSingleCoil(host, port, unitId, address, false);
+          };
+          await sendOff();
+          const offRb = await readback.confirmCoilWrite(modbusTcpClient, target, address, false, {
+            writeOnly: !!equipment.write_only, retry: sendOff
+          });
+          if (offRb.source === 'readback' && !offRb.confirmed) {
+            readback.reportUnconfirmed(equipment, address, false, offRb.readback, { source: 'manual_auto_off', userEmail });
+          }
+          applyRelayCache(equipment, [{ channel: address, requested: false, readback: offRb.readback, confirmed: offRb.confirmed }], {
+            source: 'manual_auto_off', automationId: null, userEmail
+          });
+        } catch (err) {
+          console.error(`[Relay Control] Manual auto-off failed for ${equipment.name} ch ${address}:`, err.message);
+        }
+      }, { automationId: null });
+    }
 
     res.json({
       success: true,
       channel: address,
-      state: value,
+      state: rb.readback === null ? value : rb.readback,
+      requested: value,
       writeOnly: !!equipment.write_only,
-      confirmed: result.confirmed !== false
+      confirmed: rb.confirmed,
+      readback: rb.readback,
+      readbackSource: rb.source,
+      duration_seconds: durationSeconds,
+      capped
     });
   } catch (err) {
     console.error(`[Relay Control] Error writing coil ${address} on ${equipment.name}:`, err.message);
@@ -905,40 +954,48 @@ router.post('/:id/relay/all', requireRole('admin', 'operator'), async (req, res)
   const quantity = maxAddress - minAddress + 1;
   const values = new Array(quantity).fill(value);
 
-  try {
-    let result;
-    if (equipment.write_only) {
-      result = await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, minAddress, values);
-    } else {
-      result = await modbusTcpClient.writeMultipleCoils(host, port, unitId, minAddress, values);
-    }
+  const userEmail = req.user?.email || null;
+  const target = { host, port, unitId };
 
-    // Update cached relay states
-    let lastReading = {};
-    try {
-      if (equipment.last_reading) lastReading = JSON.parse(equipment.last_reading);
-    } catch (e) {}
-    if (!lastReading.relayStates) lastReading.relayStates = {};
-    coilMappings.forEach(m => {
-      lastReading.relayStates[parseInt(m.register, 10) || 0] = value;
+  try {
+    // write (FC15) -> read the run back (FC01) -> retry once on disagreement -> alert per disagreeing coil
+    const sendWrite = async () => {
+      if (equipment.write_only) {
+        await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, minAddress, values);
+      } else {
+        await modbusTcpClient.writeMultipleCoils(host, port, unitId, minAddress, values);
+      }
+    };
+    await sendWrite();
+    const rb = await readback.confirmWrite(modbusTcpClient, target, minAddress, values, {
+      writeOnly: !!equipment.write_only, retry: sendWrite
     });
 
-    db.prepare(
-      "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
-    ).run(JSON.stringify(lastReading), equipment.id);
+    // Only the mapped channels are reported / logged (the FC15 span may cover gaps).
+    const mappedChannels = new Set(coilMappings.map(m => parseInt(m.register, 10) || 0));
+    const channelStates = rb.items
+      .filter(it => mappedChannels.has(it.channel))
+      .map(it => ({ channel: it.channel, requested: it.requested, readback: it.readback, confirmed: it.confirmed }));
+    if (rb.source === 'readback') {
+      for (const it of channelStates) {
+        if (!it.confirmed) readback.reportUnconfirmed(equipment, it.channel, it.requested, it.readback, { source: 'all_channels', userEmail });
+      }
+    } else if (rb.source === 'readback_failed') {
+      console.warn(`[Relay] read-back unavailable for ${equipment.name} all-channels ${value ? 'ON' : 'OFF'} — logged as unconfirmed`);
+    }
 
-    // Broadcast state change
+    // Cache READ-BACK values, log one relay_events row per channel, broadcast per channel
+    applyRelayCache(equipment, channelStates, { source: 'all_channels', automationId: null, userEmail });
+
+    const allConfirmed = channelStates.length > 0 && channelStates.every(c => c.confirmed);
+    // Legacy aggregate broadcast kept for UIs that listen for allChannels
     global.broadcast('relay_state_changed', {
       equipmentId: equipment.id,
       allChannels: true,
       state: value,
       writeOnly: !!equipment.write_only,
-      confirmed: result.confirmed !== false
-    });
-
-    // Log relay events for fertigation tracking
-    coilMappings.forEach(m => {
-      logRelayEvent(equipment.id, parseInt(m.register, 10) || 0, value, 'all_channels');
+      confirmed: allConfirmed,
+      source: 'all_channels'
     });
 
     res.json({
@@ -946,7 +1003,9 @@ router.post('/:id/relay/all', requireRole('admin', 'operator'), async (req, res)
       channels: coilMappings.length,
       state: value,
       writeOnly: !!equipment.write_only,
-      confirmed: result.confirmed !== false
+      confirmed: allConfirmed,
+      readbackSource: rb.source,
+      channelStates: channelStates.map(c => ({ channel: c.channel, state: c.readback === null ? c.requested : c.readback, confirmed: c.confirmed }))
     });
   } catch (err) {
     console.error(`[Relay Control] Error writing all coils on ${equipment.name}:`, err.message);

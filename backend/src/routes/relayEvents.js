@@ -29,8 +29,10 @@ router.get('/', (req, res) => {
   if (to)           { where.push('re.created_at <= ?');  params.push(to); }
 
   const total = db.prepare(`SELECT COUNT(*) AS c FROM relay_events re WHERE ${where.join(' AND ')}`).get(...params).c;
+  // confirmed: 1 = FC01 read-back matched, 0 = disagreed / unreadable, NULL = legacy row (pre read-back)
   const rows = db.prepare(`
     SELECT re.id, re.equipment_id, re.channel, re.state, re.source, re.automation_id, re.created_at,
+           re.confirmed, re.readback_state, re.user_email,
            e.name AS equipment_name, a.name AS automation_name
     FROM relay_events re
     LEFT JOIN equipment e ON re.equipment_id = e.id

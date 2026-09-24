@@ -891,6 +891,19 @@ const initSchema = () => {
     console.error('alerts dedupe columns migration failed:', err.message);
   }
 
+  // Relay write read-back audit columns (see services/RelayReadback.js).
+  // confirmed: 1 = FC01 read-back matched the request, 0 = disagreed / unreadable, NULL = legacy row.
+  // readback_state: the value read back (NULL when not read, e.g. write-only boards).
+  // user_email: operator behind a route-triggered write (NULL for schedulers).
+  try {
+    const reCols = db.pragma('table_info(relay_events)').map(c => c.name);
+    if (!reCols.includes('confirmed'))      db.exec('ALTER TABLE relay_events ADD COLUMN confirmed INTEGER');
+    if (!reCols.includes('readback_state')) db.exec('ALTER TABLE relay_events ADD COLUMN readback_state INTEGER');
+    if (!reCols.includes('user_email'))     db.exec('ALTER TABLE relay_events ADD COLUMN user_email TEXT');
+  } catch (err) {
+    console.error('relay_events read-back columns migration failed:', err.message);
+  }
+
   // Agronomist provider-error classification (billing / auth / rate_limit / other).
   try {
     const reportCols = db.pragma('table_info(agronomist_reports)').map(c => c.name);

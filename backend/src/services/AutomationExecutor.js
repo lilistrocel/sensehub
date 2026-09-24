@@ -58,52 +58,65 @@ function buildCoilRuns(items) {
   return runs;
 }
 
+// Per-channel bookkeeping after a coil write (cache = READ-BACK value, relay_events
+// row with confirmed/readback_state, relay_state_changed broadcast). Lives in
+// RelayStateCache so the manual / raw relay routes share the exact same path.
+const { applyRelayCache } = require('./RelayStateCache');
+const readback = require('./RelayReadback');
+
 /**
- * Per-channel bookkeeping after a successful coil write: update the cached
- * relayStates in equipment.last_reading, mark the equipment online, log a
- * relay_events row and broadcast `relay_state_changed` for each channel.
- *
- * The broadcast payload shape ({equipmentId, channel, state, source,
- * automationId}) is relied on by the frontend — keep it stable.
- *
- * @param {object} equipment - equipment row (id, last_reading)
- * @param {Array<{channel:number, state:boolean}>} channelStates
- * @param {object} opts
- * @param {string} opts.source - relay_events / broadcast source label
- * @param {number|null} opts.automationId
+ * Write one coil, read it back (FC01, unless write-only), and return the
+ * confirmation result. A disagreeing read-back triggers ONE re-write + re-read
+ * before the result is decided; genuine disagreement raises a warning alert.
  */
-function applyRelayCache(equipment, channelStates, { source, automationId = null }) {
-  // Re-read last_reading so we merge onto the freshest polled snapshot rather
-  // than a row that may have been fetched seconds (or a delay timer) ago.
-  let lastReading = {};
-  try {
-    const fresh = db.prepare('SELECT last_reading FROM equipment WHERE id = ?').get(equipment.id);
-    const raw = fresh ? fresh.last_reading : equipment.last_reading;
-    if (raw) lastReading = JSON.parse(raw);
-  } catch (e) {
-    try { if (equipment.last_reading) lastReading = JSON.parse(equipment.last_reading); } catch (e2) {}
+async function writeCoilConfirmed(equipment, target, address, value, context = {}) {
+  const { host, port, unitId } = target;
+  const sendWrite = async () => {
+    if (equipment.write_only) {
+      await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, value);
+    } else {
+      await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
+    }
+  };
+  await sendWrite();
+  const rb = await readback.confirmCoilWrite(modbusTcpClient, target, address, value, {
+    writeOnly: !!equipment.write_only,
+    retry: sendWrite
+  });
+  if (rb.source === 'readback' && !rb.confirmed) {
+    readback.reportUnconfirmed(equipment, address, value, rb.readback, context);
+  } else if (rb.source === 'readback_failed') {
+    console.warn(`[Relay] read-back unavailable for ${equipment.name} ch ${address} (requested ${value ? 'ON' : 'OFF'}) — logged as unconfirmed`);
   }
-  if (!lastReading || typeof lastReading !== 'object') lastReading = {};
-  if (!lastReading.relayStates) lastReading.relayStates = {};
-  for (const { channel, state } of channelStates) {
-    lastReading.relayStates[channel] = state;
-  }
+  return rb;
+}
 
-  db.prepare(
-    "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
-  ).run(JSON.stringify(lastReading), equipment.id);
-
-  for (const { channel, state } of channelStates) {
-    global.broadcast('relay_state_changed', {
-      equipmentId: equipment.id,
-      channel,
-      state,
-      source,
-      automationId
-    });
-    // Log relay event for fertigation tracking
-    logRelayEvent(equipment.id, channel, state, source, automationId);
+/**
+ * Write a contiguous run of coils (FC15), read the run back and return the
+ * per-channel confirmation. Same retry / alert policy as writeCoilConfirmed().
+ */
+async function writeCoilsConfirmed(equipment, target, start, values, context = {}) {
+  const { host, port, unitId } = target;
+  const sendWrite = async () => {
+    if (equipment.write_only) {
+      await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, start, values);
+    } else {
+      await modbusTcpClient.writeMultipleCoils(host, port, unitId, start, values);
+    }
+  };
+  await sendWrite();
+  const rb = await readback.confirmWrite(modbusTcpClient, target, start, values, {
+    writeOnly: !!equipment.write_only,
+    retry: sendWrite
+  });
+  if (rb.source === 'readback') {
+    for (const it of rb.items) {
+      if (!it.confirmed) readback.reportUnconfirmed(equipment, it.channel, it.requested, it.readback, context);
+    }
+  } else if (rb.source === 'readback_failed') {
+    console.warn(`[Relay] read-back unavailable for ${equipment.name} coils ${start}..${start + values.length - 1} — logged as unconfirmed`);
   }
+  return rb;
 }
 
 /**
@@ -374,24 +387,26 @@ async function executeControlAction(action, automation, options = {}) {
       // Hard interlock: an ON write must first drive the partner channel OFF
       // and confirm it by read-back. Throws InterlockViolation (logged +
       // critical alert) and never falls through to the energising write.
-      const cacheStates = [{ channel: address, state: value }];
+      const cacheStates = [];
       if (value === true) {
         const guard = await interlock.guardEnergise(targetEquipment, address, modbusTcpClient, {
           source: eventSource, automationId: automation.id
         });
-        if (guard.partner !== null) cacheStates.push({ channel: guard.partner, state: false });
+        // The interlock already drove the partner OFF and read it back.
+        if (guard.partner !== null) cacheStates.push({ channel: guard.partner, requested: false, readback: false, confirmed: true });
       }
 
-      if (targetEquipment.write_only) {
-        await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, value);
-      } else {
-        await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
-      }
+      // write -> read back -> (retry once on disagreement) -> alert on disagreement
+      const rb = await writeCoilConfirmed(targetEquipment, { host, port, unitId }, address, value, {
+        source: eventSource, automationId: automation.id
+      });
+      cacheStates.unshift({ channel: address, requested: value, readback: rb.readback, confirmed: rb.confirmed });
 
-      // Update cached relay state, log relay event, broadcast relay_state_changed
+      // Update cached relay state (READ-BACK value), log relay event, broadcast relay_state_changed
       applyRelayCache(targetEquipment, cacheStates, {
         source: eventSource,
-        automationId: automation.id
+        automationId: automation.id,
+        userEmail: options.userEmail || null
       });
 
       // Schedule auto-off if duration_seconds is set and action is "on"
@@ -400,75 +415,31 @@ async function executeControlAction(action, automation, options = {}) {
         // so disabling the automation must never cancel it and strand a relay ON.
         relayTimerService.scheduleOff(targetEquipment.id, address, action.duration_seconds, async () => {
           try {
-            // Send OFF command with retry+verify for reliability
-            const sendOff = async () => {
-              if (targetEquipment.write_only) {
-                await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, false);
-              } else {
-                await modbusTcpClient.writeSingleCoil(host, port, unitId, address, false);
-              }
-            };
-
-            await sendOff();
-
-            // Verify the coil actually turned off (non-write-only devices)
-            if (!targetEquipment.write_only) {
-              await new Promise(r => setTimeout(r, 500)); // let the bus settle
+            // OFF write -> FC01 read-back -> one retry on disagreement -> alert if still ON
+            const offRb = await writeCoilConfirmed(targetEquipment, { host, port, unitId }, address, false, {
+              source: 'automation_auto_off', automationId: automation.id
+            });
+            if (offRb.retried) {
               try {
-                const coils = await modbusTcpClient.readCoils(host, port, unitId, address, 1, { timeout: 3000, retries: 1 });
-                if (coils && coils[0] === true) {
-                  console.warn(`[Automation] Auto-off verify FAILED for equipment ${targetEquipment.id} ch ${address} — still ON, retrying`);
-                  try {
-                    db.prepare(`
-                      INSERT INTO relay_drift_log (equipment_id, equipment_name, channel, expected_state, actual_state, context, detail, created_at)
-                      VALUES (?, ?, ?, 0, 1, 'auto_off_verify_failed', ?, datetime('now'))
-                    `).run(targetEquipment.id, targetEquipment.name, address, JSON.stringify({ automation_id: automation.id, retry: true }));
-                  } catch (e) {}
-                  await new Promise(r => setTimeout(r, 300));
-                  await sendOff();
-
-                  // Verify again after retry
-                  await new Promise(r => setTimeout(r, 500));
-                  try {
-                    const retryCoils = await modbusTcpClient.readCoils(host, port, unitId, address, 1, { timeout: 3000, retries: 1 });
-                    if (retryCoils && retryCoils[0] === true) {
-                      console.error(`[Automation] Auto-off RETRY FAILED for equipment ${targetEquipment.id} ch ${address} — STILL STUCK ON`);
-                      db.prepare(`
-                        INSERT INTO relay_drift_log (equipment_id, equipment_name, channel, expected_state, actual_state, context, detail, created_at)
-                        VALUES (?, ?, ?, 0, 1, 'auto_off_retry_failed', ?, datetime('now'))
-                      `).run(targetEquipment.id, targetEquipment.name, address, JSON.stringify({ automation_id: automation.id, stuck: true }));
-                    }
-                  } catch (e) {}
-                }
-              } catch (verifyErr) {
-                // Verify read failed — the write probably went through, don't block on this
+                db.prepare(`
+                  INSERT INTO relay_drift_log (equipment_id, equipment_name, channel, expected_state, actual_state, context, detail, created_at)
+                  VALUES (?, ?, ?, 0, 1, ?, ?, datetime('now'))
+                `).run(targetEquipment.id, targetEquipment.name, address,
+                  offRb.confirmed ? 'auto_off_verify_failed' : 'auto_off_retry_failed',
+                  JSON.stringify({ automation_id: automation.id, retry: true, stuck: !offRb.confirmed }));
+              } catch (e) {}
+              if (!offRb.confirmed) {
+                console.error(`[Automation] Auto-off RETRY FAILED for equipment ${targetEquipment.id} ch ${address} — STILL STUCK ON`);
               }
             }
 
-            let reading = {};
-            try {
-              const freshEq = db.prepare('SELECT last_reading FROM equipment WHERE id = ?').get(targetEquipment.id);
-              if (freshEq?.last_reading) reading = JSON.parse(freshEq.last_reading);
-            } catch (e) {}
-            if (!reading.relayStates) reading.relayStates = {};
-            reading.relayStates[address] = false;
-
-            db.prepare(
-              "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), updated_at = datetime('now') WHERE id = ?"
-            ).run(JSON.stringify(reading), targetEquipment.id);
-
-            global.broadcast('relay_state_changed', {
-              equipmentId: targetEquipment.id,
-              channel: address,
-              state: false,
+            // Cache the READ-BACK value, log with confirmed/readback_state, broadcast
+            applyRelayCache(targetEquipment, [{ channel: address, requested: false, readback: offRb.readback, confirmed: offRb.confirmed }], {
               source: 'automation_auto_off',
               automationId: automation.id
             });
 
-            // Log relay event for fertigation tracking
-            logRelayEvent(targetEquipment.id, address, false, 'automation_auto_off', automation.id);
-
-            console.log(`[Automation] Auto-off completed for equipment ${targetEquipment.id} channel ${address}`);
+            console.log(`[Automation] Auto-off completed for equipment ${targetEquipment.id} channel ${address} (confirmed=${offRb.confirmed})`);
           } catch (err) {
             console.error(`[Automation] Auto-off failed for equipment ${targetEquipment.id} channel ${address}:`, err.message);
           }
@@ -617,93 +588,45 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
     const groups = buildCoilRuns(action.transitions);
     const sorted = groups.sorted;
 
-    // Execute each group via FC15
+    // Execute each group via FC15, then read the run back (FC01). A disagreeing
+    // read-back re-sends that run once before the result is decided.
+    const frameStates = [];
     for (const g of groups) {
+      let rb;
       try {
-        if (targetEquipment.write_only) {
-          await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, g.start, g.values);
-        } else {
-          await modbusTcpClient.writeMultipleCoils(host, port, unitId, g.start, g.values);
-        }
-        console.log(`[Automation] Transition FC15 sent: equipment ${targetEquipment.id} addr=${g.start} qty=${g.values.length} (${g.items.map(i => `ch${i.channel}=${i.state?'ON':'OFF'}`).join(', ')})`);
+        rb = await writeCoilsConfirmed(targetEquipment, { host, port, unitId }, g.start, g.values, {
+          source: 'automation_transition', automationId: automation.id
+        });
+        console.log(`[Automation] Transition FC15 sent: equipment ${targetEquipment.id} addr=${g.start} qty=${g.values.length} (${g.items.map(i => `ch${i.channel}=${i.state?'ON':'OFF'}`).join(', ')}) confirmed=${rb.confirmed}${rb.retried ? ' (after retry)' : ''}`);
       } catch (err) {
         console.error(`[Automation] Transition FC15 failed for equipment ${targetEquipment.id}:`, err.message);
         throw err;
       }
-    }
-
-    // Update cached relay state
-    let lastReading = {};
-    try { if (targetEquipment.last_reading) lastReading = JSON.parse(targetEquipment.last_reading); } catch (e) {}
-    if (!lastReading.relayStates) lastReading.relayStates = {};
-    for (const t of sorted) {
-      lastReading.relayStates[t.channel] = t.state;
-    }
-    for (const p of partnersOff) {
-      if (!sorted.some(t => t.channel === p)) lastReading.relayStates[p] = false;
-    }
-    db.prepare(
-      "UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), status = 'online', updated_at = datetime('now') WHERE id = ?"
-    ).run(JSON.stringify(lastReading), targetEquipment.id);
-
-    // Interlock partners switched OFF ahead of the frame (not part of the frame itself)
-    for (const p of partnersOff) {
-      if (sorted.some(t => t.channel === p)) continue;
-      logRelayEvent(targetEquipment.id, p, false, 'interlock', automation.id);
-      global.broadcast('relay_state_changed', {
-        equipmentId: targetEquipment.id, channel: p, state: false, source: 'interlock', automationId: automation.id
-      });
-    }
-
-    // Log each individual relay event and broadcast
-    for (const t of sorted) {
-      logRelayEvent(targetEquipment.id, t.channel, t.state, 'automation', automation.id);
-      global.broadcast('relay_state_changed', {
-        equipmentId: targetEquipment.id,
-        channel: t.channel,
-        state: t.state,
-        source: 'automation_transition',
-        automationId: automation.id
-      });
-    }
-
-    // Verify-and-retry: read coils back and detect mismatches (only for non-write-only devices)
-    if (!targetEquipment.write_only) {
-      await new Promise(r => setTimeout(r, 500));
-      try {
-        const minCh = sorted[0].channel;
-        const maxCh = sorted[sorted.length - 1].channel;
-        const span = maxCh - minCh + 1;
-        const coils = await modbusTcpClient.readCoils(host, port, unitId, minCh, span, { timeout: 3000, retries: 1 });
-        const mismatches = [];
-        for (const t of sorted) {
-          const idx = t.channel - minCh;
-          if (coils[idx] !== t.state) {
-            mismatches.push({ channel: t.channel, expected: t.state, actual: coils[idx] });
-          }
-        }
-        if (mismatches.length > 0) {
-          console.warn(`[Automation] Transition verify FAILED for equipment ${targetEquipment.id}: ${mismatches.length} mismatches, retrying`);
-          try {
-            db.prepare(`
-              INSERT INTO relay_drift_log (equipment_id, equipment_name, channel, expected_state, actual_state, context, detail, created_at)
-              VALUES (?, ?, ?, ?, ?, 'transition_verify_failed', ?, datetime('now'))
-            `).run(targetEquipment.id, targetEquipment.name, mismatches[0].channel, mismatches[0].expected ? 1 : 0, mismatches[0].actual ? 1 : 0, JSON.stringify({ automation_id: automation.id, mismatches }));
-          } catch (e) {}
-          // Retry the entire transition
-          await new Promise(r => setTimeout(r, 300));
-          for (const g of groups) {
-            try {
-              await modbusTcpClient.writeMultipleCoils(host, port, unitId, g.start, g.values);
-            } catch (e) {
-              console.error('[Automation] Transition retry write failed:', e.message);
-            }
-          }
-        }
-      } catch (verifyErr) {
-        // Verify read failed (bus busy) — don't block, the polling drift detector will catch any issue
+      if (rb.retried) {
+        const mismatches = rb.items.filter(i => !i.confirmed).map(i => ({ channel: i.channel, expected: i.requested, actual: i.readback }));
+        try {
+          db.prepare(`
+            INSERT INTO relay_drift_log (equipment_id, equipment_name, channel, expected_state, actual_state, context, detail, created_at)
+            VALUES (?, ?, ?, ?, ?, 'transition_verify_failed', ?, datetime('now'))
+          `).run(targetEquipment.id, targetEquipment.name, g.start, g.values[0] ? 1 : 0, rb.readback && rb.readback[0] ? 1 : 0,
+            JSON.stringify({ automation_id: automation.id, retried: true, stillMismatched: mismatches }));
+        } catch (e) {}
+      }
+      for (const it of rb.items) {
+        frameStates.push({ channel: it.channel, requested: it.requested, readback: it.readback, confirmed: it.confirmed });
       }
     }
+
+    // Interlock partners switched OFF ahead of the frame (already read back by the interlock)
+    const partnerStates = partnersOff
+      .filter(p => !sorted.some(t => t.channel === p))
+      .map(p => ({ channel: p, requested: false, readback: false, confirmed: true }));
+    if (partnerStates.length) {
+      applyRelayCache(targetEquipment, partnerStates, { source: 'interlock', automationId: automation.id });
+    }
+
+    // Cache the READ-BACK values, log each channel with confirmed/readback_state, broadcast
+    applyRelayCache(targetEquipment, frameStates, { source: 'automation', automationId: automation.id });
 
     // Schedule auto-revert if duration_seconds is set: flip all transitioned coils to OFF
     if (action.duration_seconds && action.duration_seconds > 0) {
@@ -711,29 +634,19 @@ async function executeTransitionAction(action, automation, actionIdx = 0) {
       const revertKey = `transition_off:${targetEquipment.id}:${automation.id}:${actionIdx}`;
       relayTimerService.scheduleDelayedRaw(revertKey, action.duration_seconds, async () => {
         try {
-          // Build OFF transitions for the same group
+          // Build OFF transitions for the same group; write -> read back -> cache/log with confirmed
           const offGroups = groups.map(g => ({ start: g.start, values: g.values.map(() => false) }));
+          const offStates = [];
           for (const g of offGroups) {
-            if (targetEquipment.write_only) {
-              await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, g.start, g.values);
-            } else {
-              await modbusTcpClient.writeMultipleCoils(host, port, unitId, g.start, g.values);
+            const rb = await writeCoilsConfirmed(targetEquipment, { host, port, unitId }, g.start, g.values, {
+              source: 'automation_auto_off', automationId: automation.id
+            });
+            for (const it of rb.items) {
+              offStates.push({ channel: it.channel, requested: false, readback: it.readback, confirmed: it.confirmed });
             }
           }
-          // Update cache and log
-          let r = {};
-          try {
-            const fresh = db.prepare('SELECT last_reading FROM equipment WHERE id = ?').get(targetEquipment.id);
-            if (fresh?.last_reading) r = JSON.parse(fresh.last_reading);
-          } catch {}
-          if (!r.relayStates) r.relayStates = {};
-          for (const t of sorted) {
-            r.relayStates[t.channel] = false;
-            logRelayEvent(targetEquipment.id, t.channel, false, 'automation_auto_off', automation.id);
-            global.broadcast('relay_state_changed', { equipmentId: targetEquipment.id, channel: t.channel, state: false, source: 'automation_auto_off', automationId: automation.id });
-          }
-          db.prepare("UPDATE equipment SET last_reading = ?, last_communication = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(r), targetEquipment.id);
-          console.log(`[Automation] Transition auto-off completed for equipment ${targetEquipment.id} (${sorted.length} channels)`);
+          applyRelayCache(targetEquipment, offStates, { source: 'automation_auto_off', automationId: automation.id });
+          console.log(`[Automation] Transition auto-off completed for equipment ${targetEquipment.id} (${sorted.length} channels, confirmed=${offStates.every(s => s.confirmed)})`);
         } catch (err) {
           console.error('[Automation] Transition auto-off failed:', err.message);
         }

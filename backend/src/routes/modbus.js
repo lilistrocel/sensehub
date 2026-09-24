@@ -10,6 +10,8 @@ const { modbusTcpClient } = require('../services/ModbusTcpClient');
 const { modbusPollingService } = require('../services/ModbusPollingService');
 const { requireRole } = require('../middleware/auth');
 const interlock = require('../services/RelayInterlockService');
+const readback = require('../services/RelayReadback');
+const { applyRelayCache } = require('../services/RelayStateCache');
 
 // Interlock bookkeeping for raw writes: the partner was switched OFF ahead of
 // the requested write — reflect that in the cached relay state + broadcast.
@@ -257,7 +259,24 @@ router.post('/write/coil', requireRole('admin', 'operator'), validateModbusParam
       }
     }
 
-    const result = await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
+    const sendWrite = () => modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
+    const result = await sendWrite();
+
+    // Read back (FC01) -> retry once on disagreement. When the target is a
+    // registered equipment row, cache/log/broadcast exactly like the relay routes.
+    const owner = interlock.findEquipmentByModbusTarget(host, port, unitId);
+    const rb = await readback.confirmCoilWrite(modbusTcpClient, { host, port, unitId }, address, value, {
+      writeOnly: !!(owner && owner.write_only), retry: sendWrite
+    });
+    if (owner) {
+      const userEmail = req.user?.email || null;
+      if (rb.source === 'readback' && !rb.confirmed) {
+        readback.reportUnconfirmed(owner, address, value, rb.readback, { source: 'modbus_raw', userEmail });
+      }
+      applyRelayCache(owner, [{ channel: address, requested: value, readback: rb.readback, confirmed: rb.confirmed }], {
+        source: 'modbus_raw', automationId: null, userEmail
+      });
+    }
 
     res.json({
       success: true,
@@ -266,7 +285,11 @@ router.post('/write/coil', requireRole('admin', 'operator'), validateModbusParam
       host,
       port,
       unitId,
-      ...result
+      ...result,
+      confirmed: rb.confirmed,
+      readback: rb.readback,
+      readbackSource: rb.source,
+      equipmentId: owner ? owner.id : null
     });
   } catch (error) {
     console.error('[Modbus API] Write Single Coil error:', error.message);
@@ -350,7 +373,26 @@ router.post('/write/coils', requireRole('admin', 'operator'), validateModbusPara
       }
     }
 
-    const result = await modbusTcpClient.writeMultipleCoils(host, port, unitId, address, values);
+    const sendWrite = () => modbusTcpClient.writeMultipleCoils(host, port, unitId, address, values);
+    const result = await sendWrite();
+
+    // Read the run back (FC01) -> retry once on disagreement; bookkeeping when
+    // the target is a registered equipment row.
+    const owner = interlock.findEquipmentByModbusTarget(host, port, unitId);
+    const rb = await readback.confirmWrite(modbusTcpClient, { host, port, unitId }, address, values, {
+      writeOnly: !!(owner && owner.write_only), retry: sendWrite
+    });
+    if (owner) {
+      const userEmail = req.user?.email || null;
+      if (rb.source === 'readback') {
+        for (const it of rb.items) {
+          if (!it.confirmed) readback.reportUnconfirmed(owner, it.channel, it.requested, it.readback, { source: 'modbus_raw', userEmail });
+        }
+      }
+      applyRelayCache(owner, rb.items.map(it => ({ channel: it.channel, requested: it.requested, readback: it.readback, confirmed: it.confirmed })), {
+        source: 'modbus_raw', automationId: null, userEmail
+      });
+    }
 
     res.json({
       success: true,
@@ -359,7 +401,11 @@ router.post('/write/coils', requireRole('admin', 'operator'), validateModbusPara
       host,
       port,
       unitId,
-      ...result
+      ...result,
+      confirmed: rb.confirmed,
+      readback: rb.readback,
+      readbackSource: rb.source,
+      equipmentId: owner ? owner.id : null
     });
   } catch (error) {
     console.error('[Modbus API] Write Multiple Coils error:', error.message);
