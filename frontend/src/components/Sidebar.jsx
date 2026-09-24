@@ -213,14 +213,18 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
   const NavContent = () => (
     <>
       {/* Logo / Brand */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center">
-          <span className="text-xl font-bold text-primary-600 dark:text-primary-400">A20Core - SenseHub</span>
+      <div className="flex items-center justify-between h-16 px-4 border-b border-line">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span aria-hidden="true" className="w-2.5 h-6 rounded-sm bg-brand-600 shrink-0" />
+          <span className="flex flex-col leading-tight min-w-0">
+            <span className="text-label uppercase text-muted">A20Core</span>
+            <span className="font-display text-lg font-bold text-ink truncate">SenseHub</span>
+          </span>
         </div>
         {/* Close button for mobile */}
         <button
           onClick={() => setMobileMenuOpen(false)}
-          className="md:hidden p-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+          className="md:hidden p-2 rounded-md text-muted hover:text-ink hover:bg-field focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
           aria-label="Close menu"
         >
           <CloseIcon />
@@ -232,7 +236,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
         {visibleSections.map((section, sectionIdx) => (
           <div key={section.title} className={sectionIdx > 0 ? 'mt-4' : ''}>
             <h2
-              className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 select-none"
+              className="px-3 mb-1.5 text-label uppercase text-muted select-none"
               id={`nav-section-${section.title.toLowerCase()}`}
             >
               {section.title}
@@ -245,10 +249,10 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
                   end={item.path === '/'}
                   onClick={handleNavClick}
                   className={({ isActive }) =>
-                    `flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                    `flex items-center px-3 py-2 text-sm font-medium rounded-md border-l-[3px] transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
                       isActive
-                        ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+                        ? 'border-l-brand-600 dark:border-l-brand-400 bg-brand-50 dark:bg-brand-900/50 text-brand-700 dark:text-brand-200'
+                        : 'border-l-transparent text-gray-600 dark:text-gray-300 hover:bg-field hover:text-ink'
                     }`
                   }
                 >
@@ -262,19 +266,19 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
       </nav>
 
       {/* User Info and Logout */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-4">
+      <div className="border-t border-line p-4">
         <div className="flex items-center mb-3">
-          <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium text-sm">
+          <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white font-semibold text-sm">
             {user?.name?.charAt(0) || 'U'}
           </div>
           <div className="ml-3 flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.name || 'User'}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.role || 'Role'}</p>
+            <p className="text-sm font-medium text-ink truncate">{user?.name || 'User'}</p>
+            <p className="text-label uppercase text-muted truncate">{user?.role || 'Role'}</p>
           </div>
         </div>
         <button
           onClick={handleLogout}
-          className="flex items-center w-full px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+          className="flex items-center w-full min-h-touch px-3 py-2 text-sm font-medium text-muted hover:bg-field hover:text-ink rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
         >
           <LogoutIcon />
           <span className="ml-3">Logout</span>
@@ -288,7 +292,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
       {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileMenuOpen(true)}
-        className="md:hidden fixed top-4 left-4 z-40 p-2 rounded-md bg-white dark:bg-gray-800 shadow-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+        className="md:hidden fixed top-3 left-3 z-40 p-2.5 rounded-md bg-panel border border-line shadow-sm text-muted hover:text-ink hover:bg-field focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
         aria-label="Open menu"
       >
         <MenuIcon />
@@ -297,7 +301,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
       {/* Mobile overlay */}
       {mobileMenuOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-gray-600 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-75"
+          className="md:hidden fixed inset-0 z-40 bg-gray-900/70"
           onClick={() => setMobileMenuOpen(false)}
           aria-hidden="true"
         />
@@ -305,7 +309,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
 
       {/* Mobile sidebar */}
       <aside
-        className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-xl transform transition-transform duration-300 ease-in-out ${
+        className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-panel border-r border-line shadow-xl transform transition-transform duration-300 ease-in-out ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         role="navigation"
@@ -322,7 +326,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
         role="navigation"
         aria-label="Desktop navigation"
       >
-        <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen">
+        <div className="w-64 bg-panel border-r border-line flex flex-col h-screen">
           <NavContent />
         </div>
       </aside>

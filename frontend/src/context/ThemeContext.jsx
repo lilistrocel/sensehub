@@ -4,13 +4,18 @@ const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Check localStorage first
-    const saved = localStorage.getItem('theme');
-    if (saved) {
-      return saved === 'dark';
+    // Stored preference wins. With no preference the app is LIGHT: operators
+    // read phones in full sun, so we deliberately do NOT follow
+    // prefers-color-scheme. The toggle (header / Settings) still opts into dark.
+    try {
+      const saved = localStorage.getItem('theme');
+      if (saved) {
+        return saved === 'dark';
+      }
+    } catch {
+      /* storage unavailable (private mode) - fall through to light */
     }
-    // Then check system preference
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return false;
   });
 
   useEffect(() => {
@@ -21,7 +26,11 @@ export function ThemeProvider({ children }) {
       document.documentElement.classList.remove('dark');
     }
     // Save preference
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+    try {
+      localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+    } catch {
+      /* ignore */
+    }
   }, [isDarkMode]);
 
   const toggleTheme = () => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Breadcrumb from './Breadcrumb';
+import DeviceClock from './DeviceClock';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
@@ -748,14 +749,14 @@ export default function Layout({ children }) {
   const getCloudStatusDisplay = () => {
     if (!cloudStatus.configured) {
       return {
-        color: 'bg-gray-400',
+        color: 'bg-state-idle',
         text: 'Not Configured',
         title: 'Cloud: Not Configured'
       };
     }
     if (cloudStatus.connected) {
       return {
-        color: 'bg-green-500',
+        color: 'bg-state-ok',
         text: cloudStatus.pendingItems > 0
           ? `Connected (${cloudStatus.pendingItems} pending)`
           : 'Connected',
@@ -763,7 +764,7 @@ export default function Layout({ children }) {
       };
     }
     return {
-      color: 'bg-yellow-400',
+      color: 'bg-state-caution',
       text: 'Offline Mode',
       title: 'Cloud: Disconnected'
     };
@@ -787,13 +788,13 @@ export default function Layout({ children }) {
       .join('\n');
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
+    <div className="min-h-screen bg-canvas flex">
       <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top header */}
-        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 md:px-6 md:py-4">
+        <header className="bg-panel border-b border-line px-4 py-3 md:px-6 md:py-3">
           {/* The row wraps: when the breadcrumb cannot keep at least 10rem
               beside the control group (phones, tablets), the controls drop to
               a second line instead of overflowing the clipped body and hiding
@@ -815,16 +816,16 @@ export default function Layout({ children }) {
               {/* Dark mode toggle (desktop only - theme is also in Settings) */}
               <button
                 onClick={toggleTheme}
-                className="hidden lg:block p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="hidden lg:block p-2 rounded-md text-muted hover:text-ink hover:bg-field border border-transparent transition-colors"
                 title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
                 aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDarkMode ? (
-                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5 text-caution-400" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
                   </svg>
                 ) : (
-                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
                   </svg>
                 )}
@@ -841,7 +842,7 @@ export default function Layout({ children }) {
                     <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
-                    <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[18px]">
+                    <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold font-mono tabular leading-none text-white bg-alarm-600 rounded-full min-w-[18px]">
                       {unacknowledgedCount > 99 ? '99+' : unacknowledgedCount}
                     </span>
                   </span>
@@ -855,7 +856,7 @@ export default function Layout({ children }) {
                     <button
                       onClick={handleResumePolling}
                       disabled={pollingBusy}
-                      className="flex items-center px-3 py-2 text-sm font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="flex items-center min-h-touch px-3 py-2 text-sm font-medium bg-caution-50 dark:bg-caution-900/40 text-caution-700 dark:text-caution-300 border border-caution-400 dark:border-caution-600 rounded-md hover:bg-caution-100 dark:hover:bg-caution-900/60 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                       title={`Sensor polling is paused${polling.pauseReason ? ` (${polling.pauseReason})` : ''} - click to resume`}
                       aria-label="Resume sensor polling"
                     >
@@ -871,14 +872,14 @@ export default function Layout({ children }) {
                     <button
                       onClick={() => setPauseMenuOpen(open => !open)}
                       disabled={pollingBusy}
-                      className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="p-2 rounded-md text-muted hover:text-ink hover:bg-field border border-transparent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                       title="Pause sensor polling"
                       aria-label="Pause sensor polling"
                       aria-haspopup="menu"
                       aria-expanded={pauseMenuOpen}
                     >
                       {/* Pause glyph */}
-                      <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                         <path fillRule="evenodd" d="M18 10A8 8 0 112 10a8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
                       </svg>
                     </button>
@@ -888,12 +889,12 @@ export default function Layout({ children }) {
                     <div
                       role="menu"
                       aria-label="Pause sensor polling for"
-                      className="absolute right-0 mt-2 w-64 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-2"
+                      className="absolute right-0 mt-2 w-64 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
                     >
-                      <p className="px-3 pb-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                      <p className="px-3 pb-2 text-xs text-muted border-b border-line">
                         Pauses sensor polling. Relay boards keep their 15 s heartbeat poll so the firmware fail-safe cannot trip.
                       </p>
-                      <p className="px-3 pt-2 pb-1 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      <p className="px-3 pt-2 pb-1 text-label uppercase text-muted">
                         Pause for
                       </p>
                       {PAUSE_DURATIONS.map(({ label, minutes }) => (
@@ -902,7 +903,7 @@ export default function Layout({ children }) {
                           role="menuitem"
                           onClick={() => handlePauseSelect(minutes)}
                           disabled={pollingBusy}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="w-full text-left px-3 py-2 min-h-[40px] text-sm text-ink hover:bg-field transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {label}
                         </button>
@@ -920,7 +921,7 @@ export default function Layout({ children }) {
                     <div className="relative" ref={timersMenuRef}>
                       <button
                         onClick={() => setTimersMenuOpen(open => !open)}
-                        className="flex items-center px-2 py-1.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                        className="flex items-center px-2 py-1.5 text-xs font-semibold bg-caution-50 dark:bg-caution-900/40 text-caution-700 dark:text-caution-300 border border-caution-400 dark:border-caution-600 rounded-full hover:bg-caution-100 dark:hover:bg-caution-900/60 transition-colors"
                         title={timersTooltip}
                         aria-label={`${plural(pendingTimers.length, 'relay timer')} armed - show details`}
                         aria-haspopup="menu"
@@ -930,7 +931,7 @@ export default function Layout({ children }) {
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                         </svg>
-                        <span className="ml-1 tabular-nums">{pendingTimers.length}</span>
+                        <span className="ml-1 font-mono tabular">{pendingTimers.length}</span>
                         <span className="ml-1 hidden md:inline font-medium">armed</span>
                       </button>
 
@@ -938,26 +939,26 @@ export default function Layout({ children }) {
                         <div
                           role="menu"
                           aria-label="Pending relay timers"
-                          className="absolute right-0 mt-2 w-72 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-2"
+                          className="absolute right-0 mt-2 w-72 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
                         >
-                          <p className="px-3 pb-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                          <p className="px-3 pb-2 text-xs text-muted border-b border-line">
                             These relays are scheduled to switch by themselves. Either stop button cancels all of them.
                           </p>
                           <ul className="max-h-64 overflow-auto">
                             {pendingTimers.map((timer) => (
                               <li
                                 key={timer.key}
-                                className="px-3 py-2 text-xs border-b border-gray-50 dark:border-gray-700/50 last:border-b-0"
+                                className="px-3 py-2 text-xs border-b border-line last:border-b-0"
                               >
                                 <div className="flex items-baseline justify-between gap-2">
-                                  <span className="font-medium text-gray-700 dark:text-gray-200">
+                                  <span className="font-medium text-ink">
                                     {TIMER_TYPE_LABELS[timer.type] || timer.type || 'Timer'}
                                   </span>
-                                  <span className="tabular-nums text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                  <span className="font-mono tabular text-xs text-muted whitespace-nowrap">
                                     {formatDateTime(timer.firesAt)}
                                   </span>
                                 </div>
-                                <div className="text-gray-500 dark:text-gray-400">
+                                <div className="text-muted">
                                   {equipmentNames[timer.equipmentId] || `Equipment #${timer.equipmentId}`}
                                   {timer.channel !== null && timer.channel !== undefined && ` - channel ${timer.channel}`}
                                 </div>
@@ -976,7 +977,7 @@ export default function Layout({ children }) {
                     <button
                       onClick={handleStopAll}
                       disabled={Boolean(stopBusy)}
-                      className="flex items-center min-h-[44px] px-3 py-2 text-sm font-semibold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/60 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="flex items-center min-h-[44px] px-3 py-2 text-sm font-semibold bg-transparent text-caution-700 dark:text-caution-300 border-2 border-caution-400 rounded-md hover:bg-caution-50 dark:hover:bg-caution-900/40 focus:outline-none focus:ring-2 focus:ring-caution-400 focus:ring-offset-1 focus:ring-offset-panel transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                       title="Stop all - switches every relay OFF and cancels all pending timers. Automations stay armed and may re-fire."
                       aria-label="Stop all: switch relays off and cancel pending timers, leaving automations armed"
                     >
@@ -999,8 +1000,8 @@ export default function Layout({ children }) {
                       <button
                         onClick={() => setStopMenuOpen(open => !open)}
                         disabled={Boolean(stopBusy)}
-                        className={`flex items-center min-h-[44px] px-3 py-2 text-sm font-bold uppercase tracking-wide text-white bg-red-600 dark:bg-red-700 border border-red-700 dark:border-red-600 rounded-lg shadow-sm hover:bg-red-700 dark:hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 dark:focus:ring-offset-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed${
-                          armedState.disarmed ? ' ring-2 ring-red-400 dark:ring-red-500 ring-offset-1 dark:ring-offset-gray-800' : ''
+                        className={`flex items-center min-h-[44px] px-3 py-2 text-sm font-bold uppercase tracking-wide text-white bg-alarm-600 border-2 border-alarm-700 rounded-md shadow-sm hover:bg-alarm-700 focus:outline-none focus:ring-2 focus:ring-alarm-500 focus:ring-offset-1 focus:ring-offset-panel transition-colors disabled:opacity-60 disabled:cursor-not-allowed${
+                          armedState.disarmed ? ' ring-2 ring-alarm-400 ring-offset-1 ring-offset-panel' : ''
                         }`}
                         title={armedState.disarmed
                           ? 'Automations are DISARMED. Choosing a duration stops everything again and extends the disarm.'
@@ -1030,14 +1031,14 @@ export default function Layout({ children }) {
                         <div
                           role="menu"
                           aria-label="Emergency stop - keep automations disarmed for"
-                          className="absolute right-0 mt-2 w-72 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-2"
+                          className="absolute right-0 mt-2 w-72 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
                         >
-                          <p className="px-3 pb-2 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                          <p className="px-3 pb-2 text-xs text-muted border-b border-line">
                             Switches every relay off, cancels all pending timers, and{' '}
-                            <span className="font-semibold text-red-600 dark:text-red-400">disarms automations</span>{' '}
+                            <span className="font-semibold text-alarm-600 dark:text-alarm-300">disarms automations</span>{' '}
                             so nothing re-fires. No climate control or irrigation runs while disarmed.
                           </p>
-                          <p className="px-3 pt-2 pb-1 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          <p className="px-3 pt-2 pb-1 text-label uppercase text-muted">
                             Keep disarmed for
                           </p>
                           {EMERGENCY_RE_ARM_DURATIONS.map((duration) => (
@@ -1046,7 +1047,7 @@ export default function Layout({ children }) {
                               role="menuitem"
                               onClick={() => handleEmergencyStop(duration)}
                               disabled={Boolean(stopBusy)}
-                              className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="w-full text-left px-3 py-2 min-h-[40px] text-sm text-ink hover:bg-alarm-50 dark:hover:bg-alarm-900/30 hover:text-alarm-700 dark:hover:text-alarm-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {duration.label}
                             </button>
@@ -1061,13 +1062,16 @@ export default function Layout({ children }) {
               {/* Cloud status indicator */}
               <div className="flex items-center text-sm shrink-0" title={cloudDisplay.title} aria-label={cloudDisplay.title}>
                 <span className={`w-2 h-2 rounded-full ${cloudDisplay.color} lg:mr-2`}></span>
-                <span className="hidden lg:inline text-gray-500 dark:text-gray-400">{cloudDisplay.text}</span>
+                <span className="hidden lg:inline text-muted">{cloudDisplay.text}</span>
               </div>
+
+              {/* Device clock: HH:MM:SS in the configured timezone (md: and up) */}
+              <DeviceClock className="md:pl-4 md:border-l md:border-line" />
 
               {/* User badge (role pill from lg:, name from xl:) */}
               <div className="hidden lg:flex items-center">
-                <span className="hidden xl:inline text-sm text-gray-500 dark:text-gray-400 mr-2">{user?.name}</span>
-                <span className="px-2 py-1 text-xs font-medium rounded-full bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 capitalize">
+                <span className="hidden xl:inline text-sm text-muted mr-2">{user?.name}</span>
+                <span className="px-2 py-1 text-label uppercase rounded-full border border-line bg-field text-muted">
                   {user?.role}
                 </span>
               </div>
@@ -1165,7 +1169,7 @@ export default function Layout({ children }) {
         </main>
 
         {/* Footer with system status */}
-        <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
+        <footer className="bg-panel border-t border-line px-4 py-2 text-xs text-muted">
           <div className="flex items-center justify-between">
             <span>A20Core - SenseHub v1.0.0</span>
             <div className="flex items-center space-x-4">
@@ -1177,8 +1181,8 @@ export default function Layout({ children }) {
                     : 'Backend unreachable'
               }>
                 <span className={`w-2 h-2 rounded-full mr-1 ${
-                  backendReachable === null ? 'bg-gray-400'
-                    : backendReachable ? 'bg-green-500' : 'bg-red-500'
+                  backendReachable === null ? 'bg-state-idle'
+                    : backendReachable ? 'bg-state-ok' : 'bg-state-alarm'
                 }`}></span>
                 {backendReachable === null ? 'Checking…' : backendReachable ? 'System OK' : 'System Unreachable'}
               </span>
@@ -1190,8 +1194,8 @@ export default function Layout({ children }) {
                     : 'No response from database'
               }>
                 <span className={`w-2 h-2 rounded-full mr-1 ${
-                  backendReachable === null ? 'bg-gray-400'
-                    : backendReachable ? 'bg-green-500' : 'bg-red-500'
+                  backendReachable === null ? 'bg-state-idle'
+                    : backendReachable ? 'bg-state-ok' : 'bg-state-alarm'
                 }`}></span>
                 {backendReachable === null ? 'DB Unknown' : backendReachable ? 'DB Connected' : 'DB Unreachable'}
               </span>

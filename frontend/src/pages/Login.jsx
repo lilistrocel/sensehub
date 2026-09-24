@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Button, Label } from '../ui';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -31,66 +32,66 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-canvas flex items-center justify-center px-4 py-8">
       <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-primary-600 mb-2">A20Core - SenseHub</h1>
-          <p className="text-secondary-500 dark:text-secondary-400">Edge Computing Platform for Industrial IoT</p>
+        <div className="mb-8 flex items-center gap-3">
+          <span aria-hidden="true" className="w-3 h-10 rounded-sm bg-brand-600 shrink-0" />
+          <div className="leading-tight">
+            <Label>A20Core</Label>
+            <h1 className="font-display text-3xl font-bold text-ink">SenseHub</h1>
+            <p className="text-sm text-muted mt-0.5">Edge computing platform for industrial IoT</p>
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8">
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6 text-center">Sign In</h2>
+        <div className="bg-panel border border-line rounded-card p-6 sm:p-8">
+          <h2 className="font-display text-xl font-semibold text-ink mb-6">Sign in</h2>
 
           {error && (
             <div
               role="alert"
               aria-live="assertive"
-              className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-red-700 dark:text-red-400 text-sm"
+              className="mb-4 p-3 bg-alarm-50 dark:bg-alarm-900/30 border border-alarm-200 dark:border-alarm-700 border-l-[3px] border-l-state-alarm rounded-md text-alarm-700 dark:text-alarm-300 text-sm"
             >
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Email
-              </label>
+              <Label as="label" htmlFor="email" className="mb-1.5">Email</Label>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                autoComplete="email"
+                className="w-full min-h-touch px-3 py-2 bg-field text-ink border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                 placeholder="admin@sensehub.local"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Password
-              </label>
+              <Label as="label" htmlFor="password" className="mb-1.5">Password</Label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                autoComplete="current-password"
+                className="w-full min-h-touch px-3 py-2 bg-field text-ink border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                 placeholder="Enter your password"
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
+            <Button type="submit" variant="primary" size="md" disabled={loading} className="w-full">
+              {loading ? 'Signing in...' : 'Sign in'}
+            </Button>
           </form>
         </div>
+
+        <p className="mt-6 text-center text-label uppercase text-muted">Local authentication - works offline</p>
       </div>
     </div>
   );

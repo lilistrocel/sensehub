@@ -2,22 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Design tokens
+   Light is the DEFAULT (operators read phones in full sun). Dark is opted into
+   with the `.dark` class on <html> (ThemeContext). Every semantic token has a
+   hex form for hand-written CSS and an RGB triplet so Tailwind's opacity
+   modifiers work (`bg-panel/80`), see tailwind.config.js.
+   --------------------------------------------------------------------------- */
 @layer base {
+  :root {
+    /* brand palette */
+    --night: #14100F;
+    --char: #2E2825;
+    --stone: #6A615D;
+    --ash: #C9C2BC;
+    --paper: #F7F4F1;
+    --red: #A3132E;
+    --grow: #6B2E8A;
+
+    /* semantic - light */
+    --canvas: #F7F4F1;  --canvas-rgb: 247 244 241;
+    --panel: #FFFFFF;   --panel-rgb: 255 255 255;
+    --ink: #14100F;     --ink-rgb: 20 16 15;
+    --muted: #6A615D;   --muted-rgb: 106 97 93;
+    --line: #E2DBD5;    --line-rgb: 226 219 213;
+    --field: #F1ECE8;   --field-rgb: 241 236 232;
+    --brand: #6B2E8A;   --brand-rgb: 107 46 138;
+
+    /* state colours: status only, never buttons or accents */
+    --state-idle: #6A615D;     --state-idle-rgb: 106 97 93;
+    --state-ok: #5FB07E;       --state-ok-rgb: 95 176 126;
+    --state-caution: #C9903A;  --state-caution-rgb: 201 144 58;
+    --state-alarm: #A3132E;    --state-alarm-rgb: 163 19 46;
+    --state-lighting: #A46BC6; --state-lighting-rgb: 164 107 198;
+    --state-water: #4E93B8;    --state-water-rgb: 78 147 184;
+
+    color-scheme: light;
+  }
+
+  .dark {
+    --canvas: #14100F;  --canvas-rgb: 20 16 15;
+    --panel: #2E2825;   --panel-rgb: 46 40 37;
+    --ink: #F7F4F1;     --ink-rgb: 247 244 241;
+    --muted: #C9C2BC;   --muted-rgb: 201 194 188;
+    --line: #3A332E;    --line-rgb: 58 51 46;
+    --field: #1B1613;   --field-rgb: 27 22 19;
+    /* text-brand needs a lighter purple on charcoal; filled surfaces should use
+       bg-brand-600 (fixed) so white text stays readable in both themes. */
+    --brand: #A380B6;   --brand-rgb: 163 128 182;
+    --state-idle: #C9C2BC; --state-idle-rgb: 201 194 188;
+
+    color-scheme: dark;
+  }
+
   html, body {
     @apply overflow-x-hidden;
   }
 
   body {
-    @apply font-sans antialiased bg-gray-50 text-gray-900;
+    @apply font-sans antialiased bg-canvas text-ink;
+    font-feature-settings: 'ss01' on;
   }
 
-  /* Dark mode body styles */
-  .dark body,
-  html.dark body {
-    @apply bg-gray-900 text-gray-100;
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display text-ink;
+    letter-spacing: -0.01em;
   }
 
-  /* Ensure visible focus rings on all interactive elements for accessibility */
+  ::selection {
+    background: rgb(var(--brand-rgb) / 0.25);
+  }
+
+  /* Numbers never jitter: every mono run is tabular. */
+  .font-mono, .tabular, code, kbd, samp, pre {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Form controls pick up field/line tokens app-wide. Page-level utility
+     classes still win, so existing forms keep their sizing. */
+  /* :where() keeps specificity at zero so any page utility (pl-10, bg-white,
+     text-lg ...) still overrides these defaults. */
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='submit']):not([type='button']), select, textarea) {
+    @apply bg-field text-ink border border-line rounded-md;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  :where(input, textarea)::placeholder {
+    @apply text-gray-400;
+    opacity: 1;
+  }
+  :where(input, select, textarea):focus {
+    @apply border-brand-500;
+  }
+  :where(input, select, textarea):disabled {
+    @apply opacity-60 cursor-not-allowed;
+  }
+  :where(input[type='checkbox'], input[type='radio']) {
+    @apply accent-brand-600;
+  }
+
+  /* Table header rows use the label style */
+  thead th {
+    @apply text-label uppercase text-muted font-sans;
+  }
+
+  /* Visible focus rings in brand on all interactive elements */
   a:focus-visible,
   button:focus-visible,
   input:focus-visible,
@@ -25,45 +115,86 @@
   textarea:focus-visible,
   [role="button"]:focus-visible,
   [tabindex]:focus-visible {
-    @apply outline-none ring-2 ring-primary-500 ring-offset-2;
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-canvas;
   }
 
-  /* Dark mode focus ring offset */
-  .dark a:focus-visible,
-  .dark button:focus-visible,
-  .dark input:focus-visible,
-  .dark select:focus-visible,
-  .dark textarea:focus-visible,
-  .dark [role="button"]:focus-visible,
-  .dark [tabindex]:focus-visible {
-    @apply ring-offset-gray-900;
+  /* Subtle scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--muted-rgb) / 0.35) transparent;
   }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--muted-rgb) / 0.35);
+    border-radius: 8px;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: rgb(var(--muted-rgb) / 0.55); }
 }
 
 @layer components {
+  .label {
+    @apply text-label uppercase text-muted font-sans;
+  }
+
   .btn-primary {
-    @apply bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+    @apply bg-brand-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-brand-700 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-canvas;
   }
 
   .btn-secondary {
-    @apply bg-secondary-100 text-secondary-700 px-4 py-2 rounded-lg hover:bg-secondary-200 transition-colors focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2;
+    @apply bg-panel text-ink border border-line px-4 py-2 rounded-md font-medium hover:bg-field transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-canvas;
   }
 
   .input-field {
-    @apply w-full px-3 py-2 border border-secondary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
-  }
-
-  /* Dark mode input styles */
-  .dark .input-field {
-    @apply bg-gray-700 border-gray-600 text-white placeholder-gray-400;
+    @apply w-full px-3 py-2 bg-field text-ink border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500;
   }
 
   .card {
-    @apply bg-white rounded-lg shadow-md p-6;
+    @apply bg-panel border border-line rounded-card p-6;
   }
 
-  /* Dark mode card styles */
-  .dark .card {
-    @apply bg-gray-800 shadow-lg;
-  }
+  /* Card left rail carrying state (3px). Use with `border` on a panel. */
+  .rail { @apply border-l-[3px]; }
+  .rail-idle { @apply border-l-[3px] border-l-state-idle; }
+  .rail-ok { @apply border-l-[3px] border-l-state-ok; }
+  .rail-caution { @apply border-l-[3px] border-l-state-caution; }
+  .rail-alarm { @apply border-l-[3px] border-l-state-alarm; }
+  .rail-lighting { @apply border-l-[3px] border-l-state-lighting; }
+  .rail-water { @apply border-l-[3px] border-l-state-water; }
+  .rail-stale { @apply border-l-[3px] border-l-state-caution border-dashed; }
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* Legacy remap fix-ups: gray-500 (stone) is body-muted in light but only
+     2.4:1 on the dark panel, so lift it one step in dark. Same for the
+     placeholder variant. */
+  .dark .text-gray-500:not([class*='dark:text-']),
+  .dark .dark\:text-gray-500,
+  .dark .text-gray-600:not([class*='dark:text-']),
+  .dark .dark\:text-gray-600 { color: #9D9590; }
+  .dark .placeholder-gray-500::placeholder { color: #9D9590; }
+
+  /* The remapped 600/700 steps are darker than Tailwind's, so coloured text
+     that pages set without a dark: variant (text-red-600, text-blue-600 ...)
+     would drop to ~2:1 on the charcoal panel. Lift those to the 300/400 step
+     in dark. Elements that declare their own dark:text-* are left alone.
+     Page-level agents should replace these with tokens over time. */
+  .dark .text-red-600:not([class*='dark:text-']), .dark .text-red-700:not([class*='dark:text-']),
+  .dark .text-rose-600:not([class*='dark:text-']), .dark .text-rose-700:not([class*='dark:text-']),
+  .dark .text-error:not([class*='dark:text-']) { color: #CD7B7B; }
+  .dark .text-primary-600:not([class*='dark:text-']), .dark .text-primary-700:not([class*='dark:text-']),
+  .dark .text-blue-600:not([class*='dark:text-']), .dark .text-blue-700:not([class*='dark:text-']) { color: #B89CC5; }
+  .dark .text-green-600:not([class*='dark:text-']), .dark .text-green-700:not([class*='dark:text-']),
+  .dark .text-emerald-600:not([class*='dark:text-']), .dark .text-emerald-700:not([class*='dark:text-']) { color: #5FB07E; }
+  .dark .text-amber-600:not([class*='dark:text-']), .dark .text-amber-700:not([class*='dark:text-']),
+  .dark .text-yellow-600:not([class*='dark:text-']), .dark .text-yellow-700:not([class*='dark:text-']),
+  .dark .text-orange-600:not([class*='dark:text-']), .dark .text-orange-700:not([class*='dark:text-']) { color: #C9903A; }
+  .dark .text-purple-600:not([class*='dark:text-']), .dark .text-purple-700:not([class*='dark:text-']),
+  .dark .text-violet-600:not([class*='dark:text-']), .dark .text-violet-700:not([class*='dark:text-']) { color: #C099D6; }
+  .dark .text-indigo-600:not([class*='dark:text-']), .dark .text-indigo-700:not([class*='dark:text-']),
+  .dark .text-cyan-600:not([class*='dark:text-']), .dark .text-cyan-700:not([class*='dark:text-']),
+  .dark .text-sky-600:not([class*='dark:text-']), .dark .text-sky-700:not([class*='dark:text-']),
+  .dark .text-teal-600:not([class*='dark:text-']), .dark .text-teal-700:not([class*='dark:text-']) { color: #89B4CC; }
 }
