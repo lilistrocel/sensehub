@@ -5,3 +5,4 @@ export { default as StatusPill } from './StatusPill';
 export { default as Button } from './Button';
 export { default as SectionHeader } from './SectionHeader';
 export { default as Kpi } from './Kpi';
+export { default as Chart, CHART_TONES } from './Chart';
