@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useSettings } from '../context/SettingsContext';
+import { Card, Label, Reading, Kpi, Button, StatusPill, SectionHeader } from '../ui';
+import ConsumptionTracker from '../components/reports/ConsumptionTracker';
 
 const API_BASE = '/api';
 
@@ -23,16 +26,49 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
+/** Split litres into { value, unit, precision } so Reading can render mono + tabular. */
+const liters = (l) => {
+  const v = Number(l) || 0;
+  if (v >= 1000) return { value: v / 1000, unit: 'm³', precision: 1 };
+  return { value: Math.round(v), unit: 'L', precision: 0 };
+};
+
+const kwh = (v) => {
+  const n = Number(v) || 0;
+  if (n >= 1000) return { value: n / 1000, unit: 'MWh', precision: 2 };
+  return { value: n, unit: 'kWh', precision: n < 10 ? 2 : 1 };
+};
+
+const selectCls = 'min-h-touch px-3 py-2 bg-field text-ink border border-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-500';
+
+function Bar({ fraction, tone }) {
+  const pct = Math.max(0, Math.min(100, (fraction || 0) * 100));
+  return (
+    <div className="flex-1 bg-field rounded-full h-3 overflow-hidden" aria-hidden="true">
+      <div className={`${tone} h-full rounded-full transition-all`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+function dayRail(day) {
+  if (day.drift_events > 0 || day.automations.failures > 0) return 'alarm';
+  if (day.automations.skipped_actions > 0) return 'caution';
+  return 'idle';
+}
+
 export default function Reports() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { showError } = useToast();
+  const { formatDateTime } = useSettings();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [days, setDays] = useState(7);
   const [expandedDay, setExpandedDay] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const headers = { Authorization: `Bearer ${token}` };
+  const canControl = user?.role === 'admin' || user?.role === 'operator';
 
   const fetchReport = async () => {
     setLoading(true);
@@ -50,13 +86,10 @@ export default function Reports() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchReport(); }, [days]);
 
-  const formatLiters = (l) => {
-    if (!l) return '0 L';
-    if (l >= 1000) return `${(l / 1000).toFixed(1)} m³`;
-    return `${Math.round(l)} L`;
-  };
+  const refreshAll = () => { fetchReport(); setRefreshKey((k) => k + 1); };
 
   // Totals across all days
   const totals = data?.report?.reduce((acc, d) => ({
@@ -73,16 +106,10 @@ export default function Reports() {
     power_kwh: acc.power_kwh + (d.power?.total_kwh || 0),
   }), { water_seconds: 0, water_liters: 0, fert_seconds: 0, fert_liters: 0, water_events: 0, fert_events: 0, auto_runs: 0, failures: 0, skipped: 0, drift: 0, power_kwh: 0 });
 
-  // Max values for bar chart scaling
+  // Max values for bar scaling
   const maxWater = data?.report ? Math.max(...data.report.map(d => d.water.total_seconds), 1) : 1;
   const maxFert = data?.report ? Math.max(...data.report.map(d => d.fertigation.total_seconds), 1) : 1;
   const maxPower = data?.report ? Math.max(...data.report.map(d => d.power?.total_kwh || 0), 1) : 1;
-
-  const formatKwh = (v) => {
-    if (!v) return '0 kWh';
-    if (v >= 1000) return `${(v / 1000).toFixed(2)} MWh`;
-    return `${v.toFixed(v < 10 ? 2 : 1)} kWh`;
-  };
 
   // Per-meter totals across the period
   const meterTotals = (() => {
@@ -93,315 +120,254 @@ export default function Reports() {
     });
   })();
 
+  const tw = totals ? liters(totals.water_liters) : null;
+  const tf = totals ? liters(totals.fert_liters) : null;
+  const tp = totals ? kwh(totals.power_kwh) : null;
+
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Daily Reports</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Irrigation, fertigation, and automation summary</p>
+    <div className="max-w-6xl mx-auto">
+      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl font-bold text-ink">Daily Reports</h1>
+          <p className="text-sm text-muted mt-1">Irrigation, fertigation, power and automation summary</p>
         </div>
-        <div className="flex items-center gap-3">
-          <select value={days} onChange={e => setDays(parseInt(e.target.value))}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-white">
+        <div className="flex items-center gap-2">
+          <select value={days} onChange={e => setDays(parseInt(e.target.value))} className={selectCls} aria-label="Period">
             <option value={7}>Last 7 days</option>
             <option value={14}>Last 14 days</option>
             <option value={30}>Last 30 days</option>
           </select>
-          <button onClick={fetchReport} disabled={loading}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-50">
-            <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
+          <Button variant="ghost" size="sm" onClick={refreshAll} disabled={loading}>Refresh</Button>
         </div>
       </div>
 
       {loading && !data ? (
-        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2" />
-          Loading reports...
+        <div className="text-center py-12 text-muted">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-2" />
+          Loading reports…
         </div>
       ) : error && !data ? (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
-          <svg className="w-10 h-10 mx-auto text-red-500 dark:text-red-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p className="font-semibold text-red-800 dark:text-red-400">Could not load reports</p>
-          <p className="text-sm text-red-700 dark:text-red-400 mt-1">{error}</p>
-          <button onClick={fetchReport} disabled={loading}
-            className="mt-4 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
-            Retry
-          </button>
-        </div>
+        <Card rail="alarm" className="text-center py-8">
+          <p className="font-semibold text-ink">Could not load reports</p>
+          <p className="text-sm text-muted mt-1">{error}</p>
+          <Button variant="secondary" size="sm" className="mt-4" onClick={fetchReport} disabled={loading}>Retry</Button>
+        </Card>
       ) : data && (!data.report || data.report.length === 0) ? (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
-          <svg className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <p className="text-gray-500 dark:text-gray-400 text-lg">No report data for this period</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Try selecting a longer date range, or check back once automations have run.</p>
-        </div>
+        <Card className="text-center py-12">
+          <p className="text-ink text-lg">No report data for this period</p>
+          <p className="text-sm text-muted mt-1">Try selecting a longer date range, or check back once automations have run.</p>
+        </Card>
       ) : data && (
         <>
           {/* Period totals */}
           {totals && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <p className="text-xs text-blue-600 dark:text-blue-400 uppercase font-semibold">Total Water</p>
-                <p className="text-2xl font-bold text-blue-900 dark:text-blue-200 mt-1">{formatLiters(totals.water_liters)}</p>
-                <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">{formatDuration(totals.water_seconds)} runtime, {totals.water_events} cycles</p>
-              </div>
-              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-                <p className="text-xs text-green-600 dark:text-green-400 uppercase font-semibold">Total Fertigation</p>
-                <p className="text-2xl font-bold text-green-900 dark:text-green-200 mt-1">{formatLiters(totals.fert_liters)}</p>
-                <p className="text-xs text-green-500 dark:text-green-400 mt-1">{formatDuration(totals.fert_seconds)} runtime, {totals.fert_events} cycles</p>
-              </div>
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <p className="text-xs text-yellow-700 dark:text-yellow-400 uppercase font-semibold">Total Power</p>
-                <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-200 mt-1">{formatKwh(totals.power_kwh)}</p>
-                <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-                  {meterTotals.length} meter{meterTotals.length === 1 ? '' : 's'} imported
-                </p>
-              </div>
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                <p className="text-xs text-amber-600 dark:text-amber-400 uppercase font-semibold">Skipped by EC</p>
-                <p className="text-2xl font-bold text-amber-900 dark:text-amber-200 mt-1">{totals.skipped}</p>
-                <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">actions blocked by dependency</p>
-              </div>
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                <p className="text-xs text-red-600 dark:text-red-400 uppercase font-semibold">Relay Drift</p>
-                <p className="text-2xl font-bold text-red-900 dark:text-red-200 mt-1">{totals.drift}</p>
-                <p className="text-xs text-red-500 dark:text-red-400 mt-1">hardware mismatches</p>
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6" data-testid="report-kpis">
+              <Kpi label="Total water" rail="water" value={tw.value} unit={tw.unit} precision={tw.precision}
+                hint={`${formatDuration(totals.water_seconds)} runtime · ${totals.water_events} cycles`} />
+              <Kpi label="Total fertigation" rail="water" value={tf.value} unit={tf.unit} precision={tf.precision}
+                hint={`${formatDuration(totals.fert_seconds)} runtime · ${totals.fert_events} cycles`} />
+              <Kpi label="Total power" rail="lighting" value={tp.value} unit={tp.unit} precision={tp.precision}
+                hint={`${meterTotals.length} meter${meterTotals.length === 1 ? '' : 's'} imported`} />
+              <Kpi label="Skipped by EC" rail={totals.skipped > 0 ? 'caution' : 'idle'} value={totals.skipped} precision={0}
+                hint="actions blocked by dependency" />
+              <Kpi label="Relay drift" rail={totals.drift > 0 ? 'alarm' : 'idle'} value={totals.drift} precision={0}
+                hint="hardware mismatches" />
             </div>
           )}
 
           {/* Daily breakdown */}
-          <div className="space-y-2">
-            {data.report.map((day) => (
-              <div key={day.date} className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-                {/* Day header row */}
-                <button
-                  onClick={() => setExpandedDay(expandedDay === day.date ? null : day.date)}
-                  className="w-full px-4 py-3 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                >
-                  <div className="w-24 text-left">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{formatDate(day.date)}</p>
-                    <p className="text-[10px] text-gray-400">{day.date}</p>
-                  </div>
+          <div className="space-y-2" data-testid="report-days">
+            {data.report.map((day) => {
+              const open = expandedDay === day.date;
+              const w = liters(day.water.total_liters);
+              const f = liters(day.fertigation.total_liters);
+              return (
+                <Card key={day.date} rail={dayRail(day)} padding="none" className="overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDay(open ? null : day.date)}
+                    aria-expanded={open}
+                    className="w-full px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 hover:bg-field transition-colors text-left"
+                  >
+                    <div className="w-28 shrink-0">
+                      <p className="font-display text-sm font-semibold text-ink">{formatDate(day.date)}</p>
+                      <p className="text-xs font-mono tabular text-muted">{day.date}</p>
+                    </div>
 
-                  {/* Water bar */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-blue-600 dark:text-blue-400 w-16 text-right font-medium">{formatLiters(day.water.total_liters)}</span>
-                      <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
-                        <div className="bg-blue-500 h-full rounded-full transition-all"
-                          style={{ width: `${(day.water.total_seconds / maxWater) * 100}%` }} />
+                    <div className="flex-1 min-w-[12rem] space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Label className="w-5 shrink-0">W</Label>
+                        <Reading size="sm" value={w.value} unit={w.unit} precision={w.precision} className="w-16 sm:w-24 justify-end" />
+                        <Bar fraction={day.water.total_seconds / maxWater} tone="bg-state-water" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label className="w-5 shrink-0">F</Label>
+                        <Reading size="sm" value={f.value} unit={f.unit} precision={f.precision} className="w-16 sm:w-24 justify-end" />
+                        <Bar fraction={day.fertigation.total_seconds / maxFert} tone="bg-water-600 dark:bg-water-300" />
                       </div>
                     </div>
-                  </div>
 
-                  {/* Fertigation bar */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-green-600 dark:text-green-400 w-16 text-right font-medium">{formatLiters(day.fertigation.total_liters)}</span>
-                      <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
-                        <div className="bg-green-500 h-full rounded-full transition-all"
-                          style={{ width: `${(day.fertigation.total_seconds / maxFert) * 100}%` }} />
-                      </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {day.automations.skipped_actions > 0 && (
+                        <StatusPill state="caution">{day.automations.skipped_actions} skipped</StatusPill>
+                      )}
+                      {day.drift_events > 0 && (
+                        <StatusPill state="alarm" filled>{day.drift_events} drift</StatusPill>
+                      )}
+                      {day.automations.failures > 0 && (
+                        <StatusPill state="alarm" filled>{day.automations.failures} fail</StatusPill>
+                      )}
+                      <svg className={`w-4 h-4 text-muted transition-transform ${open ? 'rotate-180' : ''}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
-                  </div>
+                  </button>
 
-                  {/* Status badges */}
-                  <div className="flex items-center gap-2">
-                    {day.automations.skipped_actions > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                        {day.automations.skipped_actions} skipped
-                      </span>
-                    )}
-                    {day.drift_events > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                        {day.drift_events} drift
-                      </span>
-                    )}
-                    {day.automations.failures > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                        {day.automations.failures} fail
-                      </span>
-                    )}
-                  </div>
-
-                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${expandedDay === day.date ? 'rotate-180' : ''}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                {/* Expanded detail */}
-                {expandedDay === day.date && (
-                  <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3">
-                      {/* Water detail */}
-                      <div>
-                        <h4 className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase mb-2">
-                          Water ({data.water_equipment?.name})
-                        </h4>
-                        <p className="text-lg font-bold text-gray-900 dark:text-white">{formatLiters(day.water.total_liters)}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{formatDuration(day.water.total_seconds)} runtime, {day.water.events} cycles</p>
-                        {Object.keys(day.water.channel_details || {}).length > 0 && (
-                          <div className="mt-2 space-y-1.5">
-                            {Object.entries(day.water.channel_details).sort(([a],[b]) => a-b).map(([ch, d]) => (
-                              <div key={ch} className="flex items-center justify-between text-xs bg-blue-50 dark:bg-blue-900/10 rounded px-2 py-1">
-                                <span className="text-gray-600 dark:text-gray-400">
-                                  Ch {ch} {d.ingredient && <span className="text-blue-600 dark:text-blue-400">({d.ingredient})</span>}
-                                </span>
-                                <span className="font-medium text-gray-900 dark:text-white">{formatLiters(d.liters)} <span className="text-gray-400">({formatDuration(d.seconds)})</span></span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Fertigation detail */}
-                      <div>
-                        <h4 className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase mb-2">
-                          Fertigation ({data.fertigation_equipment?.name})
-                        </h4>
-                        <p className="text-lg font-bold text-gray-900 dark:text-white">{formatLiters(day.fertigation.total_liters)}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{formatDuration(day.fertigation.total_seconds)} runtime, {day.fertigation.events} cycles</p>
-                        {Object.keys(day.fertigation.channel_details || {}).length > 0 && (
-                          <div className="mt-2 space-y-1.5">
-                            {Object.entries(day.fertigation.channel_details).sort(([a],[b]) => a-b).map(([ch, d]) => (
-                              <div key={ch} className="text-xs bg-green-50 dark:bg-green-900/10 rounded px-2 py-1.5">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-gray-600 dark:text-gray-400">
-                                    Ch {ch}
-                                    {d.mixture && <span className="text-green-700 dark:text-green-400 font-medium ml-1">{d.mixture}</span>}
-                                    {d.ingredient && !d.mixture && <span className="text-green-600 dark:text-green-400 ml-1">({d.ingredient})</span>}
+                  {open && (
+                    <div className="px-4 pb-4 border-t border-line">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3">
+                        {/* Water detail */}
+                        <div>
+                          <Label className="mb-1">Water · {data.water_equipment?.name}</Label>
+                          <Reading value={w.value} unit={w.unit} precision={w.precision} />
+                          <p className="text-xs text-muted">{formatDuration(day.water.total_seconds)} runtime, {day.water.events} cycles</p>
+                          {Object.keys(day.water.channel_details || {}).length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {Object.entries(day.water.channel_details).sort(([a], [b]) => a - b).map(([ch, d]) => (
+                                <div key={ch} className="flex items-center justify-between text-xs bg-field rounded px-2 py-1">
+                                  <span className="text-muted">
+                                    Ch {ch} {d.ingredient && <span className="text-ink">({d.ingredient})</span>}
                                   </span>
-                                  <span className="font-medium text-gray-900 dark:text-white">{formatLiters(d.liters)}</span>
+                                  <span className="font-mono tabular text-ink">
+                                    {liters(d.liters).value}{liters(d.liters).unit === 'm³' ? ' m³' : ' L'} <span className="text-muted">({formatDuration(d.seconds)})</span>
+                                  </span>
                                 </div>
-                                <div className="text-[10px] text-gray-400 mt-0.5">
-                                  {formatDuration(d.seconds)} @ {d.flow_rate} {d.flow_unit}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
-                      {/* Automations detail */}
-                      <div>
-                        <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-400 uppercase mb-2">Automations</h4>
-                        <div className="space-y-1 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600 dark:text-gray-400">Total runs</span>
-                            <span className="font-medium text-gray-900 dark:text-white">{day.automations.total_runs}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600 dark:text-gray-400">Failures</span>
-                            <span className={`font-medium ${day.automations.failures > 0 ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
-                              {day.automations.failures}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600 dark:text-gray-400">Skipped by dependency</span>
-                            <span className={`font-medium ${day.automations.skipped_actions > 0 ? 'text-amber-600' : 'text-gray-900 dark:text-white'}`}>
-                              {day.automations.skipped_actions} actions in {day.automations.skipped_runs} runs
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600 dark:text-gray-400">Relay drift events</span>
-                            <span className={`font-medium ${day.drift_events > 0 ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
-                              {day.drift_events}
-                            </span>
-                          </div>
+                        {/* Fertigation detail */}
+                        <div>
+                          <Label className="mb-1">Fertigation · {data.fertigation_equipment?.name}</Label>
+                          <Reading value={f.value} unit={f.unit} precision={f.precision} />
+                          <p className="text-xs text-muted">{formatDuration(day.fertigation.total_seconds)} runtime, {day.fertigation.events} cycles</p>
+                          {Object.keys(day.fertigation.channel_details || {}).length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {Object.entries(day.fertigation.channel_details).sort(([a], [b]) => a - b).map(([ch, d]) => (
+                                <div key={ch} className="text-xs bg-field rounded px-2 py-1.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted min-w-0">
+                                      Ch {ch}
+                                      {d.mixture && <span className="text-ink font-medium ml-1">{d.mixture}</span>}
+                                      {d.ingredient && !d.mixture && <span className="text-ink ml-1">({d.ingredient})</span>}
+                                    </span>
+                                    <span className="font-mono tabular text-ink shrink-0">{liters(d.liters).value} {liters(d.liters).unit}</span>
+                                  </div>
+                                  <div className="text-xs font-mono tabular text-muted mt-0.5">
+                                    {formatDuration(d.seconds)} @ {d.flow_rate} {d.flow_unit}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Automations detail */}
+                        <div>
+                          <Label className="mb-1">Automations</Label>
+                          <dl className="space-y-1 text-xs">
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-muted">Total runs</dt>
+                              <dd className="font-mono tabular text-ink">{day.automations.total_runs}</dd>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-muted">Failures</dt>
+                              <dd className={`font-mono tabular ${day.automations.failures > 0 ? 'text-alarm-600 dark:text-alarm-300' : 'text-ink'}`}>{day.automations.failures}</dd>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-muted">Skipped by dependency</dt>
+                              <dd className={`font-mono tabular text-right ${day.automations.skipped_actions > 0 ? 'text-caution-700 dark:text-caution-300' : 'text-ink'}`}>
+                                {day.automations.skipped_actions} actions in {day.automations.skipped_runs} runs
+                              </dd>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <dt className="text-muted">Relay drift events</dt>
+                              <dd className={`font-mono tabular ${day.drift_events > 0 ? 'text-alarm-600 dark:text-alarm-300' : 'text-ink'}`}>{day.drift_events}</dd>
+                            </div>
+                          </dl>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  )}
+                </Card>
+              );
+            })}
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-6 mt-4 text-xs text-gray-500 dark:text-gray-400">
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm bg-blue-500" /> Water (Irrigation 1)
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm bg-green-500" /> Fertigation (Irrigation 2)
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm bg-yellow-500" /> Power (Imported kWh)
-            </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 mt-3 text-xs text-muted">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-state-water" aria-hidden="true" /> W · Water ({data.water_equipment?.name || 'irrigation'})</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-water-600 dark:bg-water-300" aria-hidden="true" /> F · Fertigation ({data.fertigation_equipment?.name || 'fertigation'})</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-state-lighting" aria-hidden="true" /> Power (imported kWh)</span>
           </div>
 
           {/* Power consumption — per meter, per day */}
           {meterTotals.length > 0 && (
-            <div className="mt-8">
-              <div className="flex items-baseline justify-between mb-3">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Power Consumption</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Daily energy imported per power meter (computed from cumulative kWh counter).
-                </p>
-              </div>
+            <section className="mt-8" data-testid="power-section">
+              <SectionHeader
+                title="Power consumption"
+                subtitle="Daily energy imported per meter, from the cumulative kWh counter"
+              />
 
-              {/* Per-meter period totals */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
-                {meterTotals.map(m => (
-                  <div key={m.equipment_id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate" title={m.name}>{m.name}</p>
-                    <p className="text-xl font-bold text-yellow-700 dark:text-yellow-400 mt-1">{formatKwh(m.total_kwh)}</p>
-                    <p className="text-[10px] text-gray-400">total over {days} days</p>
-                  </div>
-                ))}
+                {meterTotals.map(m => {
+                  const k = kwh(m.total_kwh);
+                  return (
+                    <Kpi key={m.equipment_id} label={m.name} rail="lighting" size="sm" padding="sm"
+                      value={k.value} unit={k.unit} precision={k.precision} hint={`total over ${days} days`} />
+                  );
+                })}
               </div>
 
-              {/* Daily breakdown per meter */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+              <Card padding="none" className="overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                    <thead className="bg-field">
                       <tr>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase w-28">Date</th>
+                        <th className="px-3 py-2 text-left w-28">Date</th>
                         {meterTotals.map(m => (
-                          <th key={m.equipment_id} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">
-                            {m.name}
-                          </th>
+                          <th key={m.equipment_id} className="px-3 py-2 text-left">{m.name}</th>
                         ))}
-                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase w-28">Day total</th>
+                        <th className="px-3 py-2 text-right w-28">Day total</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    <tbody className="divide-y divide-line">
                       {data.report.map(day => {
                         const dayTotal = day.power?.total_kwh || 0;
+                        const dt = kwh(dayTotal);
                         return (
                           <tr key={day.date}>
                             <td className="px-3 py-2 align-top">
-                              <p className="text-xs font-semibold text-gray-900 dark:text-white">{formatDate(day.date)}</p>
-                              <p className="text-[10px] text-gray-400">{day.date}</p>
+                              <p className="text-xs font-semibold text-ink">{formatDate(day.date)}</p>
+                              <p className="text-xs font-mono tabular text-muted">{day.date}</p>
                             </td>
                             {meterTotals.map(m => {
                               const cell = day.power?.by_meter?.[m.equipment_id];
-                              const kwh = cell?.kwh || 0;
+                              const v = cell?.kwh || 0;
+                              const k = kwh(v);
                               return (
                                 <td key={m.equipment_id} className="px-3 py-2 align-middle">
                                   <div className="flex items-center gap-2">
-                                    <span className="text-[11px] text-yellow-700 dark:text-yellow-400 w-20 text-right font-medium tabular-nums">
-                                      {formatKwh(kwh)}
-                                    </span>
-                                    <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-                                      <div className="bg-yellow-500 h-full rounded-full transition-all"
-                                        style={{ width: `${maxPower ? (kwh / maxPower) * 100 : 0}%` }} />
-                                    </div>
+                                    <Reading size="sm" value={k.value} unit={k.unit} precision={k.precision} className="w-24 justify-end" />
+                                    <Bar fraction={maxPower ? v / maxPower : 0} tone="bg-state-lighting" />
                                   </div>
                                 </td>
                               );
                             })}
-                            <td className="px-3 py-2 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
-                              {formatKwh(dayTotal)}
+                            <td className="px-3 py-2 text-right">
+                              <Reading size="sm" value={dt.value} unit={dt.unit} precision={dt.precision} className="font-semibold" />
                             </td>
                           </tr>
                         );
@@ -409,9 +375,18 @@ export default function Reports() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </div>
+              </Card>
+            </section>
           )}
+
+          {/* Energy consumption tracker (moved from the Dashboard) */}
+          <ConsumptionTracker
+            token={token}
+            canControl={canControl}
+            showError={showError}
+            formatDateTime={formatDateTime}
+            refreshKey={refreshKey}
+          />
         </>
       )}
     </div>

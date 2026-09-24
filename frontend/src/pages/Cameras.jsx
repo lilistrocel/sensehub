@@ -3,6 +3,15 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useAuthedImage } from '../hooks/useAuthedImage';
 import PtzControls from '../components/PtzControls';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { Card, Button, StatusPill } from '../ui';
+import { timeAgo } from '../components/alerts/relativeTime';
+
+const CAMERA_STATE = {
+  online: { state: 'ok', filled: true, rail: 'ok' },
+  error: { state: 'alarm', filled: true, rail: 'alarm' },
+  offline: { state: 'idle', filled: false, rail: 'idle' },
+};
 
 const API_BASE = '/api';
 const SNAPSHOT_REFRESH_INTERVAL = 30000; // 30s
@@ -118,15 +127,13 @@ export default function Cameras() {
   const captureInfo = (snap) => {
     if (!snap || !snap.captured_at) return { text: 'No capture yet', stale: false, none: true };
     const age = Date.now() - new Date(snap.captured_at).getTime();
-    if (Number.isNaN(age)) return { text: `Last capture: ${formatDate(snap.captured_at)}`, stale: false };
+    const abs = formatDate(snap.captured_at);
+    if (Number.isNaN(age)) return { text: `Last capture ${abs}`, abs, stale: false };
+    const rel = timeAgo(snap.captured_at) || abs;
     if (age > STALE_CAPTURE_MS) {
-      const days = Math.floor(age / (24 * 60 * 60 * 1000));
-      return {
-        text: `Stale capture: last saved ${formatDate(snap.captured_at)} (${days >= 1 ? `${days} day${days === 1 ? '' : 's'}` : 'over 24 h'} ago)`,
-        stale: true,
-      };
+      return { text: `Stale capture — last saved ${rel}`, abs, stale: true };
     }
-    return { text: `Last capture: ${formatDate(snap.captured_at)}`, stale: false };
+    return { text: `Last capture ${rel}`, abs, stale: false };
   };
 
   const handleCapture = async (camera) => {
@@ -277,62 +284,49 @@ export default function Cameras() {
     setShowDeleteModal(true);
   };
 
-  const statusBadge = (status) => {
-    const styles = {
-      online: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
-      offline: 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300',
-      error: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
-    };
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.offline}`}>
-        <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${status === 'online' ? 'bg-green-500' : status === 'error' ? 'bg-red-500' : 'bg-gray-400'}`} />
-        {status}
-      </span>
-    );
+  const statusPill = (status) => {
+    const s = CAMERA_STATE[status] || CAMERA_STATE.offline;
+    return <StatusPill state={s.state} filled={s.filled} data-testid="camera-status">{status || 'offline'}</StatusPill>;
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Cameras</h1>
+      <div className="flex justify-between items-center gap-3 mb-5 flex-wrap">
+        <h1 className="font-display text-2xl font-bold text-ink">Cameras</h1>
         {canManage && (
-          <button
-            onClick={() => { setForm(emptyForm); setShowAddModal(true); }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Camera
-          </button>
+          <Button variant="secondary" size="sm" onClick={() => { setForm(emptyForm); setShowAddModal(true); }}>
+            + Add camera
+          </Button>
         )}
       </div>
 
       {cameras.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
-          <svg className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <Card className="text-center py-12">
+          <svg className="w-16 h-16 mx-auto text-muted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
-          <p className="text-gray-500 dark:text-gray-400 text-lg">No cameras configured yet</p>
+          <p className="text-ink text-lg">No cameras configured yet</p>
           {canManage && (
-            <button onClick={() => { setForm(emptyForm); setShowAddModal(true); }}
-              className="mt-4 text-blue-600 dark:text-blue-400 hover:underline">
+            <Button variant="secondary" size="sm" className="mt-4" onClick={() => { setForm(emptyForm); setShowAddModal(true); }}>
               Add your first camera
-            </button>
+            </Button>
           )}
-        </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {cameras.map(camera => (
-            <div key={camera.id} className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          {cameras.map(camera => {
+            const info = captureInfo(storedSnapshots[camera.id]);
+            const cs = CAMERA_STATE[camera.status] || CAMERA_STATE.offline;
+            return (
+            <Card key={camera.id} rail={cs.rail} padding="none" className="overflow-hidden" data-testid="camera-card">
               {/* Snapshot thumbnail */}
               <div
                 className="relative bg-gray-900 aspect-video cursor-pointer group"
@@ -343,7 +337,7 @@ export default function Cameras() {
                   <>
                     <CameraSnapshot cameraId={camera.id} tick={snapshotTick} alt={camera.name} />
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
-                      <svg className="w-12 h-12 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-12 h-12 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M8 5v14l11-7z" />
                       </svg>
                     </div>
@@ -351,92 +345,76 @@ export default function Cameras() {
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <div className="text-center">
-                      <svg className="w-12 h-12 mx-auto text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-12 h-12 mx-auto text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                       </svg>
-                      <p className="text-gray-500 text-sm mt-2">{camera.status === 'error' ? 'Connection error' : 'Offline'}</p>
+                      <p className="text-gray-400 text-sm mt-2">{camera.status === 'error' ? 'Connection error' : 'Offline'}</p>
                     </div>
                   </div>
                 )}
                 <div className="absolute top-2 right-2">
-                  {statusBadge(camera.status)}
+                  {statusPill(camera.status)}
                 </div>
               </div>
 
               {/* Camera info */}
               <div className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">{camera.name}</h3>
-                    {camera.description && (
-                      <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5 truncate">{camera.description}</p>
-                    )}
-                    <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">
-                      {camera.ip_address && `${camera.ip_address}`}
-                      {camera.manufacturer && ` - ${camera.manufacturer}`}
-                      {camera.model && ` ${camera.model}`}
-                    </p>
-                    {camera.error_message && (
-                      <p className="text-red-500 text-xs mt-1 truncate" title={camera.error_message}>{camera.error_message}</p>
-                    )}
-                    {/unreachable/i.test(camera.error_message || '') && (
-                      <p className="text-amber-600 dark:text-amber-400 text-xs mt-1" data-testid="dhcp-tip">
-                        Tip: if the camera uses DHCP its IP may have changed — give it a DHCP reservation or static IP, then update the address here.
-                      </p>
-                    )}
-                  </div>
+                <h3 className="font-display text-base font-semibold text-ink truncate">{camera.name}</h3>
+                {camera.description && (
+                  <p className="text-muted text-sm mt-0.5 truncate">{camera.description}</p>
+                )}
+                <p className="text-muted text-xs mt-1 font-mono tabular">
+                  {camera.ip_address && `${camera.ip_address}`}
+                  {camera.manufacturer && ` · ${camera.manufacturer}`}
+                  {camera.model && ` ${camera.model}`}
+                </p>
+                {camera.error_message && (
+                  <p className="text-alarm-600 dark:text-alarm-300 text-xs mt-1 break-words" title={camera.error_message}>{camera.error_message}</p>
+                )}
+                {/unreachable/i.test(camera.error_message || '') && (
+                  <p className="text-caution-700 dark:text-caution-300 text-xs mt-1" data-testid="dhcp-tip">
+                    Tip: if the camera uses DHCP its IP may have changed — give it a DHCP reservation or static IP, then update the address here.
+                  </p>
+                )}
+
+                {/* Last stored snapshot info: relative, with a caution pill when stale (> 24 h) */}
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" data-testid="camera-capture">
+                  {info.stale ? (
+                    <StatusPill state="caution" className="!whitespace-normal" title={info.abs}>{info.text}</StatusPill>
+                  ) : (
+                    <span className="text-muted" title={info.abs}>{info.text}</span>
+                  )}
                 </div>
 
-                {/* Last stored snapshot info */}
-                {(() => {
-                  const info = captureInfo(storedSnapshots[camera.id]);
-                  return (
-                    <p className={`text-xs mt-1 ${
-                      info.stale ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'
-                    }`}>
-                      {info.text}
-                    </p>
-                  );
-                })()}
-
                 {/* Actions */}
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                  {canManage && (
-                    <button onClick={() => handleCapture(camera)} disabled={capturing === camera.id}
-                      className="text-xs px-3 py-1.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-50">
-                      {capturing === camera.id ? 'Capturing...' : 'Capture Now'}
-                    </button>
-                  )}
-                  <button onClick={() => setShowLiveModal(camera)}
-                    className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
+                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-line">
+                  <Button variant="primary" size="sm" onClick={() => setShowLiveModal(camera)} data-testid="camera-live">
                     {canManage ? 'Live / PTZ' : 'Live'}
-                  </button>
-                  <button onClick={() => openHistory(camera)}
-                    className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
-                    History
-                  </button>
+                  </Button>
+                  {canManage && (
+                    <Button variant="secondary" size="sm" onClick={() => handleCapture(camera)} disabled={capturing === camera.id}>
+                      {capturing === camera.id ? 'Capturing…' : 'Capture now'}
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => openHistory(camera)}>History</Button>
                   {canManage && (
                     <>
-                      <button onClick={() => handleTest(camera)} disabled={testing === camera.id}
-                        className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">
-                        {testing === camera.id ? 'Testing...' : 'Test'}
-                      </button>
-                      <button onClick={() => openEdit(camera)}
-                        className="text-xs px-3 py-1.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
-                        Edit
-                      </button>
+                      <Button variant="ghost" size="sm" onClick={() => handleTest(camera)} disabled={testing === camera.id}>
+                        {testing === camera.id ? 'Testing…' : 'Test'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(camera)}>Edit</Button>
                     </>
                   )}
                   {canDelete && (
-                    <button onClick={() => openDelete(camera)}
-                      className="text-xs px-3 py-1.5 rounded bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 ml-auto">
+                    <Button variant="danger-ghost" size="sm" className="ml-auto" onClick={() => openDelete(camera)} data-testid="camera-delete">
                       Delete
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
-            </div>
-          ))}
+            </Card>
+            );
+          })}
         </div>
       )}
 
@@ -474,24 +452,18 @@ export default function Cameras() {
         </form>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Delete Camera">
-        <div className="px-6 py-4">
-          <p className="text-gray-700 dark:text-gray-300">
-            Are you sure you want to delete <strong>{selectedCamera?.name}</strong>? This will also remove the stream from go2rtc.
-          </p>
-        </div>
-        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 flex justify-end gap-3">
-          <button onClick={() => setShowDeleteModal(false)}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500">
-            Cancel
-          </button>
-          <button onClick={handleDelete} disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-            {saving ? 'Deleting...' : 'Delete'}
-          </button>
-        </div>
-      </Modal>
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={showDeleteModal}
+        variant="danger"
+        title="Delete this camera?"
+        body="This removes the camera record and its stream from go2rtc. Stored snapshots are kept on disk."
+        items={selectedCamera ? [`${selectedCamera.name}${selectedCamera.ip_address ? ` · ${selectedCamera.ip_address}` : ''}`] : []}
+        confirmLabel="Delete camera"
+        busy={saving}
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteModal(false)}
+      />
 
       {/* Live View Modal */}
       {showLiveModal && (

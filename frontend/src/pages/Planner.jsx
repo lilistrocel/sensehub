@@ -1,8 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { Card, Label, Button, StatusPill } from '../ui';
+import ConfirmDialog from '../components/ConfirmDialog';
+import FailureBanner, { classifyPlanError, leadingFailureRun } from '../components/planner/FailureBanner';
 
 const API_BASE = '/api';
+
+const STATUS_PILL = {
+  pending:   { state: 'caution', filled: true },
+  confirmed: { state: 'ok', filled: true },
+  rejected:  { state: 'idle', filled: true },
+  failure:   { state: 'alarm', filled: false },
+  success:   { state: 'water', filled: false },
+};
 
 const SEVERITY_COLOR = {
   low:    'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
@@ -616,13 +627,15 @@ export default function Planner() {
   const [showRawSnapshot, setShowRawSnapshot] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [rejectFeedback, setRejectFeedback] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
   const fetchPlans = async (selectId = null) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/planner/plans?limit=60`, { headers });
+      // 100 is the route's cap; a long failure streak must not truncate the banner count.
+      const res = await fetch(`${API_BASE}/planner/plans?limit=100`, { headers });
       if (res.ok) {
         const list = await res.json();
         setPlans(list);
@@ -728,9 +741,9 @@ export default function Planner() {
     // JSON.stringify the DOM/Fiber graph.
     if (!Array.isArray(overrides)) overrides = [];
     if (!canControl || !selected) return;
-    if (overrides.length === 0) {
-      if (!window.confirm('Confirm this plan and apply it to live automations? This will INSERT/UPDATE/DISABLE automations per the diff manifest.')) return;
-    }
+    // The no-override path is confirmed through <ConfirmDialog> (see confirmOpen),
+    // which names how many automations the diff manifest will INSERT/UPDATE/DISABLE.
+    setConfirmOpen(false);
     setConfirming(true);
     try {
       const res = await fetch(`${API_BASE}/planner/plans/${selected.id}/confirm`, {
@@ -836,93 +849,133 @@ export default function Planner() {
     return m;
   }, [snapshot]);
 
+  // Consecutive failures at the head of the (newest-first) plan list collapse
+  // into one banner instead of N raw-JSON rows.
+  const failureRun = useMemo(() => leadingFailureRun(plans), [plans]);
+
+  // What Confirm will do to live automations, from the diff manifest.
+  const changeCounts = useMemo(() => {
+    const c = { add: 0, modify: 0, remove: 0, keep: 0, items: [] };
+    for (const ch of (plan?.changes_from_today || [])) {
+      if (c[ch.change_type] === undefined) continue;
+      c[ch.change_type] += 1;
+      if (ch.change_type !== 'keep') {
+        const verb = ch.change_type === 'add' ? 'INSERT' : ch.change_type === 'modify' ? 'UPDATE' : 'DISABLE';
+        c.items.push(`${verb} · ${ch.target || 'automation'}${ch.current_automation_id ? ` [id ${ch.current_automation_id}]` : ''}`);
+      }
+    }
+    return c;
+  }, [plan]);
+
+  const selectedFailure = selected?.status === 'failure' ? classifyPlanError(selected.error) : null;
+
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Operational Planner</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+        <div className="min-w-0">
+          <h1 className="font-display text-2xl font-bold text-ink">Operational Planner</h1>
+          <p className="text-sm text-muted mt-1">
             AI-generated automation plan for the next day, with closed-loop scoring against the prior day's targets. Plans require operator Confirm to apply.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {canControl && (
-            <button
-              onClick={() => generateNow(false)}
-              disabled={generating}
-              className="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded disabled:opacity-50"
-            >
-              {generating ? 'Generating…' : 'Generate plan for tomorrow'}
-            </button>
-          )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => generateNow(false)}
+            disabled={!canControl || generating}
+            title={!canControl ? 'Operators and admins can generate plans' : undefined}
+          >
+            {generating ? 'Generating…' : 'Generate plan for tomorrow'}
+          </Button>
           {isAdmin && (
-            <button
-              onClick={() => setShowSettings(true)}
-              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
-            >
-              Settings
-            </button>
+            <Button variant="secondary" size="sm" onClick={() => setShowSettings(true)}>Settings</Button>
           )}
         </div>
       </div>
 
       {/* Config quick status */}
       {config && (
-        <div className="mb-4 text-xs text-gray-600 dark:text-gray-400">
+        <Label as="p" className="mb-4">
           {config.enabled
-            ? <>Scheduler ON — fires daily at <span className="font-mono">{String(config.schedule_hour).padStart(2,'0')}:{String(config.schedule_minute).padStart(2,'0')}</span>.</>
-            : <>Scheduler OFF — enable in Settings to auto-generate plans nightly.</>}
-          {!config.api_key_present && <span className="ml-2 text-red-600 dark:text-red-300">⚠ ANTHROPIC_API_KEY not set</span>}
-        </div>
+            ? <>Scheduler on · fires daily at <span className="font-mono tabular text-ink">{String(config.schedule_hour).padStart(2,'0')}:{String(config.schedule_minute).padStart(2,'0')}</span></>
+            : <>Scheduler off · enable in Settings to auto-generate plans nightly</>}
+          {!config.api_key_present && <span className="ml-2 text-alarm-600 dark:text-alarm-300">· ANTHROPIC_API_KEY not set</span>}
+        </Label>
       )}
+
+      <FailureBanner
+        run={failureRun}
+        sinceLabel={failureRun ? fmtDate(failureRun.since) : ''}
+        onRetry={() => generateNow(false)}
+        retrying={generating}
+        canRetry={canControl}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-4">
         {/* Plan list */}
-        <aside className="lg:border-r lg:border-gray-200 dark:lg:border-gray-700 lg:pr-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Plans</div>
-          {loading && <div className="text-sm text-gray-500">Loading…</div>}
+        <aside className="lg:border-r lg:border-line lg:pr-3">
+          <Label className="mb-2">Plans</Label>
+          {loading && <div className="text-sm text-muted">Loading…</div>}
           {!loading && plans.length === 0 && (
-            <div className="text-sm text-gray-500 dark:text-gray-400">No plans yet.</div>
+            <div className="text-sm text-muted">No plans yet.</div>
           )}
-          <div className="space-y-1 max-h-[70vh] overflow-y-auto">
-            {plans.map(p => (
-              <button
-                key={p.id}
-                onClick={() => loadPlan(p.id)}
-                className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
-                  selected?.id === p.id
-                    ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-100'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium">{fmtDate(p.plan_date)}</div>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase ${STATUS_COLOR[p.status] || STATUS_COLOR.success}`}>
-                    {p.status}
-                  </span>
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {p.headline || (p.status === 'failure' ? '⚠ failed' : '—')}
-                  {p.version > 1 && <span className="ml-1 font-mono">v{p.version}</span>}
-                </div>
-              </button>
-            ))}
+          <div className="space-y-1 max-h-[70vh] overflow-y-auto" data-testid="plan-list">
+            {plans.map(p => {
+              const failed = p.status === 'failure';
+              const pill = STATUS_PILL[p.status] || STATUS_PILL.success;
+              const active = selected?.id === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => loadPlan(p.id)}
+                  aria-current={active ? 'true' : undefined}
+                  data-status={p.status}
+                  className={`w-full text-left px-2 rounded-md text-sm transition-colors ${
+                    failed ? 'py-1 opacity-60 hover:opacity-100' : 'py-1.5'
+                  } ${active ? 'bg-brand-100 dark:bg-brand-900 text-ink' : 'hover:bg-field text-ink'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className={`${failed ? 'font-normal' : 'font-medium'} truncate`}>{fmtDate(p.plan_date)}</div>
+                    <StatusPill state={pill.state} filled={pill.filled} className="!px-1.5 !py-0 text-[10px]">
+                      {failed ? 'failed' : p.status}
+                    </StatusPill>
+                  </div>
+                  {!failed && (
+                    <div className="text-xs text-muted truncate">
+                      {p.headline || '—'}
+                      {p.version > 1 && <span className="ml-1 font-mono">v{p.version}</span>}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </aside>
 
         {/* Plan detail */}
         <main>
           {!selected && !loading && (
-            <div className="text-sm text-gray-500 dark:text-gray-400 p-8 text-center border border-dashed border-gray-300 dark:border-gray-700 rounded">
+            <div className="text-sm text-muted p-8 text-center border border-dashed border-line rounded-card">
               Select a plan or generate one for tomorrow.
             </div>
           )}
 
-          {selected?.status === 'failure' && (
-            <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded p-4 mb-4">
-              <div className="font-semibold text-red-800 dark:text-red-200">Plan generation failed</div>
-              <div className="text-sm mt-1 text-red-700 dark:text-red-300">{selected.error}</div>
-            </div>
+          {selected?.status === 'failure' && selectedFailure && (
+            <Card rail="alarm" className="mb-4">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <StatusPill state="alarm">failed</StatusPill>
+                <span className="font-display font-semibold text-ink">Plan for {fmtDate(selected.plan_date)} was not generated</span>
+              </div>
+              <p className="text-sm text-ink">{selectedFailure.reason}</p>
+              {selected.error && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-semibold text-muted hover:text-ink">Raw error</summary>
+                  <pre className="mt-1 text-xs font-mono whitespace-pre-wrap break-words bg-field border border-line rounded-md p-2 max-h-40 overflow-y-auto text-muted">{selected.error}</pre>
+                </details>
+              )}
+            </Card>
           )}
 
           {selected && plan && selected.status !== 'failure' && (
@@ -1024,24 +1077,27 @@ export default function Planner() {
 
                 {/* Confirm/Reject action bar */}
                 {selected.status === 'pending' && canControl && (
-                  <div className="mt-4 flex gap-2 flex-wrap border-t border-gray-200 dark:border-gray-700 pt-3">
-                    <button
-                      onClick={() => confirmPlan()}
+                  <div className="mt-4 flex gap-2 flex-wrap items-center border-t border-line pt-3">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setConfirmOpen(true)}
                       disabled={confirming || rejecting}
-                      className="px-4 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded disabled:opacity-50"
+                      data-testid="plan-confirm"
                     >
-                      {confirming ? 'Applying…' : 'Confirm & Apply'}
-                    </button>
-                    <button
+                      {confirming ? 'Applying…' : 'Confirm & apply'}
+                    </Button>
+                    <Button
+                      variant="danger-ghost"
+                      size="sm"
                       onClick={() => { setRejectFeedback(''); setShowReject(true); }}
                       disabled={confirming || rejecting}
-                      className="px-4 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50"
                     >
                       Reject…
-                    </button>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 self-center ml-2">
-                      Confirm applies the diff manifest to live automations. Reject lets you give feedback and regenerate.
-                    </div>
+                    </Button>
+                    <span className="text-xs text-muted font-mono tabular">
+                      {changeCounts.add} insert · {changeCounts.modify} update · {changeCounts.remove} disable · {changeCounts.keep} keep
+                    </span>
                   </div>
                 )}
               </div>
@@ -1203,6 +1259,18 @@ export default function Planner() {
           )}
         </main>
       </div>
+
+      {/* Confirm & apply — names what the diff manifest will do to live automations */}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Apply this plan to live automations?"
+        body={`Confirming plan ${selected ? fmtDate(selected.plan_date) : ''} will INSERT ${changeCounts.add}, UPDATE ${changeCounts.modify} and DISABLE ${changeCounts.remove} automation${changeCounts.add + changeCounts.modify + changeCounts.remove === 1 ? '' : 's'} (${changeCounts.keep} kept unchanged). Guardrails are evaluated on apply.`}
+        items={changeCounts.items}
+        confirmLabel="Confirm & apply"
+        busy={confirming}
+        onConfirm={() => confirmPlan([])}
+        onCancel={() => setConfirmOpen(false)}
+      />
 
       {/* Reject modal */}
       {showReject && (
