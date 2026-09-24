@@ -21,6 +21,9 @@
 const AnthropicModule = require('@anthropic-ai/sdk');
 const Anthropic = AnthropicModule.default || AnthropicModule.Anthropic || AnthropicModule;
 const { db } = require('../utils/database');
+const { slimOperatorTasks, sectionStats } = require('./AiSnapshotSlimming');
+const { agronomistCaptureService, buildImageBlock } = require('./AgronomistCaptureService');
+const { getSystemTimezone } = require('../utils/systemTimezone');
 
 const DEFAULT_MODEL = 'claude-sonnet-5';
 const DEFAULT_CONFIG_KEY = 'agronomist_config';
@@ -51,6 +54,14 @@ Be skeptical of physically implausible sensor readings:
 - The same suspicion applies to humidity (jumps >30% in an hour suggest sensor wetting/condensation), and to substrate EC (jumps >500 µS/cm without a fertigation event suggest probe contact issues).
 - When two sensors that should be independent track each other suspiciously (e.g. an "exposed" and a "shielded" sensor giving the same curve), say so — it suggests they share a sun-trap, an enclosure, or a comms bus issue rather than reporting independent measurements of the air.
 - If the data looks dramatic but you suspect a sensor problem, give your "real-cause" hypothesis FIRST, then briefly note "if this is real and not a sensor issue, then [crop impact]." Do not lead with the catastrophic interpretation.`;
+
+// Appended to the system prompt (also when system_prompt_override is set) so the
+// model knows how to treat the noon canopy photo that precedes the JSON snapshot.
+const CANOPY_PHOTO_INSTRUCTION = `Canopy photo:
+- The user message may start with one JPEG: the fixed daily canopy capture from the greenhouse camera. Its capture time and age are stated in the text right after it — cite that time when you refer to the photo.
+- Assess what the sensors cannot see: canopy colour (chlorosis, purpling, scorch), turgor and wilting, leaf posture (epinasty, cupping, curling), visible pests, disease, mildew or rot, fruit set, algae or salt crust on the substrate, dripper/valve leaks, anything out of place. Flag it under Risks & Anomalies and tie it to the sensor data where possible.
+- Keep it proportionate: a single wide frame cannot confirm early-stage pests — say what would need a close-up or a physical check.
+- If no photo is attached, or it is older than the report day, say so explicitly in State of the Crop ("no canopy photo available for today") rather than guessing at canopy condition.`;
 
 const REPORT_OUTPUT_SCHEMA = {
   type: 'object',
@@ -112,6 +123,10 @@ class AgronomistService {
       reference_humidity_equipment_id: null,
       reference_soil_equipment_id: null,
       system_prompt_override: null,
+      // Noon canopy capture (SnapshotService fires it daily at 12:00 local)
+      capture_enabled: true,
+      capture_camera_id: null,   // null = first enabled camera
+      capture_preset_id: null,   // null = do not move the PTZ before capturing
     };
     try {
       const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(DEFAULT_CONFIG_KEY);
@@ -139,6 +154,9 @@ class AgronomistService {
       reference_humidity_equipment_id: merged.reference_humidity_equipment_id || null,
       reference_soil_equipment_id: merged.reference_soil_equipment_id || null,
       system_prompt_override: merged.system_prompt_override || null,
+      capture_enabled: merged.capture_enabled !== false,
+      capture_camera_id: merged.capture_camera_id ? parseInt(merged.capture_camera_id, 10) || null : null,
+      capture_preset_id: merged.capture_preset_id ? parseInt(merged.capture_preset_id, 10) || null : null,
     };
     // updated_at is stamped so the scheduler can tell "config was re-saved after the
     // last provider failure" — saving settings re-enables a paused schedule.
@@ -559,15 +577,16 @@ class AgronomistService {
       reference_sensors,
       sensors: sensorReadings,
       substrate_diagnostics: substrateDiagnostics,
-      operator_tasks: db.prepare(`
-        SELECT id, source, title, description, category, priority, status,
-               completed_at, completion_notes, decline_reason, created_at
+      // Open/snoozed tasks from the last 7 days, max 10, five fields — the full
+      // 14-day list with instruction bodies was >50% of the prompt.
+      operator_tasks: slimOperatorTasks(db.prepare(`
+        SELECT title, priority, category, status, created_at
         FROM operator_tasks
-        WHERE status IN ('open', 'done', 'declined')
-          AND created_at > datetime('now', '-14 days')
-        ORDER BY status = 'open' DESC, created_at DESC
-        LIMIT 50
-      `).all(),
+        WHERE status IN ('open', 'snoozed')
+          AND created_at > datetime('now', '-7 days')
+        ORDER BY created_at DESC
+        LIMIT 200
+      `).all()),
       lab: labByRole,
       alerts: alerts.map(a => ({
         severity: a.severity,
@@ -911,6 +930,93 @@ class AgronomistService {
 
   // -------- core: generate a daily report --------
 
+  /**
+   * Build the Messages API request body for the daily report WITHOUT calling the
+   * API. Shared by generateDailyReport and scripts/agronomist-dry-run.js.
+   *
+   * @param p.date       'YYYY-MM-DD'
+   * @param p.snapshot   output of aggregateDailyData (or a saved input_snapshot)
+   * @param p.cfg        getConfig() result
+   * @param p.capture    { capture: row, ageHours, buffer } | null
+   * @param p.clarifications  optional override (defaults to the DB thread for that date)
+   * @param p.historyBlock    optional override (defaults to _formatHistoryBlock())
+   * @returns { requestBody, stats } — stats = chars per snapshot section + image info
+   */
+  buildDailyRequest({ date, snapshot, cfg = this.getConfig(), capture = null, clarifications, historyBlock } = {}) {
+    const history = historyBlock ?? this._formatHistoryBlock();
+    const systemPrompt = (cfg.system_prompt_override || SYSTEM_PROMPT_BASE).trim()
+      + '\n\n' + CANOPY_PHOTO_INSTRUCTION + '\n\n' + history;
+
+    // Pull clarifications for this date so a regeneration honors prior user feedback.
+    const clars = clarifications ?? this._getClarificationsForDate(date);
+    const clarificationsBlock = this._formatClarificationsBlock(clars);
+
+    // Strip stats if a saved snapshot is replayed, so they are not sent to the model.
+    const { snapshot_stats: _omit, ...snap } = snapshot || {};
+    const tz = snap.timezone || getSystemTimezone(db);
+
+    let photoLine;
+    if (capture?.buffer?.length) {
+      const c = capture.capture || {};
+      const when = c.created_at ? new Date(c.created_at) : null;
+      const localWhen = when ? new Intl.DateTimeFormat('en-GB', { timeZone: tz, dateStyle: 'medium', timeStyle: 'short' }).format(when) : 'unknown time';
+      const sameDay = c.capture_date === date;
+      photoLine = `The image above is the canopy photo from camera "${c.camera_name || c.camera_id}"` +
+        (c.preset_id ? ` (PTZ preset ${c.preset_id})` : '') +
+        `, captured ${localWhen} ${tz}` +
+        (sameDay ? ` (today's noon capture, ${capture.ageHours} h old at report time).` : ` — NOT from today: it is ${capture.ageHours} h old (capture date ${c.capture_date}). State its age when you refer to it.`);
+    } else {
+      photoLine = 'No canopy photo is attached (no capture within the last 36 h). Say so explicitly in the report; do not guess at canopy condition.';
+    }
+
+    const userMessageParts = [
+      `Today is ${date} (timezone: ${tz}).`,
+      '',
+      photoLine,
+      '',
+      'Here is the day\'s data from the SenseHub edge controller:',
+      '',
+      '```json',
+      JSON.stringify(snap, null, 2),
+      '```',
+      '',
+      'Write the daily report. Be specific — name zones, ingredients, ions, equipment by their actual names from the data. Quantify (mg/L, L, °C). Tie every recommendation to the data point that justifies it. The Nutrient Status section MUST address every nutrient that appears in `lab[*].latest_per_nutrient` — if `today` is empty, use the latest_per_nutrient values and call out that they are N days old. Treat `reference_sensors` as the canonical environment readings. If something is missing entirely (no AMIC ever, no soil reading), call it out and recommend a measurement.',
+    ];
+    if (clarificationsBlock) {
+      userMessageParts.push('', clarificationsBlock);
+    }
+    const userText = userMessageParts.join('\n');
+
+    // Image block FIRST, then the text (Anthropic recommends image-before-text).
+    const content = [];
+    if (capture?.buffer?.length) content.push(buildImageBlock(capture.buffer));
+    content.push({ type: 'text', text: userText });
+
+    const requestBody = {
+      model: cfg.model || DEFAULT_MODEL,
+      max_tokens: 16000,
+      system: [
+        { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+      ],
+      output_config: {
+        format: { type: 'json_schema', schema: REPORT_OUTPUT_SCHEMA },
+      },
+      messages: [{ role: 'user', content }],
+    };
+
+    const stats = {
+      ...sectionStats(snap),
+      system_prompt_chars: systemPrompt.length,
+      user_text_chars: userText.length,
+      image_present: !!capture?.buffer?.length,
+      image_bytes: capture?.buffer?.length || 0,
+      image_base64_chars: content[0]?.type === 'image' ? content[0].source.data.length : 0,
+      capture_id: capture?.capture?.id ?? null,
+      capture_age_hours: capture?.ageHours ?? null,
+    };
+    return { requestBody, stats };
+  }
+
   /** Generate (and persist) the agronomist report for a given date.
    *  @param dateStr 'YYYY-MM-DD' (local). Defaults to today.
    *  @param opts.force if true, overwrite any existing report for that date.
@@ -929,68 +1035,43 @@ class AgronomistService {
     }
 
     const snapshot = this.aggregateDailyData(date);
-    const historyBlock = this._formatHistoryBlock();
-    const systemPrompt = (cfg.system_prompt_override || SYSTEM_PROMPT_BASE).trim() + '\n\n' + historyBlock;
 
-    // Pull clarifications for this date so a regeneration honors prior user feedback.
-    // Clarifications are matched by report_id; on first generation there are none.
-    const clarifications = this._getClarificationsForDate(date);
-    const clarificationsBlock = this._formatClarificationsBlock(clarifications);
-
-    const userMessageParts = [
-      `Today is ${date} (timezone: ${snapshot.timezone}).`,
-      '',
-      'Here is the day\'s data from the SenseHub edge controller:',
-      '',
-      '```json',
-      JSON.stringify(snapshot, null, 2),
-      '```',
-      '',
-      'Write the daily report. Be specific — name zones, ingredients, ions, equipment by their actual names from the data. Quantify (mg/L, L, °C). Tie every recommendation to the data point that justifies it. The Nutrient Status section MUST address every nutrient that appears in `lab[*].latest_per_nutrient` — if `today` is empty, use the latest_per_nutrient values and call out that they are N days old. Treat `reference_sensors` as the canonical environment readings. If something is missing entirely (no AMIC ever, no soil reading), call it out and recommend a measurement.',
-    ];
-    if (clarificationsBlock) {
-      userMessageParts.push('', clarificationsBlock);
+    // Today's noon canopy capture (or the newest within 36 h) — attached as an image block.
+    let captureInfo = null;
+    if (cfg.capture_enabled !== false) {
+      try {
+        captureInfo = agronomistCaptureService.getCaptureForReport(date, { cameraId: cfg.capture_camera_id || null });
+      } catch (err) {
+        console.warn('[Agronomist] Could not load canopy capture:', err.message);
+      }
     }
-    const userMessage = userMessageParts.join('\n');
+
+    const { requestBody, stats } = this.buildDailyRequest({ date, snapshot, cfg, capture: captureInfo });
+    const captureId = captureInfo?.capture?.id ?? null;
+    const snapshotToSave = JSON.stringify({ ...snapshot, snapshot_stats: stats });
 
     const client = this._client_or_throw();
 
     let response;
     try {
-      response = await client.messages.create({
-        model: cfg.model || DEFAULT_MODEL,
-        max_tokens: 16000,
-        system: [
-          {
-            type: 'text',
-            text: systemPrompt,
-            cache_control: { type: 'ephemeral' },
-          },
-        ],
-        output_config: {
-          format: {
-            type: 'json_schema',
-            schema: REPORT_OUTPUT_SCHEMA,
-          },
-        },
-        messages: [{ role: 'user', content: userMessage }],
-      });
+      response = await client.messages.create(requestBody);
     } catch (err) {
       // Persist the failure so it shows up in the UI for debugging
       const errorClass = this.classifyProviderError(err);
       db.prepare(`
         INSERT INTO agronomist_reports
-          (report_date, model, input_snapshot, summary, full_markdown, status, error, error_class)
-        VALUES (?, ?, ?, ?, ?, 'failure', ?, ?)
+          (report_date, model, input_snapshot, summary, full_markdown, status, error, error_class, capture_id)
+        VALUES (?, ?, ?, ?, ?, 'failure', ?, ?, ?)
         ON CONFLICT(report_date) DO UPDATE SET
           generated_at = CURRENT_TIMESTAMP,
           model = excluded.model,
           input_snapshot = excluded.input_snapshot,
           status = 'failure',
           error = excluded.error,
-          error_class = excluded.error_class
-      `).run(date, cfg.model || DEFAULT_MODEL, JSON.stringify(snapshot),
-            '', '', String(err?.message || err), errorClass);
+          error_class = excluded.error_class,
+          capture_id = excluded.capture_id
+      `).run(date, cfg.model || DEFAULT_MODEL, snapshotToSave,
+            '', '', String(err?.message || err), errorClass, captureId);
       if (err && typeof err === 'object' && !err.errorClass) err.errorClass = errorClass;
       throw err;
     }
@@ -1012,9 +1093,10 @@ class AgronomistService {
       INSERT INTO agronomist_reports
         (report_date, model, input_snapshot, summary, full_markdown,
          recommendations, opinion, input_tokens, output_tokens,
-         cache_read_tokens, cache_creation_tokens, status, error)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL)
+         cache_read_tokens, cache_creation_tokens, status, error, capture_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL, ?)
       ON CONFLICT(report_date) DO UPDATE SET
+        capture_id = excluded.capture_id,
         generated_at = CURRENT_TIMESTAMP,
         model = excluded.model,
         input_snapshot = excluded.input_snapshot,
@@ -1032,7 +1114,7 @@ class AgronomistService {
     `).run(
       date,
       response.model || cfg.model || DEFAULT_MODEL,
-      JSON.stringify(snapshot),
+      snapshotToSave,
       parsed.summary,
       parsed.full_markdown,
       JSON.stringify(parsed.recommendations || []),
@@ -1041,6 +1123,7 @@ class AgronomistService {
       usage.output_tokens || 0,
       usage.cache_read_input_tokens || 0,
       usage.cache_creation_input_tokens || 0,
+      captureId,
     );
 
     // Persist operator_tasks_requests as actual tasks tied to this report.
@@ -1225,7 +1308,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
   listReports(limit = 30, offset = 0) {
     return db.prepare(`
       SELECT id, report_date, generated_at, model, opinion, summary, status, error, error_class,
-             input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens
+             input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, capture_id
       FROM agronomist_reports
       ORDER BY report_date DESC
       LIMIT ? OFFSET ?
@@ -1242,6 +1325,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
       input_snapshot: row.input_snapshot ? JSON.parse(row.input_snapshot) : null,
       recommendations: row.recommendations ? JSON.parse(row.recommendations) : [],
       clarifications: this.listClarifications(row.id),
+      capture: row.capture_id ? this._captureSummary(row.capture_id) : null,
     };
   }
 
@@ -1253,6 +1337,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
       input_snapshot: row.input_snapshot ? JSON.parse(row.input_snapshot) : null,
       recommendations: row.recommendations ? JSON.parse(row.recommendations) : [],
       clarifications: this.listClarifications(row.id),
+      capture: row.capture_id ? this._captureSummary(row.capture_id) : null,
     };
   }
 
@@ -1318,6 +1403,18 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
   }
 
   // -------- helpers --------
+
+  _captureSummary(captureId) {
+    try {
+      const c = agronomistCaptureService.getById(captureId);
+      if (!c) return null;
+      return {
+        id: c.id, camera_id: c.camera_id, camera_name: c.camera_name, capture_date: c.capture_date,
+        width: c.width, height: c.height, bytes: c.bytes, preset_id: c.preset_id, created_at: c.created_at,
+        image_url: `/api/agronomist/captures/${c.id}/image`,
+      };
+    } catch { return null; }
+  }
 
   _localDateStr(date) {
     // Return YYYY-MM-DD in the server's local time (TZ env var honored)

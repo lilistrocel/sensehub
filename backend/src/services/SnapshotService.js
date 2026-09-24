@@ -3,13 +3,22 @@ const path = require('path');
 const { db } = require('../utils/database');
 const { cameraStreamService } = require('./CameraStreamService');
 
+const { DailyLocalTrigger } = require('./DailyLocalTrigger');
+const { getSystemTimezone } = require('../utils/systemTimezone');
+
 const SNAPSHOT_DIR = path.join(__dirname, '../../data/snapshots');
 const CAPTURE_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const MAX_SNAPSHOTS_PER_CAMERA = 42; // ~7 days at 4h intervals
+const NOON_TICK_MS = 60 * 1000;
+const NOON_HOUR = 12;
+const NOON_MINUTE = 0;
+const NOON_GRACE_MINUTES = 60; // a restart at 12:20 still captures; 13:00+ waits for tomorrow
 
 class SnapshotService {
   constructor() {
     this.intervalId = null;
+    this.noonIntervalId = null;
+    this.noonTrigger = null;
   }
 
   start() {
@@ -25,9 +34,61 @@ class SnapshotService {
     // Capture immediately on start, then every 4 hours
     setTimeout(() => this._captureAll(), 60000); // wait 1 min for cameras to init
     this.intervalId = setInterval(() => this._captureAll(), CAPTURE_INTERVAL_MS);
+
+    this._startNoonCapture();
+  }
+
+  /**
+   * Fixed daily canopy capture at 12:00 in the system timezone (system_settings.timezone,
+   * falling back to TZ env). Independent of the 4-hourly cycle; the agronomist's daily
+   * report attaches this photo.
+   */
+  _startNoonCapture() {
+    const tz = () => getSystemTimezone(db);
+    this.noonTrigger = new DailyLocalTrigger({
+      hour: NOON_HOUR, minute: NOON_MINUTE, tz, graceMinutes: NOON_GRACE_MINUTES,
+      onFire: ({ dateStr, tz: zone }) => this._runNoonCapture(dateStr, zone),
+    });
+    // If today's capture already exists (restart after noon), don't take it again.
+    try {
+      const { localDateStr } = require('../utils/systemTimezone');
+      const today = localDateStr(new Date(), tz());
+      const row = db.prepare('SELECT id FROM agronomist_captures WHERE capture_date = ? LIMIT 1').get(today);
+      if (row) this.noonTrigger.markFired(today);
+    } catch {}
+    console.log(`[Snapshot] Noon canopy capture registered: daily ${String(NOON_HOUR).padStart(2, '0')}:${String(NOON_MINUTE).padStart(2, '0')} ${tz()} (grace ${NOON_GRACE_MINUTES} min)`);
+    this.noonIntervalId = setInterval(() => { try { this.noonTrigger.tick(); } catch (err) { console.error('[Snapshot] Noon tick error:', err.message); } }, NOON_TICK_MS);
+  }
+
+  async _runNoonCapture(dateStr, zone) {
+    const { agronomistCaptureService } = require('./AgronomistCaptureService');
+    let cfg = {};
+    try { cfg = require('./AgronomistService').agronomistService.getConfig(); } catch {}
+    if (cfg.capture_enabled === false) {
+      console.log(`[Snapshot] Noon capture for ${dateStr} skipped (capture_enabled=false)`);
+      return;
+    }
+    if (!cameraStreamService.ready) {
+      console.warn(`[Snapshot] Noon capture for ${dateStr} skipped: go2rtc not ready`);
+      return;
+    }
+    console.log(`[Snapshot] Firing noon canopy capture for ${dateStr} (${zone})`);
+    try {
+      const row = await agronomistCaptureService.captureForDate(dateStr, {
+        cameraId: cfg.capture_camera_id || null,
+        presetId: cfg.capture_preset_id || null,
+      });
+      console.log(`[Snapshot] Noon capture stored: ${row.path} (${row.width}x${row.height}, ${(row.bytes / 1024).toFixed(0)} KB)`);
+    } catch (err) {
+      console.error(`[Snapshot] Noon capture for ${dateStr} failed:`, err.message);
+    }
   }
 
   stop() {
+    if (this.noonIntervalId) {
+      clearInterval(this.noonIntervalId);
+      this.noonIntervalId = null;
+    }
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;

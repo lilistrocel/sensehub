@@ -26,6 +26,7 @@
 const AnthropicModule = require('@anthropic-ai/sdk');
 const Anthropic = AnthropicModule.default || AnthropicModule.Anthropic || AnthropicModule;
 const { db } = require('../utils/database');
+const { slimOperatorTasks, compactAutomation, equipmentIndexFromInventory, dedupePlannerContext, sectionStats } = require('./AiSnapshotSlimming');
 const { agronomistService } = require('./AgronomistService');
 const { instantiateTemplate } = require('../utils/templateSubstitution');
 
@@ -266,6 +267,8 @@ Tomorrow's plan must NOT be a wholesale rewrite of today's. Constrain changes to
 - ANTI-FLIP rule: if yesterday you adjusted a target's strategy and it didn't hit, do NOT reverse the adjustment. Try a DIFFERENT lever (e.g. don't shorten then re-lengthen the same cycle — instead, split into smaller cycles, or adjust upstream EC).
 
 # changes_from_today is the APPLY manifest (NEW — strict)
+
+current_automations[] is a COMPACT view: {id, name, enabled, trigger (one-line summary), actions (one line per equipment: "eq#<equipment_id> <name>: ch<channel> <label> on <duration>s @+<delay>s, ..."), action_count, dependencies (count of action-level dependency checks), template_id, dose_program_id}. It is enough to decide keep/modify/remove and to reconstruct equipment_id + channel + timing for a modify; when you modify, emit the FULL new trigger_config and actions_json (or template_id + template_parameters) in proposed_automations — the apply code reads the live row from the database by id and overwrites it with what you send.
 
 The operator will Confirm or Reject your plan. On Confirm, code walks changes_from_today and mutates the automations table:
 - change_type="add": INSERT new automation from proposed_automations[proposed_automation_index]. current_automation_id MUST be 0.
@@ -564,7 +567,8 @@ class OperationalPlannerService {
 
     // Current automations baseline — only the bits the planner needs to make diff decisions
     const currentAutomations = db.prepare(`
-      SELECT id, name, description, enabled, priority, trigger_config, conditions, actions, last_run
+      SELECT id, name, description, enabled, priority, trigger_config, conditions, actions, last_run,
+             template_id, dose_program_id
       FROM automations
     `).all().map(a => {
       const parse = s => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
@@ -578,6 +582,8 @@ class OperationalPlannerService {
         conditions: parse(a.conditions) || [],
         actions: parse(a.actions) || [],
         last_run: a.last_run,
+        template_id: a.template_id || null,
+        dose_program_id: a.dose_program_id || null,
       };
     });
 
@@ -827,13 +833,16 @@ class OperationalPlannerService {
       return { ...p, target_ppm: targetPpm, tanks };
     });
 
-    return {
+    const context = {
       today: todayStr,
       tomorrow: this._tomorrowOf(todayStr),
       timezone: process.env.TZ || 'UTC',
       today_snapshot: dailySnapshot,
       agronomist_today: agronomistContext,
-      current_automations: currentAutomations,
+      // Compact one-liners (trigger / actions / dependency count) instead of the raw
+      // actions JSON — it was ~20% of the prompt. applyPlan reads the live rows from
+      // the DB by id, never from this context, so nothing downstream needs the raw form.
+      current_automations: currentAutomations.map(a => compactAutomation(a, equipmentIndexFromInventory(equipmentInventory))),
       equipment: equipmentInventory,
       zones,
       active_crops: activeCrops,
@@ -852,15 +861,15 @@ class OperationalPlannerService {
         dosePrograms,
         waterPumpFlow,
       }),
-      operator_tasks: db.prepare(`
-        SELECT id, source, title, description, category, priority, status,
-               completed_at, completion_notes, decline_reason, created_at
+      // Open/snoozed, last 7 days, max 10, five fields (was 34% of the prompt, twice).
+      operator_tasks: slimOperatorTasks(db.prepare(`
+        SELECT title, priority, category, status, created_at
         FROM operator_tasks
-        WHERE status IN ('open', 'done', 'declined')
-          AND created_at > datetime('now', '-14 days')
-        ORDER BY status = 'open' DESC, created_at DESC
-        LIMIT 50
-      `).all(),
+        WHERE status IN ('open', 'snoozed')
+          AND created_at > datetime('now', '-7 days')
+        ORDER BY created_at DESC
+        LIMIT 200
+      `).all()),
       dose_programs: dosePrograms,
       element_targets: elementTargets,
       ingredients_library: ingredientLibrary,
@@ -871,6 +880,8 @@ class OperationalPlannerService {
       today_partial_scorecard: todayPartialScorecard,
       previous_rejection: previousRejection,
     };
+    // today_snapshot must not repeat top-level sections (operator_tasks lives at the top level).
+    return dedupePlannerContext(context);
   }
 
   /** Compact view of a plan suitable for the LLM context — full plan would be too verbose. */
@@ -1502,6 +1513,7 @@ class OperationalPlannerService {
     ].filter(Boolean).join('\n');
 
     const client = this._client_or_throw();
+    const contextToSave = JSON.stringify({ ...context, snapshot_stats: { ...sectionStats(context), user_text_chars: userMessage.length, system_prompt_chars: SYSTEM_PROMPT.length } });
 
     let response;
     try {
@@ -1523,7 +1535,7 @@ class OperationalPlannerService {
         INSERT INTO operational_plans
           (plan_date, version, parent_plan_id, generated_for, model, input_snapshot, status, error)
         VALUES (?, ?, ?, ?, ?, ?, 'failure', ?)
-      `).run(tomorrow, nextVersion, parentPlanId, today, cfg.model || DEFAULT_MODEL, JSON.stringify(context), String(err?.message || err));
+      `).run(tomorrow, nextVersion, parentPlanId, today, cfg.model || DEFAULT_MODEL, contextToSave, String(err?.message || err));
       throw err;
     }
 
@@ -1548,7 +1560,7 @@ class OperationalPlannerService {
     `).run(
       tomorrow, nextVersion, parentPlanId, today,
       response.model || cfg.model || DEFAULT_MODEL,
-      JSON.stringify(context),
+      contextToSave,
       parsed.headline,
       parsed.summary,
       JSON.stringify(parsed),

@@ -24,6 +24,7 @@
  *     network_usage_retention_days: 90,
  *     equipment_errors_retention_days: 30,
  *     watchdog_events_retention_days: 90,
+ *     agronomist_captures_retention_days: 30, // noon canopy JPEGs + rows
  *     prune_expired_sessions: true,          // sessions past expires_at
  *     dry_run: false,                        // when true, logs what would be done without modifying anything
  *   }
@@ -57,6 +58,8 @@ const DEFAULT_CONFIG = {
   // Info-severity alerts are rarely acknowledged, so the acked-only alert
   // prune never touches them; drop unacknowledged info alerts after this.
   info_alerts_retention_days: 90,
+  // Agronomist noon canopy captures (files + agronomist_captures rows).
+  agronomist_captures_retention_days: 30,
   // Sessions past expires_at are dead weight (auth already ignores them).
   prune_expired_sessions: true,
   dry_run: false,
@@ -156,6 +159,7 @@ class DataRetentionService {
       watchdog_events: {},
       sessions: {},
       info_alerts: {},
+      agronomist_captures: {},
     };
 
     // ----- readings: aggregate then drop -----
@@ -201,6 +205,14 @@ class DataRetentionService {
 
     // ----- alerts: prune UNacknowledged info-severity alerts older than threshold -----
     summary.info_alerts = this._pruneStaleInfoAlerts(cfg.info_alerts_retention_days, cfg.dry_run);
+
+    // ----- agronomist noon captures: delete JPEG files + rows older than threshold -----
+    try {
+      const { agronomistCaptureService } = require('./AgronomistCaptureService');
+      summary.agronomist_captures = agronomistCaptureService.prune(cfg.agronomist_captures_retention_days, cfg.dry_run);
+    } catch (err) {
+      summary.agronomist_captures = { error: err.message, rows_dropped: 0 };
+    }
 
     // ----- VACUUM after big deletes (only if we actually deleted something) -----
     const droppedRows =

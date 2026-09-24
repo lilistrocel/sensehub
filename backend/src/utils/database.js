@@ -913,6 +913,19 @@ const initSchema = () => {
     console.error('agronomist_reports error_class migration failed:', err.message);
   }
 
+  // Agronomist noon canopy captures (migration: agronomist_captures table +
+  // agronomist_reports.capture_id so the UI can show which photo a report used).
+  try {
+    const { AGRONOMIST_CAPTURES_SQL } = require('./agronomistCapturesSchema');
+    db.exec(AGRONOMIST_CAPTURES_SQL);
+    const reportCols2 = db.pragma('table_info(agronomist_reports)').map(c => c.name);
+    if (!reportCols2.includes('capture_id')) {
+      db.exec('ALTER TABLE agronomist_reports ADD COLUMN capture_id INTEGER REFERENCES agronomist_captures(id) ON DELETE SET NULL');
+    }
+  } catch (err) {
+    console.error('agronomist_captures migration failed:', err.message);
+  }
+
   // Add calibration columns to existing equipment table if they don't exist
   try {
     const columns = db.pragma("table_info(equipment)").map(col => col.name);

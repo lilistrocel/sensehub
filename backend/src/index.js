@@ -161,6 +161,22 @@ app.get('/api/health', (req, res) => {
 });
 
 // Public routes (no auth required)
+// Agronomist canopy capture JPEG — same treatment as camera snapshot files so an <img>
+// tag (no Authorization header) can display it.
+app.get('/api/agronomist/captures/:id/image', (req, res) => {
+  const fs = require('fs');
+  const { agronomistCaptureService } = require('./services/AgronomistCaptureService');
+  const id = parseInt(req.params.id, 10);
+  const row = id ? agronomistCaptureService.getById(id) : null;
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  const abs = agronomistCaptureService.absolutePath(row.path);
+  if (!abs.startsWith(agronomistCaptureService.rootDir) || !fs.existsSync(abs)) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.set('Content-Type', 'image/jpeg');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(abs);
+});
 app.get('/api/cameras/snapshots/file/:filename', (req, res) => {
   const path = require('path');
   const fs = require('fs');

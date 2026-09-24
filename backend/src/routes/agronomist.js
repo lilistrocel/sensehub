@@ -1,8 +1,67 @@
 const express = require('express');
+const fs = require('fs');
 const { agronomistService } = require('../services/AgronomistService');
+const { agronomistCaptureService } = require('../services/AgronomistCaptureService');
 const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
+
+const localToday = () => {
+  const { db } = require('../utils/database');
+  const { getSystemTimezone, localDateStr } = require('../utils/systemTimezone');
+  return localDateStr(new Date(), getSystemTimezone(db));
+};
+
+// ---------------------------------------------------------------------------
+// Noon canopy captures
+// ---------------------------------------------------------------------------
+
+// POST /api/agronomist/capture-now — take the agronomist canopy photo immediately
+// (testing, or a missed noon). Body: { date?: 'YYYY-MM-DD', camera_id?, preset_id? }
+// Defaults come from agronomist_config (capture_camera_id / capture_preset_id).
+router.post('/capture-now', requireRole('admin', 'operator'), async (req, res) => {
+  const cfg = agronomistService.getConfig();
+  const body = req.body || {};
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : localToday();
+  try {
+    const row = await agronomistCaptureService.captureForDate(date, {
+      cameraId: body.camera_id ? parseInt(body.camera_id, 10) : (cfg.capture_camera_id || null),
+      presetId: body.preset_id !== undefined ? (parseInt(body.preset_id, 10) || null) : (cfg.capture_preset_id || null),
+    });
+    res.json({ ok: true, capture: { ...row, image_url: `/api/agronomist/captures/${row.id}/image` } });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// GET /api/agronomist/captures?days=7&camera_id=
+router.get('/captures', (req, res) => {
+  const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 365);
+  const cameraId = req.query.camera_id ? parseInt(req.query.camera_id, 10) : null;
+  try {
+    const rows = agronomistCaptureService.listCaptures({ days, cameraId }).map(r => ({
+      ...r, image_url: `/api/agronomist/captures/${r.id}/image`,
+    }));
+    res.json({ days, captures: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/agronomist/captures/:id/image — the JPEG itself
+router.get('/captures/:id/image', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const row = agronomistCaptureService.getById(id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  const abs = agronomistCaptureService.absolutePath(row.path);
+  if (!abs.startsWith(agronomistCaptureService.rootDir) || !fs.existsSync(abs)) {
+    return res.status(404).json({ error: 'Image file missing' });
+  }
+  res.set('Content-Type', 'image/jpeg');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(abs);
+});
 
 // GET /api/agronomist/config — current config + key-present flag + provider health
 router.get('/config', (req, res) => {
