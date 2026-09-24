@@ -29,7 +29,7 @@ const { db } = require('../utils/database');
 const { agronomistService } = require('./AgronomistService');
 const { instantiateTemplate } = require('../utils/templateSubstitution');
 
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_MODEL = 'claude-sonnet-5';
 const CONFIG_KEY = 'operational_planner_config';
 
 const SYSTEM_PROMPT = `You are an expert operations planner for a controlled-environment farm in the United Arab Emirates. Each evening you produce a concrete operational plan for the FOLLOWING calendar day (00:00–23:59 local time).

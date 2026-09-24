@@ -22,7 +22,7 @@ const AnthropicModule = require('@anthropic-ai/sdk');
 const Anthropic = AnthropicModule.default || AnthropicModule.Anthropic || AnthropicModule;
 const { db } = require('../utils/database');
 
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_MODEL = 'claude-sonnet-5';
 const DEFAULT_CONFIG_KEY = 'agronomist_config';
 const TIER3_MAX_BYTES = 5120;
 const TIER1_WINDOW = 7;
