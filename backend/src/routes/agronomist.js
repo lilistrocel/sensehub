@@ -16,9 +16,12 @@ const localToday = () => {
 // Noon canopy captures
 // ---------------------------------------------------------------------------
 
-// POST /api/agronomist/capture-now — take the agronomist canopy photo immediately
-// (testing, or a missed noon). Body: { date?: 'YYYY-MM-DD', camera_id?, preset_id? }
-// Defaults come from agronomist_config (capture_camera_id / capture_preset_id).
+const withUrl = r => ({ ...r, image_url: `/api/agronomist/captures/${r.id}/image` });
+
+// POST /api/agronomist/capture-now — take a canopy SESSION immediately (testing, or a
+// missed noon): `capture_frames` frames `capture_spacing_seconds` apart, scored for
+// sharpness. Body: { date?: 'YYYY-MM-DD', camera_id?, preset_id?, frames?, spacing_seconds? }
+// Defaults come from agronomist_config. Rows are stored as source='manual'.
 router.post('/capture-now', requireRole('admin', 'operator'), async (req, res) => {
   const cfg = agronomistService.getConfig();
   const body = req.body || {};
@@ -27,22 +30,31 @@ router.post('/capture-now', requireRole('admin', 'operator'), async (req, res) =
     const row = await agronomistCaptureService.captureForDate(date, {
       cameraId: body.camera_id ? parseInt(body.camera_id, 10) : (cfg.capture_camera_id || null),
       presetId: body.preset_id !== undefined ? (parseInt(body.preset_id, 10) || null) : (cfg.capture_preset_id || null),
+      source: 'manual',
+      frames: body.frames !== undefined ? parseInt(body.frames, 10) : (cfg.capture_frames || 3),
+      spacingMs: (body.spacing_seconds !== undefined ? parseInt(body.spacing_seconds, 10) : (cfg.capture_spacing_seconds ?? 30)) * 1000,
     });
-    res.json({ ok: true, capture: { ...row, image_url: `/api/agronomist/captures/${row.id}/image` } });
+    const { frames, session, ...best } = row;
+    res.json({
+      ok: true,
+      session,
+      frames: frames.map(withUrl),
+      capture: withUrl(best),   // best (sharpest) frame — compatibility
+    });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
 });
 
 // GET /api/agronomist/captures?days=7&camera_id=
+// { days, groups: [{ date, camera_id, camera_name, best_id, frames: [...] }], captures: flat }
 router.get('/captures', (req, res) => {
   const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 365);
   const cameraId = req.query.camera_id ? parseInt(req.query.camera_id, 10) : null;
   try {
-    const rows = agronomistCaptureService.listCaptures({ days, cameraId }).map(r => ({
-      ...r, image_url: `/api/agronomist/captures/${r.id}/image`,
-    }));
-    res.json({ days, captures: rows });
+    const groups = agronomistCaptureService.listCapturesGrouped({ days, cameraId })
+      .map(g => ({ ...g, frames: g.frames.map(withUrl) }));
+    res.json({ days, groups, captures: groups.flatMap(g => g.frames) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

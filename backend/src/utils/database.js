@@ -916,11 +916,17 @@ const initSchema = () => {
   // Agronomist noon canopy captures (migration: agronomist_captures table +
   // agronomist_reports.capture_id so the UI can show which photo a report used).
   try {
-    const { AGRONOMIST_CAPTURES_SQL } = require('./agronomistCapturesSchema');
-    db.exec(AGRONOMIST_CAPTURES_SQL);
+    const { ensureAgronomistCapturesSchema } = require('./agronomistCapturesSchema');
+    const { getSystemTimezone } = require('./systemTimezone');
+    // v2: multi-frame sessions (rebuilds a v1 table in place, keeping rows + ids)
+    ensureAgronomistCapturesSchema(db, { tz: getSystemTimezone(db) });
     const reportCols2 = db.pragma('table_info(agronomist_reports)').map(c => c.name);
     if (!reportCols2.includes('capture_id')) {
       db.exec('ALTER TABLE agronomist_reports ADD COLUMN capture_id INTEGER REFERENCES agronomist_captures(id) ON DELETE SET NULL');
+    }
+    if (!reportCols2.includes('capture_ids')) {
+      // JSON array of every frame sent with the report (capture_id stays = the best frame)
+      db.exec('ALTER TABLE agronomist_reports ADD COLUMN capture_ids TEXT');
     }
   } catch (err) {
     console.error('agronomist_captures migration failed:', err.message);

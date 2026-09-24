@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { StatusPill } from '../ui';
 import DataSourcesPanel from '../components/agronomist/DataSourcesPanel';
+import CapturePanel, { FrameStrip } from '../components/agronomist/CaptureStrip';
 
 const API_BASE = '/api';
 
@@ -307,6 +308,9 @@ export default function Agronomist() {
       {/* Data sources: what the agronomist + planner may look at (shared setting) */}
       <DataSourcesPanel headers={headers} canEdit={canControl} equipment={equipment} />
 
+      {/* Canopy captures: today's frames + Capture now (admin/operator) */}
+      <CapturePanel headers={headers} canControl={canControl} config={config} />
+
       {/* Settings panel */}
       {showSettings && config && isAdmin && (
         <SettingsPanel config={config} zones={zones} equipment={equipment} onSave={saveConfig} onWeeklyRollup={runWeeklyRollup} onClose={() => setShowSettings(false)} />
@@ -396,6 +400,27 @@ export default function Agronomist() {
                   </div>
                   <p className="mt-2 text-base text-gray-800 dark:text-gray-200 italic">"{selectedReport.opinion}"</p>
                 </div>
+
+                {/* Canopy frames the model saw */}
+                {(selectedReport.captures?.length > 0 || selectedReport.capture) && (
+                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4" data-testid="report-frames">
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-2">
+                      Canopy frames used
+                      {selectedReport.capture_mode && (
+                        <span className="ml-2 font-normal normal-case tracking-normal text-xs text-gray-500 dark:text-gray-400">
+                          {{ noon: 'noon session', manual: 'manual capture', fallback_4h: '4-hourly fallback', latest: 'latest available', manual_night: 'manual capture (night)' }[selectedReport.capture_mode] || selectedReport.capture_mode}
+                        </span>
+                      )}
+                    </h3>
+                    <FrameStrip
+                      frames={selectedReport.captures?.length ? selectedReport.captures : [selectedReport.capture]}
+                      bestId={selectedReport.capture_id ?? selectedReport.capture?.id ?? null}
+                    />
+                    {selectedReport.photo_line && (
+                      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{selectedReport.photo_line}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Recommendations */}
                 {selectedReport.recommendations?.length > 0 && (

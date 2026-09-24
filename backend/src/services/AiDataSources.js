@@ -48,7 +48,7 @@ const SOURCES = [
   {
     key: 'canopy_capture',
     label: 'Canopy camera capture',
-    feeds: 'The noon greenhouse photo attached to the daily report (canopy colour, wilting, pests).',
+    feeds: 'The noon greenhouse canopy frames (up to 3, sharpest first; 4-hourly snapshots as fallback) attached to the daily report.',
     template_keywords: /camera|canopy|capture/i,
   },
   {

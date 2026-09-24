@@ -22,7 +22,7 @@ const AnthropicModule = require('@anthropic-ai/sdk');
 const Anthropic = AnthropicModule.default || AnthropicModule.Anthropic || AnthropicModule;
 const { db } = require('../utils/database');
 const { slimOperatorTasks, sectionStats } = require('./AiSnapshotSlimming');
-const { agronomistCaptureService, buildImageBlock } = require('./AgronomistCaptureService');
+const { agronomistCaptureService, buildImageBlock, describeSelection, MAX_IMAGES_PER_REPORT } = require('./AgronomistCaptureService');
 const { getSystemTimezone } = require('../utils/systemTimezone');
 const {
   aiDataSources, filterLabRows, applyToAgronomistSnapshot, SYSTEM_PROMPT_LINE: DATA_SOURCES_PROMPT_LINE,
@@ -30,6 +30,7 @@ const {
 
 const DEFAULT_MODEL = 'claude-sonnet-5';
 const DEFAULT_CONFIG_KEY = 'agronomist_config';
+const clampInt = (v, lo, hi, dflt) => { const n = parseInt(v, 10); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
 const TIER3_MAX_BYTES = 5120;
 const TIER1_WINDOW = 7;
 const TIER2_WINDOW = 12;
@@ -60,11 +61,12 @@ Be skeptical of physically implausible sensor readings:
 
 // Appended to the system prompt (also when system_prompt_override is set) so the
 // model knows how to treat the noon canopy photo that precedes the JSON snapshot.
-const CANOPY_PHOTO_INSTRUCTION = `Canopy photo:
-- The user message may start with one JPEG: the fixed daily canopy capture from the greenhouse camera. Its capture time and age are stated in the text right after it — cite that time when you refer to the photo.
+const CANOPY_PHOTO_INSTRUCTION = `Canopy photos:
+- The user message may start with up to three JPEGs from the greenhouse camera. When several are attached they are the SAME scene taken seconds to minutes apart (a burst, so one blurry frame does not spoil the day): use the sharpest one for detail and the others only to confirm what you see — do not describe them as different views or different times of day.
+- The text right after the images states exactly what they are (today's noon session, a manual capture, routine 4-hourly snapshots, or an older frame), their local capture times, their age and a sharpness score per frame. Cite that time and provenance when you refer to a photo; never call a fallback frame "the noon capture".
 - Assess what the sensors cannot see: canopy colour (chlorosis, purpling, scorch), turgor and wilting, leaf posture (epinasty, cupping, curling), visible pests, disease, mildew or rot, fruit set, algae or salt crust on the substrate, dripper/valve leaks, anything out of place. Flag it under Risks & Anomalies and tie it to the sensor data where possible.
 - Keep it proportionate: a single wide frame cannot confirm early-stage pests — say what would need a close-up or a physical check.
-- If no photo is attached, or it is older than the report day, say so explicitly in State of the Crop ("no canopy photo available for today") rather than guessing at canopy condition.`;
+- If no photo is attached, or the frames are older than the report day, say so explicitly in State of the Crop ("no canopy photo available for today") rather than guessing at canopy condition.`;
 
 const REPORT_OUTPUT_SCHEMA = {
   type: 'object',
@@ -104,6 +106,61 @@ const REPORT_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+/** JSON array column → int[] (falls back to the single capture_id). */
+function parseIds(json, single) {
+  try {
+    const arr = json ? JSON.parse(json) : null;
+    if (Array.isArray(arr) && arr.length) return arr.map(n => parseInt(n, 10)).filter(Number.isFinite);
+  } catch {}
+  return single ? [single] : [];
+}
+
+/** Accept the multi-frame selection or the legacy single { capture, ageHours, buffer }. */
+function normaliseSelection(capture, date) {
+  if (!capture) return null;
+  if (Array.isArray(capture.items)) {
+    const items = capture.items.filter(it => it?.buffer?.length);
+    return items.length ? { ...capture, items } : null;
+  }
+  if (!capture.buffer?.length) return null;
+  const sameDay = capture.capture?.capture_date === date;
+  const src = capture.capture?.source;
+  const mode = capture.mode || (sameDay ? (src === 'fallback_4h' ? 'fallback_4h' : (src === 'manual' ? 'manual' : 'noon')) : 'latest');
+  return { mode, items: [capture] };
+}
+
+/** The photo paragraph of the user message: provenance, local times, age, sharpness, how to use the frames. */
+function buildPhotoLine(sel, { date, tz }) {
+  const items = sel.items;
+  const n = items.length;
+  const c0 = items[0].capture || {};
+  const what = describeSelection(sel, { date, tz });
+  const scores = items.map(it => (it.capture?.sharpness == null ? 'n/a' : Math.round(it.capture.sharpness)));
+  const lead = n === 1 ? 'The image above is' : `The ${n} images above are`;
+  const parts = [
+    `${lead} from camera "${c0.camera_name || c0.camera_id}"${c0.preset_id ? ` (PTZ preset ${c0.preset_id})` : ''}, times in ${tz}: ${what}.`,
+    `Sharpness score${n > 1 ? 's' : ''} (variance of Laplacian, higher = sharper): ${scores.join(', ')}.`,
+  ];
+  if (n > 1) parts.push('They are the same scene seconds to minutes apart: use the sharpest for detail, the others only to confirm.');
+  switch (sel.mode) {
+    case 'fallback_4h':
+      parts.push('These are routine 4-hourly monitoring snapshots, NOT the noon canopy session — say so if you refer to them.');
+      break;
+    case 'latest':
+      parts.push(`NOT from today (capture date ${c0.capture_date}, ${items[0].ageHours} h old at report time). State its age when you refer to it.`);
+      break;
+    case 'manual_night':
+      parts.push('Taken outside daylight hours (likely IR/night mode): colour judgements are unreliable — limit yourself to structure, wilting and anything obviously wrong.');
+      break;
+    case 'manual':
+      parts.push(`Manual capture, ${items[0].ageHours} h old at report time.`);
+      break;
+    default:
+      parts.push(`${items[0].ageHours} h old at report time.`);
+  }
+  return parts.join(' ');
+}
+
 class AgronomistService {
   constructor() {
     this._client = null;
@@ -130,6 +187,9 @@ class AgronomistService {
       capture_enabled: true,
       capture_camera_id: null,   // null = first enabled camera
       capture_preset_id: null,   // null = do not move the PTZ before capturing
+      capture_frames: 3,             // frames per session (1-5)
+      capture_spacing_seconds: 30,   // gap between frames
+      capture_frames_to_send: 3,     // frames attached to the report (1-3)
     };
     try {
       const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(DEFAULT_CONFIG_KEY);
@@ -160,6 +220,9 @@ class AgronomistService {
       capture_enabled: merged.capture_enabled !== false,
       capture_camera_id: merged.capture_camera_id ? parseInt(merged.capture_camera_id, 10) || null : null,
       capture_preset_id: merged.capture_preset_id ? parseInt(merged.capture_preset_id, 10) || null : null,
+      capture_frames: clampInt(merged.capture_frames, 1, 5, 3),
+      capture_spacing_seconds: clampInt(merged.capture_spacing_seconds, 5, 120, 30),
+      capture_frames_to_send: clampInt(merged.capture_frames_to_send, 1, MAX_IMAGES_PER_REPORT, 3),
     };
     // updated_at is stamped so the scheduler can tell "config was re-saved after the
     // last provider failure" — saving settings re-enables a paused schedule.
@@ -948,7 +1011,8 @@ class AgronomistService {
    * @param p.date       'YYYY-MM-DD'
    * @param p.snapshot   output of aggregateDailyData (or a saved input_snapshot)
    * @param p.cfg        getConfig() result
-   * @param p.capture    { capture: row, ageHours, buffer } | null
+   * @param p.capture    getCapturesForReport() selection { mode, items: [{ capture, ageHours, buffer }] },
+   *                     or the legacy single { capture: row, ageHours, buffer }, or null
    * @param p.clarifications  optional override (defaults to the DB thread for that date)
    * @param p.historyBlock    optional override (defaults to _formatHistoryBlock())
    * @param p.dataSources     AiDataSources effective config (default: current setting)
@@ -974,18 +1038,16 @@ class AgronomistService {
     const snap = applyToAgronomistSnapshot(rawSnap, ds);
     const tz = snap.timezone || getSystemTimezone(db);
 
+    // Normalise the capture selection: up to MAX_IMAGES_PER_REPORT frames (cost guard).
+    const selection = normaliseSelection(capture, date);
+    const maxImages = Math.min(MAX_IMAGES_PER_REPORT, Math.max(1, parseInt(cfg.capture_frames_to_send, 10) || MAX_IMAGES_PER_REPORT));
+    const items = selection ? selection.items.slice(0, maxImages) : [];
+
     let photoLine;
     if (!ds.isEnabled('canopy_capture')) {
       photoLine = 'The canopy camera is out of service (see the OUT OF SERVICE note below): no photo is attached. Write "no canopy photo — camera out of service" in State of the Crop and do not comment on canopy condition from imagery.';
-    } else if (capture?.buffer?.length) {
-      const c = capture.capture || {};
-      const when = c.created_at ? new Date(c.created_at) : null;
-      const localWhen = when ? new Intl.DateTimeFormat('en-GB', { timeZone: tz, dateStyle: 'medium', timeStyle: 'short' }).format(when) : 'unknown time';
-      const sameDay = c.capture_date === date;
-      photoLine = `The image above is the canopy photo from camera "${c.camera_name || c.camera_id}"` +
-        (c.preset_id ? ` (PTZ preset ${c.preset_id})` : '') +
-        `, captured ${localWhen} ${tz}` +
-        (sameDay ? ` (today's noon capture, ${capture.ageHours} h old at report time).` : ` — NOT from today: it is ${capture.ageHours} h old (capture date ${c.capture_date}). State its age when you refer to it.`);
+    } else if (items.length) {
+      photoLine = buildPhotoLine({ ...selection, items }, { date, tz });
     } else {
       photoLine = 'No canopy photo is attached (no capture within the last 36 h). Say so explicitly in the report; do not guess at canopy condition.';
     }
@@ -1011,10 +1073,15 @@ class AgronomistService {
     }
     const userText = userMessageParts.join('\n');
 
-    // Image block FIRST, then the text (Anthropic recommends image-before-text).
+    // Image blocks FIRST (sharpest first), then the text (Anthropic recommends image-before-text).
     const content = [];
-    if (capture?.buffer?.length) content.push(buildImageBlock(capture.buffer));
+    for (const it of items) content.push(buildImageBlock(it.buffer));
     content.push({ type: 'text', text: userText });
+    const imageBytes = items.reduce((a, it) => a + it.buffer.length, 0);
+    const imageBase64Chars = content.filter(c => c.type === 'image').reduce((a, c) => a + c.source.data.length, 0);
+    if (items.length) {
+      console.log(`[Agronomist] ${date}: attaching ${items.length} image(s) (${selection.mode}), ${(imageBytes / 1024).toFixed(0)} KB JPEG total, ${imageBase64Chars} base64 chars`);
+    }
 
     const requestBody = {
       model: cfg.model || DEFAULT_MODEL,
@@ -1032,11 +1099,15 @@ class AgronomistService {
       ...sectionStats(snap),
       system_prompt_chars: systemPrompt.length,
       user_text_chars: userText.length,
-      image_present: !!capture?.buffer?.length,
-      image_bytes: capture?.buffer?.length || 0,
-      image_base64_chars: content[0]?.type === 'image' ? content[0].source.data.length : 0,
-      capture_id: capture?.capture?.id ?? null,
-      capture_age_hours: capture?.ageHours ?? null,
+      image_present: items.length > 0,
+      image_count: items.length,
+      image_bytes: imageBytes,
+      image_base64_chars: imageBase64Chars,
+      capture_id: items[0]?.capture?.id ?? null,
+      capture_ids: items.map(it => it.capture?.id).filter(id => id != null),
+      capture_mode: items.length ? selection.mode : null,
+      capture_age_hours: items[0]?.ageHours ?? null,
+      photo_line: photoLine,
       // Effective data-source policy at build time, so a report shows what was excluded.
       data_sources: ds.summary,
     };
@@ -1067,14 +1138,15 @@ class AgronomistService {
     let captureInfo = null;
     if (cfg.capture_enabled !== false && dataSources.isEnabled('canopy_capture')) {
       try {
-        captureInfo = agronomistCaptureService.getCaptureForReport(date, { cameraId: cfg.capture_camera_id || null });
+        captureInfo = agronomistCaptureService.getCapturesForReport(date, { cameraId: cfg.capture_camera_id || null, limit: cfg.capture_frames_to_send || MAX_IMAGES_PER_REPORT });
       } catch (err) {
         console.warn('[Agronomist] Could not load canopy capture:', err.message);
       }
     }
 
     const { requestBody, stats } = this.buildDailyRequest({ date, snapshot, cfg, capture: captureInfo, dataSources });
-    const captureId = captureInfo?.capture?.id ?? null;
+    const captureId = stats.capture_id ?? null;
+    const captureIds = JSON.stringify(stats.capture_ids || []);
     const snapshotToSave = JSON.stringify({ ...snapshot, snapshot_stats: stats });
 
     const client = this._client_or_throw();
@@ -1087,8 +1159,8 @@ class AgronomistService {
       const errorClass = this.classifyProviderError(err);
       db.prepare(`
         INSERT INTO agronomist_reports
-          (report_date, model, input_snapshot, summary, full_markdown, status, error, error_class, capture_id)
-        VALUES (?, ?, ?, ?, ?, 'failure', ?, ?, ?)
+          (report_date, model, input_snapshot, summary, full_markdown, status, error, error_class, capture_id, capture_ids)
+        VALUES (?, ?, ?, ?, ?, 'failure', ?, ?, ?, ?)
         ON CONFLICT(report_date) DO UPDATE SET
           generated_at = CURRENT_TIMESTAMP,
           model = excluded.model,
@@ -1096,9 +1168,10 @@ class AgronomistService {
           status = 'failure',
           error = excluded.error,
           error_class = excluded.error_class,
-          capture_id = excluded.capture_id
+          capture_id = excluded.capture_id,
+          capture_ids = excluded.capture_ids
       `).run(date, cfg.model || DEFAULT_MODEL, snapshotToSave,
-            '', '', String(err?.message || err), errorClass, captureId);
+            '', '', String(err?.message || err), errorClass, captureId, captureIds);
       if (err && typeof err === 'object' && !err.errorClass) err.errorClass = errorClass;
       throw err;
     }
@@ -1120,10 +1193,11 @@ class AgronomistService {
       INSERT INTO agronomist_reports
         (report_date, model, input_snapshot, summary, full_markdown,
          recommendations, opinion, input_tokens, output_tokens,
-         cache_read_tokens, cache_creation_tokens, status, error, capture_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL, ?)
+         cache_read_tokens, cache_creation_tokens, status, error, capture_id, capture_ids)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL, ?, ?)
       ON CONFLICT(report_date) DO UPDATE SET
         capture_id = excluded.capture_id,
+        capture_ids = excluded.capture_ids,
         generated_at = CURRENT_TIMESTAMP,
         model = excluded.model,
         input_snapshot = excluded.input_snapshot,
@@ -1151,6 +1225,7 @@ class AgronomistService {
       usage.cache_read_input_tokens || 0,
       usage.cache_creation_input_tokens || 0,
       captureId,
+      captureIds,
     );
 
     // Persist operator_tasks_requests as actual tasks tied to this report.
@@ -1338,7 +1413,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
     // parsing the whole input_snapshot in JS.
     return db.prepare(`
       SELECT id, report_date, generated_at, model, opinion, summary, status, error, error_class,
-             input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, capture_id,
+             input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, capture_id, capture_ids,
              CASE WHEN json_valid(input_snapshot)
                   THEN json_extract(input_snapshot, '$.snapshot_stats.data_sources.disabled')
              END AS excluded_sources_json
@@ -1351,7 +1426,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
         const arr = excluded_sources_json ? JSON.parse(excluded_sources_json) : [];
         excluded = Array.isArray(arr) ? arr.map(d => (typeof d === 'string' ? d : d?.key)).filter(Boolean) : [];
       } catch {}
-      return { ...r, excluded_sources: excluded };
+      return { ...r, capture_ids: parseIds(r.capture_ids, r.capture_id), excluded_sources: excluded };
     });
   }
 
@@ -1365,7 +1440,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
       input_snapshot: row.input_snapshot ? JSON.parse(row.input_snapshot) : null,
       recommendations: row.recommendations ? JSON.parse(row.recommendations) : [],
       clarifications: this.listClarifications(row.id),
-      capture: row.capture_id ? this._captureSummary(row.capture_id) : null,
+      ...this._captureFields(row),
     };
   }
 
@@ -1377,7 +1452,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
       input_snapshot: row.input_snapshot ? JSON.parse(row.input_snapshot) : null,
       recommendations: row.recommendations ? JSON.parse(row.recommendations) : [],
       clarifications: this.listClarifications(row.id),
-      capture: row.capture_id ? this._captureSummary(row.capture_id) : null,
+      ...this._captureFields(row),
     };
   }
 
@@ -1451,9 +1526,25 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
       return {
         id: c.id, camera_id: c.camera_id, camera_name: c.camera_name, capture_date: c.capture_date,
         width: c.width, height: c.height, bytes: c.bytes, preset_id: c.preset_id, created_at: c.created_at,
+        sequence: c.sequence, sharpness: c.sharpness, source: c.source, captured_at: c.captured_at || c.created_at,
         image_url: `/api/agronomist/captures/${c.id}/image`,
       };
     } catch { return null; }
+  }
+
+  /** { capture_ids, capture (best frame), captures (every frame sent, in the order sent) } for a report row. */
+  _captureFields(row) {
+    const ids = parseIds(row.capture_ids, row.capture_id);
+    const captures = ids.map(id => this._captureSummary(id)).filter(Boolean);
+    let photoLine = null;
+    try { photoLine = row.input_snapshot ? JSON.parse(row.input_snapshot)?.snapshot_stats?.photo_line ?? null : null; } catch {}
+    return {
+      capture_ids: ids,
+      capture: row.capture_id ? this._captureSummary(row.capture_id) : (captures[0] || null),
+      captures,
+      capture_mode: (() => { try { return row.input_snapshot ? JSON.parse(row.input_snapshot)?.snapshot_stats?.capture_mode ?? null : null; } catch { return null; } })(),
+      photo_line: photoLine,
+    };
   }
 
   _localDateStr(date) {

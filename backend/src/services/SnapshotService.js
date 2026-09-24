@@ -53,7 +53,7 @@ class SnapshotService {
     try {
       const { localDateStr } = require('../utils/systemTimezone');
       const today = localDateStr(new Date(), tz());
-      const row = db.prepare('SELECT id FROM agronomist_captures WHERE capture_date = ? LIMIT 1').get(today);
+      const row = db.prepare("SELECT id FROM agronomist_captures WHERE capture_date = ? AND source = 'noon' LIMIT 1").get(today);
       if (row) this.noonTrigger.markFired(today);
     } catch {}
     console.log(`[Snapshot] Noon canopy capture registered: daily ${String(NOON_HOUR).padStart(2, '0')}:${String(NOON_MINUTE).padStart(2, '0')} ${tz()} (grace ${NOON_GRACE_MINUTES} min)`);
@@ -72,13 +72,18 @@ class SnapshotService {
       console.warn(`[Snapshot] Noon capture for ${dateStr} skipped: go2rtc not ready`);
       return;
     }
-    console.log(`[Snapshot] Firing noon canopy capture for ${dateStr} (${zone})`);
+    const frames = cfg.capture_frames || 3;
+    console.log(`[Snapshot] Firing noon canopy session for ${dateStr} (${zone}): ${frames} frame(s), ${cfg.capture_spacing_seconds ?? 30} s apart`);
     try {
       const row = await agronomistCaptureService.captureForDate(dateStr, {
         cameraId: cfg.capture_camera_id || null,
         presetId: cfg.capture_preset_id || null,
+        source: 'noon',
+        frames,
+        spacingMs: (cfg.capture_spacing_seconds ?? 30) * 1000,
       });
-      console.log(`[Snapshot] Noon capture stored: ${row.path} (${row.width}x${row.height}, ${(row.bytes / 1024).toFixed(0)} KB)`);
+      const summary = (row.frames || []).map(f => `#${f.sequence} sharp=${f.sharpness == null ? 'n/a' : Math.round(f.sharpness)}`).join(', ');
+      console.log(`[Snapshot] Noon session stored: ${row.frames?.length || 1} frame(s) [${summary}]; best ${row.path} (${row.width}x${row.height}, ${(row.bytes / 1024).toFixed(0)} KB)`);
     } catch (err) {
       console.error(`[Snapshot] Noon capture for ${dateStr} failed:`, err.message);
     }

@@ -6,7 +6,8 @@
  *   node scripts/agronomist-dry-run.js --db /path/to.db --report-date 2026-07-01 [--capture photo.jpg]
  *   node scripts/agronomist-dry-run.js --db /path/to.db --report-id 103
  *   node scripts/agronomist-dry-run.js --db /path/to.db --plan-date 2026-06-28 | --plan-id 68
- *   node scripts/agronomist-dry-run.js --db /path/to.db --today            (live aggregateDailyData + real capture)
+ *   node scripts/agronomist-dry-run.js --db /path/to.db --today            (live aggregateDailyData + real capture frames)
+ *   node scripts/agronomist-dry-run.js --db /path/to.db --today --ignore-noon   (skip today's noon/manual sessions: exercise the 4-hourly fallback)
  *   node scripts/agronomist-dry-run.js --db /path/to.db --today --planner  (also builds the planner request; --dump-planner-request out.json)
  *   add --dump-request out.json to write the exact request body (image data truncated unless --full)
  *
@@ -51,7 +52,8 @@ function printStats(label, stats, extra = {}) {
   console.log('TOTAL snapshot JSON'.padEnd(30) + String(total).padStart(10) + ''.padStart(7) + String(tok(total)).padStart(9));
   if (stats.user_text_chars != null) console.log(`user text chars: ${stats.user_text_chars} (~${tok(stats.user_text_chars)} tokens)`);
   if (stats.system_prompt_chars != null) console.log(`system prompt chars: ${stats.system_prompt_chars} (~${tok(stats.system_prompt_chars)} tokens)`);
-  if ('image_present' in stats) console.log(`image block: ${stats.image_present ? `YES — ${stats.image_bytes} bytes JPEG, ${stats.image_base64_chars} base64 chars${stats.capture_age_hours != null ? `, ${stats.capture_age_hours} h old` : ''}` : 'none'}`);
+  if ('image_present' in stats) console.log(`image blocks: ${stats.image_present ? `${stats.image_count ?? 1} — ${stats.image_bytes} bytes JPEG total, ${stats.image_base64_chars} base64 chars, mode=${stats.capture_mode || '?'}, capture_ids=[${(stats.capture_ids || []).join(', ')}]${stats.capture_age_hours != null ? `, first ${stats.capture_age_hours} h old` : ''}` : 'none'}`);
+  if (stats.photo_line) console.log(`photo line: ${stats.photo_line}`);
   for (const [k, v] of Object.entries(extra)) console.log(`${k}: ${v}`);
 }
 
@@ -60,7 +62,8 @@ function loadCapture(file) {
   const buffer = fs.readFileSync(file);
   const { jpegDimensions } = require('../src/services/AgronomistCaptureService');
   const d = jpegDimensions(buffer);
-  return { capture: { id: 0, camera_name: 'dry-run file', capture_date: opt('--report-date') || new Date().toISOString().slice(0, 10), created_at: new Date().toISOString(), preset_id: null, width: d?.width, height: d?.height }, ageHours: 0, buffer };
+  const now = new Date().toISOString();
+  return { mode: 'manual', items: [{ capture: { id: 0, camera_name: 'dry-run file', capture_date: opt('--report-date') || now.slice(0, 10), created_at: now, captured_at: now, source: 'manual', sequence: 1, sharpness: null, preset_id: null, width: d?.width, height: d?.height }, ageHours: 0, buffer }] };
 }
 
 function dumpRequest(body) {
@@ -175,8 +178,14 @@ if (has('--today')) {
   const snapshot = agronomistService.aggregateDailyData(date);
   const cfg = agronomistService.getConfig();
   let capture = null;
-  try { capture = agronomistCaptureService.getCaptureForReport(date, { cameraId: cfg.capture_camera_id || null }); } catch (e) { console.warn('capture lookup failed:', e.message); }
-  const body = runAgronomist({ date, snapshot, capture, label: `TODAY ${date} (live aggregateDailyData, capture ${capture ? '#' + capture.capture.id : 'none'})` });
+  try {
+    capture = agronomistCaptureService.getCapturesForReport(date, { cameraId: cfg.capture_camera_id || null, limit: cfg.capture_frames_to_send || 3, ignoreSession: has('--ignore-noon') });
+  } catch (e) { console.warn('capture lookup failed:', e.message); }
+  if (capture) {
+    console.log(`capture selection: mode=${capture.mode}, ${capture.items.length} frame(s):`);
+    for (const it of capture.items) console.log(`  #${it.capture.id} seq=${it.capture.sequence} source=${it.capture.source} captured_at=${it.capture.captured_at} sharpness=${it.capture.sharpness} ${it.capture.width}x${it.capture.height} ${it.buffer.length} bytes, ${it.ageHours} h old`);
+  } else console.log('capture selection: none');
+  const body = runAgronomist({ date, snapshot, capture, label: `TODAY ${date} (live aggregateDailyData, captures ${capture ? capture.items.map(i => '#' + i.capture.id).join(',') : 'none'}${has('--ignore-noon') ? ', --ignore-noon' : ''})` });
   dumpRequest(body);
 
   if (has('--planner')) {
