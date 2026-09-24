@@ -7,7 +7,12 @@
  *   node scripts/agronomist-dry-run.js --db /path/to.db --report-id 103
  *   node scripts/agronomist-dry-run.js --db /path/to.db --plan-date 2026-06-28 | --plan-id 68
  *   node scripts/agronomist-dry-run.js --db /path/to.db --today            (live aggregateDailyData + real capture)
+ *   node scripts/agronomist-dry-run.js --db /path/to.db --today --planner  (also builds the planner request; --dump-planner-request out.json)
  *   add --dump-request out.json to write the exact request body (image data truncated unless --full)
+ *
+ * Every mode prints the effective AI data-source policy (ai_data_sources): which
+ * sections the model receives, which sources are out of service, and the
+ * OUT OF SERVICE note as it appears in the user message.
  *
  * Replay modes print BEFORE (the saved input_snapshot as it was sent) and AFTER
  * (the same snapshot passed through the slimming helpers) so the effect of the
@@ -77,13 +82,31 @@ function endOfDay(dateStr) { return `${dateStr}T23:59:59Z`; }
 // Agronomist replay / live
 // ---------------------------------------------------------------------------
 
+function dataSourceLines(stats, snapshotObj, userText) {
+  const ds = stats.data_sources || { disabled: [], excluded_equipment_ids: [] };
+  const lines = {
+    'sections present': Object.keys(snapshotObj || {}).filter(k => k !== 'snapshot_stats').join(', '),
+    'data_sources.disabled': ds.disabled.length ? ds.disabled.map(d => `${d.key}${d.reason ? ` (${d.reason})` : ''}`).join('; ') : 'none',
+    'excluded_equipment_ids': ds.excluded_equipment_ids.length ? ds.excluded_equipment_ids.join(', ') : 'none',
+  };
+  const m = /OUT OF SERVICE[^\n]*/.exec(userText || '');
+  lines['out-of-service note'] = m ? m[0] : 'absent';
+  return lines;
+}
+
 function runAgronomist({ date, snapshot, capture, label }) {
   const cfg = agronomistService.getConfig();
   const { requestBody, stats } = agronomistService.buildDailyRequest({ date, snapshot, cfg, capture, clarifications: [], historyBlock: agronomistService._formatHistoryBlock() });
   const content = requestBody.messages[0].content;
+  const userText = content.find(c => c.type === 'text')?.text || '';
+  // The sections the model actually receives (buildDailyRequest re-applies the data-source policy).
+  const sentJson = /```json\n([\s\S]*?)\n```/.exec(userText);
+  let sentSnapshot = null;
+  try { sentSnapshot = sentJson ? JSON.parse(sentJson[1]) : null; } catch {}
   printStats(label, stats, {
     'content blocks': content.map(c => c.type).join(' -> '),
     'total request chars (JSON)': JSON.stringify(requestBody).length,
+    ...dataSourceLines(stats, sentSnapshot, userText),
   });
   return requestBody;
 }
@@ -158,7 +181,14 @@ if (has('--today')) {
 
   if (has('--planner')) {
     const ctx = operationalPlannerService.buildPlanningContext(date, {});
-    printStats(`TODAY planner context ${date}`, S.sectionStats(ctx));
+    const { requestBody, userMessage, stats } = operationalPlannerService.buildPlanRequest({ today: date, context: ctx });
+    printStats(`TODAY planner context ${date}`, stats, {
+      'today_snapshot sections': Object.keys(ctx.today_snapshot || {}).join(', '),
+      'total request chars (JSON)': JSON.stringify(requestBody).length,
+      ...dataSourceLines(stats, ctx, userMessage),
+    });
+    const plannerOut = opt('--dump-planner-request');
+    if (plannerOut) { fs.writeFileSync(plannerOut, JSON.stringify(requestBody, null, 2)); console.log(`planner request body written to ${plannerOut}`); }
   }
 }
 

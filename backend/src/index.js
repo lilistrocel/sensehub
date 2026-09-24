@@ -216,6 +216,7 @@ app.use('/api/crops', authMiddleware, cropRoutes);
 app.use('/api/amic', authMiddleware, amicRoutes);
 app.use('/api/agronomist', authMiddleware, agronomistRoutes);
 app.use('/api/planner', authMiddleware, plannerRoutes);
+app.use('/api/ai/data-sources', authMiddleware, require('./routes/aiDataSources'));
 app.use('/api/operator-tasks', authMiddleware, operatorTasksRoutes);
 app.use('/api/baselines', authMiddleware, baselineRoutes);
 app.use('/api/relay-events', authMiddleware, require('./routes/relayEvents'));

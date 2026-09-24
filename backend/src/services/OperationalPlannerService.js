@@ -29,6 +29,10 @@ const { db } = require('../utils/database');
 const { slimOperatorTasks, compactAutomation, equipmentIndexFromInventory, dedupePlannerContext, sectionStats } = require('./AiSnapshotSlimming');
 const { agronomistService } = require('./AgronomistService');
 const { instantiateTemplate } = require('../utils/templateSubstitution');
+const {
+  aiDataSources, applyToPlannerContext, templatesReferencingDisabled,
+  SYSTEM_PROMPT_LINE: DATA_SOURCES_PROMPT_LINE,
+} = require('./AiDataSources');
 
 const DEFAULT_MODEL = 'claude-sonnet-5';
 const CONFIG_KEY = 'operational_planner_config';
@@ -543,7 +547,10 @@ class OperationalPlannerService {
 
   /** Gather the rich operational context: today's snapshot + agronomist report + current automations + equipment + zones + closed-loop scorecards. */
   buildPlanningContext(todayStr, opts = {}) {
-    const dailySnapshot = agronomistService.aggregateDailyData(todayStr);
+    // Operator-controlled data sources: disabled sections are omitted from
+    // today_snapshot AND from the planner-only sections (fertigation, tasks, ...).
+    const dataSources = opts.dataSources || aiDataSources.effective();
+    const dailySnapshot = agronomistService.aggregateDailyData(todayStr, { dataSources });
 
     // Today's agronomist report (most recent successful, may be today's if generated before planner)
     const agronReport = db.prepare(`
@@ -881,7 +888,60 @@ class OperationalPlannerService {
       previous_rejection: previousRejection,
     };
     // today_snapshot must not repeat top-level sections (operator_tasks lives at the top level).
-    return dedupePlannerContext(context);
+    return dedupePlannerContext(applyToPlannerContext(context, dataSources));
+  }
+
+  /**
+   * Build the Messages API request for tomorrow's plan WITHOUT calling the API.
+   * Shared by generatePlanForTomorrow and scripts/agronomist-dry-run.js --planner.
+   *
+   * @param p.today        'YYYY-MM-DD'
+   * @param p.context      buildPlanningContext() output
+   * @param p.cfg          getConfig() result
+   * @param p.previousRejection  set when regenerating after a reject
+   * @param p.dataSources  AiDataSources effective config (default: current setting)
+   * @returns { requestBody, userMessage, systemPrompt, stats }
+   */
+  buildPlanRequest({ today, context, cfg = this.getConfig(), previousRejection = null, dataSources } = {}) {
+    const tomorrow = this._tomorrowOf(today);
+    const ds = dataSources || aiDataSources.effective();
+    const outOfService = aiDataSources.outOfServiceNote({ effective: ds, audience: 'planner' });
+    const systemPrompt = SYSTEM_PROMPT + '\n\n' + DATA_SOURCES_PROMPT_LINE;
+
+    const parts = [
+      `Today is ${today}. You are planning operations for TOMORROW (${tomorrow}).`,
+      `Timezone: ${context.timezone}.`,
+    ];
+    if (previousRejection) {
+      parts.push('IMPORTANT: A previous attempt at this plan was REJECTED by the operator. Their written feedback is in context.previous_rejection.feedback. Address it explicitly.');
+    }
+    parts.push(
+      '',
+      'Full operational context:',
+      '',
+      '```json',
+      JSON.stringify(context, null, 2),
+      '```',
+      '',
+      'Produce the JSON plan. Declare measurable targets[]. Review the scorecards in yesterday_review. Use real equipment_id/channel values from the inventory. Address the agronomist\'s recommendations. Be specific about times and durations.',
+    );
+    if (outOfService) parts.push('', outOfService);
+    const userMessage = parts.join('\n');
+
+    const requestBody = {
+      model: cfg.model || DEFAULT_MODEL,
+      max_tokens: 24000,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      output_config: { format: { type: 'json_schema', schema: PLAN_SCHEMA } },
+      messages: [{ role: 'user', content: userMessage }],
+    };
+    const stats = {
+      ...sectionStats(context),
+      user_text_chars: userMessage.length,
+      system_prompt_chars: systemPrompt.length,
+      data_sources: ds.summary,
+    };
+    return { requestBody, userMessage, systemPrompt, stats };
   }
 
   /** Compact view of a plan suitable for the LLM context — full plan would be too verbose. */
@@ -1238,9 +1298,19 @@ class OperationalPlannerService {
    * Returns an array of warning objects. Empty array = clean. Warnings DO NOT block — they just
    * surface in the UI so the operator notices before Confirm.
    */
-  _findConsistencyWarnings(parsed, currentAutomations) {
+  /**
+   * @param extras.dataSources  AiDataSources effective config — adds warnings when a
+   *        proposed automation instantiates a template that references an out-of-service
+   *        source, or targets excluded equipment.
+   * @param extras.templates    context.templates (id/name/description/agent_usage_notes)
+   */
+  _findConsistencyWarnings(parsed, currentAutomations, extras = {}) {
     const warnings = [];
     if (!parsed) return warnings;
+
+    if (extras.dataSources) {
+      warnings.push(...this._findDataSourceWarnings(parsed, extras.dataSources, extras.templates || []));
+    }
 
     const NUMBER_WORDS = {
       one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
@@ -1464,6 +1534,49 @@ class OperationalPlannerService {
     });
   }
 
+  /** Warnings for proposed automations that lean on an out-of-service data source. */
+  _findDataSourceWarnings(parsed, eff, templates) {
+    const out = [];
+    const autos = Array.isArray(parsed?.proposed_automations) ? parsed.proposed_automations : [];
+    if (autos.length === 0) return out;
+    const flagged = templatesReferencingDisabled(templates, eff);
+    const byTemplate = new Map();
+    for (const f of flagged) {
+      if (!byTemplate.has(f.template_id)) byTemplate.set(f.template_id, f);
+    }
+    autos.forEach((a, index) => {
+      const tid = parseInt(a?.template_id, 10);
+      if (tid > 0 && byTemplate.has(tid)) {
+        const f = byTemplate.get(tid);
+        out.push({
+          kind: 'template_references_disabled_source',
+          index,
+          template_id: tid,
+          source: f.source,
+          context: a.name || `proposed_automations[${index}]`,
+          hint: `Template "${f.template_name}" references the out-of-service source "${eff.sources[f.source]?.label || f.source}".`,
+        });
+      }
+      let actions = [];
+      try { actions = typeof a?.actions_json === 'string' ? JSON.parse(a.actions_json) : (a?.actions || []); } catch {}
+      const sensorId = parseInt(a?.trigger_config?.sensor_equipment_id, 10);
+      const ids = new Set((Array.isArray(actions) ? actions : []).map(x => parseInt(x?.equipment_id, 10)).filter(n => n > 0));
+      if (sensorId > 0) ids.add(sensorId);
+      for (const id of ids) {
+        if (eff.isEquipmentExcluded(id)) {
+          out.push({
+            kind: 'targets_excluded_equipment',
+            index,
+            id,
+            context: a.name || `proposed_automations[${index}]`,
+            hint: `Proposed automation reads from or actuates equipment #${id}, which the operator excluded from AI data sources.`,
+          });
+        }
+      }
+    });
+    return out;
+  }
+
   // -------- core: generate a plan --------
 
   /** Generate the plan for the day after `referenceDate` (default: today).
@@ -1492,43 +1605,21 @@ class OperationalPlannerService {
     const nextVersion = (versionRow.max_v || 0) + 1;
     const parentPlanId = opts.previous_rejection?.rejected_plan_id || null;
 
+    const dataSources = aiDataSources.effective();
     const context = this.buildPlanningContext(today, {
       previous_rejection: opts.previous_rejection || null,
+      dataSources,
+    });
+    const { requestBody, stats } = this.buildPlanRequest({
+      today, context, cfg, previousRejection: opts.previous_rejection || null, dataSources,
     });
 
-    const userMessage = [
-      `Today is ${today}. You are planning operations for TOMORROW (${tomorrow}).`,
-      `Timezone: ${context.timezone}.`,
-      opts.previous_rejection
-        ? `IMPORTANT: A previous attempt at this plan was REJECTED by the operator. Their written feedback is in context.previous_rejection.feedback. Address it explicitly.`
-        : '',
-      '',
-      'Full operational context:',
-      '',
-      '```json',
-      JSON.stringify(context, null, 2),
-      '```',
-      '',
-      'Produce the JSON plan. Declare measurable targets[]. Review the scorecards in yesterday_review. Use real equipment_id/channel values from the inventory. Address the agronomist\'s recommendations. Be specific about times and durations.',
-    ].filter(Boolean).join('\n');
-
     const client = this._client_or_throw();
-    const contextToSave = JSON.stringify({ ...context, snapshot_stats: { ...sectionStats(context), user_text_chars: userMessage.length, system_prompt_chars: SYSTEM_PROMPT.length } });
+    const contextToSave = JSON.stringify({ ...context, snapshot_stats: stats });
 
     let response;
     try {
-      const stream = client.messages.stream({
-        model: cfg.model || DEFAULT_MODEL,
-        max_tokens: 24000,
-        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-        output_config: {
-          format: {
-            type: 'json_schema',
-            schema: PLAN_SCHEMA,
-          },
-        },
-        messages: [{ role: 'user', content: userMessage }],
-      });
+      const stream = client.messages.stream(requestBody);
       response = await stream.finalMessage();
     } catch (err) {
       db.prepare(`
@@ -1549,7 +1640,9 @@ class OperationalPlannerService {
     const usage = response.usage || {};
 
     // Deterministic post-LLM cross-check: scan prose vs structured data for mismatches.
-    const warnings = this._findConsistencyWarnings(parsed, context.current_automations || []);
+    const warnings = this._findConsistencyWarnings(parsed, context.current_automations || [], {
+      dataSources, templates: context.templates || [],
+    });
 
     const result = db.prepare(`
       INSERT INTO operational_plans

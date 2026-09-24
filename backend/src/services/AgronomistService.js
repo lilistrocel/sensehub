@@ -24,6 +24,9 @@ const { db } = require('../utils/database');
 const { slimOperatorTasks, sectionStats } = require('./AiSnapshotSlimming');
 const { agronomistCaptureService, buildImageBlock } = require('./AgronomistCaptureService');
 const { getSystemTimezone } = require('../utils/systemTimezone');
+const {
+  aiDataSources, filterLabRows, applyToAgronomistSnapshot, SYSTEM_PROMPT_LINE: DATA_SOURCES_PROMPT_LINE,
+} = require('./AiDataSources');
 
 const DEFAULT_MODEL = 'claude-sonnet-5';
 const DEFAULT_CONFIG_KEY = 'agronomist_config';
@@ -276,11 +279,14 @@ class AgronomistService {
 
   /** Aggregate everything the agent needs to know about a single day.
    *  @param dateStr 'YYYY-MM-DD' (local server date)
+   *  @param opts.dataSources  effectiveConfig() from AiDataSources (default: current setting).
+   *         Disabled sources are OMITTED from the result; excluded equipment rows are dropped.
    */
-  aggregateDailyData(dateStr) {
+  aggregateDailyData(dateStr, opts = {}) {
     const dayStart = `${dateStr} 00:00:00`;
     const dayEnd = `${dateStr} 23:59:59`;
     const cfg = this.getConfig();
+    const dataSources = opts.dataSources || aiDataSources.effective();
 
     // --- Crops (active assignments, not date-scoped — we want current state) ---
     const crops = db.prepare(`
@@ -409,14 +415,16 @@ class AgronomistService {
     };
 
     // --- Lab + AMIC readings, split by zone role (irrigation vs drain) ---
-    const labRows = db.prepare(`
+    //     AMIC rows carry notes "AMIC CHn (...)"; filterLabRows drops the origin(s) the
+    //     operator has taken out of service (ai_data_sources: amic / lab).
+    const labRows = filterLabRows(db.prepare(`
       SELECT lr.id, lr.sample_date, lr.nutrient, lr.value, lr.unit, lr.zone_id, lr.notes,
              z.name AS zone_name
       FROM lab_readings lr
       LEFT JOIN zones z ON lr.zone_id = z.id
       WHERE date(lr.sample_date) = ?
       ORDER BY lr.sample_date DESC
-    `).all(dateStr);
+    `).all(dateStr), dataSources);
 
     const irrigationIds = new Set(cfg.irrigation_zone_ids || []);
     const drainIds = new Set(cfg.drain_zone_ids || []);
@@ -451,13 +459,13 @@ class AgronomistService {
 
     // Latest-known fallback: most recent reading per nutrient × role within last 90 days,
     // so the agent always sees nutrient context even on no-AMIC days.
-    const latestRows = db.prepare(`
-      SELECT lr.nutrient, lr.value, lr.unit, lr.zone_id, lr.sample_date, z.name AS zone_name
+    const latestRows = filterLabRows(db.prepare(`
+      SELECT lr.nutrient, lr.value, lr.unit, lr.zone_id, lr.sample_date, lr.notes, z.name AS zone_name
       FROM lab_readings lr
       LEFT JOIN zones z ON lr.zone_id = z.id
       WHERE date(lr.sample_date) >= date(?, '-90 days')
       ORDER BY lr.sample_date DESC
-    `).all(dateStr);
+    `).all(dateStr), dataSources);
 
     const dayEndMs = new Date(`${dateStr}T23:59:59Z`).getTime();
     for (const r of latestRows) {
@@ -538,7 +546,7 @@ class AgronomistService {
 
     // --- Alerts created today ---
     const alerts = db.prepare(`
-      SELECT a.severity, a.message, a.created_at, a.acknowledged,
+      SELECT a.severity, a.message, a.created_at, a.acknowledged, a.equipment_id,
              e.name AS equipment_name, z.name AS zone_name
       FROM alerts a
       LEFT JOIN equipment e ON a.equipment_id = e.id
@@ -569,7 +577,9 @@ class AgronomistService {
     //     raw hourly averages alone. ---
     const substrateDiagnostics = this._computeSubstrateDiagnostics(dateStr, dayStart, dayEnd);
 
-    return {
+    // Disabled sources are omitted entirely (no null placeholders — they invite the
+    // model to speculate about "missing" data); excluded equipment rows are dropped.
+    return applyToAgronomistSnapshot({
       date: dateStr,
       timezone: process.env.TZ || 'UTC',
       crops,
@@ -592,6 +602,7 @@ class AgronomistService {
         severity: a.severity,
         message: a.message,
         equipment: a.equipment_name,
+        equipment_id: a.equipment_id ?? null,
         zone: a.zone_name,
         acknowledged: !!a.acknowledged,
       })),
@@ -601,7 +612,7 @@ class AgronomistService {
         successes: autoStats.successes || 0,
         drift_events: driftCount,
       },
-    };
+    }, dataSources);
   }
 
   /** Substrate diagnostics, aggregated PER ZONE (not per sensor).
@@ -940,23 +951,33 @@ class AgronomistService {
    * @param p.capture    { capture: row, ageHours, buffer } | null
    * @param p.clarifications  optional override (defaults to the DB thread for that date)
    * @param p.historyBlock    optional override (defaults to _formatHistoryBlock())
-   * @returns { requestBody, stats } — stats = chars per snapshot section + image info
+   * @param p.dataSources     AiDataSources effective config (default: current setting)
+   * @returns { requestBody, stats } — stats = chars per snapshot section + image info + data_sources
    */
-  buildDailyRequest({ date, snapshot, cfg = this.getConfig(), capture = null, clarifications, historyBlock } = {}) {
+  buildDailyRequest({ date, snapshot, cfg = this.getConfig(), capture = null, clarifications, historyBlock, dataSources } = {}) {
     const history = historyBlock ?? this._formatHistoryBlock();
     const systemPrompt = (cfg.system_prompt_override || SYSTEM_PROMPT_BASE).trim()
-      + '\n\n' + CANOPY_PHOTO_INSTRUCTION + '\n\n' + history;
+      + '\n\n' + CANOPY_PHOTO_INSTRUCTION + '\n\n' + DATA_SOURCES_PROMPT_LINE + '\n\n' + history;
 
     // Pull clarifications for this date so a regeneration honors prior user feedback.
     const clars = clarifications ?? this._getClarificationsForDate(date);
     const clarificationsBlock = this._formatClarificationsBlock(clars);
 
+    // Out-of-service systems: replayed snapshots are filtered again (idempotent) so a
+    // dry-run of an old report reflects the CURRENT policy.
+    const ds = dataSources || aiDataSources.effective();
+    const outOfService = aiDataSources.outOfServiceNote({ effective: ds, audience: 'agronomist' });
+    if (!ds.isEnabled('canopy_capture')) capture = null;
+
     // Strip stats if a saved snapshot is replayed, so they are not sent to the model.
-    const { snapshot_stats: _omit, ...snap } = snapshot || {};
+    const { snapshot_stats: _omit, ...rawSnap } = snapshot || {};
+    const snap = applyToAgronomistSnapshot(rawSnap, ds);
     const tz = snap.timezone || getSystemTimezone(db);
 
     let photoLine;
-    if (capture?.buffer?.length) {
+    if (!ds.isEnabled('canopy_capture')) {
+      photoLine = 'The canopy camera is out of service (see the OUT OF SERVICE note below): no photo is attached. Write "no canopy photo — camera out of service" in State of the Crop and do not comment on canopy condition from imagery.';
+    } else if (capture?.buffer?.length) {
       const c = capture.capture || {};
       const when = c.created_at ? new Date(c.created_at) : null;
       const localWhen = when ? new Intl.DateTimeFormat('en-GB', { timeZone: tz, dateStyle: 'medium', timeStyle: 'short' }).format(when) : 'unknown time';
@@ -980,8 +1001,11 @@ class AgronomistService {
       JSON.stringify(snap, null, 2),
       '```',
       '',
-      'Write the daily report. Be specific — name zones, ingredients, ions, equipment by their actual names from the data. Quantify (mg/L, L, °C). Tie every recommendation to the data point that justifies it. The Nutrient Status section MUST address every nutrient that appears in `lab[*].latest_per_nutrient` — if `today` is empty, use the latest_per_nutrient values and call out that they are N days old. Treat `reference_sensors` as the canonical environment readings. If something is missing entirely (no AMIC ever, no soil reading), call it out and recommend a measurement.',
+      'Write the daily report. Be specific — name zones, ingredients, ions, equipment by their actual names from the data. Quantify (mg/L, L, °C). Tie every recommendation to the data point that justifies it. The Nutrient Status section MUST address every nutrient that appears in `lab[*].latest_per_nutrient` — if `today` is empty, use the latest_per_nutrient values and call out that they are N days old. Treat `reference_sensors` as the canonical environment readings. If something is missing entirely (no AMIC ever, no soil reading), call it out and recommend a measurement — unless it is listed as out of service below.',
     ];
+    if (outOfService) {
+      userMessageParts.push('', outOfService);
+    }
     if (clarificationsBlock) {
       userMessageParts.push('', clarificationsBlock);
     }
@@ -1013,6 +1037,8 @@ class AgronomistService {
       image_base64_chars: content[0]?.type === 'image' ? content[0].source.data.length : 0,
       capture_id: capture?.capture?.id ?? null,
       capture_age_hours: capture?.ageHours ?? null,
+      // Effective data-source policy at build time, so a report shows what was excluded.
+      data_sources: ds.summary,
     };
     return { requestBody, stats };
   }
@@ -1034,11 +1060,12 @@ class AgronomistService {
       throw err;
     }
 
-    const snapshot = this.aggregateDailyData(date);
+    const dataSources = aiDataSources.effective();
+    const snapshot = this.aggregateDailyData(date, { dataSources });
 
     // Today's noon canopy capture (or the newest within 36 h) — attached as an image block.
     let captureInfo = null;
-    if (cfg.capture_enabled !== false) {
+    if (cfg.capture_enabled !== false && dataSources.isEnabled('canopy_capture')) {
       try {
         captureInfo = agronomistCaptureService.getCaptureForReport(date, { cameraId: cfg.capture_camera_id || null });
       } catch (err) {
@@ -1046,7 +1073,7 @@ class AgronomistService {
       }
     }
 
-    const { requestBody, stats } = this.buildDailyRequest({ date, snapshot, cfg, capture: captureInfo });
+    const { requestBody, stats } = this.buildDailyRequest({ date, snapshot, cfg, capture: captureInfo, dataSources });
     const captureId = captureInfo?.capture?.id ?? null;
     const snapshotToSave = JSON.stringify({ ...snapshot, snapshot_stats: stats });
 
@@ -1306,13 +1333,26 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
   // -------- queries --------
 
   listReports(limit = 30, offset = 0) {
+    // excluded_sources: keys of the data sources that were out of service when the
+    // report was built (snapshot_stats.data_sources.disabled[].key), without
+    // parsing the whole input_snapshot in JS.
     return db.prepare(`
       SELECT id, report_date, generated_at, model, opinion, summary, status, error, error_class,
-             input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, capture_id
+             input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, capture_id,
+             CASE WHEN json_valid(input_snapshot)
+                  THEN json_extract(input_snapshot, '$.snapshot_stats.data_sources.disabled')
+             END AS excluded_sources_json
       FROM agronomist_reports
       ORDER BY report_date DESC
       LIMIT ? OFFSET ?
-    `).all(limit, offset);
+    `).all(limit, offset).map(({ excluded_sources_json, ...r }) => {
+      let excluded = [];
+      try {
+        const arr = excluded_sources_json ? JSON.parse(excluded_sources_json) : [];
+        excluded = Array.isArray(arr) ? arr.map(d => (typeof d === 'string' ? d : d?.key)).filter(Boolean) : [];
+      } catch {}
+      return { ...r, excluded_sources: excluded };
+    });
   }
 
   getReportByDate(dateStr) {

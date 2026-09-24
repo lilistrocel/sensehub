@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { StatusPill } from '../ui';
+import DataSourcesPanel from '../components/agronomist/DataSourcesPanel';
 
 const API_BASE = '/api';
 
@@ -302,6 +304,9 @@ export default function Agronomist() {
         </div>
       )}
 
+      {/* Data sources: what the agronomist + planner may look at (shared setting) */}
+      <DataSourcesPanel headers={headers} canEdit={canControl} equipment={equipment} />
+
       {/* Settings panel */}
       {showSettings && config && isAdmin && (
         <SettingsPanel config={config} zones={zones} equipment={equipment} onSave={saveConfig} onWeeklyRollup={runWeeklyRollup} onClose={() => setShowSettings(false)} />
@@ -333,8 +338,16 @@ export default function Agronomist() {
                         selectedReport?.id === r.id ? 'bg-primary-50 dark:bg-primary-900/20 border-l-4 border-primary-500' : ''
                       }`}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-sm font-medium text-gray-900 dark:text-white">{r.report_date}</span>
+                        {r.excluded_sources?.length > 0 && (
+                          <StatusPill
+                            state="caution"
+                            className="ml-auto"
+                            text={`${r.excluded_sources.length} source${r.excluded_sources.length === 1 ? '' : 's'} excluded`}
+                            title={`Out of service when this report was built: ${r.excluded_sources.join(', ')}`}
+                          />
+                        )}
                         {r.status === 'failure' && (
                           <span
                             className="text-xs px-1.5 py-0.5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 rounded"
