@@ -143,8 +143,59 @@ class ModbusTcpClient {
       ...options
     };
 
-    // Start idle connection cleanup
+    // Per-unit inter-request gap. Map<"host:port:unit", ms> — a device that
+    // drops back-to-back frames (SEKO) gets a pause before every request to
+    // it, whoever issues it (poller, /api/modbus, relay writes).
+    this.unitGaps = new Map();
+    // Map<"host:port:unit", ms timestamp> when the last request to that unit
+    // finished (resolved, rejected or timed out).
+    this.lastRequestEnd = new Map();
+    // Injectable clock/sleep so the gap timing is unit-testable.
+    this._now = typeof options.now === 'function' ? options.now : () => Date.now();
+    this._sleep = typeof options.sleep === 'function' ? options.sleep : (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Start idle connection cleanup (unref: never keeps a process alive on its own)
     this.cleanupInterval = setInterval(() => this.cleanupIdleConnections(), 30000);
+    if (this.cleanupInterval && typeof this.cleanupInterval.unref === 'function') this.cleanupInterval.unref();
+  }
+
+  /** Key for the per-unit gap bookkeeping. */
+  getUnitKey(host, port, unitId = 1) {
+    return `${host}:${port}:${unitId}`;
+  }
+
+  /**
+   * Set the minimum pause (ms) between consecutive requests to one unit.
+   * 0 (or anything non-positive) removes the gap.
+   */
+  setRequestGap(host, port, unitId, gapMs) {
+    const key = this.getUnitKey(host, port, unitId);
+    const ms = Number(gapMs);
+    if (Number.isFinite(ms) && ms > 0) this.unitGaps.set(key, ms);
+    else this.unitGaps.delete(key);
+  }
+
+  getRequestGap(host, port, unitId) {
+    return this.unitGaps.get(this.getUnitKey(host, port, unitId)) || 0;
+  }
+
+  /**
+   * Wait until at least gap ms have passed since the last request to this
+   * unit finished. Resolves immediately when no gap is configured.
+   */
+  async waitForUnitGap(unitKey) {
+    const gap = this.unitGaps.get(unitKey);
+    if (!gap) return 0;
+    const last = this.lastRequestEnd.get(unitKey);
+    if (last === undefined) return 0;
+    const remaining = gap - (this._now() - last);
+    if (remaining <= 0) return 0;
+    await this._sleep(remaining);
+    return remaining;
+  }
+
+  markRequestEnd(unitKey) {
+    this.lastRequestEnd.set(unitKey, this._now());
   }
 
   /**
@@ -242,6 +293,7 @@ class ModbusTcpClient {
         options.timeout || this.config.defaultTimeout,
         options.retries || this.config.defaultRetries
       );
+      request.unitKey = this.getUnitKey(host, port, unitId);
 
       let queue = this.requestQueues.get(key);
       if (!queue) {
@@ -283,13 +335,20 @@ class ModbusTcpClient {
       return;
     }
 
+    const unitKey = request.unitKey || null;
+
     while (request.attempts < request.retries) {
       request.attempts++;
 
+      // Honour the per-unit inter-request gap (before every attempt, so a
+      // retry after a timeout also gives the device its breathing room).
+      if (unitKey) await this.waitForUnitGap(unitKey);
+
+      let timer = null;
       try {
         // Set up timeout
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Request timeout')), request.timeout);
+          timer = setTimeout(() => reject(new Error('Request timeout')), request.timeout);
         });
 
         // Execute the operation
@@ -298,11 +357,23 @@ class ModbusTcpClient {
           timeoutPromise
         ]);
 
+        if (timer) clearTimeout(timer);
+        if (unitKey) this.markRequestEnd(unitKey);
         connection.updateActivity();
         request.resolve(result);
         return;
       } catch (error) {
+        if (timer) clearTimeout(timer);
+        if (unitKey) this.markRequestEnd(unitKey);
         console.error(`[Modbus] Request failed (attempt ${request.attempts}/${request.retries}):`, error.message);
+
+        // A Modbus exception response is the device deliberately refusing
+        // the request (illegal address/function/value). Retrying gets the
+        // same answer, so surface it right away.
+        if (error && error.modbusCode !== undefined && error.modbusCode !== null) {
+          request.reject(error);
+          return;
+        }
 
         // Handle connection errors
         if (error.message.includes('Port Not Open') ||
@@ -476,6 +547,7 @@ class ModbusTcpClient {
         3000, // timeout for the whole operation
         1     // only 1 attempt — no retries for fire-and-forget
       );
+      request.unitKey = this.getUnitKey(host, port, unitId);
 
       let queue = this.requestQueues.get(key);
       if (!queue) {
@@ -525,6 +597,7 @@ class ModbusTcpClient {
         3000,
         1
       );
+      request.unitKey = this.getUnitKey(host, port, unitId);
 
       let queue = this.requestQueues.get(key);
       if (!queue) {

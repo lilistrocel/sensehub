@@ -30,6 +30,18 @@ function refreshPolling() {
 
 const router = express.Router();
 
+// request_gap_ms body field -> { value } (undefined when not supplied) or { error }.
+// The pause between consecutive Modbus requests to one device; 0 = none.
+function parseRequestGap(raw) {
+  if (raw === undefined) return { value: undefined };
+  if (raw === null || raw === '') return { value: 0 };
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 5000) {
+    return { error: 'Request gap must be a whole number of milliseconds between 0 and 5000' };
+  }
+  return { value: n };
+}
+
 // Helper: get disabled register names for a specific equipment
 function getDisabledNamesForEquipment(equipmentId) {
   try {
@@ -95,10 +107,15 @@ router.get('/', (req, res) => {
 
 // POST /api/equipment - Create equipment
 router.post('/', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings, write_only } = req.body;
+  const { name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings, write_only, request_gap_ms } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Bad Request', message: 'Name is required' });
+  }
+
+  const gap = parseRequestGap(request_gap_ms);
+  if (gap.error) {
+    return res.status(400).json({ error: 'Bad Request', message: gap.error });
   }
 
   // Validate Modbus-specific fields if protocol is Modbus
@@ -122,7 +139,7 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
     (typeof register_mappings === 'string' ? register_mappings : JSON.stringify(register_mappings)) : null;
 
   const result = db.prepare(
-    'INSERT INTO equipment (name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings, write_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO equipment (name, description, type, protocol, address, slave_id, polling_interval_ms, register_mappings, write_only, request_gap_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     name,
     description,
@@ -132,7 +149,8 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
     slave_id ? parseInt(slave_id) : null,
     polling_interval_ms ? parseInt(polling_interval_ms) : 1000,
     registerMappingsJson,
-    write_only ? 1 : 0
+    write_only ? 1 : 0,
+    gap.value ?? 0
   );
 
   const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(result.lastInsertRowid);
@@ -183,13 +201,18 @@ router.get('/:id', (req, res) => {
 
 // PUT /api/equipment/:id - Update equipment
 router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
-  const { name, description, type, protocol, address, enabled, slave_id, polling_interval_ms, register_mappings, write_only } = req.body;
+  const { name, description, type, protocol, address, enabled, slave_id, polling_interval_ms, register_mappings, write_only, request_gap_ms } = req.body;
   const equipmentId = req.params.id;
 
   const equipment = db.prepare('SELECT * FROM equipment WHERE id = ?').get(equipmentId);
 
   if (!equipment) {
     return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
+  }
+
+  const gap = parseRequestGap(request_gap_ms);
+  if (gap.error) {
+    return res.status(400).json({ error: 'Bad Request', message: gap.error });
   }
 
   // Determine the effective protocol for validation
@@ -219,7 +242,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   }
 
   db.prepare(
-    "UPDATE equipment SET name = ?, description = ?, type = ?, protocol = ?, address = ?, enabled = ?, slave_id = ?, polling_interval_ms = ?, register_mappings = ?, write_only = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE equipment SET name = ?, description = ?, type = ?, protocol = ?, address = ?, enabled = ?, slave_id = ?, polling_interval_ms = ?, register_mappings = ?, write_only = ?, request_gap_ms = ?, updated_at = datetime('now') WHERE id = ?"
   ).run(
     name ?? equipment.name,
     description ?? equipment.description,
@@ -231,6 +254,7 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
     polling_interval_ms !== undefined ? (polling_interval_ms ? parseInt(polling_interval_ms) : 1000) : equipment.polling_interval_ms,
     registerMappingsJson,
     write_only !== undefined ? (write_only ? 1 : 0) : (equipment.write_only || 0),
+    gap.value !== undefined ? gap.value : (equipment.request_gap_ms || 0),
     equipmentId
   );
 

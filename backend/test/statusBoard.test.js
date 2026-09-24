@@ -90,7 +90,7 @@ for (const [label, overrides, reason] of [
   ['disabled equipment', { enabled: 0 }, 'disabled'],
   ['write_only equipment', { write_only: 1 }, 'write_only'],
   ['offline equipment', { status: 'offline' }, 'offline'],
-  ['stale last_communication (> 2x poll)', { last_communication: iso(31000) }, 'stale'],
+  ['stale last_communication (> 3x poll, 90 s floor)', { last_communication: iso(91000) }, 'stale'],
   ['missing last_communication', { last_communication: null }, 'stale'],
 ]) {
   test(`unknown state: ${label} -> state null (never false), unknown counted`, () => {
@@ -110,8 +110,10 @@ for (const [label, overrides, reason] of [
   });
 }
 
-test('last_communication exactly at 2x poll is still fresh; SQLite-format timestamps accepted', () => {
-  const fresh = board({ last_communication: iso(30000) });
+test('last_communication within the 90 s floor is still fresh (one missed 15 s poll never flips a tile); SQLite-format timestamps accepted', () => {
+  // 3 x 15 s = 45 s, but the floor is 90 s: 31 s (one missed poll) and exactly 90 s are both fresh
+  assert.equal(sb.channelUnknownReason(board({ last_communication: iso(31000) }), NOW), null);
+  const fresh = board({ last_communication: iso(90000) });
   assert.equal(sb.channelUnknownReason(fresh, NOW), null);
   const sqlite = board({ last_communication: new Date(NOW - 1000).toISOString().replace('T', ' ').slice(0, 19) });
   assert.equal(sb.channelUnknownReason(sqlite, NOW), null);
@@ -132,9 +134,15 @@ test('buildRelayGroups attaches last event ts/source and flags an unconfirmed la
   assert.equal(groups.small_fans.channels[0].lastChangeTs, null);
 });
 
-test('isStale: 2x poll interval, or 5 min when the interval is unknown', () => {
-  assert.equal(sb.isStale(NOW - 59000, 30000, NOW), false);
-  assert.equal(sb.isStale(NOW - 61000, 30000, NOW), true);
+test('isStale: 3x poll interval with a 90 s floor, or 5 min when the interval is unknown', () => {
+  assert.equal(sb.staleLimitMs(30000), 90000);
+  assert.equal(sb.staleLimitMs(15000), 90000);   // floor
+  assert.equal(sb.staleLimitMs(60000), 180000);
+  assert.equal(sb.staleLimitMs(null), sb.DEFAULT_STALE_MS);
+  // one missed 30 s poll (61 s) is NOT stale any more; two missed polls (91 s) is
+  assert.equal(sb.isStale(NOW - 61000, 30000, NOW), false);
+  assert.equal(sb.isStale(NOW - 89000, 30000, NOW), false);
+  assert.equal(sb.isStale(NOW - 91000, 30000, NOW), true);
   assert.equal(sb.isStale(NOW - 4 * 60000, null, NOW), false);
   assert.equal(sb.isStale(NOW - 6 * 60000, null, NOW), true);
   assert.equal(sb.isStale(null, 30000, NOW), true);
@@ -148,7 +156,7 @@ test('buildClimate reads values, averages substrate temp, excludes disabled equi
       last_reading: JSON.stringify({ values: { Temperature: { value: 99, unit: '°C' } } }) },
     { id: 7, enabled: 1, polling_interval_ms: 30000, last_communication: iso(5000),
       last_reading: JSON.stringify({ values: { 'Substrate Temperature': { value: 30, unit: '°C' }, 'Substrate Moisture': { value: 40.5, unit: '%' }, 'Pore EC': { value: 1536, unit: 'µS/cm' } } }) },
-    { id: 12, enabled: 1, polling_interval_ms: 30000, last_communication: iso(70000),
+    { id: 12, enabled: 1, polling_interval_ms: 30000, last_communication: iso(100000),
       last_reading: JSON.stringify({ values: { 'Substrate Temperature': { value: 32, unit: '°C' }, 'Substrate Moisture': { value: 44, unit: '%' } } }) },
     { id: 17, enabled: 1, polling_interval_ms: 30000, last_communication: iso(5000),
       last_reading: JSON.stringify({ values: { pH: { value: 5.39, unit: 'pH' }, 'Water EC': { value: 1612.6, unit: 'µS/cm' }, 'Water Temperature': { value: 35.3, unit: '°C' } } }) },
@@ -163,7 +171,7 @@ test('buildClimate reads values, averages substrate temp, excludes disabled equi
   // disabled exposed sensor is excluded -> null value, stale
   assert.equal(climate.temp_exposed.value, null);
   assert.equal(climate.temp_exposed.stale, true);
-  // substrate temp = mean of 7 and 12; sensor 12 is stale (70 s > 2x30 s) so the tile is stale
+  // substrate temp = mean of 7 and 12; sensor 12 is stale (100 s > 3x30 s) so the tile is stale
   assert.equal(climate.substrate_temp.value, 31);
   assert.deepEqual(climate.substrate_temp.equipment_id, [7, 12]);
   assert.equal(climate.substrate_temp.stale, true);

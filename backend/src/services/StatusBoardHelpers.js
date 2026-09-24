@@ -39,6 +39,17 @@ const CLIMATE_SPEC = [
 ];
 
 const DEFAULT_STALE_MS = 5 * 60 * 1000;
+// A reading is stale after STALE_POLL_MULTIPLIER missed polls (but never
+// sooner than MIN_STALE_MS), so one dropped cycle does not flip a tile.
+const STALE_POLL_MULTIPLIER = 3;
+const MIN_STALE_MS = 90 * 1000;
+
+/** Staleness limit (ms) for a device polled every pollMs (5 min when unknown). */
+function staleLimitMs(pollMs) {
+  const p = Number(pollMs);
+  if (!(p > 0)) return DEFAULT_STALE_MS;
+  return Math.max(STALE_POLL_MULTIPLIER * p, MIN_STALE_MS);
+}
 
 /**
  * Parse a stored timestamp. SQLite datetime('now') yields 'YYYY-MM-DD HH:MM:SS'
@@ -95,16 +106,17 @@ function channelUnknownReason(equipment, nowMs = Date.now()) {
   const pollMs = Number(equipment.polling_interval_ms) || 0;
   const lastMs = parseTs(equipment.last_communication);
   if (lastMs === null) return 'stale';
-  if (pollMs > 0 && nowMs - lastMs > 2 * pollMs) return 'stale';
-  if (pollMs <= 0 && nowMs - lastMs > DEFAULT_STALE_MS) return 'stale';
+  if (nowMs - lastMs > staleLimitMs(pollMs)) return 'stale';
   return null;
 }
 
-/** A reading is stale when older than 2x the device's poll interval (5 min when unknown). */
+/**
+ * A reading is stale when older than 3x the device's poll interval, with a
+ * 90 s floor (5 min when the interval is unknown).
+ */
 function isStale(tsMs, pollMs, nowMs = Date.now()) {
   if (tsMs === null || tsMs === undefined) return true;
-  const limit = Number(pollMs) > 0 ? 2 * Number(pollMs) : DEFAULT_STALE_MS;
-  return nowMs - tsMs > limit;
+  return nowMs - tsMs > staleLimitMs(pollMs);
 }
 
 /**
@@ -235,6 +247,9 @@ module.exports = {
   CLIMATE_SPEC,
   IRRIGATION_EQUIPMENT_IDS,
   DEFAULT_STALE_MS,
+  STALE_POLL_MULTIPLIER,
+  MIN_STALE_MS,
+  staleLimitMs,
   parseTs,
   toIso,
   groupKeyForChannel,

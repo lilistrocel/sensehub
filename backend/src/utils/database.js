@@ -71,6 +71,7 @@ const initSchema = () => {
       slave_id INTEGER,
       polling_interval_ms INTEGER DEFAULT 1000,
       register_mappings TEXT,
+      request_gap_ms INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -966,6 +967,18 @@ const initSchema = () => {
     }
   } catch (err) {
     console.log('write_only column already exists or migration skipped');
+  }
+
+  // Add request_gap_ms: pause between consecutive Modbus requests to one
+  // device (some controllers, e.g. SEKO Kontrol 800, drop back-to-back frames)
+  try {
+    const eqCols = db.pragma("table_info(equipment)").map(col => col.name);
+    if (!eqCols.includes('request_gap_ms')) {
+      db.exec('ALTER TABLE equipment ADD COLUMN request_gap_ms INTEGER DEFAULT 0');
+      console.log('Added request_gap_ms column to equipment table');
+    }
+  } catch (err) {
+    console.error('request_gap_ms migration failed:', err.message);
   }
 
   // Add template_id column to automations table if it doesn't exist

@@ -13,13 +13,22 @@
 const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const interlock = require('./RelayInterlockService');
+const blockReads = require('./ModbusBlockReads');
 
 /**
  * Errors that mean the whole device (not one register) is unreachable.
  * When one of these is hit mid-cycle there is no point trying the remaining
  * registers — each attempt would just burn another connect timeout.
+ * (Defined in ModbusBlockReads so the block reader bails out the same way.)
  */
-const CONNECTION_ERROR_RE = /ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|Port Not Open|Connection not found|Max reconnect/i;
+const CONNECTION_ERROR_RE = blockReads.CONNECTION_ERROR_RE;
+
+/** Clamp a stored request_gap_ms to what the API accepts (0-5000). */
+function normalizeGapMs(value) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(5000, n);
+}
 
 /**
  * Device polling state tracker
@@ -33,6 +42,14 @@ class DevicePollingState {
     this.pollingInterval = equipment.polling_interval_ms || 1000;
     this.registerMappings = this.parseRegisterMappings(equipment.register_mappings);
     this.writeOnly = !!equipment.write_only;
+
+    // Pause between consecutive Modbus requests to this device. Some
+    // controllers (SEKO Kontrol 800) drop back-to-back frames.
+    this.requestGapMs = normalizeGapMs(equipment.request_gap_ms);
+
+    // Fallback read mode per block ('split' / 'single') for blocks this
+    // device would not answer whole. A new state (config reload) resets it.
+    this.runModes = new Map();
 
     // Relay boards (any coil / FC01 mapping). The v2 relay firmware latches
     // every relay OFF after 60 s without a Modbus frame addressed to it, and
@@ -365,6 +382,7 @@ class ModbusPollingService {
       for (const item of equipment) {
         const state = new DevicePollingState(item);
         this.devices.set(item.id, state);
+        this.applyRequestGap(state);
       }
 
       console.log(`[Polling] Loaded ${equipment.length} Modbus devices`);
@@ -396,7 +414,9 @@ class ModbusPollingService {
         if (!currentIds.has(id)) {
           console.log(`[Polling] Removing device ${id} (no longer active)`);
           this.stopDevicePolling(id);
+          const gone = this.devices.get(id);
           this.devices.delete(id);
+          if (gone) { gone.requestGapMs = 0; this.applyRequestGap(gone); }
         }
       }
 
@@ -406,24 +426,43 @@ class ModbusPollingService {
           console.log(`[Polling] Adding new device ${item.id} (${item.name})`);
           const state = new DevicePollingState(item);
           this.devices.set(item.id, state);
+          this.applyRequestGap(state);
           this.startDevicePolling(item.id);
         } else {
           // Update configuration if changed
           const existingState = this.devices.get(item.id);
           if (existingState.pollingInterval !== item.polling_interval_ms ||
               existingState.address !== item.address ||
+              existingState.slaveId !== (item.slave_id || 1) ||
+              existingState.requestGapMs !== normalizeGapMs(item.request_gap_ms) ||
               JSON.stringify(existingState.registerMappings) !== item.register_mappings) {
             console.log(`[Polling] Updating device ${item.id} configuration`);
             this.stopDevicePolling(item.id);
             const newState = new DevicePollingState(item);
             newState.consecutiveErrors = existingState.consecutiveErrors;
             this.devices.set(item.id, newState);
+            this.applyRequestGap(newState);
             this.startDevicePolling(item.id);
           }
         }
       }
     } catch (error) {
       console.error('[Polling] Error refreshing devices:', error.message);
+    }
+  }
+
+  /**
+   * Tell the shared Modbus client about this device's inter-request gap so
+   * manual reads (/api/modbus) and relay writes to the same host:port:unit
+   * respect it too, not just the poller.
+   */
+  applyRequestGap(state) {
+    const addressInfo = state.parseAddress();
+    if (!addressInfo) return;
+    try {
+      modbusTcpClient.setRequestGap(addressInfo.host, addressInfo.port, state.slaveId, state.requestGapMs);
+    } catch (e) {
+      console.error(`[Polling] Could not apply request gap for device ${state.equipmentId}:`, e.message);
     }
   }
 
@@ -529,57 +568,45 @@ class ModbusPollingService {
     state.lastPollTime = Date.now();
 
     try {
-      const readings = [];
       const { host, port } = addressInfo;
 
-      // Per-cycle error bookkeeping: we log ONE line per failed cycle (in
-      // handleDeviceError), never one per register.
-      let attempted = 0;
-      let failed = 0;
-      let lastRegError = null;
-      let connectionError = null;
-
-      // Read each configured register mapping (skip disabled ones)
-      for (const mapping of state.registerMappings) {
-        if (mapping.enabled === false) continue;
-        attempted++;
-        try {
-          const regAddress = mapping.address ?? mapping.register;
-          const value = await this.readRegister(host, port, state.slaveId, mapping);
-
-          if (value !== null) {
-            readings.push({
-              name: mapping.name || `Register ${regAddress}`,
-              value,
-              unit: mapping.unit || '',
-              registerAddress: regAddress,
-              functionCode: this.getFunctionCode(mapping)
-            });
-          }
-        } catch (regError) {
-          failed++;
-          lastRegError = regError;
-          // Device-level failure: the host is unreachable, so every remaining
-          // register would fail the same way. Bail out of the cycle now instead
-          // of paying a connect timeout per register.
-          if (CONNECTION_ERROR_RE.test(regError.message || '')) {
-            connectionError = regError;
-            break;
-          }
+      // Read every enabled mapping with contiguous block reads (one request
+      // per run of adjacent registers / coils per function code). Per-cycle
+      // error bookkeeping stays per mapping: ONE log line per failed cycle
+      // (in handleDeviceError), never one per register. A connection-level
+      // error aborts the cycle instead of paying a connect timeout per read;
+      // a Modbus exception on a block falls back to per-mapping reads.
+      const result = await blockReads.readMappings(
+        modbusTcpClient,
+        { host, port, unitId: state.slaveId },
+        state.registerMappings,
+        {
+          interpret: (words, mapping) => this.interpretRegisterValue(words, mapping),
+          runModes: state.runModes,
+          gapMs: state.requestGapMs,
+          log: (msg) => console.warn(`[Polling] Device ${equipmentId} (${state.name}): ${msg}`),
         }
-      }
+      );
+
+      const readings = result.readings.map(r => ({
+        name: r.mapping.name || `Register ${r.mapping.address ?? r.mapping.register}`,
+        value: r.value,
+        unit: r.mapping.unit || '',
+        registerAddress: r.mapping.address ?? r.mapping.register,
+        functionCode: r.functionCode
+      }));
 
       // If we got any readings, update the device
       if (readings.length > 0) {
-        if (failed > 0) {
-          console.warn(`[Polling] Device ${equipmentId} (${state.name}): ${failed}/${attempted} register(s) failed this cycle: ${lastRegError?.message}`);
+        if (result.failed > 0) {
+          console.warn(`[Polling] Device ${equipmentId} (${state.name}): ${result.failed}/${result.attempted} register(s) failed this cycle: ${result.lastError?.message}`);
         }
         await this.updateDeviceWithReadings(equipmentId, state, readings);
         state.recordSuccess();
       } else {
         // No readings obtained - surface the real cause (connection error if
         // there was one) so the error log is useful
-        throw connectionError || lastRegError || new Error('No readings obtained from device');
+        throw result.connectionError || result.lastError || new Error('No readings obtained from device');
       }
 
     } catch (error) {
@@ -630,24 +657,7 @@ class ModbusPollingService {
    * Supports both explicit functionCode and type-based lookup.
    */
   getFunctionCode(mapping) {
-    // Explicit functionCode takes priority
-    if (mapping.functionCode !== undefined) {
-      return parseInt(mapping.functionCode, 10);
-    }
-    // Map register type names to function codes
-    const typeMap = {
-      'coil': 1,
-      'discrete': 2,
-      'discreteInput': 2,
-      'holding': 3,
-      'holdingRegister': 3,
-      'input': 4,
-      'inputRegister': 4
-    };
-    if (mapping.type && typeMap[mapping.type]) {
-      return typeMap[mapping.type];
-    }
-    return 3; // Default: holding registers
+    return blockReads.getFunctionCode(mapping);
   }
 
   /**
@@ -655,6 +665,9 @@ class ModbusPollingService {
    * Supports both mapping formats:
    *   - {address, functionCode, quantity} (explicit)
    *   - {register, type, dataType}        (equipment template style)
+   *
+   * The polling cycle now goes through ModbusBlockReads.readMappings; this
+   * stays for one-off callers that want a single mapping read.
    */
   async readRegister(host, port, unitId, mapping) {
     const address = parseInt(mapping.address ?? mapping.register, 10);
@@ -1142,6 +1155,8 @@ class ModbusPollingService {
         slaveId: state.slaveId,
         pollingInterval: state.pollingInterval,
         effectiveInterval: state.getEffectiveInterval(),
+        requestGapMs: state.requestGapMs,
+        blockFallbacks: state.runModes.size,
         registerMappings: state.registerMappings.length,
         hasCoils: state.hasCoils,
         consecutiveErrors: state.consecutiveErrors,

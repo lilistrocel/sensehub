@@ -15,6 +15,7 @@ const EMPTY_FORM = {
   address: '',
   slave_id: '',
   polling_interval_ms: '1000',
+  request_gap_ms: '0',
   register_mappings: []
 };
 
@@ -26,6 +27,7 @@ const fromEquipment = (equipment) => ({
   address: equipment.address || '',
   slave_id: equipment.slave_id !== null && equipment.slave_id !== undefined ? String(equipment.slave_id) : '',
   polling_interval_ms: equipment.polling_interval_ms ? String(equipment.polling_interval_ms) : '1000',
+  request_gap_ms: equipment.request_gap_ms ? String(equipment.request_gap_ms) : '0',
   register_mappings: Array.isArray(equipment.register_mappings) ? equipment.register_mappings : []
 });
 
@@ -88,6 +90,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSuccess, token, 
       const modbusFields = formData.protocol === 'modbus' ? {
         slave_id: formData.slave_id ? parseInt(formData.slave_id, 10) : null,
         polling_interval_ms: formData.polling_interval_ms ? parseInt(formData.polling_interval_ms, 10) : 1000,
+        request_gap_ms: formData.request_gap_ms ? parseInt(formData.request_gap_ms, 10) : 0,
         register_mappings: formData.register_mappings.length > 0 ? formData.register_mappings : null
       } : {};
 
@@ -204,6 +207,11 @@ export default function EquipmentFormModal({ isOpen, onClose, onSuccess, token, 
               <div>
                 <label htmlFor={`${idp}polling_interval_ms`} className={LABEL}>Polling interval (ms)</label>
                 <input type="number" id={`${idp}polling_interval_ms`} name="polling_interval_ms" min="100" max="60000" step="100" value={formData.polling_interval_ms} onChange={handleChange} className="w-full font-mono" placeholder="1000" />
+              </div>
+              <div>
+                <label htmlFor={`${idp}request_gap_ms`} className={LABEL}>Request gap (ms)</label>
+                <input type="number" id={`${idp}request_gap_ms`} name="request_gap_ms" min="0" max="5000" step="50" value={formData.request_gap_ms} onChange={handleChange} className="w-full font-mono" placeholder="0" aria-describedby={`${idp}request_gap_ms-help`} />
+                <p id={`${idp}request_gap_ms-help`} className="mt-1 text-xs text-muted">Pause between consecutive Modbus requests to this device. Some controllers, e.g. SEKO, drop back-to-back requests. 0 = none.</p>
               </div>
             </div>
 
