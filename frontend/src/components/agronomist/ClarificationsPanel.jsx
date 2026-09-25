@@ -21,7 +21,7 @@ export default function ClarificationsPanel({ report, canControl, headers, onUpd
       return;
     }
     if (regenerate && !window.confirm(
-      'Regenerate the report now with this clarification? This will call Claude and overwrite the current report. The previous version is not preserved.'
+      'Regenerate the report now with this clarification? This will call Claude and replace the current report if the new one passes its checks. If regeneration fails, the current report is kept.'
     )) return;
 
     setPosting(regenerate ? 'regenerate' : 'add');
@@ -31,8 +31,13 @@ export default function ClarificationsPanel({ report, canControl, headers, onUpd
         headers,
         body: JSON.stringify({ message: message.trim(), regenerate: !!regenerate }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // The clarification itself is saved even when regeneration fails; reload so
+        // the thread and the kept report's 'regenerate failed' marker show.
+        if (data.clarification) { setMessage(''); onUpdated(null); }
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
       setMessage('');
       if (regenerate && data.regenerated) {
         showSuccess('Clarification posted and report regenerated');

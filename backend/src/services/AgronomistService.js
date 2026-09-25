@@ -27,9 +27,20 @@ const { getSystemTimezone } = require('../utils/systemTimezone');
 const {
   aiDataSources, filterLabRows, applyToAgronomistSnapshot, SYSTEM_PROMPT_LINE: DATA_SOURCES_PROMPT_LINE,
 } = require('./AiDataSources');
+const {
+  REPORT_OUTPUT_SCHEMA, REPORT_FORMAT_INSTRUCTION, validateReportOutput, normaliseSections, composeFullMarkdown,
+} = require('./agronomistReportFormat');
 
 const DEFAULT_MODEL = 'claude-sonnet-5';
 const DEFAULT_CONFIG_KEY = 'agronomist_config';
+// Daily report output budget. Thinking + JSON share it; 16000 left ~2k after
+// thinking (report 181 used 14000). Above ~21k the SDK refuses non-streaming
+// calls, so the daily report streams (see _callReportModel).
+const REPORT_MAX_TOKENS = 32000;
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const DEFAULT_EFFORT = 'medium';
+// One retry when the output fails validation / stops early (a regenerate costs ~1 report).
+const REPORT_MAX_ATTEMPTS = 2;
 const clampInt = (v, lo, hi, dflt) => { const n = parseInt(v, 10); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
 const TIER3_MAX_BYTES = 5120;
 const TIER1_WINDOW = 7;
@@ -64,47 +75,18 @@ Be skeptical of physically implausible sensor readings:
 const CANOPY_PHOTO_INSTRUCTION = `Canopy photos:
 - The user message may start with up to three JPEGs from the greenhouse camera. When several are attached they are the SAME scene taken seconds to minutes apart (a burst, so one blurry frame does not spoil the day): use the sharpest one for detail and the others only to confirm what you see — do not describe them as different views or different times of day.
 - The text right after the images states exactly what they are (today's noon session, a manual capture, routine 4-hourly snapshots, or an older frame), their local capture times, their age and a sharpness score per frame. Cite that time and provenance when you refer to a photo; never call a fallback frame "the noon capture".
-- Assess what the sensors cannot see: canopy colour (chlorosis, purpling, scorch), turgor and wilting, leaf posture (epinasty, cupping, curling), visible pests, disease, mildew or rot, fruit set, algae or salt crust on the substrate, dripper/valve leaks, anything out of place. Flag it under Risks & Anomalies and tie it to the sensor data where possible.
+- Assess what the sensors cannot see: canopy colour (chlorosis, purpling, scorch), turgor and wilting, leaf posture (epinasty, cupping, curling), visible pests, disease, mildew or rot, fruit set, algae or salt crust on the substrate, dripper/valve leaks, anything out of place. Flag it in the risks section and tie it to the sensor data where possible.
 - Keep it proportionate: a single wide frame cannot confirm early-stage pests — say what would need a close-up or a physical check.
-- If no photo is attached, or the frames are older than the report day, say so explicitly in State of the Crop ("no canopy photo available for today") rather than guessing at canopy condition.`;
+- If no photo is attached, or the frames are older than the report day, say so explicitly in the crop section ('no canopy photo available for today') rather than guessing at canopy condition.`;
 
-const REPORT_OUTPUT_SCHEMA = {
-  type: 'object',
-  properties: {
-    opinion: {
-      type: 'string',
-      description: '1-2 sentence headline opinion about how the farm is doing today. Direct, no hedging.',
-    },
-    summary: {
-      type: 'string',
-      description: 'A self-contained ≤500-char paragraph capturing what happened today and why it matters. This becomes part of the rolling history for future reports.',
-    },
-    full_markdown: {
-      type: 'string',
-      description: 'Full agronomist report in markdown. Use sections: ## State of the Crop, ## Irrigation & Fertigation, ## Nutrient Status (AMIC + Lab), ## Risks & Anomalies, ## Recommendations.',
-    },
-    recommendations: {
-      type: 'array',
-      description: 'Prioritized actionable recommendations for the operator.',
-      items: {
-        type: 'object',
-        properties: {
-          priority: { type: 'string', enum: ['high', 'medium', 'low'] },
-          action: { type: 'string', description: 'What to do, concretely.' },
-          rationale: { type: 'string', description: 'Why, tied to today\'s data.' },
-        },
-        required: ['priority', 'action', 'rationale'],
-        additionalProperties: false,
-      },
-    },
-    operator_tasks_requests: {
-      type: 'string',
-      description: 'JSON array string of actionable tasks the human operator must do that depend on physical farm interventions — measurements, drilling drain holes, refilling tanks, calibrating sensors, etc. Use "[]" if none. Each entry is an object: {title (short, imperative), description, category ("physical"|"measurement"|"tutorial"|"config_change"), priority ("low"|"medium"|"high"|"critical"), instructions (markdown step-by-step), expected_outcome (what should be observed when done), target_entity (free text, e.g. "Tank 1", "AMIC CH1")}. The recommendations field stays in your prose narrative — operator_tasks_requests are STRUCTURED, tracked, with confirm/decline feedback flowing back into your next report. Reference them in full_markdown so the operator understands the context.',
-    },
-  },
-  required: ['opinion', 'summary', 'full_markdown', 'recommendations', 'operator_tasks_requests'],
-  additionalProperties: false,
-};
+/** agronomist_reports.sections JSON → object, or null (old reports / bad JSON). */
+function parseSectionsColumn(json) {
+  if (!json) return null;
+  try {
+    const v = JSON.parse(json);
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  } catch { return null; }
+}
 
 /** JSON array column → int[] (falls back to the single capture_id). */
 function parseIds(json, single) {
@@ -183,6 +165,9 @@ class AgronomistService {
       reference_humidity_equipment_id: null,
       reference_soil_equipment_id: null,
       system_prompt_override: null,
+      // Daily report thinking depth (output_config.effort). medium keeps most of the
+      // output budget for the report; high spent ~10k of 11k tokens thinking.
+      effort: DEFAULT_EFFORT,
       // Noon canopy capture (SnapshotService fires it daily at 12:00 local)
       capture_enabled: true,
       capture_camera_id: null,   // null = first enabled camera
@@ -217,6 +202,7 @@ class AgronomistService {
       reference_humidity_equipment_id: merged.reference_humidity_equipment_id || null,
       reference_soil_equipment_id: merged.reference_soil_equipment_id || null,
       system_prompt_override: merged.system_prompt_override || null,
+      effort: (EFFORT_LEVELS.includes(merged.effort) || merged.effort === 'default') ? merged.effort : DEFAULT_EFFORT,
       capture_enabled: merged.capture_enabled !== false,
       capture_camera_id: merged.capture_camera_id ? parseInt(merged.capture_camera_id, 10) || null : null,
       capture_preset_id: merged.capture_preset_id ? parseInt(merged.capture_preset_id, 10) || null : null,
@@ -249,7 +235,9 @@ class AgronomistService {
    *   'billing'    — HTTP 400 mentioning credit balance (account out of credits)
    *   'auth'       — HTTP 401 / 403 (bad or revoked API key)
    *   'rate_limit' — HTTP 429
-   *   'other'      — everything else (network, 5xx, schema, parse errors, ...)
+   *   'other'      — everything else (network, 5xx, ...)
+   * Output problems are classified by _checkReportResponse instead:
+   *   'max_tokens' | 'refusal' | 'truncated_output' (cut-off, invalid JSON, failed validation)
    * @param {any} err
    * @returns {'billing'|'auth'|'rate_limit'|'other'}
    */
@@ -281,6 +269,7 @@ class AgronomistService {
       paused: false,
       pauseReason: null,
       configUpdatedAt: null,
+      lastRegenerateFailure: null,
     };
     try {
       const recent = db.prepare(`
@@ -306,6 +295,17 @@ class AgronomistService {
         out.lastFailureAt = lastFail.generated_at || null;
       }
       out.configUpdatedAt = this.getConfigUpdatedAt();
+      // A failed regenerate leaves the report's status alone (content kept), so it
+      // does not count as a failure above; expose it separately.
+      const kept = db.prepare(`
+        SELECT id, report_date, last_error, last_error_class, last_error_at
+        FROM agronomist_reports WHERE last_error_at IS NOT NULL
+        ORDER BY last_error_at DESC LIMIT 1
+      `).get();
+      out.lastRegenerateFailure = kept ? {
+        reportId: kept.id, reportDate: kept.report_date, errorClass: kept.last_error_class,
+        message: kept.last_error, at: kept.last_error_at,
+      } : null;
 
       const lastThree = recent.slice(0, 3);
       const allHardFailures = lastThree.length === 3 && lastThree.every(r =>
@@ -1020,8 +1020,11 @@ class AgronomistService {
    */
   buildDailyRequest({ date, snapshot, cfg = this.getConfig(), capture = null, clarifications, historyBlock, dataSources } = {}) {
     const history = historyBlock ?? this._formatHistoryBlock();
+    // Format + photo + data-source rules are appended AFTER the (possibly overridden)
+    // base prompt, so an override can change the persona but never drop the format.
     const systemPrompt = (cfg.system_prompt_override || SYSTEM_PROMPT_BASE).trim()
-      + '\n\n' + CANOPY_PHOTO_INSTRUCTION + '\n\n' + DATA_SOURCES_PROMPT_LINE + '\n\n' + history;
+      + '\n\n' + REPORT_FORMAT_INSTRUCTION + '\n\n' + CANOPY_PHOTO_INSTRUCTION
+      + '\n\n' + DATA_SOURCES_PROMPT_LINE + '\n\n' + history;
 
     // Pull clarifications for this date so a regeneration honors prior user feedback.
     const clars = clarifications ?? this._getClarificationsForDate(date);
@@ -1045,7 +1048,7 @@ class AgronomistService {
 
     let photoLine;
     if (!ds.isEnabled('canopy_capture')) {
-      photoLine = 'The canopy camera is out of service (see the OUT OF SERVICE note below): no photo is attached. Write "no canopy photo — camera out of service" in State of the Crop and do not comment on canopy condition from imagery.';
+      photoLine = 'The canopy camera is out of service (see the OUT OF SERVICE note below): no photo is attached. Write ‘no canopy photo — camera out of service’ in the crop section and do not comment on canopy condition from imagery.';
     } else if (items.length) {
       photoLine = buildPhotoLine({ ...selection, items }, { date, tz });
     } else {
@@ -1063,7 +1066,7 @@ class AgronomistService {
       JSON.stringify(snap, null, 2),
       '```',
       '',
-      'Write the daily report. Be specific — name zones, ingredients, ions, equipment by their actual names from the data. Quantify (mg/L, L, °C). Tie every recommendation to the data point that justifies it. The Nutrient Status section MUST address every nutrient that appears in `lab[*].latest_per_nutrient` — if `today` is empty, use the latest_per_nutrient values and call out that they are N days old. Treat `reference_sensors` as the canonical environment readings. If something is missing entirely (no AMIC ever, no soil reading), call it out and recommend a measurement — unless it is listed as out of service below.',
+      'Write the daily report. Be specific — name zones, ingredients, ions, equipment by their actual names from the data. Quantify (mg/L, L, °C). Tie every recommendation to the data point that justifies it. Keep it concise: conclusion-first bullets, no restating the data back. The nutrients section MUST address every nutrient that appears in `lab[*].latest_per_nutrient` — if `today` is empty, use the latest_per_nutrient values and call out that they are N days old. Treat `reference_sensors` as the canonical environment readings. If something is missing entirely (no AMIC ever, no soil reading), call it out and recommend a measurement — unless it is listed as out of service below.',
     ];
     if (outOfService) {
       userMessageParts.push('', outOfService);
@@ -1083,13 +1086,21 @@ class AgronomistService {
       console.log(`[Agronomist] ${date}: attaching ${items.length} image(s) (${selection.mode}), ${(imageBytes / 1024).toFixed(0)} KB JPEG total, ${imageBase64Chars} base64 chars`);
     }
 
+    // Thinking is left at the model default (claude-sonnet-5: adaptive); effort
+    // bounds how much of the budget it spends. effort 'default' omits the field
+    // (for models that do not accept it).
+    // Haiku 4.5 rejects output_config.effort, so it is never sent there.
+    const model = cfg.model || DEFAULT_MODEL;
+    const effort = /haiku/i.test(model) ? null
+      : EFFORT_LEVELS.includes(cfg.effort) ? cfg.effort : (cfg.effort === 'default' ? null : DEFAULT_EFFORT);
     const requestBody = {
-      model: cfg.model || DEFAULT_MODEL,
-      max_tokens: 16000,
+      model,
+      max_tokens: REPORT_MAX_TOKENS,
       system: [
         { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
       ],
       output_config: {
+        ...(effort ? { effort } : {}),
         format: { type: 'json_schema', schema: REPORT_OUTPUT_SCHEMA },
       },
       messages: [{ role: 'user', content }],
@@ -1114,9 +1125,109 @@ class AgronomistService {
     return { requestBody, stats };
   }
 
+  /**
+   * The daily-report API call. Streams because max_tokens (32000) is above what
+   * the SDK allows non-streaming (it throws "Streaming is strongly recommended"
+   * past ~21k); finalMessage() returns the same Message shape as create().
+   * stop_details (refusal category) is not accumulated by this SDK version's
+   * stream helper, so it is picked up from the message_delta event.
+   */
+  async _callReportModel(client, requestBody) {
+    const stream = client.messages.stream(requestBody);
+    let stopDetails = null;
+    stream.on('streamEvent', (ev) => {
+      if (ev?.type === 'message_delta' && ev.delta?.stop_details) stopDetails = ev.delta.stop_details;
+    });
+    const message = await stream.finalMessage();
+    if (stopDetails && !message.stop_details) message.stop_details = stopDetails;
+    return message;
+  }
+
+  /**
+   * stop_reason → parse → content validation.
+   * @returns {{ok:true, parsed, warnings:string[]} | {ok:false, errorClass:string, message:string}}
+   *   errorClass: 'max_tokens' | 'refusal' | 'truncated_output'
+   */
+  _checkReportResponse(response) {
+    const stop = response?.stop_reason;
+    if (stop === 'max_tokens') {
+      return { ok: false, errorClass: 'max_tokens', message: `output hit max_tokens (${response.usage?.output_tokens ?? '?'} tokens) before the report was finished` };
+    }
+    if (stop === 'refusal') {
+      const d = response.stop_details;
+      return { ok: false, errorClass: 'refusal', message: `model declined${d?.category ? ` (${d.category})` : ''}${d?.explanation ? `: ${d.explanation}` : ''}` };
+    }
+    if (stop !== 'end_turn') {
+      return { ok: false, errorClass: 'truncated_output', message: `unexpected stop_reason '${stop}'` };
+    }
+    const textBlock = (response.content || []).find(b => b.type === 'text');
+    if (!textBlock || !textBlock.text) return { ok: false, errorClass: 'truncated_output', message: 'no text block in the response' };
+    let parsed;
+    try {
+      parsed = JSON.parse(textBlock.text);
+    } catch (err) {
+      return { ok: false, errorClass: 'truncated_output', message: `invalid JSON: ${err.message}` };
+    }
+    const v = validateReportOutput(parsed);
+    if (!v.ok) return { ok: false, errorClass: 'truncated_output', message: v.problems.slice(0, 6).join('; ') };
+    return { ok: true, parsed, warnings: v.warnings };
+  }
+
+  /**
+   * Record a failed run WITHOUT destroying a good report: when a successful row
+   * already exists for the date (regenerate / clarification-regenerate), only its
+   * last_error* columns are set — content, status and generated_at stay. With no
+   * successful row, the date gets (or keeps) a failure row as before.
+   * @returns {{ keptExisting: boolean }}
+   */
+  _recordReportFailure({ date, model, snapshotToSave, captureId, captureIds }, { message, errorClass, stopReason = null, totals = null, attempt = 1 }) {
+    try {
+      const existing = db.prepare(
+        "SELECT id FROM agronomist_reports WHERE report_date = ? AND status = 'success'"
+      ).get(date);
+      if (existing) {
+        db.prepare(`
+          UPDATE agronomist_reports
+          SET last_error = ?, last_error_class = ?, last_error_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(message, errorClass, existing.id);
+        console.error(`[Agronomist] ${date}: regeneration failed (${errorClass}) after ${attempt} attempt(s); kept the existing report #${existing.id}. ${message}`);
+        return { keptExisting: true };
+      }
+      db.prepare(`
+        INSERT INTO agronomist_reports
+          (report_date, model, input_snapshot, summary, full_markdown, status, error, error_class,
+           capture_id, capture_ids, stop_reason, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens)
+        VALUES (?, ?, ?, '', '', 'failure', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(report_date) DO UPDATE SET
+          generated_at = CURRENT_TIMESTAMP,
+          model = excluded.model,
+          input_snapshot = excluded.input_snapshot,
+          status = 'failure',
+          error = excluded.error,
+          error_class = excluded.error_class,
+          capture_id = excluded.capture_id,
+          capture_ids = excluded.capture_ids,
+          stop_reason = excluded.stop_reason,
+          input_tokens = excluded.input_tokens,
+          output_tokens = excluded.output_tokens,
+          cache_read_tokens = excluded.cache_read_tokens,
+          cache_creation_tokens = excluded.cache_creation_tokens
+      `).run(date, model, snapshotToSave, message, errorClass, captureId, captureIds, stopReason,
+        totals?.input || 0, totals?.output || 0, totals?.cacheRead || 0, totals?.cacheWrite || 0);
+      console.error(`[Agronomist] ${date}: report failed (${errorClass}) after ${attempt} attempt(s). ${message}`);
+    } catch (dbErr) {
+      console.error(`[Agronomist] ${date}: could not record failure (${errorClass}: ${message}):`, dbErr.message);
+    }
+    return { keptExisting: false };
+  }
+
   /** Generate (and persist) the agronomist report for a given date.
    *  @param dateStr 'YYYY-MM-DD' (local). Defaults to today.
-   *  @param opts.force if true, overwrite any existing report for that date.
+   *  @param opts.force if true, regenerate an existing report for that date. A
+   *         regeneration that fails (provider error, cut-off or invalid output)
+   *         keeps the existing successful report and throws with
+   *         err.keptExisting = true; the error is stored in last_error*.
    */
   async generateDailyReport(dateStr = null, opts = {}) {
     const cfg = this.getConfig();
@@ -1150,51 +1261,70 @@ class AgronomistService {
     const snapshotToSave = JSON.stringify({ ...snapshot, snapshot_stats: stats });
 
     const client = this._client_or_throw();
+    const model = cfg.model || DEFAULT_MODEL;
+    const meta = { date, model, snapshotToSave, captureId, captureIds };
 
-    let response;
-    try {
-      response = await client.messages.create(requestBody);
-    } catch (err) {
-      // Persist the failure so it shows up in the UI for debugging
-      const errorClass = this.classifyProviderError(err);
-      db.prepare(`
-        INSERT INTO agronomist_reports
-          (report_date, model, input_snapshot, summary, full_markdown, status, error, error_class, capture_id, capture_ids)
-        VALUES (?, ?, ?, ?, ?, 'failure', ?, ?, ?, ?)
-        ON CONFLICT(report_date) DO UPDATE SET
-          generated_at = CURRENT_TIMESTAMP,
-          model = excluded.model,
-          input_snapshot = excluded.input_snapshot,
-          status = 'failure',
-          error = excluded.error,
-          error_class = excluded.error_class,
-          capture_id = excluded.capture_id,
-          capture_ids = excluded.capture_ids
-      `).run(date, cfg.model || DEFAULT_MODEL, snapshotToSave,
-            '', '', String(err?.message || err), errorClass, captureId, captureIds);
-      if (err && typeof err === 'object' && !err.errorClass) err.errorClass = errorClass;
+    // Call → check stop_reason → parse → validate; one retry on bad output.
+    // Provider errors (HTTP/network) are not retried here: the SDK already
+    // retries 408/409/429/5xx twice.
+    const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    let accepted = null;
+    let lastBad = null;
+    for (let attempt = 1; attempt <= REPORT_MAX_ATTEMPTS; attempt++) {
+      let response;
+      try {
+        response = await this._callReportModel(client, requestBody);
+      } catch (err) {
+        const errorClass = this.classifyProviderError(err);
+        const { keptExisting } = this._recordReportFailure(meta, { message: String(err?.message || err), errorClass, totals, attempt });
+        if (err && typeof err === 'object') {
+          if (!err.errorClass) err.errorClass = errorClass;
+          if (keptExisting) err.keptExisting = true;
+        }
+        throw err;
+      }
+      const usage = response.usage || {};
+      totals.input += usage.input_tokens || 0;
+      totals.output += usage.output_tokens || 0;
+      totals.cacheRead += usage.cache_read_input_tokens || 0;
+      totals.cacheWrite += usage.cache_creation_input_tokens || 0;
+      console.log(`[Agronomist] ${date} attempt ${attempt}/${REPORT_MAX_ATTEMPTS}: stop_reason=${response.stop_reason}` +
+        ` in=${usage.input_tokens || 0} out=${usage.output_tokens || 0}/${requestBody.max_tokens}` +
+        ` cache_read=${usage.cache_read_input_tokens || 0} cache_write=${usage.cache_creation_input_tokens || 0}` +
+        ` effort=${requestBody.output_config?.effort || 'default'}`);
+
+      const check = this._checkReportResponse(response);
+      if (check.ok) {
+        accepted = { response, parsed: check.parsed, stopReason: response.stop_reason, attempt };
+        if (check.warnings.length) console.warn(`[Agronomist] ${date} output warnings: ${check.warnings.join('; ')}`);
+        break;
+      }
+      lastBad = { ...check, stopReason: response.stop_reason };
+      console.error(`[Agronomist] ${date} attempt ${attempt} rejected (${check.errorClass}): ${check.message}`);
+    }
+
+    if (!accepted) {
+      const err = new Error(`Report output rejected after ${REPORT_MAX_ATTEMPTS} attempts (${lastBad.errorClass}): ${lastBad.message}`);
+      err.errorClass = lastBad.errorClass;
+      const { keptExisting } = this._recordReportFailure(meta, {
+        message: err.message, errorClass: lastBad.errorClass, stopReason: lastBad.stopReason, totals, attempt: REPORT_MAX_ATTEMPTS,
+      });
+      if (keptExisting) err.keptExisting = true;
       throw err;
     }
 
-    // Extract the structured JSON output
-    const textBlock = response.content.find(b => b.type === 'text');
-    if (!textBlock) throw new Error('Claude returned no text block');
-
-    let parsed;
-    try {
-      parsed = JSON.parse(textBlock.text);
-    } catch (err) {
-      throw new Error(`Claude returned invalid JSON: ${err.message}`);
-    }
-
-    const usage = response.usage || {};
+    const parsed = accepted.parsed;
+    const sections = normaliseSections(parsed.sections);
+    const fullMarkdown = sections ? composeFullMarkdown({ sections, recommendations_notes: parsed.recommendations_notes }) : String(parsed.full_markdown || '');
+    const response = accepted.response;
 
     db.prepare(`
       INSERT INTO agronomist_reports
         (report_date, model, input_snapshot, summary, full_markdown,
          recommendations, opinion, input_tokens, output_tokens,
-         cache_read_tokens, cache_creation_tokens, status, error, capture_id, capture_ids)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL, ?, ?)
+         cache_read_tokens, cache_creation_tokens, status, error, capture_id, capture_ids,
+         sections, stop_reason)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'success', NULL, ?, ?, ?, ?)
       ON CONFLICT(report_date) DO UPDATE SET
         capture_id = excluded.capture_id,
         capture_ids = excluded.capture_ids,
@@ -1209,23 +1339,31 @@ class AgronomistService {
         output_tokens = excluded.output_tokens,
         cache_read_tokens = excluded.cache_read_tokens,
         cache_creation_tokens = excluded.cache_creation_tokens,
+        sections = excluded.sections,
+        stop_reason = excluded.stop_reason,
         status = 'success',
         error = NULL,
-        error_class = NULL
+        error_class = NULL,
+        last_error = NULL,
+        last_error_class = NULL,
+        last_error_at = NULL
     `).run(
       date,
-      response.model || cfg.model || DEFAULT_MODEL,
+      response.model || model,
       snapshotToSave,
-      parsed.summary,
-      parsed.full_markdown,
+      String(parsed.summary).trim(),
+      fullMarkdown,
       JSON.stringify(parsed.recommendations || []),
-      parsed.opinion,
-      usage.input_tokens || 0,
-      usage.output_tokens || 0,
-      usage.cache_read_input_tokens || 0,
-      usage.cache_creation_input_tokens || 0,
+      String(parsed.opinion).trim(),
+      // Tokens are summed over attempts so a retried run shows its real cost.
+      totals.input,
+      totals.output,
+      totals.cacheRead,
+      totals.cacheWrite,
       captureId,
       captureIds,
+      sections ? JSON.stringify(sections) : null,
+      accepted.stopReason || null,
     );
 
     // Persist operator_tasks_requests as actual tasks tied to this report.
@@ -1413,6 +1551,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
     // parsing the whole input_snapshot in JS.
     return db.prepare(`
       SELECT id, report_date, generated_at, model, opinion, summary, status, error, error_class,
+             stop_reason, last_error_class, last_error_at,
              input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, capture_id, capture_ids,
              CASE WHEN json_valid(input_snapshot)
                   THEN json_extract(input_snapshot, '$.snapshot_stats.data_sources.disabled')
@@ -1439,6 +1578,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
       ...row,
       input_snapshot: row.input_snapshot ? JSON.parse(row.input_snapshot) : null,
       recommendations: row.recommendations ? JSON.parse(row.recommendations) : [],
+      sections: parseSectionsColumn(row.sections),
       clarifications: this.listClarifications(row.id),
       ...this._captureFields(row),
     };
@@ -1451,6 +1591,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
       ...row,
       input_snapshot: row.input_snapshot ? JSON.parse(row.input_snapshot) : null,
       recommendations: row.recommendations ? JSON.parse(row.recommendations) : [],
+      sections: parseSectionsColumn(row.sections),
       clarifications: this.listClarifications(row.id),
       ...this._captureFields(row),
     };

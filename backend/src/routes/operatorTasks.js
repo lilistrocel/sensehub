@@ -14,25 +14,33 @@ const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-const PRIORITY_ORDER = "CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END";
+const PRIORITY_ORDER = "CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END";
 
 // GET /api/operator-tasks
-// Query: status (open|done|declined|snoozed|all, default open), source, limit, since (ISO date)
+// Query: status (open|done|declined|snoozed|all, default open), source, source_report_id,
+//        limit, since (ISO date)
+// Every column is qualified with t. — the users join also has created_at (was a 500:
+// "ambiguous column name: created_at" on ?since=).
 router.get('/', (req, res) => {
   try {
     const where = [];
     const args = [];
     const status = (req.query.status || 'open').toLowerCase();
-    if (status !== 'all') { where.push('status = ?'); args.push(status); }
-    if (req.query.source) { where.push('source = ?'); args.push(req.query.source); }
-    if (req.query.since) { where.push('created_at > ?'); args.push(req.query.since); }
+    if (status !== 'all') { where.push('t.status = ?'); args.push(status); }
+    if (req.query.source) { where.push('t.source = ?'); args.push(req.query.source); }
+    if (req.query.source_report_id) {
+      const rid = parseInt(req.query.source_report_id, 10);
+      if (!Number.isFinite(rid)) return res.status(400).json({ error: 'source_report_id must be an integer' });
+      where.push('t.source_report_id = ?'); args.push(rid);
+    }
+    if (req.query.since) { where.push('t.created_at > ?'); args.push(req.query.since); }
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
     const sql = `
       SELECT t.*, u.email AS completed_by_email
       FROM operator_tasks t
       LEFT JOIN users u ON u.id = t.completed_by_user_id
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY ${PRIORITY_ORDER}, created_at DESC
+      ORDER BY ${PRIORITY_ORDER}, t.created_at DESC
       LIMIT ?
     `;
     res.json(db.prepare(sql).all(...args, limit));

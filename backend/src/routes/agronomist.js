@@ -108,6 +108,7 @@ router.post('/retry-now', requireRole('admin', 'operator'), async (req, res) => 
     res.status(502).json({
       error: err.message,
       error_class: err.errorClass || agronomistService.classifyProviderError(err),
+      kept_existing: !!err.keptExisting,
       health: agronomistService.getHealth(),
     });
   }
@@ -160,7 +161,12 @@ router.post('/generate', requireRole('admin', 'operator'), async (req, res) => {
     if (err.code === 'ALREADY_EXISTS') {
       return res.status(409).json({ error: err.message, code: 'ALREADY_EXISTS' });
     }
-    res.status(500).json({ error: err.message });
+    // A failed force-regenerate keeps the existing report (kept_existing: true).
+    res.status(502).json({
+      error: err.keptExisting ? `Regeneration failed; the existing report was kept. ${err.message}` : err.message,
+      error_class: err.errorClass || agronomistService.classifyProviderError(err),
+      kept_existing: !!err.keptExisting,
+    });
   }
 });
 
@@ -225,9 +231,12 @@ router.post('/reports/:id/clarifications', requireRole('admin', 'operator'), asy
         const regenerated = await agronomistService.generateDailyReport(report.report_date, { force: true });
         return res.json({ ok: true, clarification: clar, report: regenerated, regenerated: true });
       } catch (err) {
-        // Clarification is saved even if regeneration fails — surface both
-        return res.status(500).json({
-          error: `Clarification saved, but regeneration failed: ${err.message}`,
+        // Clarification is saved even if regeneration fails; the report content is
+        // kept (generateDailyReport never overwrites a success with a failure).
+        return res.status(502).json({
+          error: `Clarification saved, but regeneration failed${err.keptExisting ? ' — the previous report was kept' : ''}: ${err.message}`,
+          error_class: err.errorClass || agronomistService.classifyProviderError(err),
+          kept_existing: !!err.keptExisting,
           clarification: clar,
           regenerated: false,
         });

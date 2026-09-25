@@ -32,6 +32,9 @@ const ERROR_CLASS_TITLES = {
   billing: 'Anthropic credit balance exhausted',
   auth: 'Anthropic API key rejected',
   rate_limit: 'Anthropic rate limit hit',
+  truncated_output: 'Last report output was cut off or invalid',
+  max_tokens: 'Last report hit the output token limit',
+  refusal: 'Last report was declined by the model',
   other: 'Last agronomist report failed',
 };
 
@@ -181,7 +184,7 @@ export default function Agronomist() {
         body: JSON.stringify({ force }),
       });
       if (res.status === 409) {
-        if (window.confirm("Today's report already exists. Overwrite it?")) {
+        if (window.confirm("Today's report already exists. Replace it? If the new report fails, the current one is kept.")) {
           return generateNow(true);
         }
       } else if (!res.ok) {
@@ -195,6 +198,9 @@ export default function Agronomist() {
       }
     } catch (err) {
       showError('Generation failed: ' + err.message);
+      // A failed regenerate keeps the existing report and marks it; refresh both.
+      fetchReports();
+      if (selectedReport?.id) loadReport(selectedReport.id);
     }
     setGenerating(false);
   };
@@ -451,10 +457,19 @@ const MODEL_OPTIONS = [
   ['claude-haiku-4-5', 'Claude Haiku 4.5 (cheapest)'],
 ];
 
+// output_config.effort for the daily report (thinking depth). Haiku ignores it.
+const EFFORT_OPTIONS = [
+  ['low', 'Low (fastest, cheapest)'],
+  ['medium', 'Medium (default)'],
+  ['high', 'High (more thinking, less room for the report)'],
+  ['xhigh', 'Extra high'],
+];
+
 function valuesFromConfig(config) {
   return {
     enabled: !!config.enabled,
     model: config.model || '',
+    effort: config.effort || 'medium',
     hour: String(config.schedule_hour ?? 20),
     minute: String(config.schedule_minute ?? 0),
     weeklyDay: String(config.weekly_rollup_day ?? 0),
@@ -496,6 +511,7 @@ function useConfigForm(config, onSave) {
       const updated = await onSave({
         enabled: values.enabled,
         model: values.model,
+        effort: values.effort,
         schedule_hour: parseInt(values.hour, 10),
         schedule_minute: parseInt(values.minute, 10),
         weekly_rollup_day: parseInt(values.weeklyDay, 10),
@@ -551,6 +567,16 @@ function ScheduleModelFields({ form, onWeeklyRollup }) {
           {!modelKnown && v.model && <option value={v.model}>{v.model} (current)</option>}
           {MODEL_OPTIONS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Thinking effort</label>
+        <select value={v.effort} onChange={e => form.set({ effort: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white">
+          {!EFFORT_OPTIONS.some(([id]) => id === v.effort) && <option value={v.effort}>{v.effort} (current)</option>}
+          {EFFORT_OPTIONS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        </select>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Thinking shares the output budget with the report. Not sent for Haiku.</p>
       </div>
 
       <div>

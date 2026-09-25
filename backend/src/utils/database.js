@@ -913,6 +913,23 @@ const initSchema = () => {
     console.error('agronomist_reports error_class migration failed:', err.message);
   }
 
+  // Agronomist report reliability + structured sections (incident 2026-09-25, report 182:
+  // a cut-off report was saved as success and overwrote a good one).
+  //   stop_reason      — API stop_reason of the accepted response
+  //   sections         — JSON { crop, irrigation, nutrients, risks } (null on older reports)
+  //   last_error*      — a failed regenerate recorded on a successful row, whose content is kept
+  try {
+    const cols = db.pragma('table_info(agronomist_reports)').map(c => c.name);
+    const add = (name, type) => { if (!cols.includes(name)) db.exec(`ALTER TABLE agronomist_reports ADD COLUMN ${name} ${type}`); };
+    add('stop_reason', 'TEXT');
+    add('sections', 'TEXT');
+    add('last_error', 'TEXT');
+    add('last_error_class', 'TEXT');
+    add('last_error_at', 'TEXT');
+  } catch (err) {
+    console.error('agronomist_reports sections/stop_reason migration failed:', err.message);
+  }
+
   // Agronomist noon canopy captures (migration: agronomist_captures table +
   // agronomist_reports.capture_id so the UI can show which photo a report used).
   try {

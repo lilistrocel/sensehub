@@ -46,7 +46,10 @@ class AgronomistSchedulerService {
   _raiseProviderAlert(health) {
     if (!health?.lastErrorClass) return;
     const label = { billing: 'Anthropic credit balance exhausted', auth: 'Anthropic API key rejected',
-                    rate_limit: 'Anthropic rate limit hit', other: 'Anthropic API error' }[health.lastErrorClass] || 'Anthropic API error';
+                    rate_limit: 'Anthropic rate limit hit', other: 'Anthropic API error',
+                    // Output rejected by the report checks (nothing saved as a success).
+                    truncated_output: 'Report output cut off or invalid', max_tokens: 'Report hit the output token limit',
+                    refusal: 'Report declined by the model' }[health.lastErrorClass] || 'Anthropic API error';
     createAlert({
       severity: health.paused ? 'critical' : 'warning',
       source: 'agronomist',
@@ -112,7 +115,8 @@ class AgronomistSchedulerService {
             console.log(`[Agronomist] Daily report for ${dateStr} already exists, skipping`);
           } else {
             console.error(`[Agronomist] Daily report for ${dateStr} failed:`, err.message);
-            // Surface provider problems as one deduped alert (billing/auth/rate_limit).
+            // Surface provider / output problems as one deduped alert
+            // (billing, auth, rate_limit, truncated_output, max_tokens, refusal).
             const cls = err.errorClass || agronomistService.classifyProviderError(err);
             if (cls !== 'other') this._raiseProviderAlert(agronomistService.getHealth());
           }

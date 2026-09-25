@@ -1,17 +1,57 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Button, Card, Label, StatusPill } from '../../ui';
+import { Button, Card, Kpi, Label, RAIL_CLASSES, StatusPill } from '../../ui';
 import { FrameStrip } from './CaptureStrip';
 import ClarificationsPanel from './ClarificationsPanel';
 import ReportActions, { RecommendationCard, groupRecommendations } from './ReportActions';
 import ReportMarkdown from './ReportMarkdown';
 import ReportTabs, { tabPanelProps } from './ReportTabs';
 import { splitReportSections } from './splitReportSections';
+import { SECTION_STATUS, SectionStatusPill, StatusMark, statusOf } from './SectionStatus';
 
 const API_BASE = '/api';
 const TAB_KEY = 'agronomist:reportTab';
 const TOP_ACTIONS = 3;
 
-export const ERROR_CLASS_LABELS = { billing: 'billing', auth: 'auth', rate_limit: 'rate limit', other: 'error' };
+export const ERROR_CLASS_LABELS = {
+  billing: 'billing', auth: 'auth', rate_limit: 'rate limit', other: 'error',
+  truncated_output: 'truncated output', max_tokens: 'output limit', refusal: 'declined',
+};
+
+// Structured reports (report.sections, since 2026-09-25): fixed order, same
+// labels as the markdown splitter so a remembered tab carries across old/new.
+const STRUCTURED_SECTIONS = [
+  { key: 'crop', label: 'Crop', title: 'State of the Crop' },
+  { key: 'irrigation', label: 'Irrigation', title: 'Irrigation & Fertigation' },
+  { key: 'nutrients', label: 'Nutrients', title: 'Nutrient Status (AMIC + Lab)' },
+  { key: 'risks', label: 'Risks', title: 'Risks & Anomalies' },
+];
+
+const str = (v) => (typeof v === 'string' ? v : v == null ? '' : String(v));
+
+/** report.sections -> ordered sections, or null (older reports: markdown path). */
+export function structuredSections(sections) {
+  if (!sections || typeof sections !== 'object' || Array.isArray(sections)) return null;
+  const list = STRUCTURED_SECTIONS
+    .filter(s => sections[s.key] && typeof sections[s.key] === 'object')
+    .map(s => {
+      const raw = sections[s.key];
+      return {
+        ...s,
+        status: statusOf(raw.status),
+        headline: str(raw.headline).trim(),
+        keyNumbers: (Array.isArray(raw.key_numbers) ? raw.key_numbers : [])
+          .filter(k => k && str(k.label).trim())
+          .map(k => ({ label: str(k.label).trim(), value: str(k.value).trim(), unit: str(k.unit).trim(), state: statusOf(k.state) })),
+        details: str(raw.details_markdown).trim(),
+      };
+    });
+  return list.length ? list : null;
+}
+
+/** A failed regenerate newer than the content shown (content was kept). */
+function keptAfterFailure(r) {
+  return !!(r?.last_error_at && (!r.generated_at || String(r.last_error_at) >= String(r.generated_at)));
+}
 const CAPTURE_MODE_LABELS = {
   noon: 'noon session', manual: 'manual capture', fallback_4h: '4-hourly fallback',
   latest: 'latest available', manual_night: 'manual capture (night)',
@@ -47,23 +87,23 @@ function dayName(reportDate) {
 function optionLabel(r) {
   let s = `${r.report_date} · ${dayName(r.report_date)}`;
   if (r.status === 'failure') s += ` ■ failed (${ERROR_CLASS_LABELS[r.error_class] || 'error'})`;
+  else if (keptAfterFailure(r)) s += ' ▲ regenerate failed';
   else if (r.excluded_sources?.length) s += ` ▲ ${r.excluded_sources.length} excluded`;
   return s;
 }
 
 /**
- * Operator tasks the agronomist created, for the Actions tab. The tasks API has
- * no report filter, so fetch the agronomist's tasks once and match on
- * source_report_id; refetched whenever the page reloads its report list
- * (generate / retry / regenerate create new tasks).
+ * Operator tasks this report created, for the Actions tab (server-side
+ * source_report_id filter). Refetched when the report changes or the page
+ * reloads its report list (generate / retry / regenerate create new tasks).
  */
-function useAgronomistTasks(headers, refreshKey) {
+function useAgronomistTasks(headers, reportId, refreshKey) {
   const [state, setState] = useState({ tasks: null, error: null });
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/operator-tasks?status=all&source=agronomist&limit=500`, { headers });
+        const res = await fetch(`${API_BASE}/operator-tasks?status=all&source=agronomist&source_report_id=${encodeURIComponent(reportId)}&limit=500`, { headers });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
         if (!cancelled) setState({ tasks: Array.isArray(data) ? data : [], error: null });
@@ -72,7 +112,7 @@ function useAgronomistTasks(headers, refreshKey) {
       }
     })();
     return () => { cancelled = true; };
-  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reportId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return state;
 }
 
@@ -139,6 +179,16 @@ function ReportHeader({ report, reports, excluded, onSelect, pending }) {
         {isLatest && age != null && age >= 2 && (
           <StatusPill state="caution" text={`${age} days old`} title="No newer report has been generated" />
         )}
+        {!failed && keptAfterFailure(report) && (
+          <StatusPill
+            state="caution"
+            filled
+            className="max-w-full !whitespace-normal"
+            text={`regenerate failed · ${ERROR_CLASS_LABELS[report.last_error_class] || 'error'} · showing previous version`}
+            title={`Regeneration at ${fmtGenerated(report.last_error_at)} failed; this is the version from ${fmtGenerated(report.generated_at)}. ${report.last_error || ''}`}
+            data-testid="report-regen-failed"
+          />
+        )}
         {excluded.length > 0 && (
           <StatusPill
             state="caution"
@@ -179,7 +229,87 @@ function FailureCard({ report }) {
   );
 }
 
-function Overview({ report, intro, chips, onOpenTab, taskCount }) {
+/** One tile per key number: status mark + label, value as a Reading (em dash when unknown). */
+function KeyNumber({ k }) {
+  const st = statusOf(k.state);
+  const unknown = st === 'unknown';
+  const shownValue = unknown ? null : k.value;
+  const hint = unknown && k.value && !/^[-—–]+$/.test(k.value) ? `${k.value}${k.unit ? ` ${k.unit}` : ''} · not current` : null;
+  return (
+    <Kpi
+      padding="sm"
+      rail={SECTION_STATUS[st].rail}
+      className="min-w-0"
+      size={String(k.value).length > 8 ? 'sm' : 'md'}
+      label={<span className="inline-flex items-center gap-1.5 min-w-0"><StatusMark status={st} /><span className="truncate">{k.label}</span></span>}
+      value={shownValue}
+      unit={k.unit || undefined}
+      unknown={unknown}
+      hint={hint}
+      data-key-number-state={st}
+    />
+  );
+}
+
+/** A section tab of a structured report: status + headline, key numbers, then bullets. */
+function StructuredSection({ section }) {
+  const st = statusOf(section.status);
+  return (
+    <Card rail={SECTION_STATUS[st].rail} data-testid={`section-${section.key}`} data-section-status={st}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-display text-lg font-semibold text-ink break-words">{section.title}</h2>
+        <SectionStatusPill status={st} />
+      </div>
+      {section.headline && (
+        <p className="mt-2 font-display text-[16px] sm:text-lg font-semibold leading-snug text-ink max-w-3xl break-words" data-testid="section-headline">
+          {section.headline}
+        </p>
+      )}
+      {section.keyNumbers.length > 0 && (
+        <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-2" data-testid="section-key-numbers">
+          {section.keyNumbers.map((k, i) => <KeyNumber key={`${k.label}-${i}`} k={k} />)}
+        </div>
+      )}
+      {section.details
+        ? <ReportMarkdown markdown={section.details} className="mt-4" />
+        : <p className="mt-3 text-sm text-muted">No further detail in this section.</p>}
+    </Card>
+  );
+}
+
+/** Overview's "status at a glance": every section's status + headline, tap to open it. */
+function GlanceCard({ sections, onOpenTab }) {
+  return (
+    <Card data-testid="report-glance">
+      <Label as="h3" className="mb-2">Status at a glance</Label>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {sections.map(s => {
+          const st = statusOf(s.status);
+          return (
+            <li key={s.key} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => onOpenTab(s.key)}
+                className={`w-full h-full text-left min-h-touch p-3 rounded-md border border-line bg-field hover:border-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${RAIL_CLASSES[SECTION_STATUS[st].rail] || ''}`}
+                data-chip={s.key}
+                data-section-status={st}
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <StatusMark status={st} />
+                  <span className="font-semibold text-ink">{s.label}</span>
+                  <SectionStatusPill status={st} className="ml-auto" />
+                </span>
+                {s.headline && <span className="mt-1 block text-sm leading-snug text-muted break-words">{s.headline}</span>}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+function Overview({ report, intro, chips, glance, onOpenTab, taskCount }) {
   const frames = report.captures?.length ? report.captures : report.capture ? [report.capture] : [];
   const recs = report.recommendations || [];
   const top = groupRecommendations(recs)
@@ -190,6 +320,8 @@ function Overview({ report, intro, chips, onOpenTab, taskCount }) {
 
   return (
     <div className="space-y-4">
+      {glance && <GlanceCard sections={glance} onOpenTab={onOpenTab} />}
+
       {frames.length > 0 && (
         <Card data-testid="report-frames">
           <div className="flex flex-wrap items-baseline gap-x-2 mb-2">
@@ -209,7 +341,7 @@ function Overview({ report, intro, chips, onOpenTab, taskCount }) {
         {intro && <ReportMarkdown markdown={intro} className={report.summary ? 'mt-3' : ''} />}
         {!hasText && <p className="text-sm text-muted">This report has no summary text.</p>}
 
-        {chips.length > 0 && (
+        {!glance && chips.length > 0 && (
           <div className="mt-4 pt-3 border-t border-line">
             <Label className="mb-2">Read the report</Label>
             <div className="flex flex-wrap gap-2">
@@ -302,11 +434,17 @@ export default function ReportView({ report, reports, onSelect, pending, isAdmin
   const idBase = useId().replace(/:/g, '');
   const tabsRef = useRef(null);
   const [preferredTab, setPreferredTab] = useState(readTab);
-  const { tasks: allTasks, error: tasksError } = useAgronomistTasks(headers, reports);
+  const { tasks: allTasks, error: tasksError } = useAgronomistTasks(headers, report.id, reports);
 
   const { intro, sections } = useMemo(() => splitReportSections(report.full_markdown), [report.full_markdown]);
-  const contentSections = sections.filter(s => s.key !== 'recommendations');
+  // Structured reports drive the tabs from report.sections; older ones (sections
+  // null) keep the markdown-splitter path unchanged. full_markdown is composed
+  // server-side for structured reports too, so the Recommendations notes come
+  // from it either way.
+  const structured = useMemo(() => structuredSections(report.sections), [report.sections]);
+  const contentSections = structured || sections.filter(s => s.key !== 'recommendations');
   const notes = sections.find(s => s.key === 'recommendations')?.body || '';
+  // The API filters by source_report_id; the client-side filter stays as a guard.
   const tasks = useMemo(() => (allTasks || []).filter(t => t.source_report_id === report.id), [allTasks, report.id]);
   const recCount = report.recommendations?.length || 0;
   const noteCount = report.clarifications?.length || 0;
@@ -316,7 +454,7 @@ export default function ReportView({ report, reports, onSelect, pending, isAdmin
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
-    ...contentSections.map(s => ({ id: s.key, label: s.label })),
+    ...contentSections.map(s => ({ id: s.key, label: s.label, icon: structured ? <StatusMark status={s.status} /> : null })),
     { id: 'actions', label: 'Actions', badge: recCount, badgeLabel: `${recCount} recommendations` },
     { id: 'discussion', label: 'Discussion', badge: noteCount, badgeLabel: `${noteCount} notes` },
   ];
@@ -358,13 +496,15 @@ export default function ReportView({ report, reports, onSelect, pending, isAdmin
         {active === 'overview' && (
           <Overview
             report={report}
-            intro={intro}
+            intro={structured ? '' : intro}
             chips={contentSections}
+            glance={structured}
             taskCount={tasks.length}
             onOpenTab={id => selectTab(id, { reveal: true })}
           />
         )}
-        {section && (
+        {section && structured && <StructuredSection section={section} />}
+        {section && !structured && (
           <Card>
             <h2 className="font-display text-lg font-semibold text-ink mb-3 break-words">{section.title}</h2>
             {section.body

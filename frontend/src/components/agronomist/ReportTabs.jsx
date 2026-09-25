@@ -6,7 +6,7 @@ import React, { useEffect, useRef } from 'react';
  * view. The strip scrolls sideways on a phone instead of wrapping or widening
  * the page. Pair each panel with `tabPanelProps(idBase, id)`.
  *
- * tabs: [{ id, label, badge? }]
+ * tabs: [{ id, label, icon?, badge? }] — icon (e.g. a StatusMark) renders before the label
  * variant: 'underline' (report sections) | 'segmented' (page-level switch)
  */
 export default function ReportTabs({ tabs, active, onChange, idBase, label, variant = 'underline', className = '' }) {
@@ -66,6 +66,7 @@ export default function ReportTabs({ tabs, active, onChange, idBase, label, vari
               : `shrink-0 min-h-touch px-3 -mb-px border-b-2 text-sm font-semibold whitespace-nowrap inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 ${
                 selected ? 'border-brand-600 text-brand' : 'border-transparent text-muted hover:text-ink hover:border-line'}`}
           >
+            {t.icon}
             {t.label}
             {t.badge != null && t.badge !== 0 && (
               <span
