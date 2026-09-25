@@ -434,6 +434,34 @@ router.post('/:id/test-connection', requireRole('admin', 'operator'), (req, res)
     return res.status(404).json({ error: 'Not Found', message: 'Equipment not found' });
   }
 
+  // MQTT equipment: report what the ingest actually knows (broker link + age of the
+  // last live message). Never simulate, and never write status — the ingest owns it.
+  if (equipment.protocol === 'mqtt') {
+    const { getMqttIngestService } = require('../services/MqttIngestService');
+    const svc = getMqttIngestService();
+    const health = svc.getHealth();
+    const snap = svc.getSnapshots().find(s => s.equipment_id === equipment.id) || null;
+    const fresh = !!(snap && !snap.stale);
+    const lastSeen = (snap && snap.last_seen) || equipment.last_communication || null;
+    const result = {
+      success: health.connected && fresh,
+      latency_ms: null,
+      protocol: 'mqtt',
+      address: equipment.address,
+      broker_connected: health.connected,
+      last_communication: lastSeen,
+    };
+    if (result.success) {
+      result.message = `${equipment.name} is publishing (last live message ${snap.age_s} s ago)`;
+    } else {
+      result.message = `No live data from ${equipment.name}`;
+      result.error = !health.connected
+        ? `SenseHub is not connected to the MQTT broker${health.last_error ? `: ${health.last_error}` : ''}`
+        : (lastSeen ? `Broker connected, but no live message for ${snap ? snap.age_s + ' s' : 'a while'}` : 'Broker connected, but this device has never published');
+    }
+    return res.json(result);
+  }
+
   // Simulate connection test based on protocol
   // In a real implementation, this would actually attempt to connect
   const testResult = {

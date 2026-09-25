@@ -83,3 +83,9 @@ Screenshot*.png
 
 # Coding-agent progress log (not source)
 claude-progress.txt
+
+# Mosquitto broker secrets + runtime state (config/*.conf, acl and README are committed)
+mosquitto/config/passwd
+mosquitto/config/passwd.*
+mosquitto/data/
+mosquitto/log/

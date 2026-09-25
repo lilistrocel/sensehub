@@ -1,0 +1,11 @@
+# Mosquitto ACL — SenseHub. Anything not granted here is denied.
+# (Publishes to a denied topic are dropped; MQTT v5 clients get "Not authorized".)
+
+# Irrigation monitor, farm 1021: its own subtree only (includes its LWT on farm/1021/status).
+user farm1021
+topic readwrite farm/1021/#
+
+# SenseHub backend ingest: read-only on every farm. It cannot publish anything,
+# so the ingest can never command a device through the broker.
+user sensehub
+topic read farm/#

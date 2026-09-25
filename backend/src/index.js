@@ -53,6 +53,7 @@ const { relaySafetyWatchdogService } = require('./services/RelaySafetyWatchdogSe
 const { amicSchedulerService } = require('./services/AmicSchedulerService');
 const { operationalPlannerSchedulerService } = require('./services/OperationalPlannerSchedulerService');
 const { dataRetentionService } = require('./services/DataRetentionService');
+const { getMqttIngestService } = require('./services/MqttIngestService');
 
 const app = express();
 const server = http.createServer(app);
@@ -220,6 +221,7 @@ app.use('/api/ai/data-sources', authMiddleware, require('./routes/aiDataSources'
 app.use('/api/operator-tasks', authMiddleware, operatorTasksRoutes);
 app.use('/api/baselines', authMiddleware, baselineRoutes);
 app.use('/api/relay-events', authMiddleware, require('./routes/relayEvents'));
+app.use('/api/mqtt', authMiddleware, require('./routes/mqtt'));
 
 // Error handling middleware
 app.use(errorHandler);
@@ -360,6 +362,15 @@ server.listen(PORT, async () => {
   } catch (error) {
     console.error('Data retention scheduler: Failed to start -', error.message);
   }
+
+  // MQTT ingest (irrigation monitors on the local Mosquitto). Read-only telemetry;
+  // a missing/down broker only logs — mqtt.js keeps reconnecting with backoff.
+  try {
+    getMqttIngestService().start();
+    console.log('MQTT ingest service: Started');
+  } catch (error) {
+    console.error('MQTT ingest service: Failed to start -', error.message);
+  }
 });
 
 // Graceful shutdown handler
@@ -372,6 +383,7 @@ process.on('SIGINT', async () => {
   cameraStreamService.stop();
   automationSchedulerService.stop();
   relayTimerService.shutdown();
+  try { getMqttIngestService().stop(); } catch (_) {}
   await modbusPollingService.stop();
   process.exit(0);
 });
@@ -385,6 +397,7 @@ process.on('SIGTERM', async () => {
   cameraStreamService.stop();
   automationSchedulerService.stop();
   relayTimerService.shutdown();
+  try { getMqttIngestService().stop(); } catch (_) {}
   await modbusPollingService.stop();
   process.exit(0);
 });

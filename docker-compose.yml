@@ -1,4 +1,36 @@
 services:
+  # MQTT broker for field devices (irrigation monitor farm/1021). Host network:
+  # listens on the host's 0.0.0.0:1883 (LAN + tailnet). LAN-only — never
+  # port-forward it or route it through cloudflared. See mosquitto/README.md.
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: sensehub-mosquitto
+    network_mode: "host"
+    # Run as the repo owner: the bind-mounted passwd (0600) stays readable and
+    # the image entrypoint does not chown the repo's config dir.
+    user: "1000:1000"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    environment:
+      - TZ=Asia/Dubai
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    healthcheck:
+      # every TCP probe is a "New connection" log line, so probe sparingly
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 1883 || exit 1"]
+      interval: 120s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
   go2rtc:
     image: alexxit/go2rtc:latest
     container_name: sensehub-go2rtc
@@ -34,6 +66,11 @@ services:
       - GO2RTC_URL=http://localhost:1984
       - TZ=Asia/Dubai
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # MQTT ingest (read-only subscriber on the local mosquitto service).
+      # Deliberately no depends_on: the backend must run with the broker down.
+      - MQTT_URL=${MQTT_URL:-mqtt://127.0.0.1:1883}
+      - MQTT_USERNAME=sensehub
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
     depends_on:
       go2rtc:
         condition: service_healthy

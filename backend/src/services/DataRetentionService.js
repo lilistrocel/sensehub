@@ -25,6 +25,7 @@
  *     equipment_errors_retention_days: 30,
  *     watchdog_events_retention_days: 90,
  *     agronomist_captures_retention_days: 30, // noon canopy JPEGs + rows
+ *     irrigation_cycles_retention_days: 730, // MQTT irrigation-monitor cycle reports (a few rows/day)
  *     prune_expired_sessions: true,          // sessions past expires_at
  *     dry_run: false,                        // when true, logs what would be done without modifying anything
  *   }
@@ -60,6 +61,10 @@ const DEFAULT_CONFIG = {
   info_alerts_retention_days: 90,
   // Agronomist noon canopy captures (files + agronomist_captures rows).
   agronomist_captures_retention_days: 30,
+  // Irrigation-monitor cycle reports (MqttIngestService). A handful of rows per
+  // day, kept for season-over-season water/dosing comparisons. The monitors'
+  // live readings go to `readings` and follow readings_retention_days above.
+  irrigation_cycles_retention_days: 730,
   // Sessions past expires_at are dead weight (auth already ignores them).
   prune_expired_sessions: true,
   dry_run: false,
@@ -160,6 +165,7 @@ class DataRetentionService {
       sessions: {},
       info_alerts: {},
       agronomist_captures: {},
+      irrigation_cycles: {},
     };
 
     // ----- readings: aggregate then drop -----
@@ -214,6 +220,15 @@ class DataRetentionService {
       summary.agronomist_captures = { error: err.message, rows_dropped: 0 };
     }
 
+    // ----- irrigation_cycles (MQTT monitor reports): simple prune by receive time -----
+    try {
+      summary.irrigation_cycles = this._pruneByAge(
+        'irrigation_cycles', 'received_at', cfg.irrigation_cycles_retention_days, cfg.dry_run,
+      );
+    } catch (err) {
+      summary.irrigation_cycles = { error: err.message, rows_dropped: 0 };
+    }
+
     // ----- VACUUM after big deletes (only if we actually deleted something) -----
     const droppedRows =
       (summary.readings.rows_dropped || 0) +
@@ -225,7 +240,8 @@ class DataRetentionService {
       (summary.equipment_errors.rows_dropped || 0) +
       (summary.watchdog_events.rows_dropped || 0) +
       (summary.sessions.rows_dropped || 0) +
-      (summary.info_alerts.rows_dropped || 0);
+      (summary.info_alerts.rows_dropped || 0) +
+      (summary.irrigation_cycles.rows_dropped || 0);
     if (!cfg.dry_run && droppedRows > 10000) {
       // VACUUM rebuilds the DB into a temp copy and can transiently need free
       // space up to the current DB size. On a disk-constrained host that could

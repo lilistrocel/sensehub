@@ -932,6 +932,13 @@ const initSchema = () => {
     console.error('agronomist_captures migration failed:', err.message);
   }
 
+  // MQTT irrigation-monitor ingest: per-farm state + idempotent irrigation cycle reports.
+  try {
+    require('./mqttIngestSchema').ensureMqttIngestSchema(db);
+  } catch (err) {
+    console.error('mqtt ingest schema migration failed:', err.message);
+  }
+
   // Add calibration columns to existing equipment table if they don't exist
   try {
     const columns = db.pragma("table_info(equipment)").map(col => col.name);
