@@ -56,7 +56,7 @@ export function FrameStrip({ frames = [], bestId = null, className = '' }) {
  * "Canopy captures" card: today's latest frames + a Capture now button (admin/operator)
  * that runs a 3-frame session and shows the resulting thumbnails.
  */
-export default function CapturePanel({ headers, canControl, config }) {
+export default function CapturePanel({ headers, canControl, config, embedded = false }) {
   const { showError, showSuccess } = useToast();
   const [group, setGroup] = useState(null);   // today's group from GET /captures?days=1
   const [session, setSession] = useState(null); // frames returned by capture-now
@@ -102,11 +102,14 @@ export default function CapturePanel({ headers, canControl, config }) {
   const eta = Math.max(1, Math.round(((frames - 1) * spacing + 5) / 60));
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4" data-testid="capture-panel">
+    <div
+      className={embedded ? '' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4'}
+      data-testid="capture-panel"
+    >
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Canopy captures</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+        <div className="min-w-0 flex-1">
+          {!embedded && <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Canopy captures</h3>}
+          <p className={`text-xs text-gray-500 dark:text-gray-400 ${embedded ? '' : 'mt-1'}`}>
             Noon session: {frames} frame{frames === 1 ? '' : 's'} {spacing} s apart, scored for sharpness. The report gets the sharpest
             {config?.capture_frames_to_send ? ` ${config.capture_frames_to_send}` : ''}; without a noon session it falls back to the 10:00–14:00 4-hourly snapshots.
           </p>

@@ -11,7 +11,7 @@ const API_BASE = '/api';
  *
  * Reads/writes GET|PUT /api/ai/data-sources. Viewers get a read-only panel.
  */
-export default function DataSourcesPanel({ headers, canEdit, equipment = [] }) {
+export default function DataSourcesPanel({ headers, canEdit, equipment = [], embedded = false, onSaved = null }) {
   const { showError, showSuccess } = useToast();
   const [initial, setInitial] = useState(null);   // last saved (effective) config from the API
   const [draft, setDraft] = useState(null);       // { sources: {key:{enabled,reason,until}}, excluded_equipment_ids }
@@ -81,6 +81,7 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [] }) {
       setInitial(data);
       setOrder(data.order || order);
       setDraft(toDraft(data));
+      if (onSaved) onSaved(data);
       const n = (data.disabled || []).length;
       showSuccess(n ? `Data sources saved — ${n} out of service` : 'Data sources saved — everything in use');
     } catch (err) {
@@ -102,14 +103,24 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [] }) {
     return draft.excluded_equipment_ids.map(id => byId[id] || `#${id}`);
   }, [draft, equipment]);
 
+  // Embedded (inside the agronomist settings area) the section header already
+  // names the panel and summarises it, so only the body is rendered.
+  const Wrapper = embedded ? 'div' : Card;
+  const wrapperProps = embedded
+    ? { 'data-testid': 'data-sources-panel' }
+    : { as: 'section', padding: 'md', className: 'mb-4', 'data-testid': 'data-sources-panel', rail: disabledCount > 0 ? 'caution' : null };
+
   return (
-    <Card as="section" padding="md" className="mb-4" data-testid="data-sources-panel" rail={disabledCount > 0 ? 'caution' : null}>
-      <SectionHeader
-        title="Data sources"
-        subtitle="What the AI is allowed to look at. Take a system out of service when it is broken and cannot be fixed yet."
-        right={headerPill}
-      />
+    <Wrapper {...wrapperProps}>
+      {!embedded && (
+        <SectionHeader
+          title="Data sources"
+          subtitle="What the AI is allowed to look at. Take a system out of service when it is broken and cannot be fixed yet."
+          right={headerPill}
+        />
+      )}
       <p className="text-xs text-muted mb-3">
+        {embedded && 'What the AI is allowed to look at. Take a system out of service when it is broken and cannot be fixed yet. '}
         Applies to the daily agronomist report and the nightly planner. An out-of-service system is removed from
         the data the AI sees and it is told not to reason about it, ask for samples, or create tasks for it.
         {!canEdit && ' View only — ask an operator or admin to change this.'}
@@ -221,6 +232,6 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [] }) {
           <Button variant="primary" size="sm" onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save data sources'}</Button>
         </div>
       )}
-    </Card>
+    </Wrapper>
   );
 }
