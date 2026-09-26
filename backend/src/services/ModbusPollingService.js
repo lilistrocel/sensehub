@@ -14,6 +14,10 @@ const { db } = require('../utils/database');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const interlock = require('./RelayInterlockService');
 const blockReads = require('./ModbusBlockReads');
+const autoRange = require('./ModbusAutoRange');
+
+/** system_settings key holding the inferred range per "equipmentId:metric" (auto-ranging registers). */
+const AUTO_RANGE_STATE_KEY = 'modbus_autorange_state';
 
 /**
  * Errors that mean the whole device (not one register) is unreachable.
@@ -70,6 +74,9 @@ class DevicePollingState {
     this.lastPollTime = null;
     this.isPolling = false;
     this.timerId = null;
+
+    // Temporary faster cadence { ms, untilMs, requestOptions } (sensors only)
+    this.intervalOverride = null;
   }
 
   parseRegisterMappings(mappings) {
@@ -140,9 +147,33 @@ class DevicePollingState {
    */
   getEffectiveInterval() {
     const backoff = this.getBackoffDelay();
-    return Math.max(this.pollingInterval, backoff);
+    return Math.max(this.getBaseInterval(), backoff);
+  }
+
+  /**
+   * The configured interval, or a temporary faster one while an interval
+   * override is active (see ModbusPollingService.setIntervalOverride). An
+   * expired override is dropped here, so a caller that dies never leaves a
+   * device on the fast cadence.
+   */
+  getBaseInterval(nowMs = Date.now()) {
+    const o = this.intervalOverride;
+    if (o && nowMs < o.untilMs) return Math.min(this.pollingInterval, o.ms);
+    if (o) this.intervalOverride = null;
+    return this.pollingInterval;
+  }
+
+  /** Request options (timeout/retries) of the active override, or undefined. */
+  getOverrideRequestOptions(nowMs = Date.now()) {
+    const o = this.intervalOverride;
+    return o && nowMs < o.untilMs ? o.requestOptions : undefined;
   }
 }
+
+/** Fastest interval an override may request (ms). */
+const MIN_OVERRIDE_INTERVAL_MS = 5000;
+/** Longest an override may last (ms) — a dose cycle is < 30 min. */
+const MAX_OVERRIDE_DURATION_MS = 2 * 60 * 60 * 1000;
 
 /**
  * ModbusPollingService - Main service class
@@ -151,6 +182,14 @@ class ModbusPollingService {
   constructor() {
     // Map of equipment ID to DevicePollingState
     this.devices = new Map();
+
+    // Auto-ranging registers (mapping.autoRange, e.g. SEKO EC): inferred range
+    // per "equipmentId:metric" -> { range, value }. Kept on the service (not the
+    // device state) so a config reload does not forget it; persisted on change.
+    this.autoRangeStates = new Map();
+    this._autoRangeWarned = new Map();
+    // Optional (equipmentId, metric) => hint for ModbusAutoRange (DoseController: live-monitor plausibility)
+    this._autoRangeHint = null;
 
     // Service state
     this.isRunning = false;
@@ -440,6 +479,7 @@ class ModbusPollingService {
             this.stopDevicePolling(item.id);
             const newState = new DevicePollingState(item);
             newState.consecutiveErrors = existingState.consecutiveErrors;
+            newState.intervalOverride = existingState.intervalOverride || null;
             this.devices.set(item.id, newState);
             this.applyRequestGap(newState);
             this.startDevicePolling(item.id);
@@ -584,13 +624,14 @@ class ModbusPollingService {
           interpret: (words, mapping) => this.interpretRegisterValue(words, mapping),
           runModes: state.runModes,
           gapMs: state.requestGapMs,
+          requestOptions: state.getOverrideRequestOptions(),
           log: (msg) => console.warn(`[Polling] Device ${equipmentId} (${state.name}): ${msg}`),
         }
       );
 
       const readings = result.readings.map(r => ({
         name: r.mapping.name || `Register ${r.mapping.address ?? r.mapping.register}`,
-        value: r.value,
+        value: r.mapping && r.mapping.autoRange ? this.decodeAutoRange(equipmentId, r.mapping, r.value) : r.value,
         unit: r.mapping.unit || '',
         registerAddress: r.mapping.address ?? r.mapping.register,
         functionCode: r.functionCode
@@ -783,10 +824,12 @@ class ModbusPollingService {
    * Apply scaling and calibration to raw value
    */
   applyCalibration(value, equipment, mapping) {
+    if (value === null || value === undefined) return value;
     let result = value;
 
-    // Apply mapping scale factor if present
-    if (mapping.scale !== undefined && mapping.scale !== null) {
+    // Apply mapping scale factor if present (an auto-range value is already
+    // decoded to engineering units by decodeAutoRange — never scale it twice)
+    if (!mapping.autoRange && mapping.scale !== undefined && mapping.scale !== null) {
       result *= parseFloat(mapping.scale);
     }
 
@@ -1141,6 +1184,133 @@ class ModbusPollingService {
     }
   }
 
+  // ─── auto-ranging registers ────────────────────────────────────────────
+
+  /**
+   * Decode a raw word of a mapping with `autoRange` (ModbusAutoRange). The
+   * range state per equipment + metric is seeded once from the persisted state
+   * (system_settings 'modbus_autorange_state') or, failing that, by replaying
+   * the stored history of that metric; every range switch is logged and
+   * persisted. An ambiguous step keeps the range and warns (once per hour).
+   */
+  decodeAutoRange(equipmentId, mapping, raw) {
+    const key = `${equipmentId}:${mapping.name}`;
+    let st = this.autoRangeStates.get(key);
+    if (st === undefined) {
+      st = this._seedAutoRange(equipmentId, mapping, key);
+      this.autoRangeStates.set(key, st);
+    }
+    let hint = null;
+    if (this._autoRangeHint) {
+      try { hint = this._autoRangeHint(equipmentId, mapping.name) || null; } catch (_) { hint = null; }
+    }
+    const d = autoRange.decodeAutoRange(raw, st, mapping.autoRange, hint);
+    if (d.value === null) return null;
+    if (d.overridden) {
+      const cont = autoRange.decodeAutoRange(raw, st, mapping.autoRange);
+      console.warn(`[Polling] Device ${equipmentId} "${mapping.name}": ${d.overridden} cross-check overrode continuity — raw ${raw} read ${d.range.toUpperCase()} (${d.value}) instead of ${cont.range.toUpperCase()} (${cont.value})`);
+      try { if (hint && typeof hint.onOverride === 'function') hint.onOverride({ equipmentId, metric: mapping.name, raw, value: d.value, range: d.range, continuity: cont.value, basis: d.overridden }); } catch (_) { /* best effort */ }
+    }
+    const next = { range: d.range, value: d.value };
+    this.autoRangeStates.set(key, next);
+    const lastSave = this._autoRangeWarned.get(`save:${key}`) || 0;
+    if (!d.switched && !d.assumed && Date.now() - lastSave > 600000) {
+      // keep the persisted value roughly current (restart seed), at most every 10 min
+      this._autoRangeWarned.set(`save:${key}`, Date.now());
+      this._persistAutoRange(key, next);
+    }
+    if (d.switched || d.assumed) {
+      console.log(`[Polling] Device ${equipmentId} "${mapping.name}": ${d.assumed ? 'range unknown, assumed' : 'range switched to'} ${d.range.toUpperCase()} (raw ${raw} -> ${d.value}${mapping.unit ? ` ${mapping.unit}` : ''}${st && st.value !== undefined ? `, previous ${st.value}` : ''})`);
+      this._persistAutoRange(key, next);
+    }
+    if (d.ambiguous) {
+      const last = this._autoRangeWarned.get(key) || 0;
+      if (Date.now() - last > 3600000) {
+        this._autoRangeWarned.set(key, Date.now());
+        console.warn(`[Polling] Device ${equipmentId} "${mapping.name}": ambiguous auto-range step (previous ${st.value}, raw ${raw}) — kept ${d.range.toUpperCase()} range (${d.value})`);
+      }
+    }
+    return d.value;
+  }
+
+  /** Register the plausibility-hint provider used by decodeAutoRange (one provider). */
+  setAutoRangeHintProvider(fn) {
+    this._autoRangeHint = typeof fn === 'function' ? fn : null;
+  }
+
+  _seedAutoRange(equipmentId, mapping, key) {
+    try {
+      const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(AUTO_RANGE_STATE_KEY);
+      const saved = row && row.value ? JSON.parse(row.value)[key] : null;
+      if (saved && (saved.range === 'low' || saved.range === 'high') && Number.isFinite(saved.value)) {
+        return { range: saved.range, value: saved.value };
+      }
+    } catch (_) { /* fall through to history */ }
+    try {
+      const rows = db.prepare('SELECT value FROM readings WHERE equipment_id = ? AND name = ? ORDER BY timestamp DESC LIMIT 5000')
+        .all(equipmentId, mapping.name);
+      const st = autoRange.seedFromHistory(rows.map(r => r.value).reverse(), mapping.autoRange, mapping.scale);
+      if (st) {
+        console.log(`[Polling] Device ${equipmentId} "${mapping.name}": auto-range seeded from ${rows.length} stored reading(s): ${st.range.toUpperCase()} range`);
+        this._persistAutoRange(key, st);
+      }
+      return st;
+    } catch (e) {
+      console.error(`[Polling] Device ${equipmentId} "${mapping.name}": auto-range seed failed: ${e.message}`);
+      return null;
+    }
+  }
+
+  _persistAutoRange(key, st) {
+    try {
+      const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(AUTO_RANGE_STATE_KEY);
+      let all = {};
+      try { all = row && row.value ? JSON.parse(row.value) || {} : {}; } catch (_) { all = {}; }
+      all[key] = { range: st.range, value: st.value, at: new Date().toISOString() };
+      db.prepare(
+        "INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+      ).run(AUTO_RANGE_STATE_KEY, JSON.stringify(all));
+    } catch (e) {
+      console.error(`[Polling] could not persist auto-range state for ${key}: ${e.message}`);
+    }
+  }
+
+  /**
+   * Temporarily poll a SENSOR device faster, e.g. the SEKO feed-pH probe
+   * (equipment 17) at 10 s while a closed-loop dose cycle runs (DoseController).
+   *
+   * - Only for devices without coils: relay boards keep their own cadence
+   *   (their poll is the firmware heartbeat; never touched here).
+   * - `ms` is clamped to >= 5 s; the override expires by itself at `untilMs`
+   *   (max 2 h ahead), so a crashed caller cannot leave the bus on the fast
+   *   cadence.
+   * - `requestOptions` ({timeout, retries}) apply to this device's reads
+   *   while the override lasts. A short timeout bounds how long one slow
+   *   SEKO read can hold the shared gateway queue (relay writes on the same
+   *   host:port wait behind it).
+   * - Reschedules the next poll now, so the fast cadence starts immediately.
+   * Returns false if the device is unknown, write-only or has coils.
+   */
+  setIntervalOverride(equipmentId, ms, { untilMs, requestOptions } = {}) {
+    const state = this.devices.get(equipmentId);
+    if (!state || state.hasCoils || state.writeOnly) return false;
+    const now = Date.now();
+    const interval = Math.max(MIN_OVERRIDE_INTERVAL_MS, Math.round(Number(ms) || 0));
+    const until = Math.min(Number.isFinite(untilMs) ? untilMs : now + MAX_OVERRIDE_DURATION_MS, now + MAX_OVERRIDE_DURATION_MS);
+    if (until <= now) return false;
+    state.intervalOverride = { ms: interval, untilMs: until, requestOptions: requestOptions || undefined };
+    if (this.isRunning && !state.isPolling && !(this.isPaused && !state.hasCoils)) this.scheduleNextPoll(equipmentId);
+    return true;
+  }
+
+  /** Drop a temporary interval override (back to the configured cadence). */
+  clearIntervalOverride(equipmentId) {
+    const state = this.devices.get(equipmentId);
+    if (!state || !state.intervalOverride) return false;
+    state.intervalOverride = null;
+    return true;
+  }
+
   /**
    * Get service status and statistics
    */
@@ -1155,6 +1325,7 @@ class ModbusPollingService {
         slaveId: state.slaveId,
         pollingInterval: state.pollingInterval,
         effectiveInterval: state.getEffectiveInterval(),
+        intervalOverride: state.intervalOverride ? { ms: state.intervalOverride.ms, untilMs: state.intervalOverride.untilMs } : null,
         requestGapMs: state.requestGapMs,
         blockFallbacks: state.runModes.size,
         registerMappings: state.registerMappings.length,
@@ -1207,5 +1378,7 @@ const modbusPollingService = new ModbusPollingService();
 // Export both the class and singleton
 module.exports = {
   ModbusPollingService,
-  modbusPollingService
+  modbusPollingService,
+  AUTO_RANGE_STATE_KEY,
+  __DevicePollingState: DevicePollingState, // tests
 };

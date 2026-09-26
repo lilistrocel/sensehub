@@ -46,8 +46,64 @@ const { logRelayEvent } = require('./RelayEventLogger');
 const { automationArmingService } = require('./AutomationArmingService');
 
 class FertigationDoseScheduler {
-  constructor() {
-    this._active = null; // { programId, automationId, startedAt, endsAt, timers: [], schedule, valveStates }
+  /**
+   * @param {object} [opts]
+   * @param {object} [opts.controller] closed-loop DoseController (tests inject one;
+   *                                   default: the DoseController singleton, loaded lazily)
+   */
+  constructor(opts = {}) {
+    this._active = null; // { programId, automationId, startedAt, endsAt, timers: [], schedule, valveStates, controller?, extraTargets? }
+    this._controller = opts.controller || null;
+  }
+
+  _getController() {
+    if (this._controller) return this._controller;
+    try {
+      return require('./DoseController').getDoseController();
+    } catch (err) {
+      console.error('[DoseScheduler] closed-loop controller unavailable:', err.message);
+      return null;
+    }
+  }
+
+  /** Modbus coordinates of a dosing board (cached per cycle). */
+  _equipmentFor(equipmentId, cache) {
+    if (cache && cache[equipmentId]) return cache[equipmentId];
+    const eq = db.prepare('SELECT id, name, address, slave_id, write_only, register_mappings FROM equipment WHERE id = ?').get(equipmentId);
+    if (!eq) throw new Error(`Equipment ${equipmentId} not found`);
+    const [host, portStr] = (eq.address || '').split(':');
+    const port = parseInt(portStr, 10);
+    if (!host || !Number.isFinite(port)) throw new Error(`Equipment ${equipmentId} has an invalid address: ${eq.address}`);
+    const out = { ...eq, host, port, unitId: eq.slave_id || 1 };
+    if (cache) cache[equipmentId] = out;
+    return out;
+  }
+
+  /**
+   * The ONE coil-write path for the closed-loop DoseController (nutrient and pH
+   * Down valves): same guard/write/log sequence as the fixed-schedule toggle.
+   *   ON : refused while disarmed; RelayInterlockService.guardEnergise (runs
+   *        validateWriteSet + partner-OFF read-back); then `stillValid()` is
+   *        re-checked so an ON superseded while the guard ran is dropped.
+   *   OFF: always written (fail-safe direction; disarm never blocks a close).
+   * Every write is logged via RelayEventLogger with the caller's `source`.
+   * Throws on a failed coil write (the controller aborts the cycle).
+   */
+  async _writeValve(target, state, { source = 'dose_controller', automationId = null, stillValid = null } = {}) {
+    const cache = this._active ? (this._active.equipmentById || (this._active.equipmentById = {})) : null;
+    const eq = this._equipmentFor(target.equipment_id, cache);
+    if (state) {
+      if (automationArmingService.isDisarmed()) return false;
+      await interlock.guardEnergise(eq, target.channel, modbusTcpClient, { source, automationId });
+      if (stillValid && !stillValid()) return false;
+    }
+    if (eq.write_only) {
+      await modbusTcpClient.writeSingleCoilFireAndForget(eq.host, eq.port, eq.unitId, target.channel, state);
+    } else {
+      await modbusTcpClient.writeSingleCoil(eq.host, eq.port, eq.unitId, target.channel, state);
+    }
+    logRelayEvent(target.equipment_id, target.channel, state, source, automationId);
+    return true;
   }
 
   isRunning() {
@@ -56,8 +112,8 @@ class FertigationDoseScheduler {
 
   currentCycle() {
     if (!this._active) return null;
-    const { programId, automationId, cycleLogId, startedAt, endsAt, schedule, valveStates, dryRun } = this._active;
-    return { programId, automationId, cycleLogId, startedAt, endsAt, schedule, valveStates, dryRun: !!dryRun };
+    const { programId, automationId, cycleLogId, startedAt, endsAt, schedule, valveStates, dryRun, controlMode } = this._active;
+    return { programId, automationId, cycleLogId, startedAt, endsAt, schedule, valveStates, dryRun: !!dryRun, controlMode: controlMode || 'open_loop' };
   }
 
   /**
@@ -245,7 +301,36 @@ class FertigationDoseScheduler {
       programId, automationId, cycleLogId,
       startedAt: cycleStartedAt, endsAt: cycleEndsAt,
       schedule, valveStates, timers, dryRun,
+      equipmentById, controlMode: 'open_loop', controller: null, extraTargets: [],
     };
+
+    // Closed-loop program: the DoseController drives the valves from measured
+    // water + concentrate volumes (and the pH Down valve from the feed pH),
+    // through _writeValve. It falls back to this program's fixed schedule on
+    // its own when the monitor is blind. Dry runs keep the fixed schedule.
+    if (!dryRun && prog.control_mode === 'closed_loop') {
+      const ctl = this._getController();
+      let enabled = false;
+      try { enabled = !!(ctl && ctl.isEnabled()); } catch (_) { enabled = false; }
+      if (enabled) {
+        try {
+          const info = ctl.beginCycle({
+            cycleLogId, programId, automationId, durationSeconds, schedule,
+            tanks: schedule.tanks,
+            write: (target, state, opts) => this._writeValve(target, state, opts),
+            abort: (reason) => this.abortCycle(reason, { source: 'dose_controller' }),
+            valveStates,
+          });
+          this._active.controller = ctl;
+          this._active.controlMode = 'closed_loop';
+          if (info && info.phTank) {
+            this._active.extraTargets = [{ tank_id: info.phTank.tank_id, tank_name: info.phTank.tank_name, equipment_id: info.phTank.equipment_id, channel: info.phTank.channel }];
+          }
+        } catch (err) {
+          console.error(`[DoseScheduler] closed-loop controller refused cycle #${cycleLogId}, using the fixed schedule: ${err.message}`);
+        }
+      }
+    }
 
     // Drive a single valve toggle. Closes over equipmentById + dryRun.
     const toggleValve = async (tank, state) => {
@@ -270,8 +355,8 @@ class FertigationDoseScheduler {
       }
     };
 
-    // Schedule all events.
-    for (const tank of schedule.tanks) {
+    // Schedule all events (fixed-schedule / open-loop programs only).
+    for (const tank of (this._active.controller ? [] : schedule.tanks)) {
       for (const ev of tank.valve_events) {
         const fireAtMs = cycleStartedAt + ev.at_sec * 1000;
         const delay = Math.max(0, fireAtMs - Date.now());
@@ -290,18 +375,37 @@ class FertigationDoseScheduler {
       started_at: new Date(cycleStartedAt).toISOString(),
       ends_at: new Date(cycleEndsAt).toISOString(),
       dry_run: !!dryRun,
+      control_mode: this._active.controlMode,
     };
+  }
+
+  /** Every valve this cycle may have opened: the program's tanks + the pH Down valve (closed loop). */
+  _closeTargets(active) {
+    return [...(active.schedule.tanks || []), ...(active.extraTargets || [])];
+  }
+
+  /** Hand the cycle back from the closed-loop controller (it records the run). */
+  async _endController(active, status, reason) {
+    if (!active.controller) return;
+    try {
+      await active.controller.endCycle({ status, reason });
+    } catch (err) {
+      console.error('[DoseScheduler] controller end failed:', err.message);
+    }
   }
 
   /** End the cycle gracefully: close every valve, mark completed. */
   async _completeCycle() {
-    if (!this._active) return;
-    const { schedule, dryRun, cycleLogId, timers } = this._active;
+    const active = this._active;
+    if (!active || active.ending) return;
+    active.ending = true;
+    const { dryRun, cycleLogId, timers } = active;
     for (const t of timers) clearTimeout(t);
+    await this._endController(active, 'completed', null);
     if (!dryRun) {
-      // Close every valve that was part of this program.
+      // Close every valve that was part of this program (and the pH Down valve).
       const equipmentById = {};
-      for (const tank of schedule.tanks) {
+      for (const tank of this._closeTargets(active)) {
         if (!equipmentById[tank.equipment_id]) {
           const eq = db.prepare('SELECT id, address, slave_id, write_only FROM equipment WHERE id = ?').get(tank.equipment_id);
           if (!eq) continue;
@@ -313,13 +417,13 @@ class FertigationDoseScheduler {
         try {
           if (eq.write_only) await modbusTcpClient.writeSingleCoilFireAndForget(eq.host, eq.port, eq.unitId, tank.channel, false);
           else await modbusTcpClient.writeSingleCoil(eq.host, eq.port, eq.unitId, tank.channel, false);
-          logRelayEvent(tank.equipment_id, tank.channel, false, 'dose_program_end', this._active.automationId);
+          logRelayEvent(tank.equipment_id, tank.channel, false, 'dose_program_end', active.automationId);
         } catch (_) { /* best-effort */ }
       }
     }
     db.prepare("UPDATE fertigation_dose_cycle_log SET cycle_ended_at = datetime('now'), status = 'completed' WHERE id = ?")
       .run(cycleLogId);
-    this._active = null;
+    if (this._active === active) this._active = null;
   }
 
   /**
@@ -332,12 +436,15 @@ class FertigationDoseScheduler {
    *                                 flow watch passes 'flow_watch')
    */
   async abortCycle(reason = 'manual stop', opts = {}) {
-    if (!this._active) return false;
+    const active = this._active;
+    if (!active || active.ending) return false;
+    active.ending = true;
     const source = (opts && opts.source) || 'dose_program_abort';
-    const { cycleLogId, timers, schedule, dryRun } = this._active;
+    const { cycleLogId, timers, dryRun } = active;
     for (const t of timers) clearTimeout(t);
+    await this._endController(active, 'aborted', reason);
     if (!dryRun) {
-      for (const tank of schedule.tanks) {
+      for (const tank of this._closeTargets(active)) {
         try {
           const eq = db.prepare('SELECT address, slave_id, write_only FROM equipment WHERE id = ?').get(tank.equipment_id);
           if (!eq) continue;
@@ -346,13 +453,13 @@ class FertigationDoseScheduler {
           const unitId = eq.slave_id || 1;
           if (eq.write_only) await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, tank.channel, false);
           else await modbusTcpClient.writeSingleCoil(host, port, unitId, tank.channel, false);
-          logRelayEvent(tank.equipment_id, tank.channel, false, source, this._active.automationId);
+          logRelayEvent(tank.equipment_id, tank.channel, false, source, active.automationId);
         } catch (_) {}
       }
     }
     db.prepare("UPDATE fertigation_dose_cycle_log SET cycle_ended_at = datetime('now'), status = 'aborted', notes = ? WHERE id = ?")
       .run(reason, cycleLogId);
-    this._active = null;
+    if (this._active === active) this._active = null;
     return true;
   }
 }

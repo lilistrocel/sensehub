@@ -55,6 +55,7 @@ const { operationalPlannerSchedulerService } = require('./services/OperationalPl
 const { dataRetentionService } = require('./services/DataRetentionService');
 const { getMqttIngestService } = require('./services/MqttIngestService');
 const { getFlowWatchService } = require('./services/IrrigationFlowWatchService');
+const { getDoseController } = require('./services/DoseController');
 
 const app = express();
 const server = http.createServer(app);
@@ -224,6 +225,7 @@ app.use('/api/baselines', authMiddleware, baselineRoutes);
 app.use('/api/relay-events', authMiddleware, require('./routes/relayEvents'));
 app.use('/api/mqtt', authMiddleware, require('./routes/mqtt'));
 app.use('/api/flow-watch', authMiddleware, require('./routes/flowWatch'));
+app.use('/api/dose-controller', authMiddleware, require('./routes/doseController'));
 
 // Error handling middleware
 app.use(errorHandler);
@@ -383,6 +385,16 @@ server.listen(PORT, async () => {
   } catch (error) {
     console.error('Irrigation flow watch: Failed to start -', error.message);
   }
+
+  // Closed-loop dose controller: subscribes to the live monitor stream; it only
+  // drives valves inside a dose cycle of a control_mode='closed_loop' program.
+  // A run left open by a restart gets its dosing valves written OFF here.
+  try {
+    getDoseController().start();
+    console.log('Dose controller: Started');
+  } catch (error) {
+    console.error('Dose controller: Failed to start -', error.message);
+  }
 });
 
 // Graceful shutdown handler
@@ -397,6 +409,7 @@ process.on('SIGINT', async () => {
   relayTimerService.shutdown();
   try { getMqttIngestService().stop(); } catch (_) {}
   try { getFlowWatchService().stop(); } catch (_) {}
+  try { getDoseController().stop(); } catch (_) {}
   await modbusPollingService.stop();
   process.exit(0);
 });
@@ -412,6 +425,7 @@ process.on('SIGTERM', async () => {
   relayTimerService.shutdown();
   try { getMqttIngestService().stop(); } catch (_) {}
   try { getFlowWatchService().stop(); } catch (_) {}
+  try { getDoseController().stop(); } catch (_) {}
   await modbusPollingService.stop();
   process.exit(0);
 });

@@ -963,6 +963,20 @@ const initSchema = () => {
     console.error('flow watch schema migration failed:', err.message);
   }
 
+  // Closed-loop dose controller: fertigation_dose_programs.control_mode + per-cycle run records.
+  try {
+    require('./doseControllerSchema').ensureDoseControllerSchema(db);
+  } catch (err) {
+    console.error('dose controller schema migration failed:', err.message);
+  }
+
+  // SEKO Kontrol 800 EC register auto-ranges (x10 below 2000 µS, x1 above): decode it.
+  try {
+    require('./sekoEcAutoRange').ensureSekoEcAutoRange(db);
+  } catch (err) {
+    console.error('SEKO EC auto-range migration failed:', err.message);
+  }
+
   // Add calibration columns to existing equipment table if they don't exist
   try {
     const columns = db.pragma("table_info(equipment)").map(col => col.name);
