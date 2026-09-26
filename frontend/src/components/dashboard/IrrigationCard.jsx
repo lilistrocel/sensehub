@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, Label, Reading, SectionHeader, StatusPill } from '../../ui';
 import { useIrrigationLive } from './useIrrigationLive';
+import LastCycleZones from '../LastCycleZones';
 import {
   IRRIGATION,
   deriveIrrigationView,
@@ -333,6 +334,16 @@ export default function IrrigationCard({ token, subscribe, board, formatClock })
               <p className="text-sm text-muted mt-1">No cycle recorded yet.</p>
             )}
           </div>
+          {live.lastRun !== undefined && (
+            <div className="col-span-2 sm:col-span-4 min-w-0 border-t border-line pt-3" data-testid="irrigation-last-cycle-zones">
+              <Label>Last cycle per zone</Label>
+              {live.lastRun ? (
+                <LastCycleZones run={live.lastRun} formatTime={(iso) => clock(Date.parse(iso))} className="mt-1" />
+              ) : (
+                <p className="text-sm text-muted mt-1">No dose-controller run recorded yet.</p>
+              )}
+            </div>
+          )}
           <div className="col-span-2 sm:col-span-4 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-sm">
             <Link to="/reports" className="text-muted underline min-h-[32px] inline-flex items-center">Reports (measured)</Link>
             <Link to="/fertigation" className="text-muted underline min-h-[32px] inline-flex items-center">Fertigation</Link>

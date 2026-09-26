@@ -45,6 +45,11 @@ const interlock = require('./RelayInterlockService');
 const { logRelayEvent } = require('./RelayEventLogger');
 const { automationArmingService } = require('./AutomationArmingService');
 
+// Valve writes jump ahead of queued sensor reads on the shared gateway and give
+// up on a lost reply quickly (1.5 s, re-sent after 200 ms) instead of the 5 s +
+// 1 s default: a pH Down OFF landed 5 s late on 2026-09-26 15:32:52.
+const VALVE_WRITE_OPTIONS = Object.freeze({ priority: 'high', timeout: 1500, retries: 3, retryDelayMs: 200 });
+
 class FertigationDoseScheduler {
   /**
    * @param {object} [opts]
@@ -100,7 +105,7 @@ class FertigationDoseScheduler {
     if (eq.write_only) {
       await modbusTcpClient.writeSingleCoilFireAndForget(eq.host, eq.port, eq.unitId, target.channel, state);
     } else {
-      await modbusTcpClient.writeSingleCoil(eq.host, eq.port, eq.unitId, target.channel, state);
+      await modbusTcpClient.writeSingleCoil(eq.host, eq.port, eq.unitId, target.channel, state, VALVE_WRITE_OPTIONS);
     }
     logRelayEvent(target.equipment_id, target.channel, state, source, automationId);
     return true;
@@ -108,6 +113,36 @@ class FertigationDoseScheduler {
 
   isRunning() {
     return !!this._active;
+  }
+
+  /**
+   * Hold the dosing valves closed without ending the cycle (flow-watch cold-restart
+   * retry). Only a closed-loop cycle can pause (the DoseController keeps its zone
+   * targets); returns false for a fixed-schedule / dry-run cycle or when idle — the
+   * caller then aborts instead.
+   */
+  pauseDosing(reason = 'paused') {
+    const a = this._active;
+    if (!a || a.ending || a.dryRun || !a.controller || typeof a.controller.pauseDosing !== 'function') return false;
+    try { return !!a.controller.pauseDosing(reason); } catch (err) {
+      console.error('[DoseScheduler] pause failed:', err.message);
+      return false;
+    }
+  }
+
+  /** End a pauseDosing() hold. */
+  resumeDosing(reason = 'resumed') {
+    const a = this._active;
+    if (!a || a.ending || !a.controller || typeof a.controller.resumeDosing !== 'function') return false;
+    try { return !!a.controller.resumeDosing(reason); } catch (err) {
+      console.error('[DoseScheduler] resume failed:', err.message);
+      return false;
+    }
+  }
+
+  isPaused() {
+    const a = this._active;
+    try { return !!(a && a.controller && typeof a.controller.isPaused === 'function' && a.controller.isPaused()); } catch (_) { return false; }
   }
 
   currentCycle() {
@@ -345,7 +380,7 @@ class FertigationDoseScheduler {
         if (eq.write_only) {
           await modbusTcpClient.writeSingleCoilFireAndForget(eq.host, eq.port, eq.unitId, tank.channel, state);
         } else {
-          await modbusTcpClient.writeSingleCoil(eq.host, eq.port, eq.unitId, tank.channel, state);
+          await modbusTcpClient.writeSingleCoil(eq.host, eq.port, eq.unitId, tank.channel, state, VALVE_WRITE_OPTIONS);
         }
         logRelayEvent(tank.equipment_id, tank.channel, state, 'dose_program', automationId);
       } catch (err) {
@@ -385,10 +420,10 @@ class FertigationDoseScheduler {
   }
 
   /** Hand the cycle back from the closed-loop controller (it records the run). */
-  async _endController(active, status, reason) {
+  async _endController(active, status, reason, source = null) {
     if (!active.controller) return;
     try {
-      await active.controller.endCycle({ status, reason });
+      await active.controller.endCycle({ status, reason, source });
     } catch (err) {
       console.error('[DoseScheduler] controller end failed:', err.message);
     }
@@ -416,7 +451,7 @@ class FertigationDoseScheduler {
         if (!eq?.host) continue;
         try {
           if (eq.write_only) await modbusTcpClient.writeSingleCoilFireAndForget(eq.host, eq.port, eq.unitId, tank.channel, false);
-          else await modbusTcpClient.writeSingleCoil(eq.host, eq.port, eq.unitId, tank.channel, false);
+          else await modbusTcpClient.writeSingleCoil(eq.host, eq.port, eq.unitId, tank.channel, false, VALVE_WRITE_OPTIONS);
           logRelayEvent(tank.equipment_id, tank.channel, false, 'dose_program_end', active.automationId);
         } catch (_) { /* best-effort */ }
       }
@@ -442,7 +477,7 @@ class FertigationDoseScheduler {
     const source = (opts && opts.source) || 'dose_program_abort';
     const { cycleLogId, timers, dryRun } = active;
     for (const t of timers) clearTimeout(t);
-    await this._endController(active, 'aborted', reason);
+    await this._endController(active, 'aborted', reason, source);
     if (!dryRun) {
       for (const tank of this._closeTargets(active)) {
         try {
@@ -452,7 +487,7 @@ class FertigationDoseScheduler {
           const port = parseInt(portStr, 10);
           const unitId = eq.slave_id || 1;
           if (eq.write_only) await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, tank.channel, false);
-          else await modbusTcpClient.writeSingleCoil(host, port, unitId, tank.channel, false);
+          else await modbusTcpClient.writeSingleCoil(host, port, unitId, tank.channel, false, VALVE_WRITE_OPTIONS);
           logRelayEvent(tank.equipment_id, tank.channel, false, source, active.automationId);
         } catch (_) {}
       }
@@ -466,4 +501,4 @@ class FertigationDoseScheduler {
 
 const fertigationDoseScheduler = new FertigationDoseScheduler();
 
-module.exports = { FertigationDoseScheduler, fertigationDoseScheduler };
+module.exports = { FertigationDoseScheduler, fertigationDoseScheduler, VALVE_WRITE_OPTIONS };

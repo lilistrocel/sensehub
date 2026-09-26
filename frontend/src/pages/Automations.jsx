@@ -204,7 +204,7 @@ export default function Automations() {
   const confirmCopy = useMemo(() => {
     if (!confirm) return null;
     const { kind, auto, summary, targets, actions } = confirm;
-    const items = targets.map(t => `${t.eqName} · ${t.label} → ${t.action.toUpperCase()}${t.value !== null && t.value !== undefined && t.action === 'set' ? ` ${t.value}` : ''}${t.duration ? ` for ${formatDuration(t.duration)}` : ''}${t.delay ? ` (after ${formatDuration(t.delay)})` : ''}`);
+    const items = targets.map(t => `${t.eqName} · ${t.label} → ${t.action.toUpperCase()}${t.value !== null && t.value !== undefined && t.action === 'set' ? ` ${t.value}` : ''}${t.duration ? ` for ${formatDuration(t.duration)}` : ''}${t.windows > 1 ? ` × ${t.windows}` : ''}${t.delay ? ` (${t.windows > 1 ? 'first ' : ''}after ${formatDuration(t.delay)})` : ''}`);
     const alerts = actions.filter(a => a?.type === 'alert').length;
     const logs = actions.filter(a => a?.type === 'log').length;
     const extras = [];

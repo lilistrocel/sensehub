@@ -3,6 +3,7 @@
  *
  *   GET /api/dose-controller/status              any role — live mode, per-tank target vs dosed, pH, acid use, last run
  *   GET /api/dose-controller/runs                any role — ?date=YYYY-MM-DD&from=&to=&limit=&offset= (run records)
+ *   GET /api/dose-controller/runs/last           any role — latest finished run (per-zone table), { run: null } if none
  *   GET /api/dose-controller/config              admin — settings (system_settings 'dose_controller') + defaults + programs' control_mode
  *   PUT /api/dose-controller/config              admin — partial (deep) update, validated
  *   PUT /api/dose-controller/programs/:id/mode   admin — { control_mode: 'closed_loop' | 'open_loop' } (takes effect next cycle)
@@ -20,6 +21,14 @@ const router = express.Router();
 router.get('/status', (req, res) => {
   try {
     res.json(getDoseController().getStatus());
+  } catch (err) {
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
+  }
+});
+
+router.get('/runs/last', (req, res) => {
+  try {
+    res.json({ run: getDoseController().lastRun() });
   } catch (err) {
     res.status(500).json({ error: 'Internal Server Error', message: err.message });
   }

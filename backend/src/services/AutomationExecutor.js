@@ -69,13 +69,13 @@ const readback = require('./RelayReadback');
  * confirmation result. A disagreeing read-back triggers ONE re-write + re-read
  * before the result is decided; genuine disagreement raises a warning alert.
  */
-async function writeCoilConfirmed(equipment, target, address, value, context = {}) {
+async function writeCoilConfirmed(equipment, target, address, value, context = {}, writeOptions = undefined) {
   const { host, port, unitId } = target;
   const sendWrite = async () => {
     if (equipment.write_only) {
       await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, value);
     } else {
-      await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
+      await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value, writeOptions);
     }
   };
   await sendWrite();
@@ -95,13 +95,13 @@ async function writeCoilConfirmed(equipment, target, address, value, context = {
  * Write a contiguous run of coils (FC15), read the run back and return the
  * per-channel confirmation. Same retry / alert policy as writeCoilConfirmed().
  */
-async function writeCoilsConfirmed(equipment, target, start, values, context = {}) {
+async function writeCoilsConfirmed(equipment, target, start, values, context = {}, writeOptions = undefined) {
   const { host, port, unitId } = target;
   const sendWrite = async () => {
     if (equipment.write_only) {
       await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, start, values);
     } else {
-      await modbusTcpClient.writeMultipleCoils(host, port, unitId, start, values);
+      await modbusTcpClient.writeMultipleCoils(host, port, unitId, start, values, writeOptions);
     }
   };
   await sendWrite();
@@ -227,6 +227,21 @@ function evaluateDependencies(deps) {
 }
 
 /**
+ * Length of the dose cycle an automation run starts: max(delay + duration) over
+ * the control actions that ran (not errored / skipped by a dependency). Equals
+ * max(duration) when no action is delayed; covers every zone of a soft-switch run
+ * (one delayed pump window per zone). 0 = no timed control action ran.
+ */
+function doseCycleSeconds(executedActions) {
+  const ran = (executedActions || [])
+    .filter(a => a && a.type === 'control' && a.status !== 'error' && a.status !== 'skipped_dependency');
+  return Math.max(0, ...ran.map(a => {
+    const dur = parseFloat(a.duration_seconds) || 0;
+    return dur > 0 ? (parseFloat(a.delay_seconds) || 0) + dur : 0;
+  }));
+}
+
+/**
  * Execute all actions for an automation.
  *
  * @param {object} automation - The automation row from the database
@@ -294,7 +309,7 @@ async function executeAutomation(automation, source = 'manual') {
       executedActions.push({ type: 'log', status: 'executed', message: action.message || 'Event logged' });
 
     } else if (action.type === 'control') {
-      const result = await executeControlAction(action, automation);
+      const result = await executeControlAction(action, automation, { actionIdx });
       executedActions.push(result);
 
     } else if (action.type === 'transition') {
@@ -309,11 +324,12 @@ async function executeAutomation(automation, source = 'manual') {
   // the dose scheduler just modulates the injector valves alongside them.
   if (automation.dose_program_id) {
     try {
-      const durations = executedActions
-        .filter(a => a.type === 'control' && a.status !== 'error' && a.status !== 'skipped_dependency')
-        .map(a => parseFloat(a.duration_seconds) || 0);
-      const ranControl = durations.some(d => d > 0);
-      const cycleSeconds = Math.max(0, ...durations);
+      // The dose cycle must cover the whole run: max(delay + duration) over the
+      // control actions that ran. Identical to max(duration) when no action is
+      // delayed; with soft-switch runs (one delayed pump window per zone) a plain
+      // max(duration) would end dosing after the first zone (Part D, 2026-09-26).
+      const cycleSeconds = doseCycleSeconds(executedActions);
+      const ranControl = cycleSeconds > 0;
       if (ranControl && cycleSeconds > 0 && !fertigationDoseScheduler.isRunning()) {
         fertigationDoseScheduler.startCycle({
           programId: automation.dose_program_id,
@@ -455,7 +471,9 @@ async function executeControlAction(action, automation, options = {}) {
         // delayed action would turn the coil ON; a delayed OFF must always run.
         relayTimerService.scheduleDelayedStart(targetEquipment.id, address, action.delay_seconds, executeRelayAction, {
           automationId: automation.id,
-          checkEnabled: value === true
+          checkEnabled: value === true,
+          // per action: one automation may hold several delayed windows on a channel
+          actionKey: automation.id != null && Number.isInteger(options.actionIdx) ? `a${automation.id}:${options.actionIdx}` : null
         });
         return {
           type: 'control', status: 'scheduled', action: action.action,
@@ -821,6 +839,15 @@ async function stopAllRelays(options = {}) {
     startedAt: new Date().toISOString(),
   });
 
+  // A flow-watch cold-restart retry waiting out its pause is not a RelayTimer:
+  // drop it first so nothing re-energises the irrigation pumps after the stop.
+  try {
+    const fw = require('./IrrigationFlowWatchService').peekFlowWatchService();
+    if (fw && fw.cancelPendingRetry('Stop All')) console.log('[Automation] Stop-all: cancelled a pending flow-watch cold restart');
+  } catch (err) {
+    console.error('[Automation] Stop-all: flow-watch retry cancel failed:', err.message);
+  }
+
   summary.timersCancelled = relayTimerService.cancelAllTimers();
   console.log(`[Automation] Stop-all: cancelled ${summary.timersCancelled} pending relay timer(s)`);
 
@@ -924,6 +951,7 @@ async function stopAllRelays(options = {}) {
 
 module.exports = {
   executeAutomation, evaluateDependencies, executeTransitionAction, stopAllRelays,
-  // exported for tests / reuse
-  planStopAll, buildCoilRuns, parseHostPort, applyRelayCache
+  // exported for tests / reuse (flow-watch run shutdown + cold-restart retry)
+  planStopAll, buildCoilRuns, parseHostPort, applyRelayCache,
+  writeCoilConfirmed, writeCoilsConfirmed, doseCycleSeconds,
 };

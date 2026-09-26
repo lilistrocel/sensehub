@@ -21,6 +21,8 @@ import {
  * - Flow ring buffer (10 min) seeded from /api/equipment/:id/history/chart.
  * - Channel config (expected flow, tank -> relay channel) every 10 min.
  * - Daily report (measured totals, tank map) every 3 min and after a cycle ends.
+ * - Last dose-controller run (per-zone water, A-D, ratio, EC, pH) with the
+ *   report: GET /api/dose-controller/runs/last (older backends: status.last_run).
  */
 export function useIrrigationLive({ token, subscribe }) {
   const [monitor, setMonitor] = useState(null);
@@ -28,6 +30,7 @@ export function useIrrigationLive({ token, subscribe }) {
   const [flowBuffer, setFlowBuffer] = useState([]);
   const [channelConfig, setChannelConfig] = useState(null);
   const [report, setReport] = useState(null);
+  const [lastRun, setLastRun] = useState(undefined); // undefined = not loaded, null = none
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [firstSeenOnMs, setFirstSeenOnMs] = useState({});
@@ -62,6 +65,25 @@ export function useIrrigationLive({ token, subscribe }) {
     } catch (e) {
       // The card shows "—" for today's totals; not worth a toast.
       setReport((prev) => prev || { error: e.message });
+    }
+  }, [token, auth]);
+
+  const fetchLastRun = useCallback(async () => {
+    if (!token) return;
+    try {
+      let r = await fetch(`${API_BASE}/dose-controller/runs/last`, auth());
+      if (r.status === 404) {
+        r = await fetch(`${API_BASE}/dose-controller/status`, auth());
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const s = await r.json();
+        setLastRun(s && s.last_run ? s.last_run : null);
+        return;
+      }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const body = await r.json();
+      setLastRun(body && body.run ? body.run : null);
+    } catch (e) {
+      setLastRun((prev) => (prev === undefined ? null : prev));
     }
   }, [token, auth]);
 
@@ -124,10 +146,11 @@ export function useIrrigationLive({ token, subscribe }) {
     fetchMonitors();
     fetchConfig();
     fetchReport();
+    fetchLastRun();
     const cfg = setInterval(() => { if (!document.hidden) fetchConfig(); }, IRRIGATION.configPollMs);
-    const rep = setInterval(() => { if (!document.hidden) fetchReport(); }, IRRIGATION.reportPollMs);
+    const rep = setInterval(() => { if (!document.hidden) { fetchReport(); fetchLastRun(); } }, IRRIGATION.reportPollMs);
     return () => { clearInterval(cfg); clearInterval(rep); };
-  }, [fetchMonitors, fetchConfig, fetchReport]);
+  }, [fetchMonitors, fetchConfig, fetchReport, fetchLastRun]);
 
   // Poll when the WebSocket is quiet; always refresh last_cycle every 30 s.
   useEffect(() => {
@@ -163,20 +186,20 @@ export function useIrrigationLive({ token, subscribe }) {
   useEffect(() => {
     const active = !!monitor?.irrigation?.active;
     if (wasActiveRef.current === true && !active) {
-      const t = setTimeout(() => { fetchMonitors(); fetchReport(); }, 4000);
+      const t = setTimeout(() => { fetchMonitors(); fetchReport(); fetchLastRun(); }, 4000);
       wasActiveRef.current = active;
       return () => clearTimeout(t);
     }
     wasActiveRef.current = active;
     return undefined;
-  }, [monitor?.irrigation?.active, fetchMonitors, fetchReport]);
+  }, [monitor?.irrigation?.active, fetchMonitors, fetchReport, fetchLastRun]);
 
   useEffect(() => {
     const id = monitor?.last_cycle?.id;
     if (id === undefined) return;
-    if (lastCycleIdRef.current !== undefined && lastCycleIdRef.current !== id) fetchReport();
+    if (lastCycleIdRef.current !== undefined && lastCycleIdRef.current !== id) { fetchReport(); fetchLastRun(); }
     lastCycleIdRef.current = id;
-  }, [monitor?.last_cycle?.id, fetchReport]);
+  }, [monitor?.last_cycle?.id, fetchReport, fetchLastRun]);
 
   // Remember when a zone was first seen ON (fallback when the board has no lastChangeTs).
   const noteZoneStates = useCallback((zones) => {
@@ -192,7 +215,7 @@ export function useIrrigationLive({ token, subscribe }) {
     });
   }, []);
 
-  return { monitor, skewMs, flowBuffer, channelConfig, report, error, loading, firstSeenOnMs, noteZoneStates, refresh: fetchMonitors };
+  return { monitor, skewMs, flowBuffer, channelConfig, report, lastRun, error, loading, firstSeenOnMs, noteZoneStates, refresh: fetchMonitors };
 }
 
 export default useIrrigationLive;

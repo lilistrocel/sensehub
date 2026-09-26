@@ -19,6 +19,18 @@ function timeText(item) {
   return `${formatClock(item.start)}–${formatClock(item.end)}`;
 }
 
+/** One segment: as before. Several (e.g. pumps once per zone): "4× 4:30 · 0:03–18:30". */
+function rowTimeText(row) {
+  if (row.segments.length === 1) return timeText(row.segments[0]);
+  const bars = row.segments.filter(s => s.kind === 'bar');
+  const durs = new Set(bars.map(s => (s.end === null ? 'open' : Math.round(s.end - s.start))));
+  const each = bars.length === row.segments.length && durs.size === 1 && !durs.has('open')
+    ? `${row.segments.length}× ${formatClock([...durs][0])}`
+    : `${row.segments.length} windows`;
+  const end = row.end === null ? ' → until off' : `–${formatClock(row.end)}`;
+  return `${each} · ${formatClock(row.start)}${end}`;
+}
+
 /**
  * Read-only preview of when each relay action runs, measured from the
  * trigger. Flags (never blocks) a feed pump running with no zone open and
@@ -27,6 +39,7 @@ function timeText(item) {
 export default function SequenceTimeline({ sequence }) {
   if (!sequence || !sequence.show) return null;
   const { items, total, openEnded, scaleEnd, gaps, overlaps, pumpCovered } = sequence;
+  const rows = sequence.rows || items.map(i => ({ key: i.key, eqId: i.eqId, eqName: i.eqName, label: i.label, stagger: i.stagger, segments: [i], start: i.start, end: i.end }));
   const multiEquipment = new Set(items.map(i => i.eqId)).size > 1;
   const issues = gaps.length + overlaps.length;
 
@@ -50,29 +63,30 @@ export default function SequenceTimeline({ sequence }) {
       </div>
 
       <ol className="space-y-1.5">
-        {items.map((item) => {
-          const label = multiEquipment ? `${item.eqName} · ${item.label}` : item.label;
-          const overlays = flagged.get(item.key) || [];
+        {rows.map((row) => {
+          const label = multiEquipment ? `${row.eqName} · ${row.label}` : row.label;
+          const overlays = row.segments.flatMap(s => flagged.get(s.key) || []);
           return (
             <li
-              key={item.key}
-              className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[9rem_minmax(0,1fr)_7.5rem] items-center gap-x-2 gap-y-0.5"
+              key={row.key}
+              className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[9rem_minmax(0,1fr)_9.5rem] items-center gap-x-2 gap-y-0.5"
               data-testid="sequence-row"
             >
-              <span className="text-xs text-ink truncate flex items-center gap-1" title={`${item.eqName} · ${item.label}`}>
+              <span className="text-xs text-ink truncate flex items-center gap-1" title={`${row.eqName} · ${row.label}`}>
                 {overlays.length > 0 && <CautionTriangle />}
                 <span className="truncate">{label}</span>
-                {item.stagger ? <span className="text-muted shrink-0">· {item.stagger} s apart</span> : null}
+                {row.stagger ? <span className="text-muted shrink-0">· {row.stagger} s apart</span> : null}
               </span>
               <span className="col-span-2 sm:col-span-1 order-last sm:order-none relative h-3 rounded-sm bg-field border border-line overflow-hidden" aria-hidden="true">
-                {item.kind === 'bar' ? (
+                {row.segments.map((item) => (item.kind === 'bar' ? (
                   <span
+                    key={item.key}
                     className={`absolute inset-y-0 ${item.end === null ? 'bg-gradient-to-r from-state-ok to-transparent' : 'bg-state-ok'}`}
                     style={{ left: pct(item.start, scaleEnd), width: pct((item.end === null ? scaleEnd : item.end) - item.start, scaleEnd) }}
                   />
                 ) : (
-                  <span className="absolute inset-y-0 w-0.5 bg-ink" style={{ left: pct(item.start, scaleEnd) }} />
-                )}
+                  <span key={item.key} className="absolute inset-y-0 w-0.5 bg-ink" style={{ left: pct(item.start, scaleEnd) }} />
+                )))}
                 {overlays.map((o, n) => (
                   <span
                     key={n}
@@ -81,7 +95,7 @@ export default function SequenceTimeline({ sequence }) {
                   />
                 ))}
               </span>
-              <span className="text-xs font-mono tabular text-muted whitespace-nowrap text-right sm:text-left">{timeText(item)}</span>
+              <span className="text-xs font-mono tabular text-muted whitespace-nowrap text-right sm:text-left">{rowTimeText(row)}</span>
             </li>
           );
         })}

@@ -231,17 +231,42 @@ test('readMappings: Circutor .206 case - block spanning a hole rejected -> hole-
   assert.deepEqual(client.calls.map(c => c.quantity), [18, 8]);
 });
 
-test('readMappings: Circutor .205 case - block spanning a hole silently dropped (timeout), sub-blocks answer -> remembered as "split"', async () => {
+test('readMappings: Circutor .205 case - block spanning a hole silently dropped (timeout), sub-blocks answer -> remembered as "split" after 3 cycles in a row', async () => {
   const registers = { 10: 1, 11: 2, 14: 5, 15: 6 };
   const spansHole = ({ address, quantity }) => address <= 12 && address + quantity - 1 >= 12;
   const client = stubClient({ registers, reject: (q) => (spansHole(q) ? new Error('Request timeout') : null) });
   const mappings = [reg(10), reg(11), reg(14), reg(15)];
   const memory = new Map();
-  const r = await blocks.readMappings(client, TARGET, mappings, { runModes: memory });
-  assert.deepEqual(client.calls.map(c => [c.address, c.quantity]), [[10, 6], [10, 2], [14, 2]]);
-  assert.equal(r.failed, 0);
-  assert.deepEqual(r.readings.map(x => x.value), [1, 2, 5, 6]);
-  assert.equal(memory.get('4:10:6'), blocks.MODE_SPLIT);
+  for (let cycle = 1; cycle <= blocks.SPLIT_AFTER_TIMEOUTS; cycle++) {
+    client.calls.length = 0;
+    const r = await blocks.readMappings(client, TARGET, mappings, { runModes: memory });
+    assert.deepEqual(client.calls.map(c => [c.address, c.quantity]), [[10, 6], [10, 2], [14, 2]], `cycle ${cycle}`);
+    assert.equal(r.failed, 0);
+    assert.deepEqual(r.readings.map(x => x.value), [1, 2, 5, 6]);
+    assert.equal(memory.get('4:10:6'), cycle < blocks.SPLIT_AFTER_TIMEOUTS ? undefined : blocks.MODE_SPLIT, `cycle ${cycle}`);
+  }
+  client.calls.length = 0;
+  await blocks.readMappings(client, TARGET, mappings, { runModes: memory });
+  assert.deepEqual(client.calls.map(c => [c.address, c.quantity]), [[10, 2], [14, 2]], 'split remembered: no block attempt');
+});
+
+test('readMappings: SEKO case - ONE lost block frame on a busy bus does not switch FC04 1000x9 to 4 sub-block reads (2026-09-26 11:30:15)', async () => {
+  const registers = { 1000: 605, 1001: 0, 1002: -5, 1003: 350, 1004: 0, 1005: 2080, 1006: 0, 1007: 0, 1008: 88 };
+  let dropNext = true;
+  const client = stubClient({ registers, reject: (q) => { if (q.quantity === 9 && dropNext) { dropNext = false; return new Error('Request timeout'); } return null; } });
+  const seko = [1000, 1003, 1005, 1008].map(a => ({ ...reg(a), functionCode: 4 }));
+  const memory = new Map();
+  const r1 = await blocks.readMappings(client, TARGET, seko, { runModes: memory });
+  assert.equal(r1.failed, 0, 'sub-blocks still deliver this cycle');
+  assert.equal(memory.size, 0, 'not remembered after one timeout');
+  client.calls.length = 0;
+  const r2 = await blocks.readMappings(client, TARGET, seko, { runModes: memory });
+  assert.deepEqual(client.calls.map(c => [c.address, c.quantity]), [[1000, 9]], 'next cycle: one block request again');
+  assert.equal(r2.failed, 0);
+  // a later single timeout starts the streak from 1 again (block success reset it)
+  dropNext = true;
+  await blocks.readMappings(client, TARGET, seko, { runModes: memory });
+  assert.equal(memory.size, 0);
 });
 
 test('readMappings: block spanning a hole times out AND its sub-blocks time out -> nothing remembered (flaky bus, not the hole)', async () => {

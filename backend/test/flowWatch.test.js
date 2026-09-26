@@ -73,6 +73,18 @@ class Sim {
     this.sched = {
       running: doseRunning,
       aborts: [],
+      paused: false,
+      canPause: true,
+      pauses: [],
+      resumes: [],
+      pauseDosing(reason) {
+        if (!this.running || !this.canPause) return false;
+        this.paused = true; this.pauses.push({ reason, at: sim.t });
+        for (const t of sim.tanks) sim.relayEvent(sim.dos, t.channel, false, 'dose_controller');
+        return true;
+      },
+      resumeDosing(reason) { if (!this.paused) return false; this.paused = false; this.resumes.push({ reason, at: sim.t }); return true; },
+      isPaused() { return this.paused; },
       isRunning() { return this.running; },
       currentCycle() { return this.running ? { cycleLogId: 85, dryRun: false, schedule: { tanks: sim.tanks } } : null; },
       async abortCycle(reason, opts = {}) {
@@ -86,29 +98,94 @@ class Sim {
     };
     if (doseRunning) for (const t of this.tanks) this.relayEvent(this.dos, t.channel, true, 'dose_program', base - 600000);
     this.notifications = [];
+    this.timers = [];   // the run's RelayTimer: { at, ch, on, type: 'delay'|'off', aid }
+    this.wakeups = [];  // service setTimer() callbacks
+    this.act = this._fakeActuator();
     this.svc = new IrrigationFlowWatchService({
       db, now: () => this.t, createAlert, updateOpenAlert, logger: quiet,
       notify: async (title, text, severity) => { this.notifications.push({ title, text, severity }); },
       doseScheduler: this.sched,
-      config: { irrigation_equipment_id: this.irr, dosing_equipment_id: this.dos, ...config },
+      actuator: this.act,
+      setTimer: (fn, ms) => { this.wakeups.push({ at: this.t + ms, fn }); return null; },
+      // pump no-flow protection is OFF in the legacy replays; its own tests switch it on
+      config: { irrigation_equipment_id: this.irr, dosing_equipment_id: this.dos, shutdown_enabled: false, ...config },
     });
     this.consumed = { 1: 100, 2: 100, 3: 100, 4: 100 };
     this.dosingStoppedAt = null;
     this.firedAt = {};
   }
 
-  relayEvent(eqId, ch, on, source, atMs = this.t) {
-    db.prepare('INSERT INTO relay_events (equipment_id, channel, state, source, automation_id, confirmed, created_at) VALUES (?, ?, ?, ?, NULL, 1, ?)')
-      .run(eqId, ch, on ? 1 : 0, source, dbTs(atMs));
+  relayEvent(eqId, ch, on, source, atMs = this.t, aid = null) {
+    db.prepare('INSERT INTO relay_events (equipment_id, channel, state, source, automation_id, confirmed, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)')
+      .run(eqId, ch, on ? 1 : 0, source, aid, dbTs(atMs));
   }
 
   /** Switch an irrigation relay the way AutomationExecutor + RelayStateCache would: event + read-back into the cache. */
-  setRelay(ch, on, source = 'automation', atMs = this.t) {
+  setRelay(ch, on, source = 'automation', atMs = this.t, aid = null) {
     const row = db.prepare('SELECT last_reading FROM equipment WHERE id = ?').get(this.irr);
     const r = JSON.parse(row.last_reading);
     r.relayStates[ch] = on;
     db.prepare('UPDATE equipment SET last_reading = ?, last_communication = ? WHERE id = ?').run(JSON.stringify(r), new Date(this.t).toISOString(), this.irr);
-    this.relayEvent(this.irr, ch, on, source, atMs);
+    this.relayEvent(this.irr, ch, on, source, atMs, aid);
+    if (this.onSwitch) this.onSwitch(ch, on, source);
+  }
+
+  relayStates() {
+    return JSON.parse(db.prepare('SELECT last_reading FROM equipment WHERE id = ?').get(this.irr).last_reading).relayStates;
+  }
+
+  /** The automation's RelayTimer entries (delayed starts / auto-offs), fired by run(). */
+  timer(atRel, ch, on, aid = null) {
+    this.timers.push({ at: this.base + atRel * 1000, ch, on, type: on ? 'delay' : 'off', aid });
+  }
+
+  _fireDue() {
+    for (const w of this.wakeups.filter(x => x.at <= this.t)) { this.wakeups.splice(this.wakeups.indexOf(w), 1); w.fn(); }
+    for (const tm of this.timers.filter(x => x.at <= this.t).sort((a, b) => a.at - b.at)) {
+      this.timers.splice(this.timers.indexOf(tm), 1);
+      this.setRelay(tm.ch, tm.on, tm.on ? 'automation' : 'automation_auto_off', this.t, tm.aid);
+    }
+  }
+
+  /** Fake actuator: records every call, writes go straight into the relay cache + relay_events. */
+  _fakeActuator() {
+    const sim = this;
+    return {
+      calls: [], disarmed: false, failOff: 0, failOn: false,
+      isDisarmed() { return this.disarmed; },
+      async writeOff(eqId, channels, o) {
+        this.calls.push({ op: 'off', eqId, channels: [...channels], source: o.source, automationId: o.automationId, at: sim.t });
+        if (this.failOff > 0) { this.failOff--; return { confirmed: false, error: 'Request timeout', items: channels.map(ch => ({ channel: ch, confirmed: false })) }; }
+        for (const ch of channels) sim.setRelay(ch, false, o.source, sim.t, o.automationId);
+        return { confirmed: true, items: channels.map(ch => ({ channel: ch, confirmed: true, readback: false })) };
+      },
+      async writeOn(eqId, channels, o) {
+        this.calls.push({ op: 'on', eqId, channels: [...channels], source: o.source, automationId: o.automationId, at: sim.t });
+        if (this.disarmed) throw new Error('automations are disarmed');
+        if (this.failOn) return { confirmed: false, error: 'read-back disagrees', items: [] };
+        for (const ch of channels) sim.setRelay(ch, true, o.source, sim.t, o.automationId);
+        return { confirmed: true, items: channels.map(ch => ({ channel: ch, confirmed: true, readback: true })) };
+      },
+      cancelRunTimers(aid, eqId) {
+        const gone = sim.timers.filter(tm => tm.type === 'delay');
+        sim.timers = sim.timers.filter(tm => tm.type !== 'delay');
+        this.calls.push({ op: 'cancel', automationId: aid, eqId, keys: gone.map(tm => `delay:${eqId}:${tm.ch}`), at: sim.t });
+        return gone.map(tm => ({ key: `delay:${eqId}:${tm.ch}`, type: 'delay', equipmentId: eqId, channel: tm.ch }));
+      },
+      cancelOffTimers(eqId, channels) {
+        sim.timers = sim.timers.filter(tm => !(tm.type === 'off' && channels.includes(tm.ch)));
+      },
+      getOffTimer(eqId, ch) {
+        const tm = sim.timers.filter(x => x.type === 'off' && x.ch === ch).sort((a, b) => a.at - b.at)[0];
+        return tm ? { firesAt: new Date(tm.at) } : null;
+      },
+      scheduleOff(eqId, ch, seconds, o) {
+        sim.timers = sim.timers.filter(tm => !(tm.type === 'off' && tm.ch === ch));
+        sim.timers.push({ at: sim.t + seconds * 1000, ch, on: false, type: 'off', aid: o.automationId });
+        this.calls.push({ op: 'scheduleOff', ch, seconds, at: sim.t });
+      },
+      logAutomationRun(aid, status, message) { this.calls.push({ op: 'log', automationId: aid, status, message, at: sim.t }); },
+    };
   }
 
   poll() {
@@ -143,6 +220,7 @@ class Sim {
     for (let i = Math.round(from * 10); i <= Math.round(to * 10); i += 5) {
       const rel = i / 10;
       this.t = this.base + rel * 1000;
+      this._fireDue();
       if (acts.has(i)) acts.get(i)(this, rel);
       if (i % 150 === 0) this.poll();
       const active = activeAt(rel);
@@ -634,4 +712,453 @@ test('status: idle when all OFF, unknown when the relay board is stale or the pu
   assert.deepEqual(st3.active.map(a => [a.rule, a.fired]), [['monitor_blind', true]]);
   sim.dispose();
   sim2.dispose();
+});
+
+// ─── pump no-flow protection: run shutdown + cold-restart retry (2026-09-26) ─
+
+/**
+ * Hydraulic plant driven by the relay cache: flow ramps 0 -> 8,850 L/h in ~7 s
+ * when the irrigation pump runs into an open valve and falls to 0 in ~3 s
+ * otherwise. A zone valve switched ON while the pump is running (under
+ * pressure) sticks shut when it is in `stuck`; switched ON with the pump OFF
+ * (cold) it opens — unless in `alwaysStuck`. Zone 4 on 2026-09-26: stuck when
+ * switched on mid-run (09:40, 15:37), fine from a cold start (09:52 test).
+ */
+function hydraulicPlant(sim, { stuck = [], alwaysStuck = [], full = 8850, noise = noiseGen(5) } = {}) {
+  const open = new Map(); // ch -> physically open?
+  let flow = null;
+  let lastRel = null;
+  const states = () => sim.relayStates();
+  // decide a valve's fate the moment its relay switches ON
+  sim.onSwitch = (ch, on) => {
+    if (![3, 4, 5, 6].includes(ch)) return;
+    if (!on) { open.delete(ch); return; }
+    const pumpRunning = states()[1] === true;
+    open.set(ch, !(alwaysStuck.includes(ch) || (stuck.includes(ch) && pumpRunning)));
+  };
+  for (const [ch, on] of Object.entries(states())) if (on && [3, 4, 5, 6].includes(Number(ch))) open.set(Number(ch), true);
+  const flowAt = (rel) => {
+    const r = states();
+    const target = r[1] === true && [...open.values()].some(Boolean) ? full : 0;
+    if (flow === null) flow = target;
+    const dt = lastRel === null ? 0 : rel - lastRel;
+    lastRel = rel;
+    if (flow < target) flow = Math.min(target, flow + (full / 7) * dt);
+    else if (flow > target) flow = Math.max(target, flow - (full / 3) * dt);
+    return flow > 0 && target > 0 ? Math.max(0, flow + noise(40)) : flow;
+  };
+  return { flowAt, open };
+}
+
+/** Longest stretch with the pump relay ON and flow below 500 L/h, from the replay's samples. */
+function trackDeadHead(sim, flowAt) {
+  let since = null; let worst = 0;
+  const wrapped = (rel) => {
+    const f = flowAt(rel);
+    const pump = sim.relayStates()[1] === true;
+    if (pump && f !== null && f < 500) { if (since === null) since = rel; worst = Math.max(worst, rel - since); } else since = null;
+    return f;
+  };
+  return { flowAt: wrapped, worst: () => worst };
+}
+
+const AID = 100; // automation 100, "Fertigation 15:30 — 2.5 min/zone"
+function ensureAutomation(id, name) {
+  if (!db.prepare('SELECT id FROM automations WHERE id = ?').get(id)) {
+    db.prepare("INSERT INTO automations (id, name, enabled, trigger_config, actions, last_run) VALUES (?, ?, 1, '{}', '[]', ?)").run(id, name, '2026-09-26 11:30:04');
+  }
+}
+
+/**
+ * 15:30 run (automation 100), relative to Zone 4 ON at 15:37:34 (= rel 0):
+ * pumps ON since 15:30:04 (rel -450), Zone 3 ON since 15:35:11 and switched OFF
+ * at 15:37:41 (rel +7); Zone 4 and both pumps end at 15:40:04 (rel +150).
+ */
+function run1530Sim(config = {}, plantOpts = { stuck: [6] }) {
+  ensureAutomation(AID, 'Fertigation 15:30 — 2.5 min/zone, full strength');
+  const base = Date.parse('2026-09-26T11:37:34Z');
+  const sim = new Sim({ base, relays: { 1: true, 2: true, 5: true }, config: { shutdown_enabled: true, ...config } });
+  sim.relayEvent(sim.irr, 1, true, 'automation', base - 450000, AID);
+  sim.relayEvent(sim.irr, 2, true, 'automation', base - 450000, AID);
+  sim.relayEvent(sim.irr, 5, true, 'automation', base - 143000, AID);
+  sim.timer(0, 6, true, AID);   // zone 4 delayed start
+  sim.timer(7, 5, false, AID);  // zone 3 auto-off (landed 7 s late on the day)
+  sim.timer(150, 6, false, AID);
+  sim.timer(150, 1, false, AID);
+  sim.timer(150, 2, false, AID);
+  const plant = hydraulicPlant(sim, plantOpts);
+  return { sim, plant };
+}
+
+const irrigationOffCalls = (sim) => sim.act.calls.filter(c => c.op === 'off');
+const guardAlerts = (sim) => db.prepare("SELECT * FROM alerts WHERE fingerprint LIKE ? ORDER BY id").all(`flow_watch:pump_no_flow:${sim.irr}:%`);
+const guardEpisodes = (sim) => db.prepare("SELECT * FROM irrigation_flow_episodes WHERE equipment_id = ? AND kind IN ('run_shutdown','retry_recovered','retry_ended','retry_abandoned') ORDER BY id").all(sim.irr);
+
+test('pump protection, 15:30 replay, stuck Zone 4 + cold-restart retry that WORKS: pumps+zone OFF at ~15 s of no flow, 10 s pause, cold restart, flow back, zone completes, dosing paused then resumed, one alert downgraded to "recovered"', async () => {
+  const { sim, plant } = run1530Sim();
+  const dh = trackDeadHead(sim, plant.flowAt);
+  await sim.run({ from: -20, to: 170, flowAt: dh.flowAt, dosingAt: NORMAL_RATES, actions: { 150: s => { s.sched.running = false; } } });
+
+  const off = irrigationOffCalls(sim);
+  const on = sim.act.calls.filter(c => c.op === 'on');
+  assert.equal(off.length, 1, JSON.stringify(sim.act.calls));
+  assert.deepEqual(off[0].channels, [1, 2, 6], 'pause: both pumps + the stuck zone');
+  assert.equal(off[0].source, 'flow_watch_retry');
+  const tOff = (off[0].at - sim.base) / 1000;
+  assert.ok(tOff >= 25 && tOff <= 30, `retry pause at +${tOff}s (zone 3 off +7, grace 5, 15 s below threshold)`);
+  assert.equal(on.length, 1);
+  assert.deepEqual(on[0].channels, [6, 1, 2], 'cold restart: zone first, then the pumps');
+  assert.equal(on[0].source, 'flow_watch_retry');
+  assert.equal(on[0].automationId, AID);
+  const pause = (on[0].at - off[0].at) / 1000;
+  assert.ok(pause >= 10 && pause <= 10.6, `pause ${pause}s`);
+  // dosing paused (no abort) and resumed at the restart
+  assert.equal(sim.sched.aborts.length, 0, JSON.stringify(sim.sched.aborts) + JSON.stringify(sim.act.calls.map(c => [c.op, c.channels, (c.at - sim.base) / 1000])));
+  assert.equal(sim.sched.pauses.length, 1);
+  assert.equal(sim.sched.resumes.length, 1);
+  // the zone ran to its planned end (auto-off +150) with water
+  assert.equal(sim.relayStates()[6], false);
+  const f140 = db.prepare("SELECT 1").get(); assert.ok(f140);
+  // one alert, downgraded
+  const a = guardAlerts(sim);
+  assert.equal(a.length, 1);
+  assert.equal(a[0].occurrence_count, 1);
+  assert.equal(a[0].severity, 'warning');
+  assert.match(a[0].message, /^Irrigation Zone 4 \(Waveshare Irrigation 1 relay 6\) recovered after a cold restart \(retry\)/);
+  const ep = guardEpisodes(sim);
+  assert.deepEqual(ep.map(e => e.kind), ['retry_recovered']);
+  assert.equal(ep[0].channel, 6);
+  // never two zones open, pump never dead-headed for longer than grace + hold
+  assert.ok(dh.worst() <= 15 + 5 + 2, `pump ON with < 500 L/h for ${dh.worst()} s at most`);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM relay_events WHERE equipment_id = ? AND source = 'flow_watch_shutdown'").get(sim.irr).n, 0);
+  assert.equal(sim.svc.getStatus().last_shutdown.kind, 'retry_recovered');
+  sim.dispose();
+});
+
+test('pump protection, 15:30 replay, retry FAILS (valve stuck even from cold): full shutdown — OFF ch1-6, pending timers cancelled, dose cycle aborted, run marked aborted, ONE critical alert + Telegram, episode run_shutdown', async () => {
+  const { sim, plant } = run1530Sim({}, { alwaysStuck: [6] });
+  const dh = trackDeadHead(sim, plant.flowAt);
+  await sim.run({ from: -20, to: 170, flowAt: dh.flowAt, dosingAt: NORMAL_RATES });
+
+  const off = irrigationOffCalls(sim);
+  assert.equal(off.length, 2, JSON.stringify(off));
+  assert.deepEqual(off[0].channels, [1, 2, 6]);
+  assert.deepEqual(off[1].channels, [1, 2, 3, 4, 5, 6], 'shutdown: every pump + zone of the run');
+  assert.equal(off[1].source, 'flow_watch_shutdown');
+  const restart = sim.act.calls.find(c => c.op === 'on');
+  const tShut = (off[1].at - restart.at) / 1000;
+  assert.ok(tShut >= 24 && tShut <= 27, `second no-flow after the restart: cold grace 10 s + 15 s -> +${tShut}s`);
+  assert.equal(sim.act.calls.filter(c => c.op === 'cancel').length, 1, 'run timers cancelled');
+  assert.equal(sim.sched.aborts.length, 1);
+  assert.equal(sim.sched.aborts[0].source, 'flow_watch_shutdown');
+  const log = sim.act.calls.find(c => c.op === 'log');
+  assert.equal(log.automationId, AID);
+  assert.equal(log.status, 'failure');
+  assert.match(log.message, /^ABORTED by flow watch/);
+  const a = guardAlerts(sim);
+  assert.equal(a.length, 1, a.map(x => x.message).join('\n'));
+  assert.equal(a[0].severity, 'critical');
+  assert.match(a[0].message, /^Irrigation stopped: Irrigation Zone 4 \(Waveshare Irrigation 1 relay 6\) had no water for 1\d s with the pumps running — pumps, zones and dosing switched off to prevent over-pressure\. A cold restart .* did not bring water\. Zones not irrigated this run: Irrigation Zone 4\. Check the valve\./);
+  assert.match(a[0].message, /OFF confirmed on relays 1, 2, 3, 4, 5, 6/);
+  assert.ok(sim.notifications.some(n => n.severity === 'critical' && /Irrigation stopped/.test(n.text)));
+  assert.deepEqual(guardEpisodes(sim).map(e => e.kind), ['run_shutdown']);
+  const all = sim.relayStates();
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map(ch => all[ch]), [false, false, false, false, false, false]);
+  assert.ok(dh.worst() <= 15 + 10 + 2, `pump ON with < 500 L/h for ${dh.worst()} s at most`);
+  const st = sim.svc.getStatus();
+  assert.equal(st.last_shutdown.kind, 'run_shutdown');
+  assert.equal(st.last_shutdown.detail.automation_id, AID);
+  sim.dispose();
+});
+
+test('pump protection, 15:30 replay with max_retries = 0: shutdown at ~15 s of no flow with exactly dose abort, OFF ch1-6 on eq1, timers cancelled, one critical alert', async () => {
+  const { sim, plant } = run1530Sim({ max_retries: 0 });
+  await sim.run({ from: -20, to: 120, flowAt: plant.flowAt, dosingAt: NORMAL_RATES });
+  const off = irrigationOffCalls(sim);
+  assert.equal(off.length, 1);
+  assert.deepEqual(off[0].channels, [1, 2, 3, 4, 5, 6]);
+  const t = (off[0].at - sim.base) / 1000;
+  assert.ok(t >= 25 && t <= 30, `shutdown at +${t}s`);
+  assert.equal(sim.act.calls.filter(c => c.op === 'on').length, 0);
+  assert.equal(sim.sched.aborts.length, 1);
+  assert.equal(guardAlerts(sim).length, 1);
+  assert.match(guardAlerts(sim)[0].message, /No cold restart: cold-restart retry is switched off/);
+  sim.dispose();
+});
+
+test('pump protection, 09:40 replay (automation 96, 3.5 min zones): Zone 4 stuck, flow 8,837 -> 0 in 18 s -> retry at ~15 s below threshold; with max_retries 0 -> shutdown and Zone 4 listed as not irrigated', async () => {
+  ensureAutomation(96, 'Fertigation 09:30 — 3.5 min/zone, full strength');
+  for (const retries of [1, 0]) {
+    const base = Date.parse('2026-09-26T05:40:55Z');
+    const sim = new Sim({ base, relays: { 1: true, 2: true, 5: true }, config: { shutdown_enabled: true, max_retries: retries } });
+    sim.relayEvent(sim.irr, 1, true, 'automation', base - 630000, 96);
+    sim.relayEvent(sim.irr, 5, true, 'automation', base - 209000, 96);
+    sim.timer(0, 6, true, 96); sim.timer(1, 5, false, 96); sim.timer(210, 6, false, 96); sim.timer(210, 1, false, 96); sim.timer(210, 2, false, 96);
+    const noise = noiseGen(7);
+    let stopped = false;
+    const flowAt = (rel) => {
+      const r = sim.relayStates();
+      if (!r[1]) stopped = true;
+      if (stopped) return 0;
+      if (rel < 0) return 8837 + noise(90);
+      if (rel <= 5) return lerp(8837, 2157, rel / 5);
+      if (rel <= 18) return lerp(2157, 0, (rel - 5) / 13);
+      return 0;
+    };
+    await sim.run({ from: -30, to: 90, flowAt, dosingAt: INCIDENT_RATES });
+    const first = sim.act.calls.find(c => c.op === 'off');
+    assert.ok(first, 'acted');
+    const t = (first.at - sim.base) / 1000;
+    // below max(500 L/h, 10 % of 8,819) = 882 L/h from ~+12.7 s (grace ended +6 s) -> +27.7 s
+    assert.ok(t >= 27 && t <= 29, `acted at +${t}s (retries=${retries})`);
+    assert.deepEqual(first.channels, retries ? [1, 2, 6] : [1, 2, 3, 4, 5, 6]);
+    if (!retries) assert.match(guardAlerts(sim)[0].message, /Zones not irrigated this run: Irrigation Zone 4\./);
+    sim.dispose();
+  }
+});
+
+test('pump protection: stuck Zone 3 with Zone 4 still pending -> full shutdown lists BOTH zones as not irrigated and cancels Zone 4\'s delayed start', async () => {
+  ensureAutomation(AID, 'Fertigation 15:30');
+  const base = Date.parse('2026-09-26T11:35:04Z');
+  const sim = new Sim({ base, relays: { 1: true, 2: true, 4: true }, config: { shutdown_enabled: true, max_retries: 0 } });
+  sim.relayEvent(sim.irr, 1, true, 'automation', base - 300000, AID);
+  sim.relayEvent(sim.irr, 4, true, 'automation', base - 150000, AID);
+  sim.timer(0, 5, true, AID); sim.timer(0.5, 4, false, AID); sim.timer(150, 5, false, AID);
+  sim.timer(150, 6, true, AID); sim.timer(300, 6, false, AID); sim.timer(300, 1, false, AID);
+  const plant = hydraulicPlant(sim, { stuck: [5] });
+  await sim.run({ from: -10, to: 200, flowAt: plant.flowAt, dosingAt: NORMAL_RATES });
+  const a = guardAlerts(sim);
+  assert.equal(a.length, 1);
+  assert.match(a[0].message, /Zones not irrigated this run: Irrigation Zone 3, Irrigation Zone 4\./);
+  assert.match(a[0].message, /1 pending start\(s\) cancelled/);
+  assert.equal(sim.relayStates()[6], false, 'zone 4 never opened');
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM relay_events WHERE equipment_id = ? AND channel = 6 AND state = 1").get(sim.irr).n, 0);
+  sim.dispose();
+});
+
+test('pump protection: DISARMED -> no cold restart (it would energise), the OFF writes still happen and the run is shut down', async () => {
+  const { sim, plant } = run1530Sim();
+  sim.act.disarmed = true;
+  await sim.run({ from: -20, to: 100, flowAt: plant.flowAt, dosingAt: NORMAL_RATES });
+  const off = irrigationOffCalls(sim);
+  assert.equal(off.length, 1);
+  assert.deepEqual(off[0].channels, [1, 2, 3, 4, 5, 6]);
+  assert.equal(sim.act.calls.filter(c => c.op === 'on').length, 0);
+  assert.match(guardAlerts(sim)[0].message, /No cold restart: automations are disarmed/);
+  assert.deepEqual([1, 2, 6].map(ch => sim.relayStates()[ch]), [false, false, false]);
+  sim.dispose();
+});
+
+test('pump protection: disarmed DURING the retry pause -> no restart, full shutdown', async () => {
+  const { sim, plant } = run1530Sim();
+  await sim.run({ from: -20, to: 100, flowAt: plant.flowAt, dosingAt: NORMAL_RATES,
+    actions: { 32: s => { s.act.disarmed = true; } } });
+  assert.equal(sim.act.calls.filter(c => c.op === 'on').length, 0);
+  const off = irrigationOffCalls(sim);
+  assert.equal(off.length, 2);
+  assert.deepEqual(off[1].channels, [1, 2, 3, 4, 5, 6]);
+  assert.match(guardAlerts(sim)[0].message, /disarmed during the retry pause/);
+  sim.dispose();
+});
+
+test('pump protection: < 20 s of the zone left -> no retry, shutdown', async () => {
+  ensureAutomation(AID, 'Fertigation 15:30');
+  const base = Date.parse('2026-09-26T11:37:34Z');
+  const sim = new Sim({ base, relays: { 1: true, 2: true, 5: true }, config: { shutdown_enabled: true } });
+  sim.relayEvent(sim.irr, 1, true, 'automation', base - 450000, AID);
+  sim.relayEvent(sim.irr, 5, true, 'automation', base - 143000, AID);
+  sim.timer(0, 6, true, AID); sim.timer(7, 5, false, AID);
+  sim.timer(55, 6, false, AID); sim.timer(55, 1, false, AID); sim.timer(55, 2, false, AID); // zone ends at +55
+  const plant = hydraulicPlant(sim, { stuck: [6] });
+  await sim.run({ from: -10, to: 80, flowAt: plant.flowAt, dosingAt: NORMAL_RATES });
+  assert.equal(sim.act.calls.filter(c => c.op === 'on').length, 0);
+  const off = irrigationOffCalls(sim);
+  assert.equal(off.length, 1);
+  assert.deepEqual(off[0].channels, [1, 2, 3, 4, 5, 6]);
+  assert.match(guardAlerts(sim)[0].message, /No cold restart: only \d+ s of the zone would be left after the pause/);
+  sim.dispose();
+});
+
+test('pump protection: pump dead-heading with NO zone open -> no retry, full shutdown at grace + 15 s', async () => {
+  ensureAutomation(AID, 'Fertigation 15:30');
+  const base = Date.parse('2026-09-26T09:00:00Z');
+  const sim = new Sim({ base, doseRunning: false, config: { shutdown_enabled: true } });
+  sim.timer(0, 1, true, AID); sim.timer(0, 2, true, AID); sim.timer(600, 1, false, AID);
+  const plant = hydraulicPlant(sim, {});
+  await sim.run({ from: -5, to: 60, flowAt: plant.flowAt });
+  const off = irrigationOffCalls(sim);
+  assert.equal(off.length, 1);
+  const t = (off[0].at - sim.base) / 1000;
+  assert.ok(t >= 25 && t <= 26.5, `shutdown at +${t}s (pump start = cold grace 10 s + 15 s)`);
+  assert.match(guardAlerts(sim)[0].message, /^Irrigation stopped: the irrigation pump \(Waveshare Irrigation 1 relay 1\) ran with no zone open and no water flowing for 1\d s/);
+  assert.equal(sim.act.calls.filter(c => c.op === 'on').length, 0);
+  sim.dispose();
+});
+
+test('pump protection: meter BLIND (signal 20) with the pump on and "0 L/h" -> never shuts down (monitor_blind instead)', async () => {
+  const { sim, plant } = run1530Sim();
+  await sim.run({ from: -20, to: 120, flowAt: plant.flowAt, dosingAt: NORMAL_RATES, flowExtra: (rel) => (rel >= 3 ? { signal_quality: 20 } : {}) });
+  assert.equal(sim.act.calls.length, 0, JSON.stringify(sim.act.calls));
+  assert.ok(sim.alerts().some(a => a.fingerprint === 'flow_watch:monitor_blind:irrigation_monitor'));
+  sim.dispose();
+});
+
+test('pump protection stays silent: switch-over dip (3 s), cold start ramp (0 -> 8,800 in ~8 s), drain-back blips with pumps OFF', async () => {
+  // switch-over dip
+  {
+    const base = Date.parse('2026-09-26T07:34:38Z');
+    const sim = new Sim({ base, relays: { 1: true, 2: true, 3: true }, config: { shutdown_enabled: true } });
+    sim.relayEvent(sim.irr, 1, true, 'automation', base - 270000);
+    sim.relayEvent(sim.irr, 3, true, 'automation', base - 270000);
+    const noise = noiseGen(3);
+    await sim.run({ from: -30, to: 120, flowAt: (rel) => (rel >= 0.5 && rel < 3.5 ? (rel < 2 ? 0 : 400) : 8880 + noise(100)), dosingAt: NORMAL_RATES,
+      actions: { 0: s => s.setRelay(4, true), 1: s => s.setRelay(3, false, 'automation_auto_off') } });
+    assert.equal(sim.act.calls.length, 0, 'dip');
+    sim.dispose();
+  }
+  // cold start: flow 0 for 2 s, ramp to 8,800 by 8 s — and a slow one (0 for 5 s, 8,800 at 13 s)
+  for (const [z, r] of [[2, 8], [5, 13]]) {
+    const base = Date.parse('2026-09-26T07:30:08Z');
+    const sim = new Sim({ base, doseRunning: true, config: { shutdown_enabled: true } });
+    await sim.run({ from: -20, to: 90, flowAt: (rel) => (rel < z ? 0 : rel <= r ? lerp(0, 8800, (rel - z) / (r - z)) : 8850), activeAt: (rel) => rel >= 1.5,
+      dosingAt: NORMAL_RATES, actions: { 0: s => { s.setRelay(1, true); s.setRelay(2, true); s.setRelay(3, true); } } });
+    assert.equal(sim.act.calls.length, 0, `cold start ${z}-${r}`);
+    sim.dispose();
+  }
+  // drain-back after a run
+  {
+    const base = Date.parse('2026-09-26T07:48:14Z');
+    const sim = new Sim({ base, relays: { 1: true, 2: true, 6: true }, config: { shutdown_enabled: true } });
+    sim.relayEvent(sim.irr, 1, true, 'automation', base - 1080000);
+    sim.relayEvent(sim.irr, 6, true, 'automation', base - 276000);
+    const blips = [[20, 26, 2500], [45, 54, 1800], [80, 82, 3000]];
+    await sim.run({ from: -20, to: 120, flowAt: (rel) => { if (rel < 0) return 8900; if (rel < 6) return lerp(8900, 0, rel / 6); for (const [a, b, v] of blips) if (rel >= a && rel < b) return v; return 0; },
+      activeAt: (rel) => rel < 6, dosingAt: (rel) => (rel < 50 ? NORMAL_RATES() : [0, 0, 0, 0]),
+      actions: { 0: s => { for (const ch of [1, 2, 6]) s.setRelay(ch, false, 'automation_auto_off'); s.sched.running = false; } } });
+    assert.equal(sim.act.calls.length, 0, 'drain-back');
+    sim.dispose();
+  }
+});
+
+test('pump protection: 11:30 late-opening valve (~25 s of zero flow) is now retried at ~20 s — accepted by the operator; the cold restart opens it', async () => {
+  const sim = lateOpenSim({ shutdown_enabled: true });
+  sim.timer(270, 6, false); sim.timer(270, 1, false); sim.timer(270, 2, false);
+  const sc = lateOpenScenario(sim, 31.7);
+  let stopped = false; let restarted = null;
+  const flowAt = (rel) => {
+    const r = sim.relayStates();
+    if (!r[1]) { stopped = true; return 0; }
+    if (stopped) { if (restarted === null) restarted = rel; return rel - restarted < 2 ? 0 : lerp(0, 8900, (rel - restarted - 2) / 6); }
+    return sc.flowAt(rel);
+  };
+  await sim.run({ from: -30, to: 90, ...sc, flowAt });
+  const off = irrigationOffCalls(sim);
+  assert.equal(off.length, 1);
+  const t = (off[0].at - sim.base) / 1000;
+  assert.ok(t >= 21 && t <= 23, `late-open valve retried at +${t}s (zone 3 off +1, grace to +6, below 882 L/h from +6.5)`);
+  assert.equal(guardAlerts(sim)[0].severity, 'warning', 'recovered after the cold restart');
+  sim.dispose();
+});
+
+test('pump protection under SOFT-SWITCH (valve leads the pumps by 3 s): stuck zone -> retry cycles the PUMPS only (valve stays energised), recovers', async () => {
+  ensureAutomation(97, 'Fertigation 11:30 — 4.5 min/zone');
+  const base = Date.parse('2026-09-26T07:44:00Z'); // zone 4 valve ON at rel 0, pumps at +3
+  const sim = new Sim({ base, config: { shutdown_enabled: true } });
+  sim.timer(0, 6, true, 97); sim.timer(3, 1, true, 97); sim.timer(3, 2, true, 97);
+  sim.timer(273, 1, false, 97); sim.timer(273, 2, false, 97); sim.timer(278, 6, false, 97);
+  // valve opened with no pressure, yet stuck: it frees once the pumps restart (pressure pulse)
+  let freed = false;
+  const plant = hydraulicPlant(sim, {});
+  const plantSwitch = sim.onSwitch;
+  sim.onSwitch = (ch, on, source) => { plantSwitch(ch, on, source); if (ch === 1 && on && source === 'flow_watch_retry') freed = true; };
+  const flowAt = (rel) => { const f = plant.flowAt(rel); return freed ? f : 0; };
+  await sim.run({ from: -5, to: 120, flowAt, dosingAt: NORMAL_RATES });
+  const off = irrigationOffCalls(sim);
+  assert.equal(off.length, 1, JSON.stringify(sim.act.calls.map(c => [c.op, c.channels, (c.at - sim.base) / 1000])) + guardAlerts(sim).map(a => a.message));
+  assert.deepEqual(off[0].channels, [1, 2], 'valve that led the pumps stays energised');
+  const on = sim.act.calls.filter(c => c.op === 'on');
+  assert.deepEqual(on[0].channels, [1, 2]);
+  const t = (off[0].at - sim.base) / 1000;
+  assert.ok(t >= 27.5 && t <= 29, `retry at +${t}s (pump start +3, cold grace 10 s, hold 15 s)`);
+  assert.equal(sim.relayStates()[6], true, 'zone valve never dropped');
+  assert.equal(on[0].automationId, 97);
+  assert.equal(sim.sched.resumes.length, 1, 'dosing resumed');
+  assert.equal(guardAlerts(sim)[0].severity, 'warning');
+  sim.dispose();
+});
+
+test('pump protection: an operator Stop All during the retry pause cancels the cold restart (nothing re-energises)', async () => {
+  const { sim, plant } = run1530Sim();
+  await sim.run({ from: -20, to: 90, flowAt: plant.flowAt, dosingAt: NORMAL_RATES,
+    actions: { 32: s => { for (const ch of [1, 2, 3, 4, 5, 6]) s.setRelay(ch, false, 'stop_all'); } } });
+  assert.equal(sim.act.calls.filter(c => c.op === 'on').length, 0);
+  assert.match(guardAlerts(sim)[0].message, /Cold restart cancelled: operator action/);
+  assert.equal(guardAlerts(sim)[0].severity, 'critical');
+  sim.dispose();
+});
+
+test('pump protection: OFF not confirmed -> retried once, then an extra critical "switch off at the panel" alert', async () => {
+  const { sim, plant } = run1530Sim({ max_retries: 0 });
+  sim.act.failOff = 2;
+  await sim.run({ from: -20, to: 60, flowAt: plant.flowAt, dosingAt: NORMAL_RATES });
+  assert.equal(irrigationOffCalls(sim).length, 2, 'one retry of the OFF');
+  const extra = db.prepare("SELECT * FROM alerts WHERE fingerprint = ?").get(`flow_watch:shutdown_off_unconfirmed:${sim.irr}`);
+  assert.ok(extra);
+  assert.equal(extra.severity, 'critical');
+  assert.match(guardAlerts(sim)[0].message, /OFF NOT CONFIRMED/);
+  sim.dispose();
+});
+
+test('pump protection config: validated ranges (no_flow 10-60 s, pause 5-60 s, retries 0-3)', () => {
+  assert.ok(validateConfigUpdate({ shutdown_no_flow_seconds: 9 }).error);
+  assert.ok(validateConfigUpdate({ shutdown_no_flow_seconds: 61 }).error);
+  assert.deepEqual(validateConfigUpdate({ shutdown_no_flow_seconds: 30 }).value, { shutdown_no_flow_seconds: 30 });
+  assert.ok(validateConfigUpdate({ retry_pause_seconds: 4 }).error);
+  assert.ok(validateConfigUpdate({ max_retries: 1.5 }).error);
+  assert.deepEqual(validateConfigUpdate({ max_retries: 0, shutdown_enabled: false }).value, { max_retries: 0, shutdown_enabled: false });
+});
+
+test('soft-switch: a full automation 97 run (4 x 4.5 min, lead 3 / lag 5 / gap 1) through every flow-watch rule incl. the pump protection -> no alerts, no action, never two zones, pumps only ON with a zone valve ON', async () => {
+  const { buildSoftSwitchActions } = require(path.join(__dirname, '..', 'scripts', 'soft-switch-sequences.js'));
+  const legacy = [
+    { type: 'control', action: 'on', equipment_id: 1, channel: 1, duration_seconds: 1080 },
+    { type: 'control', action: 'on', equipment_id: 1, channel: 2, duration_seconds: 1080 },
+    ...[3, 4, 5, 6].map((ch, i) => ({ type: 'control', action: 'on', equipment_id: 1, channel: ch, delay_seconds: i * 270, duration_seconds: 270 })),
+  ];
+  const { actions, totalS } = buildSoftSwitchActions(legacy);
+  assert.equal(totalS, 1115);
+  ensureAutomation(97, 'Fertigation 11:30 — 4.5 min/zone');
+  const base = Date.parse('2026-09-26T07:30:04Z');
+  const sim = new Sim({ base, config: { shutdown_enabled: true } });
+  for (const a of actions) { sim.timer(a.delay_seconds || 0, a.channel, true, 97); sim.timer((a.delay_seconds || 0) + a.duration_seconds, a.channel, false, 97); }
+  const plant = hydraulicPlant(sim, { stuck: [6] }); // zone 4 sticks only under pressure — soft-switch never opens it under pressure
+  let twoZones = 0; let pumpNoValve = 0;
+  const flowAt = (rel) => {
+    const r = sim.relayStates();
+    const zonesOn = [3, 4, 5, 6].filter(ch => r[ch]).length;
+    if (zonesOn > 1) twoZones++;
+    if ((r[1] || r[2]) && zonesOn === 0) pumpNoValve++;
+    return plant.flowAt(rel);
+  };
+  await sim.run({ from: -5, to: totalS + 30, flowAt, activeAt: () => true, dosingAt: (rel) => (sim.relayStates()[1] ? NORMAL_RATES() : [0, 0, 0, 0]),
+    actions: { [totalS]: s => { s.sched.running = false; } } });
+  assert.deepEqual(sim.alerts().map(a => a.message), []);
+  assert.equal(sim.act.calls.length, 0, 'the pump protection never acted');
+  assert.equal(twoZones, 0, 'never two zones open');
+  assert.equal(pumpNoValve, 0, 'pumps never ON without an open zone valve');
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM relay_events WHERE equipment_id = ? AND channel = 1 AND state = 1").get(sim.irr).n, 4, 'four pump windows');
+  sim.dispose();
+});
+
+test('pump protection: automation DISABLED during the retry pause -> no restart, shutdown', async () => {
+  const { sim, plant } = run1530Sim();
+  try {
+    await sim.run({ from: -20, to: 100, flowAt: plant.flowAt, dosingAt: NORMAL_RATES,
+      actions: { 32: () => { db.prepare('UPDATE automations SET enabled = 0 WHERE id = ?').run(AID); } } });
+    assert.equal(sim.act.calls.filter(c => c.op === 'on').length, 0);
+    assert.match(guardAlerts(sim)[0].message, /disabled or deleted during the retry pause/);
+  } finally {
+    db.prepare('UPDATE automations SET enabled = 1 WHERE id = ?').run(AID);
+    sim.dispose();
+  }
 });

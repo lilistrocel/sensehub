@@ -62,6 +62,8 @@
  * through the scheduler's existing end/abort path.
  */
 
+const zoneStats = require('./DoseRunZoneStats');
+
 const CONFIG_KEY = 'dose_controller';
 const TICK_MS = 1000;
 const CHECKPOINT_MS = 15000;
@@ -74,6 +76,7 @@ const DEFAULT_EXPECTED_FLOW_LPH = 8820;
 const DRY_EVIDENCE_MS = 30000;
 const ZONE_READ_GAP_MS = 1000;
 const ZONE_TARGET = 'zone target reached';
+const PULSE_OVERRUN_TOLERANCE_MS = 1000; // a later OFF than this is charged to the acid budget
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
@@ -85,6 +88,7 @@ const DEFAULT_CONFIG = Object.freeze({
     ratio: Object.freeze({ 1: 150, 2: 150, 3: 150, 4: 150 }), // 1:150 = 6.67 L concentrate per m3
     irrigation_equipment_id: 1,  // zone relays (segments come from their relay events)
     zone_channels: Object.freeze([3, 4, 5, 6]),
+    pump_channel: 1,             // irrigation pump on the same board: its planned ON window bounds each zone's flow
     slots_per_zone: 1,           // 2 = two half-zone targets (evens out weak feeds, e.g. 1:250)
     latency_s: 1.5,              // close when dosed >= target - rate x latency
     reopen_margin_l: 0.5,        // reopen a target-closed tank only if its target grew by more
@@ -174,6 +178,7 @@ const SCHEMA = {
       mode: { t: 'enum', values: ['per_zone_target', 'tracking'] },
       irrigation_equipment_id: { t: 'int', min: 1, max: 1e9 },
       zone_channels: { t: 'channels' },
+      pump_channel: { t: 'int', min: 1, max: 64 },
       slots_per_zone: { t: 'int', min: 1, max: 4 },
       latency_s: NUM(0, 10),
       reopen_margin_l: NUM(0.1, 10),
@@ -933,10 +938,11 @@ class DoseController {
   }
 
   /** Stop controlling (the scheduler then closes every dosing valve). Idempotent. */
-  async endCycle({ status = 'completed', reason = null } = {}) {
+  async endCycle({ status = 'completed', reason = null, source = null } = {}) {
     const c = this.cycle;
     if (!c || c.ended) return null;
     const now = this.now();
+    c.endInfo = { status, reason, source }; // per-zone status on the final record (shutdown / not run)
     c.ended = true;
     this.cycle = null;
     if (c.timer) { clearInterval(c.timer); c.timer = null; }
@@ -970,6 +976,43 @@ class DoseController {
     return row;
   }
 
+  /**
+   * Hold every dosing valve closed without ending the cycle (flow-watch cold-restart
+   * retry, 2026-09-26): mode 'hold', nutrients + acid closed at once through the
+   * normal close path, no ON write until resumeDosing(). Segments, per-zone targets
+   * and carry are kept, so dosing picks up the same zone's litre target when the
+   * water comes back. Returns false when no cycle runs.
+   */
+  pauseDosing(reason = 'paused') {
+    const c = this.cycle;
+    if (!c || c.ended) return false;
+    const now = this.now();
+    if (!c.paused) {
+      c.paused = { reason: String(reason), since: now };
+      this._trip(c, 'dosing_paused', now, String(reason));
+      this.log.warn(`[DoseController] dosing paused: ${reason}`);
+    }
+    try { this.step(now); } catch (e) { this.log.error(`[DoseController] step on pause failed: ${e.message}`); }
+    return true;
+  }
+
+  /** End a pauseDosing() hold. Returns false when no cycle runs or it was not paused. */
+  resumeDosing(reason = 'resumed') {
+    const c = this.cycle;
+    if (!c || c.ended || !c.paused) return false;
+    const now = this.now();
+    const secs = r1((now - c.paused.since) / 1000);
+    c.paused = null;
+    this._trip(c, 'dosing_resumed', now, `${reason} after ${secs} s`);
+    this.log.log(`[DoseController] dosing resumed (${reason}) after ${secs} s`);
+    try { this.step(now); } catch (e) { this.log.error(`[DoseController] step on resume failed: ${e.message}`); }
+    return true;
+  }
+
+  isPaused() {
+    return !!(this.cycle && !this.cycle.ended && this.cycle.paused);
+  }
+
   /** One control step. Production: every 1 s; tests call it directly. */
   step(now = this.now()) {
     const c = this.cycle;
@@ -983,6 +1026,7 @@ class DoseController {
     let reason = null;
     if (!cfg.enabled) { mode = 'fallback'; reason = 'controller switched off — fixed schedule'; }
     else if (disarmed) { mode = 'hold'; reason = 'automations disarmed — dosing valves held closed'; }
+    else if (c.paused) { mode = 'hold'; reason = `dosing paused — ${c.paused.reason}`; }
     else if (ws.dry && !ws.known) {
       // monitor on its idle cadence (or silent) and its last word was "no water": hold closed
       mode = 'closed_loop';
@@ -1004,7 +1048,10 @@ class DoseController {
     // pH start delay restarts after every water stop: the cup is flushed again.
     if (ws.stopped || !ws.known) c.phFlowSince = null;
     else if (ws.ok && c.phFlowSince === null && c.waterEstablishedAt) c.phFlowSince = now;
-    if (n.mode !== 'tracking' && c.waterEstablishedAt) this._updateSegment(c, cfg, now, ws);
+    if (n.mode !== 'tracking' && c.waterEstablishedAt) {
+      this._updateSegment(c, cfg, now, ws);
+      this._sampleZoneQuality(c, cfg, now, ws);
+    }
 
     const due = now - c.lastEvalMs >= n.eval_s * 1000 - 1;
     if (due || mode === 'hold' || ws.stopped) {
@@ -1094,7 +1141,7 @@ class DoseController {
       t.target = t.ratio ? c.W / t.ratio : null;
       t.err = null;
 
-      if (mode === 'hold') { want = false; force = true; why = 'disarmed'; }
+      if (mode === 'hold') { want = false; force = true; why = c.paused && !this._disarmed(now) ? 'paused' : 'disarmed'; }
       else if (mode === 'waiting') { want = false; why = 'waiting for monitor'; }
       else if (ws.stopped) { want = false; force = true; why = 'no water'; reason = 'water stopped — nutrient valves closed'; }
       else if (ws.dry && !ws.known) { want = false; why = 'no water (monitor idle)'; }
@@ -1175,20 +1222,48 @@ class DoseController {
     return t.V + Math.min(0.24, Math.max(0, rate * (now - t.lastIncMs) / 1000));
   }
 
+  /**
+   * Zone plan of the triggering automation: per zone channel the ON actions
+   * { delay, duration } plus the planned FLOW window inside the zone (seconds
+   * after the zone opens), bounded by the irrigation pump's ON action(s):
+   *   flowStart = pump start - zone start (0 when the pump already runs)
+   *   flowEnd   = min(zone end, pump end) - zone start
+   *   pumpStop  = pump end - zone start when a pump action ENDS inside this zone
+   *               (soft-switch sequencing: pump OFF, then the valve), else null.
+   * Today's structure (one pump action for the whole run) gives flowStart 0,
+   * flowEnd = duration, pumpStop null except where the run itself ends —
+   * i.e. exactly the previous behaviour.
+   */
   _loadZonePlan(cfg, automationId) {
     const plan = {};
     if (!automationId) return plan;
     try {
       const row = this.db.prepare('SELECT actions FROM automations WHERE id = ?').get(automationId);
       const actions = row && row.actions ? JSON.parse(row.actions) : [];
-      const eq = cfg.nutrients.irrigation_equipment_id;
-      const zones = new Set(cfg.nutrients.zone_channels);
+      const n = cfg.nutrients;
+      const eq = n.irrigation_equipment_id;
+      const zones = new Set(n.zone_channels);
+      const pumps = [];
       for (const a of Array.isArray(actions) ? actions : []) {
         if (!a || a.type !== 'control' || a.action !== 'on' || Number(a.equipment_id) !== eq) continue;
         const ch = parseInt(a.channel, 10);
         const dur = parseFloat(a.duration_seconds);
+        const delay = parseFloat(a.delay_seconds) || 0;
+        if (ch === n.pump_channel && dur > 0) pumps.push({ start: delay, end: delay + dur });
         if (!zones.has(ch) || !(dur > 0)) continue;
-        (plan[ch] = plan[ch] || []).push({ delay: parseFloat(a.delay_seconds) || 0, duration: dur });
+        (plan[ch] = plan[ch] || []).push({ delay, duration: dur });
+      }
+      for (const opts of Object.values(plan)) {
+        for (const o of opts) {
+          const zEnd = o.delay + o.duration;
+          const overlap = pumps.filter(pw => pw.start < zEnd && pw.end > o.delay);
+          if (!overlap.length) { o.flowStart = 0; o.flowEnd = o.duration; o.pumpStop = null; continue; }
+          const start = Math.min(...overlap.map(pw => pw.start));
+          const end = Math.max(...overlap.map(pw => pw.end));
+          o.flowStart = Math.max(0, start - o.delay);
+          o.flowEnd = Math.max(o.flowStart, Math.min(o.duration, end - o.delay));
+          o.pumpStop = end <= zEnd + 2 ? end - o.delay : null;
+        }
       }
     } catch (_) { /* unknown plan: live relay state decides */ }
     return plan;
@@ -1228,6 +1303,14 @@ class DoseController {
         let best = null;
         for (const o of options) if (!best || Math.abs(o.delay - at) < Math.abs(best.delay - at)) best = o;
         zone.plannedDurS = best ? best.duration : null;
+        if (best) {
+          // Planned flow window, anchored on the relay ON time; a zone re-opened well
+          // after its planned start (flow-watch retry) keeps the plan's absolute times.
+          const anchor = at - best.delay > 15 ? c.startedAt + best.delay * 1000 : zone.openedAt;
+          zone.flowStartMs = anchor + (best.flowStart ?? 0) * 1000;
+          zone.flowEndMs = anchor + (best.flowEnd ?? best.duration) * 1000;
+          zone.pumpStopMs = best.pumpStop === null || best.pumpStop === undefined ? null : anchor + best.pumpStop * 1000;
+        }
       }
     } catch (_) { zone = null; }
     c.zoneRead.zone = zone;
@@ -1241,12 +1324,15 @@ class DoseController {
     if (z) {
       const dur = z.plannedDurS;
       const slots = dur ? n.slots_per_zone : 1;
-      if (dur && slots > 1) {
-        const len = (dur * 1000) / slots;
-        slot = clamp(Math.floor((now - z.openedAt) / len), 0, slots - 1);
-        plannedEndMs = z.openedAt + (slot + 1) * len;
+      // the zone's planned FLOW window (pump ON inside the valve window); = the valve window today
+      const fStart = z.flowStartMs ?? z.openedAt;
+      const fEnd = z.flowEndMs ?? (dur ? z.openedAt + dur * 1000 : null);
+      if (dur && slots > 1 && fEnd > fStart) {
+        const len = (fEnd - fStart) / slots;
+        slot = clamp(Math.floor((now - fStart) / len), 0, slots - 1);
+        plannedEndMs = fStart + (slot + 1) * len;
       } else {
-        plannedEndMs = dur ? z.openedAt + dur * 1000 : c.endsAt;
+        plannedEndMs = fEnd !== null ? fEnd : c.endsAt;
       }
       key = `${z.channel}@${z.openedAt}#${slot}`;
     } else if (c.seg) {
@@ -1282,7 +1368,9 @@ class DoseController {
       idx: c.zoneRecords.length + 1, key, channel: z ? z.channel : null,
       name: z ? (c.zoneNames[z.channel] || `Zone relay ${z.channel}`) : 'Cycle', slot,
       openedAt: z ? z.openedAt : now, startMs: now, plannedEndMs, plannedDurS: z ? z.plannedDurS : null,
+      pumpStopMs: z && z.pumpStopMs !== undefined ? z.pumpStopMs : null, // planned pump OFF inside this zone (soft switch)
       W0: c.W, water: 0, expectedW: 0, remainingS: null, tanks: {},
+      q: zoneStats.newAcc(), // per-zone feed EC/pH (see _sampleZoneQuality)
     };
     for (const t of c.tanks) {
       seg.tanks[t.tank_id] = {
@@ -1325,8 +1413,37 @@ class DoseController {
         this._trip(c, 'cant_reach', now, `${t.name}: ${r2(dosed)} of ${r2(target)} L in ${seg.name}${seg.slot ? ` slot ${seg.slot + 1}` : ''}`);
       }
     }
+    Object.assign(rec, zoneStats.accFields(seg.q), { stats_source: 'live' });
     c.zoneRecords.push(rec);
+    // A SEKO sample taken before this switch but first seen after it still belongs here.
+    c.prevSeg = { rec, q: seg.q, startMs: seg.startMs, endMs: now };
     c.seg = null;
+  }
+
+  /**
+   * Per-zone feed quality: each NEW SEKO sample (pH + EC from the sensor's
+   * last_reading) is added to the zone whose window contains it, only while the
+   * flow at the sample time is >= 50 % of expected (stagnant cup otherwise).
+   */
+  _sampleZoneQuality(c, cfg, now, ws) {
+    const s = this._readPh(cfg, now, c);
+    if (!s || !c.seg || s.tsMs === c.lastZoneSampleTs) return;
+    c.lastZoneSampleTs = s.tsMs;
+    let target = null;
+    if (s.tsMs >= c.seg.startMs) target = c.seg.q;
+    else if (c.prevSeg && s.tsMs >= c.prevSeg.startMs && s.tsMs <= c.prevSeg.endMs) target = c.prevSeg.q;
+    if (!target) return;
+    let flow = null;
+    for (let i = this._flowRing.length - 1; i >= 0; i--) {
+      const [ms, v] = this._flowRing[i];
+      if (ms <= s.tsMs + 500) { flow = s.tsMs - ms <= 5000 ? v : null; break; }
+    }
+    if (flow === null && ws.known && Math.abs(now - s.tsMs) <= 2000) flow = ws.flow;
+    zoneStats.addSample(target, {
+      ph: s.value, ec: s.ec, flowLph: flow, expectedLph: ws.expected,
+      phMin: cfg.ph.plausible_min, phMax: cfg.ph.plausible_max,
+    });
+    if (target === (c.prevSeg && c.prevSeg.q)) Object.assign(c.prevSeg.rec, zoneStats.accFields(target));
   }
 
   _perZoneWant(c, cfg, t, now, ws) {
@@ -1384,7 +1501,7 @@ class DoseController {
         const res = await c.ctx.write(target, state, {
           source,
           automationId: c.ctx.automationId ?? null,
-          stillValid: () => this.cycle === c && !c.ended && target.open === true && !this._disarmed(this.now(), true),
+          stillValid: () => this.cycle === c && !c.ended && !c.paused && target.open === true && !this._disarmed(this.now(), true),
         });
         target.writes++;
         return res;
@@ -1556,11 +1673,14 @@ class DoseController {
     if (!cfg.enabled) return 'controller switched off';
     if (!p.enabled) return 'pH control switched off';
     if (disarmed) return 'automations disarmed';
+    if (c.paused) return `dosing paused — ${c.paused.reason}`;
     if (!ws.known) return 'flow not verifiable';
     if (!ws.ok) return 'no water flow';
     if (!c.waterEstablishedAt) return 'waiting for water';
     if (now < this._phDelayEnd(c, cfg)) return 'start delay (cup flush)';
     if (c.endsAt - now <= p.stop_before_end_s * 1000) return 'end of cycle';
+    const pumpStop = this._plannedPumpStop(c, now);
+    if (pumpStop !== null && pumpStop - now <= p.stop_before_end_s * 1000) return 'planned pump stop ahead';
     if (a.tripped) return `pH fell below ${p.floor_ph} — locked out this cycle`;
     if (a.faultLatched) return `pH sensor ${a.faultLatched}`;
     if (a.sampleState === 'stale') return 'pH sample stale';
@@ -1570,6 +1690,19 @@ class DoseController {
     if (!a.open && p.max_acid_s_per_cycle - this._acidUsedS(c, now) < p.min_pulse_s) { this._capAlert(c, now, 'cycle', aboveBand); return `acid cap reached (${p.max_acid_s_per_cycle} s this cycle)`; }
     if (!a.open && p.max_acid_s_per_day - this._acidDayUsedS(c, now) < p.min_pulse_s) { this._capAlert(c, now, 'day', aboveBand); return `daily acid cap reached (${p.max_acid_s_per_day} s)`; }
     return null;
+  }
+
+  /**
+   * Planned pump OFF of the current pumping segment (soft-switch sequencing:
+   * each zone has its own pump action), or null. Acid gets the same
+   * stop_before_end_s margin before every planned pump stop as before the end
+   * of the cycle (the next pump start restarts the start delay via phFlowSince).
+   * Ignored once > 15 s past (the plan is then unreliable).
+   */
+  _plannedPumpStop(c, now) {
+    const ps = c.seg ? c.seg.pumpStopMs : null;
+    if (ps === null || ps === undefined || ps >= c.endsAt || now > ps + 15000) return null;
+    return ps;
   }
 
   _capAlert(c, now, which, aboveBand) {
@@ -1631,6 +1764,7 @@ class DoseController {
       p.max_acid_s_per_cycle - this._acidUsedS(c, now),
       p.max_acid_s_per_day - this._acidDayUsedS(c, now),
       (c.endsAt - now) / 1000 - p.stop_before_end_s,
+      (() => { const ps = this._plannedPumpStop(c, now); return ps === null ? Infinity : (ps - now) / 1000 - p.stop_before_end_s; })(),
     );
     let budgetLimited = false;
     if (pulse > budget) { pulse = Math.max(0, budget); budgetLimited = true; if (eEff > 0) a.saturated = true; }
@@ -1658,7 +1792,16 @@ class DoseController {
     a.pulses++;
     c.phTank.open = true;
     c.phTank.lastSwitchMs = now;
-    this._command(c, c.phTank, true, 'ph_controller');
+    // Actual ON time is measured from the coil writes, not from these decisions:
+    // an OFF that queues behind other traffic on the shared gateway keeps the
+    // valve open longer than planned (incident 2026-09-26 15:32:35: 12 s pulse,
+    // OFF landed after 17 s). See _acidClose.
+    const pulse = { onReqMs: now, onOk: false, onDoneMs: null };
+    a.pulse = pulse;
+    const onP = this._command(c, c.phTank, true, 'ph_controller');
+    if (onP && typeof onP.then === 'function') {
+      onP.then((res) => { if (res === true) { pulse.onOk = true; pulse.onDoneMs = this.now(); } }, () => {});
+    }
     if (this.autoTick) {
       if (c.acidTimer) clearTimeout(c.acidTimer);
       c.acidTimer = setTimeout(() => { try { this.step(); } catch (_) { /* next tick */ } }, Math.ceil(pulseS * 1000) + 5);
@@ -1669,16 +1812,44 @@ class DoseController {
   _acidClose(c, now, why) {
     const a = c.acid;
     if (!a.open) return;
-    a.usedMs += now - a.openAt;
+    const plannedMs = now - a.openAt;
+    a.usedMs += plannedMs;
     a.open = false;
     a.openAt = null;
     a.closeAt = null;
     a.lastCloseWhy = why;
+    const pulse = a.pulse || null;
+    a.pulse = null;
     if (c.phTank) {
       c.phTank.open = false;
       c.phTank.lastSwitchMs = now;
-      this._command(c, c.phTank, false, 'ph_controller');
+      const offP = this._command(c, c.phTank, false, 'ph_controller');
+      if (pulse && offP && typeof offP.then === 'function') {
+        offP.then((res) => { if (res === true) this._accountPulseOverrun(c, pulse, plannedMs, this.now()); }, () => {});
+      }
     }
+  }
+
+  /**
+   * Charge a late OFF to the acid budgets. actual = OFF write done - ON write done
+   * (both coil writes, so the normal write latency cancels out); anything beyond
+   * the planned pulse by more than PULSE_OVERRUN_TOLERANCE_MS is added to usedMs
+   * (cycle + daily caps) and recorded as a 'pulse_overrun' trip. A pulse whose ON
+   * never reached the coil is not charged.
+   */
+  _accountPulseOverrun(c, pulse, plannedMs, offDoneMs) {
+    if (!pulse || !pulse.onOk || pulse.onDoneMs === null) return 0;
+    const a = c.acid;
+    const actualMs = offDoneMs - pulse.onDoneMs;
+    const overMs = actualMs - plannedMs;
+    if (!(overMs > PULSE_OVERRUN_TOLERANCE_MS)) return 0;
+    a.usedMs += overMs;
+    a.overrunMs = (a.overrunMs || 0) + overMs;
+    a.overruns = (a.overruns || 0) + 1;
+    const detail = `planned ${r1(plannedMs / 1000)} s, valve open ${r1(actualMs / 1000)} s (OFF late by ${r1(overMs / 1000)} s) — ${r1(overMs / 1000)} s charged to the acid budget`;
+    this._trip(c, 'pulse_overrun', offDoneMs, detail);
+    this.log.warn(`[DoseController] pH Down pulse overrun: ${detail}`);
+    return overMs;
   }
 
   // ─── actual state (read-back via the 15 s board poll) ──────────────────────
@@ -1776,10 +1947,16 @@ class DoseController {
         range_overrides: c.ecOverrides || 0,
       },
       trim: c.trim,
-      zones: c.zoneRecords,
+      zones: zoneStats.decorateZones(c.zoneRecords, {
+        expectedLph: this._expectedFlow(c.cfgAtStart), final: !!c.endInfo,
+        endSource: c.endInfo ? c.endInfo.source : null, endReason: c.endInfo ? c.endInfo.reason : null,
+        plan: c.zonePlan, startedAtMs: c.startedAt, names: c.zoneNames,
+      }),
       acid_s: r1(acidS),
       acid_est_l: r2((acidS / 60) * c.cfgAtStart.ph.acid_lpm_estimate),
       acid_pulses: a.pulses,
+      acid_overrun_s: r1((a.overrunMs || 0) / 1000),
+      acid_overruns: a.overruns || 0,
       trips: c.trips,
     };
   }
@@ -1831,7 +2008,7 @@ class DoseController {
   formatRun(row) {
     if (!row) return null;
     const j = (s, d) => { try { return s ? JSON.parse(s) : d; } catch (_) { return d; } };
-    return {
+    const run = {
       id: row.id, cycle_log_id: row.cycle_log_id, program_id: row.program_id, automation_id: row.automation_id,
       automation_name: row.automation_name || null,
       started_at: row.started_at, ended_at: row.ended_at, local_date: row.local_date, status: row.status, end_reason: row.end_reason,
@@ -1843,6 +2020,55 @@ class DoseController {
       acid_s: row.acid_s, acid_est_l: row.acid_est_l, acid_est_unverified: true, acid_pulses: row.acid_pulses,
       trips: j(row.trips_json, []),
     };
+    return this._withZoneStats(run, row);
+  }
+
+  /**
+   * Per-zone EC/pH, status and ratio on every run read. Runs recorded before
+   * these fields existed get them computed from stored readings (read-only,
+   * cached per run + updated_at); a running run is decorated without the
+   * end-of-run rules.
+   */
+  _withZoneStats(run, row) {
+    try {
+      const cfg = this.getConfig();
+      const expectedLph = this._expectedFlow(cfg);
+      let zones = Array.isArray(run.zones) ? run.zones : [];
+      const final = run.status !== 'running';
+      const missing = zones.some(z => !z.not_run && !('samples' in z));
+      if (missing && final && zones.length) {
+        const key = `${run.id}|${row.updated_at || ''}`;
+        if (!this._zoneStatsCache) this._zoneStatsCache = new Map();
+        let stats = this._zoneStatsCache.get(key);
+        if (stats === undefined) {
+          stats = zoneStats.statsFromHistory(this.db, run, {
+            sensorEquipmentId: cfg.ph.sensor_equipment_id, phMetric: cfg.ph.sensor_metric, ecMetric: cfg.ph.ec_metric,
+            expectedLph, phMin: cfg.ph.plausible_min, phMax: cfg.ph.plausible_max,
+          });
+          if (this._zoneStatsCache.size > 100) this._zoneStatsCache.clear();
+          this._zoneStatsCache.set(key, stats);
+        }
+        if (stats) {
+          let i = 0;
+          zones = zones.map(z => (z.not_run ? z : ('samples' in z ? (i++, z) : { ...z, ...stats[i++], stats_source: 'history' })));
+        }
+      }
+      const { zones: decorated, visits } = zoneStats.analyseZones(zones, {
+        expectedLph, final, endReason: run.end_reason,
+        endSource: zoneStats.isShutdownEnd({ endReason: run.end_reason }) ? zoneStats.SHUTDOWN_SOURCE : null,
+      });
+      // zones = segment records (API as before); zone_visits = one row per zone visit (dashboard table)
+      const out = { ...run, zones: decorated, zone_visits: visits };
+      out.zone_totals = zoneStats.zoneTotals(out, visits);
+      out.ratio_target = (() => {
+        const r = (run.tanks || []).map(t => t.ratio_target).filter(x => x > 0);
+        return r.length && r.every(x => x === r[0]) ? r[0] : (r.length ? r : null);
+      })();
+      return out;
+    } catch (e) {
+      this.log.error(`[DoseController] zone stats for run ${run.id} failed: ${e.message}`);
+      return run;
+    }
   }
 
   getRun(id) {
@@ -1931,8 +2157,10 @@ class DoseController {
         started_at: iso(c.seg.startMs), planned_end: iso(c.seg.plannedEndMs),
         remaining_s: c.seg.remainingS === null ? null : Math.round(c.seg.remainingS),
         water_l: r1(c.seg.water), expected_water_l: r1(c.seg.expectedW),
+        planned_pump_stop: iso(c.seg.pumpStopMs),
       } : null,
       zones_done: c.zoneRecords.length,
+      paused: c.paused ? { reason: c.paused.reason, since: iso(c.paused.since) } : null,
       tanks: s.tanks.map((st, i) => {
         const t = c.tanks[i];
         const zs = c.seg ? c.seg.tanks[t.tank_id] : null;
@@ -1960,6 +2188,7 @@ class DoseController {
           open: a.open, used_s: s.acid_s, cap_s: cfg.ph.max_acid_s_per_cycle,
           day_used_s: r1(this._acidDayUsedS(c, now)), day_cap_s: cfg.ph.max_acid_s_per_day,
           pulses: a.pulses, est_l: s.acid_est_l, est_unverified: true,
+          overrun_s: s.acid_overrun_s, overruns: s.acid_overruns,
           integral: r3(a.integral), last_decision: a.lastDecision,
         },
       },

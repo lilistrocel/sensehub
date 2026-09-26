@@ -25,10 +25,15 @@ class RelayTimerService {
    * @param {number|null} [options.automationId] - owning automation, if any
    * @param {boolean} [options.checkEnabled] - re-check the owning automation is
    *        still enabled at fire time (see _mayFire)
+   * @param {string|null} [options.actionKey] - per-action suffix (automation id +
+   *        action index). Lets ONE automation hold several delayed starts on the
+   *        same channel (soft-switch runs: one pump window per zone) without the
+   *        later one cancelling the earlier; a re-trigger of the same automation
+   *        still replaces its own timers. Without it the key is per channel.
    */
   scheduleDelayedStart(equipmentId, channel, delaySeconds, executeFn, options = {}) {
-    const { automationId = null, checkEnabled = false } = options;
-    const key = `delay:${equipmentId}:${channel}`;
+    const { automationId = null, checkEnabled = false, actionKey = null } = options;
+    const key = actionKey ? `delay:${equipmentId}:${channel}:${actionKey}` : `delay:${equipmentId}:${channel}`;
     const offKey = `off:${equipmentId}:${channel}`;
 
     if (this.timers.has(key)) {
@@ -56,7 +61,7 @@ class RelayTimerService {
       }
     }, delaySeconds * 1000);
 
-    this.timers.set(key, { timer, equipmentId, channel, firesAt, type: 'delay', automationId });
+    this.timers.set(key, { timer, equipmentId, channel, firesAt, type: 'delay', automationId, checkEnabled: !!checkEnabled });
     console.log(`[RelayTimer] Scheduled delayed start for equipment ${equipmentId} ch ${channel} in ${delaySeconds}s`);
   }
 
@@ -94,7 +99,7 @@ class RelayTimerService {
       }
     }, durationSeconds * 1000);
 
-    this.timers.set(key, { timer, equipmentId, channel, firesAt, type: 'off', automationId });
+    this.timers.set(key, { timer, equipmentId, channel, firesAt, type: 'off', automationId, checkEnabled: !!checkEnabled });
     console.log(`[RelayTimer] Scheduled auto-off for equipment ${equipmentId} ch ${channel} in ${durationSeconds}s`);
   }
 
@@ -127,7 +132,7 @@ class RelayTimerService {
       }
     }, delaySeconds * 1000);
 
-    this.timers.set(key, { timer, firesAt, type: 'raw', equipmentId: 0, channel: 0, automationId });
+    this.timers.set(key, { timer, firesAt, type: 'raw', equipmentId: 0, channel: 0, automationId, checkEnabled: !!checkEnabled });
     console.log(`[RelayTimer] Scheduled raw timer ${key} in ${delaySeconds}s`);
   }
 
@@ -200,6 +205,49 @@ class RelayTimerService {
   }
 
   /**
+   * Cancel the pending timers that belong to one automation run (flow-watch run
+   * shutdown, 2026-09-26). `filter(entry, key)` narrows the set (e.g. keep the
+   * auto-offs of channels whose OFF could not be confirmed). Timers without an
+   * owning automation are only matched by `extraKeyPrefixes` (e.g. 'delay:1:'),
+   * so a manual timer on another board is never touched.
+   *
+   * @returns {Array<{key, type, equipmentId, channel, automationId, firesAt}>} what was cancelled
+   */
+  cancelTimersForAutomation(automationId, { filter = null, extraKeyPrefixes = [] } = {}) {
+    const cancelled = [];
+    for (const [key, entry] of [...this.timers.entries()]) {
+      const owned = automationId != null && entry.automationId === automationId;
+      const prefixed = extraKeyPrefixes.some(p => key.startsWith(p));
+      if (!owned && !prefixed) continue;
+      if (filter && !filter(entry, key)) continue;
+      clearTimeout(entry.timer);
+      this.timers.delete(key);
+      cancelled.push({
+        key, type: entry.type, equipmentId: entry.equipmentId, channel: entry.channel,
+        automationId: entry.automationId ?? null, firesAt: entry.firesAt ? entry.firesAt.toISOString() : null,
+      });
+      console.log(`[RelayTimer] Cancelled ${key} (automation ${automationId} run stopped)`);
+    }
+    return cancelled;
+  }
+
+  /** Cancel one timer by its exact key. Returns true when one was pending. */
+  cancelTimer(key) {
+    const e = this.timers.get(key);
+    if (!e) return false;
+    clearTimeout(e.timer);
+    this.timers.delete(key);
+    console.log(`[RelayTimer] Cancelled ${key}`);
+    return true;
+  }
+
+  /** The pending auto-off for a channel ({ firesAt: Date, automationId }) or null. */
+  getOffTimer(equipmentId, channel) {
+    const e = this.timers.get(`off:${equipmentId}:${channel}`);
+    return e ? { key: `off:${equipmentId}:${channel}`, firesAt: e.firesAt, automationId: e.automationId ?? null } : null;
+  }
+
+  /**
    * Cancel EVERY pending timer, whatever its purpose (emergency stop).
    * Returns the number of timers cancelled; safe to call on an empty Map.
    */
@@ -246,4 +294,4 @@ class RelayTimerService {
 
 const relayTimerService = new RelayTimerService();
 
-module.exports = { relayTimerService };
+module.exports = { relayTimerService, RelayTimerService };

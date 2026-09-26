@@ -40,12 +40,43 @@
  *   flow_after_pump_off  caution flow > 1,000 L/h for 20 s with the pump relay OFF.
  *   monitor_blind        caution pump ON but no fresh flowmeter data for 60 s, or the
  *                                meter unhealthy (signal < 60 / error_flags != 0) for 30 s.
+ *   pump_no_flow_shutdown alarm  PUMP PROTECTION (operator request 2026-09-26, after the
+ *                                15:30 and 09:40 runs dead-headed the pumps against a stuck
+ *                                Zone 4 valve for ~2-3 min). Irrigation pump ON, meter healthy
+ *                                + fresh, flow < max(shutdown_flow_lph, shutdown_flow_pct % of
+ *                                the zone's expected flow) for shutdown_no_flow_seconds, counted
+ *                                from shutdown_grace_seconds after the latest pump/zone switch
+ *                                (cold_start_grace_seconds when that switch was a pump start —
+ *                                the 0 -> 8,800 L/h ramp takes 6-8 s). Zone ON (stuck valve) or
+ *                                no zone ON (dead-heading) alike. Meter blind -> never acts
+ *                                (monitor_blind alerts instead).
+ *                                Action, once per zone per run:
+ *                                1. COLD-RESTART RETRY (zone ON, max_retries, not disarmed,
+ *                                   >= retry_min_remaining_seconds of the zone left, planned
+ *                                   auto-offs known): pause dosing (DoseController hold, targets
+ *                                   kept; fixed-schedule cycles are aborted instead), pumps OFF
+ *                                   (+ the zone valve if it was switched ON under pressure; a
+ *                                   soft-switch valve that led the pumps stays energised), wait
+ *                                   retry_pause_seconds, then pumps (+ that zone) ON again through
+ *                                   the guarded ON path (guardWriteSet, arming re-checked, source
+ *                                   'flow_watch_retry') for the zone's remaining planned time,
+ *                                   dosing resumed. Flow back -> alert downgraded, episode
+ *                                   'retry_recovered'. Still no flow -> 2.
+ *                                2. RUN SHUTDOWN: cancel the run's pending delayed starts, all
+ *                                   irrigation pumps + zones OFF (FC15 + read-back, one retry,
+ *                                   source 'flow_watch_shutdown'), dose cycle aborted, run marked
+ *                                   in automation_logs, one critical alert + Telegram per run
+ *                                   and zone, episode 'run_shutdown'.
+ *                                Accepted trade-off: a valve that opens ~25 s late (11:30 run)
+ *                                is now retried/shut down at ~20 s instead of recovering alone.
  *
- * ACTUATION: the ONLY actuation is the optional dose-cycle abort, which goes
- * through the scheduler's existing abort path (writes coils OFF, logs every
- * write via RelayEventLogger). It never energises anything, never touches the
- * pumps or zone valves, and runs regardless of the arming state (closing
- * dosing valves is the fail-safe direction; disarm must never block a stop).
+ * ACTUATION: (a) the optional dose-cycle abort (scheduler's abort path); (b) the
+ * run shutdown: OFF writes only, never blocked by disarm (OFF is the fail-safe
+ * direction), RelayEventLogger source 'flow_watch_shutdown'; (c) the cold-restart
+ * retry, which DOES energise the irrigation pumps and one zone valve: only through
+ * RelayInterlockService.guardWriteSet + read-back, refused while disarmed (then the
+ * run is shut down instead), logged 'flow_watch_retry', bounded by the run's planned
+ * auto-offs (and RelaySafetyWatchdogService max-on as a backstop).
  *
  * ALERTS: createAlert() with a stable fingerprint `flow_watch:<rule>:<eq>[:<ch>]`,
  * once per episode. When the condition ends the same open alert is rewritten via
@@ -61,7 +92,14 @@ const RULES = {
   water_without_valve: { severity: 'warning', level: 'caution', title: 'Irrigation: flow with no zone open' },
   flow_after_pump_off: { severity: 'warning', level: 'caution', title: 'Irrigation: flow with pump OFF' },
   monitor_blind: { severity: 'warning', level: 'caution', title: 'Irrigation: flow not verifiable' },
+  pump_no_flow_shutdown: { severity: 'critical', level: 'alarm', title: 'Irrigation stopped: no water flow' },
 };
+// Guard phases of the pump no-flow protection while it is acting on a run.
+const GUARD_BUSY = new Set(['retry_stopping', 'retry_pause', 'retry_restarting', 'shutting_down']);
+const GUARD_RETRY = new Set(['retry_stopping', 'retry_pause', 'retry_restarting', 'retry_watch']);
+// Operator actions on the irrigation board that end a pending retry (never restart after these).
+const OPERATOR_SOURCES = new Set(['manual', 'manual_all', 'all_channels', 'stop_all']);
+const OFF_WRITE_OPTIONS = Object.freeze({ priority: 'high', timeout: 1500, retries: 2, retryDelayMs: 200 });
 const ZONE_RULES = ['valve_no_flow', 'low_flow', 'flow_above_expected'];
 
 const CONFIG_KEY = 'irrigation_flow_watch';
@@ -110,6 +148,18 @@ const DEFAULT_CONFIG = {
   gap_seconds: 3,
   episode_min_seconds: 10,
   telegram: true,                 // alarms (critical) also go to Telegram when configured
+  // pump no-flow protection (pump_no_flow_shutdown + cold-restart retry)
+  mixing_pump_channel: 2,
+  shutdown_enabled: true,
+  shutdown_no_flow_seconds: 15,   // operator: "after 15 or 30 seconds with 0 flow"
+  shutdown_flow_lph: 500,         // no flow = below this ...
+  shutdown_flow_pct: 10,          // ... or below this % of the zone's expected flow (the larger)
+  shutdown_grace_seconds: 5,      // after any zone / pump switch (switch-over dips are < 5 s)
+  cold_start_grace_seconds: 10,   // after a pump start (ramp 0 -> 8,800 L/h in 6-8 s)
+  max_retries: 1,                 // cold-restart retries per zone per run; 0 = shut down at once
+  retry_pause_seconds: 10,        // pumps OFF this long before the cold restart
+  retry_min_remaining_seconds: 20, // no retry when less of the zone would be left
+  recovered_pct: 50,              // retry succeeded once flow >= this % of expected
 };
 
 const NUM = (min, max) => ({ type: 'number', min, max });
@@ -151,6 +201,17 @@ const CONFIG_SCHEMA = {
   gap_seconds: NUM(0, 60),
   episode_min_seconds: NUM(1, 3600),
   telegram: { type: 'bool' },
+  mixing_pump_channel: INT(1, 64),
+  shutdown_enabled: { type: 'bool' },
+  shutdown_no_flow_seconds: NUM(10, 60),
+  shutdown_flow_lph: NUM(50, 5000),
+  shutdown_flow_pct: NUM(1, 50),
+  shutdown_grace_seconds: NUM(2, 30),
+  cold_start_grace_seconds: NUM(5, 60),
+  max_retries: INT(0, 3),
+  retry_pause_seconds: NUM(5, 60),
+  retry_min_remaining_seconds: NUM(10, 600),
+  recovered_pct: NUM(10, 95),
 };
 
 /** Validate a partial config update. Returns { value } or { error }. */
@@ -226,6 +287,79 @@ function shortTankName(name, id) {
   return String(name).split(' — ')[0] || name;
 }
 
+/**
+ * Real I/O for the pump no-flow protection. Every coil write goes through the
+ * executor's confirmed-write path (FC15 + FC01 read-back, one re-send on a
+ * disagreeing read-back) and RelayStateCache/RelayEventLogger with the given
+ * source. ON writes (cold-restart retry only) are refused while disarmed and go
+ * through RelayInterlockService.guardWriteSet first. Loaded lazily so the module
+ * stays DB/Modbus-free for tests.
+ */
+function defaultActuator(db, log = console) {
+  const exec = () => require('./AutomationExecutor');
+  const timers = () => require('./RelayTimerService').relayTimerService;
+  const arming = () => require('./AutomationArmingService').automationArmingService;
+  const eqRow = (id) => {
+    const eq = db.prepare('SELECT * FROM equipment WHERE id = ?').get(id);
+    if (!eq) throw new Error(`equipment ${id} not found`);
+    const hp = exec().parseHostPort(eq.address);
+    if (!hp) throw new Error(`equipment ${id} has an invalid address "${eq.address}"`);
+    return { eq, target: { host: hp.host, port: hp.port, unitId: eq.slave_id || 1 } };
+  };
+  // Keeps the caller's order across runs (zone before pumps on a restart); adjacent channels share one FC15.
+  const writeRuns = async (eqId, channels, state, { source, automationId = null }) => {
+    const { writeCoilsConfirmed, applyRelayCache } = exec();
+    const { eq, target } = eqRow(eqId);
+    const runs = [];
+    for (const ch of channels) {
+      const last = runs[runs.length - 1];
+      if (last && ch === last.start + last.values.length) last.values.push(state);
+      else runs.push({ start: ch, values: [state] });
+    }
+    const items = [];
+    let error = null;
+    for (const run of runs) {
+      try {
+        const rb = await writeCoilsConfirmed(eq, target, run.start, run.values, { source, automationId }, OFF_WRITE_OPTIONS);
+        for (const it of rb.items) items.push({ channel: it.channel, requested: state, readback: it.readback, confirmed: it.confirmed });
+      } catch (e) {
+        error = e.message;
+        run.values.forEach((_, i) => items.push({ channel: run.start + i, requested: state, readback: null, confirmed: false, failed: true }));
+        if (state) break; // never energise the pumps after the zone write failed
+      }
+    }
+    const written = items.filter(i => !i.failed);
+    if (written.length) applyRelayCache(eq, written, { source, automationId });
+    return { confirmed: items.length === channels.length && items.every(i => i.confirmed), items, error };
+  };
+  return {
+    isDisarmed: () => arming().isDisarmed(),
+    writeOff: (eqId, channels, opts) => writeRuns(eqId, channels, false, opts),
+    writeOn: async (eqId, channels, opts) => {
+      if (arming().isDisarmed()) throw new Error('automations are disarmed');
+      const interlock = require('./RelayInterlockService');
+      const { modbusTcpClient } = require('./ModbusTcpClient');
+      const { eq } = eqRow(eqId);
+      await interlock.guardWriteSet(eq, channels.map(ch => ({ channel: ch, state: true })), modbusTcpClient, { source: opts.source, automationId: opts.automationId ?? null });
+      if (arming().isDisarmed()) throw new Error('automations were disarmed'); // re-check right before energising
+      return writeRuns(eqId, channels, true, opts);
+    },
+    cancelRunTimers: (automationId, eqId) => timers().cancelTimersForAutomation(automationId, {
+      filter: (e) => e.type !== 'off',
+      extraKeyPrefixes: [`delay:${eqId}:`, `transition_delay:${eqId}:`],
+    }),
+    cancelOffTimers: (eqId, channels) => channels.map(ch => timers().cancelTimer(`off:${eqId}:${ch}`)),
+    getOffTimer: (eqId, ch) => timers().getOffTimer(eqId, ch),
+    scheduleOff: (eqId, ch, seconds, { source, automationId = null }) => timers().scheduleOff(eqId, ch, seconds, async () => {
+      const r = await writeRuns(eqId, [ch], false, { source, automationId });
+      if (!r.confirmed) log.error(`[FlowWatch] ${source}: OFF of eq ${eqId} ch ${ch} not confirmed`);
+    }, { automationId }),
+    logAutomationRun: (automationId, status, message) => db.prepare(
+      "INSERT INTO automation_logs (automation_id, status, message, triggered_at, completed_at) VALUES (?, ?, ?, datetime('now'), datetime('now'))"
+    ).run(automationId, status, message),
+  };
+}
+
 class IrrigationFlowWatchService {
   /**
    * @param {object} deps
@@ -238,6 +372,13 @@ class IrrigationFlowWatchService {
    * @param {object}   [deps.mqtt]           { onLive(fn) } (MqttIngestService)
    * @param {object}   [deps.config]         overrides on top of stored config (tests)
    * @param {object}   [deps.logger]
+   * @param {object}   [deps.actuator]       pump no-flow protection I/O (tests inject a fake):
+   *   { writeOff(eqId, channels, {source, automationId}) -> {confirmed, items:[{channel, confirmed, readback}], error},
+   *     writeOn(eqId, channels, {source, automationId}) -> same (guarded ON path; throws when refused),
+   *     isDisarmed() -> bool, cancelRunTimers(automationId, eqId) -> [{key,type,channel,firesAt}],
+   *     cancelOffTimers(eqId, channels, automationId), getOffTimer(eqId, ch) -> {firesAt: Date}|null,
+   *     scheduleOff(eqId, ch, seconds, {source, automationId}), logAutomationRun(automationId, status, message) }
+   * @param {Function} [deps.setTimer]       (fn, ms) => handle — retry restart wake-up (tests: no-op)
    */
   constructor(deps = {}) {
     this.db = deps.db;
@@ -249,6 +390,9 @@ class IrrigationFlowWatchService {
     this.mqtt = deps.mqtt || null;
     this.configOverride = deps.config || null;
     this.log = deps.logger || console;
+    this._actuator = deps.actuator || null;
+    this._setTimer = deps.setTimer || ((fn, ms) => { const t = setTimeout(fn, ms); if (t.unref) t.unref(); return t; });
+    this.guard = null;          // pump no-flow protection state for the current run
 
     this.startedAt = this.now();
     this.timer = null;
@@ -421,7 +565,7 @@ class IrrigationFlowWatchService {
 
   _latestEvent(eqId, ch) {
     return this.db.prepare(
-      'SELECT state, source, created_at FROM relay_events WHERE equipment_id = ? AND channel = ? ORDER BY id DESC LIMIT 1'
+      'SELECT id, state, source, automation_id, created_at FROM relay_events WHERE equipment_id = ? AND channel = ? ORDER BY id DESC LIMIT 1'
     ).get(eqId, ch);
   }
 
@@ -464,6 +608,10 @@ class IrrigationFlowWatchService {
           return { channel: ch, on, openedAt };
         };
         const pump = chan(cfg.pump_channel);
+        {
+          const ev = pump.on ? this._latestEvent(eqId, cfg.pump_channel) : null;
+          pump.automationId = ev && ev.state === 1 ? ev.automation_id ?? null : null;
+        }
         const zones = cfg.zone_channels.map(ch => {
           const z = chan(ch);
           const configured = cfg.expected_flow_lph || st.expected[ch] || null;
@@ -477,7 +625,16 @@ class IrrigationFlowWatchService {
             expectedLph: b.lph || configured,
           };
         });
-        value = { known: true, ageMs, pump, zones };
+        // Latest switch (either direction) of the pump, mixing pump or a zone: the
+        // pump no-flow grace counts from it (a zone switch-over dip is < 5 s).
+        let lastSwitchMs = null;
+        try {
+          const chs = [...new Set([cfg.pump_channel, cfg.mixing_pump_channel, ...cfg.zone_channels])];
+          const ev = this.db.prepare(`SELECT created_at FROM relay_events WHERE equipment_id = ? AND channel IN (${chs.map(() => '?').join(',')}) ORDER BY id DESC LIMIT 1`).get(eqId, ...chs);
+          lastSwitchMs = ev ? parseDbTs(ev.created_at) : null;
+        } catch (_) { lastSwitchMs = null; }
+        for (const z of [pump, ...zones]) if (z.on && z.openedAt !== null) lastSwitchMs = Math.max(lastSwitchMs ?? -Infinity, z.openedAt);
+        value = { known: true, ageMs, pump, zones, lastSwitchMs };
       }
     }
     // Dosing valves: commanded state (dose_program writes do not refresh the
@@ -735,7 +892,17 @@ class IrrigationFlowWatchService {
       const key = `dosing_without_water:${cfg.dosing_equipment_id}`;
       let verdict = null;
       let reason = 'recovered';
-      if (meter.known && dosing.fresh) {
+      if (cfg.shutdown_enabled && this.instances.has(`pump_no_flow_shutdown:${cfg.irrigation_equipment_id}`)) {
+        // The pump no-flow protection is timing this same no-water period and will
+        // pause (or abort) dosing itself within grace + shutdown_no_flow_seconds;
+        // an abort here would only cost the cold-restart retry its dosing.
+        verdict = null;
+      } else if (this.guard && GUARD_RETRY.has(this.guard.phase)) {
+        // Cold-restart retry in progress: dosing is paused (valves held closed) and
+        // the dosing meter still shows the last rates for ~40 s — not a real event.
+        verdict = false;
+        reason = 'dosing_stopped';
+      } else if (meter.known && dosing.fresh) {
         verdict = dosing.open && dosing.active.length > 0 && flow < cfg.dosing_max_flow_lph;
         if (!verdict) reason = flow >= cfg.dosing_max_flow_lph ? 'recovered' : 'dosing_stopped';
       }
@@ -798,10 +965,538 @@ class IrrigationFlowWatchService {
       });
     }
 
+    // ── pump no-flow protection (shutdown / cold-restart retry) ──
+    this._evalPumpGuard(cfg, nowMs, relays, meter, st, onZones, current);
+
     if (learn) this._learn(cfg, nowMs, relays, meter, current, onZones);
 
     this.lastEvaluation = { at: nowMs, enabled: true, relays, meter, dosing, current, onZones, settleEnd, cfg };
     return this.lastEvaluation;
+  }
+
+  // ─── pump no-flow protection: shutdown / cold-restart retry ──────────────
+
+  /** Channels of the irrigation run on the irrigation board: pump, mixing pump, zones. */
+  _runChannels(cfg) {
+    return [...new Set([cfg.pump_channel, cfg.mixing_pump_channel, ...cfg.zone_channels])].filter(ch => Number.isInteger(ch));
+  }
+
+  _pumpChannels(cfg) {
+    return [...new Set([cfg.pump_channel, cfg.mixing_pump_channel])].filter(ch => Number.isInteger(ch));
+  }
+
+  _noFlowThreshold(cfg, zone) {
+    const exp = zone && zone.expectedLph ? zone.expectedLph : null;
+    return Math.max(cfg.shutdown_flow_lph, exp ? (exp * cfg.shutdown_flow_pct) / 100 : 0);
+  }
+
+  _evalPumpGuard(cfg, nowMs, relays, meter, st, onZones, current) {
+    const key = `pump_no_flow_shutdown:${cfg.irrigation_equipment_id}`;
+    const reset = () => { if (this.instances.has(key)) this._step(key, 'pump_no_flow_shutdown', nowMs, false, { gapMs: 0, clearMs: 0, falseReason: 'ended' }); };
+    let g = this.guard;
+
+    // Forget a finished run: pump OFF, no zone ON for 60 s and nothing in progress.
+    if (g && !GUARD_BUSY.has(g.phase) && relays.known && !relays.pump.on && onZones.length === 0) {
+      if (g.idleSince == null) g.idleSince = nowMs;
+      if (g.phase === 'retry_watch') this._retryEnded(g, nowMs, 'the pump switched off before water was confirmed');
+      if (nowMs - g.idleSince >= 60000) { this.guard = null; g = null; }
+    } else if (g) {
+      g.idleSince = null;
+    }
+
+    if (!cfg.shutdown_enabled) { reset(); return; }
+
+    if (g && GUARD_BUSY.has(g.phase)) {
+      // Pumps are OFF on purpose (retry pause) or an action is on the wire.
+      if (g.phase === 'retry_pause') {
+        const op = this._operatorActionSince(cfg, g.retry && g.retry.eventMark);
+        if (op) this._retryAbandoned(g, nowMs, `operator action on ${st.eqName} (${op})`);
+        else if (nowMs >= g.retry.restartAt) {
+          g.phase = 'retry_restarting';
+          this._track(this._retryRestart(g, nowMs));
+        }
+      }
+      reset();
+      return;
+    }
+
+    // Never act on a blind meter or an unknown relay board (monitor_blind covers it).
+    if (!relays.known || !meter.known) { reset(); return; }
+
+    const thr = this._noFlowThreshold(cfg, current);
+    const flow = meter.flow;
+
+    if (g && g.phase === 'retry_watch' && relays.pump.on) {
+      const r = g.retry;
+      const exp = r.zone && r.zone.expectedLph ? r.zone.expectedLph : null;
+      const need = Math.max(thr, exp ? (exp * cfg.recovered_pct) / 100 : thr * 4);
+      if (flow >= need) this._retryRecovered(g, nowMs, flow);
+    }
+
+    const pumpStart = relays.pump.on ? relays.pump.openedAt : null;
+    const lastSwitch = relays.lastSwitchMs ?? pumpStart ?? nowMs;
+    const coldStart = pumpStart !== null && pumpStart >= lastSwitch - 1500;
+    const graceS = coldStart ? cfg.cold_start_grace_seconds : cfg.shutdown_grace_seconds;
+    const notBefore = lastSwitch + graceS * 1000;
+    const verdict = relays.pump.on && flow < thr;
+    this._step(key, 'pump_no_flow_shutdown', nowMs, verdict, {
+      holdMs: cfg.shutdown_no_flow_seconds * 1000, notBefore, gapMs: cfg.gap_seconds * 1000, clearMs: 0,
+      falseReason: relays.pump.on ? 'recovered' : 'ended', flow,
+      ctx: {
+        eqName: st.eqName, eqId: cfg.irrigation_equipment_id, threshold: thr, notBefore, graceS, coldStart,
+        zone: current ? { channel: current.channel, name: current.name, expectedLph: current.expectedLph, openedAt: current.openedAt } : null,
+        pumpOpenedAt: pumpStart, automationId: relays.pump.automationId ?? null,
+        otherZones: onZones.filter(z => !current || z.channel !== current.channel).map(z => z.channel),
+      },
+    });
+    // Act on time even while the monitor is on its 10 s idle cadence (it drops to
+    // it when the flow stops): wake up when the hold period would complete.
+    const inst = this.instances.get(key);
+    if (inst && !inst.fired) {
+      const dueAt = Math.max(inst.start, notBefore) + cfg.shutdown_no_flow_seconds * 1000;
+      if (dueAt > nowMs && this._guardWakeAt !== dueAt) {
+        this._guardWakeAt = dueAt;
+        this._setTimer(() => { try { this.evaluate(this.now(), { force: true }); } catch (e) { this.log.error(`[FlowWatch] evaluate failed: ${e.message}`); } }, dueAt - nowMs + 20);
+      }
+    }
+  }
+
+  /** Latest operator relay action (manual / stop-all) on the irrigation board after relay_events id `mark`. */
+  _operatorActionSince(cfg, mark) {
+    if (mark === null || mark === undefined) return null;
+    try {
+      const rows = this.db.prepare('SELECT source FROM relay_events WHERE equipment_id = ? AND id > ? ORDER BY id').all(cfg.irrigation_equipment_id, mark);
+      const hit = rows.find(r => OPERATOR_SOURCES.has(r.source));
+      return hit ? hit.source : null;
+    } catch (_) { return null; }
+  }
+
+  _eventMark() {
+    try { return this.db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM relay_events').get().id; } catch (_) { return 0; }
+  }
+
+  /** The guard for the run this detection belongs to (one per automation trigger). */
+  _ensureGuard(cfg, nowMs, ctx) {
+    if (this.guard) return this.guard;
+    let automationName = null;
+    let lastRun = null;
+    if (ctx.automationId != null) {
+      try {
+        const row = this.db.prepare('SELECT name, last_run FROM automations WHERE id = ?').get(ctx.automationId);
+        if (row) { automationName = row.name; lastRun = row.last_run; }
+      } catch (_) { /* unnamed */ }
+    }
+    const runStart = parseDbTs(lastRun) ?? ctx.pumpOpenedAt ?? nowMs;
+    this.guard = {
+      runKey: `${ctx.automationId != null ? `a${ctx.automationId}` : 'manual'}@${new Date(runStart).toISOString().slice(0, 19)}`,
+      automationId: ctx.automationId ?? null, automationName,
+      phase: 'active', retries: new Map(), retry: null, idleSince: null, createdAt: nowMs,
+    };
+    return this.guard;
+  }
+
+  _guardFingerprint(cfg, g, zone) {
+    return `flow_watch:pump_no_flow:${cfg.irrigation_equipment_id}:${g.runKey}:${zone ? zone.channel : 'none'}`;
+  }
+
+  _act() {
+    if (this._actuator) return this._actuator;
+    this._actuator = defaultActuator(this.db, this.log);
+    return this._actuator;
+  }
+
+  /** Same fire-time gate as RelayTimerService for energising timers: the owning automation must still be enabled (fails closed). */
+  _automationEnabled(automationId) {
+    if (automationId == null) return true;
+    try {
+      const row = this.db.prepare('SELECT enabled FROM automations WHERE id = ?').get(automationId);
+      return !!(row && row.enabled);
+    } catch (_) { return false; }
+  }
+
+  _isDisarmed() {
+    try { return !!this._act().isDisarmed(); } catch (_) { return true; } // fail closed: no retry
+  }
+
+  /** The zero-flow condition held: retry once per zone (cold restart) or shut the run down. */
+  _onPumpNoFlow(inst, nowMs) {
+    const cfg = this.getConfig();
+    const c = inst.ctx;
+    const g = this._ensureGuard(cfg, nowMs, c);
+    const noFlowMs = nowMs - Math.max(inst.start, c.notBefore || 0);
+    const zone = c.zone;
+    const retried = zone ? (g.retries.get(zone.channel) || 0) : 0;
+    const d = this._retryDecision(cfg, g, c, nowMs);
+    const base = {
+      zone, noFlowMs, noFlowSince: Math.max(inst.start, c.notBefore || 0), flow: this.flow ? this.flow.values.flow_lph : null,
+      minFlow: inst.minFlow, threshold: c.threshold, retried,
+    };
+    if (d.retry) {
+      g.phase = 'retry_stopping';
+      g.retries.set(zone.channel, retried + 1);
+      this._track(this._retryStart(g, { ...base, ...d }, nowMs));
+    } else {
+      g.phase = 'shutting_down';
+      this._track(this._fullShutdown(g, { ...base, whyNoRetry: d.reason }, nowMs));
+    }
+  }
+
+  _retryDecision(cfg, g, ctx, nowMs) {
+    const zone = ctx.zone;
+    if (cfg.max_retries <= 0) return { retry: false, reason: 'cold-restart retry is switched off' };
+    if (!zone) return { retry: false, reason: 'no zone was open (pump dead-heading)' };
+    if ((g.retries.get(zone.channel) || 0) >= cfg.max_retries) return { retry: false, reason: 'the cold restart did not bring water' };
+    if ((ctx.otherZones || []).length) return { retry: false, reason: 'more than one zone was open' };
+    if (this._isDisarmed()) return { retry: false, reason: 'automations are disarmed (no restart allowed)' };
+    const act = this._act();
+    const eqId = cfg.irrigation_equipment_id;
+    const pumpOff = act.getOffTimer(eqId, cfg.pump_channel);
+    if (!pumpOff) return { retry: false, reason: 'no planned pump end (not a scheduled run)' };
+    // Soft-switch: the zone valve opened >= 1 s before the pumps (no pressure) — keep it
+    // energised and cycle only the pumps. Otherwise the valve was switched under
+    // pressure: cycle it together with the pumps (cold start, as at 09:52).
+    const valveCycle = !(zone.openedAt !== null && ctx.pumpOpenedAt !== null && zone.openedAt <= ctx.pumpOpenedAt - 1000);
+    const zoneOff = act.getOffTimer(eqId, zone.channel);
+    if (!zoneOff) return { retry: false, reason: 'no planned zone end (not a scheduled run)' };
+    const pumpEndMs = pumpOff.firesAt.getTime();
+    const zoneEndMs = zoneOff.firesAt.getTime();
+    const segEndMs = valveCycle ? zoneEndMs : Math.min(pumpEndMs, zoneEndMs);
+    const left = (segEndMs - (nowMs + cfg.retry_pause_seconds * 1000)) / 1000;
+    if (left < cfg.retry_min_remaining_seconds) return { retry: false, reason: `only ${Math.max(0, Math.round(left))} s of the zone would be left after the pause` };
+    return { retry: true, valveCycle, pumpEndMs, zoneEndMs, segEndMs };
+  }
+
+  _labelZone(cfg, zone) {
+    const st = this._staticInfo(cfg, this.now());
+    return zone ? `${zone.name} (${st.eqName} relay ${zone.channel})` : `the irrigation pump (${st.eqName} relay ${cfg.pump_channel})`;
+  }
+
+  async _retryStart(g, info, nowMs) {
+    const cfg = this.getConfig();
+    const act = this._act();
+    const eqId = cfg.irrigation_equipment_id;
+    const zone = info.zone;
+    const label = this._labelZone(cfg, zone);
+    const fp = this._guardFingerprint(cfg, g, zone);
+    g.retry = {
+      zone, valveCycle: info.valveCycle, segEndMs: info.segEndMs, pumpEndMs: info.pumpEndMs, zoneEndMs: info.zoneEndMs,
+      noFlowSince: info.noFlowSince, noFlowMs: info.noFlowMs, minFlow: info.minFlow, startedAt: nowMs, restartAt: null,
+      restartedAt: null, attempt: g.retries.get(zone.channel), fingerprint: fp, eventMark: this._eventMark(), dose: null,
+    };
+    const chans = info.valveCycle ? [...this._pumpChannels(cfg), zone.channel] : this._pumpChannels(cfg);
+    const msg = `${label} had no water for ${fmtDur(info.noFlowMs)} with the pumps running (flow ${fmtLph(info.flow)} L/h, below ${fmtLph(info.threshold)} L/h). Pumps${info.valveCycle ? ' and the zone valve' : ''} switched off and dosing paused; cold restart ${info.valveCycle ? 'of pumps + zone ' : 'of the pumps '}in ${cfg.retry_pause_seconds} s (retry ${g.retry.attempt} of ${cfg.max_retries}).`;
+    g.retry.message = msg;
+    const row = this._createAlert({ severity: 'critical', source: 'flow_watch', equipment_id: eqId, fingerprint: fp, message: msg,
+      metadata: { rule: 'pump_no_flow_shutdown', phase: 'retry', run_key: g.runKey } });
+    g.retry.alertId = row && row.id ? row.id : null;
+    this.log.warn(`[FlowWatch] ALARM pump_no_flow ${g.runKey}: ${msg}`);
+
+    // 1. dosing: pause (closed-loop targets kept) — or abort a cycle that cannot pause
+    g.retry.dose = await this._pauseOrAbortDosing(`flow watch cold-restart retry: ${zone.name} no water`, 'flow_watch_retry');
+    // 2. pumps (+ zone) OFF
+    const off = await this._writeOffSafe(eqId, chans, 'flow_watch_retry', g.automationId);
+    if (!off.confirmed) {
+      g.phase = 'shutting_down';
+      await this._fullShutdown(g, { ...info, whyNoRetry: `the pumps could not be confirmed OFF for the retry (${off.error || 'read-back disagrees'})` }, this.now());
+      return;
+    }
+    // 3. pause, then restart from evaluate() (tick / samples) or the wake-up timer
+    g.retry.restartAt = this.now() + cfg.retry_pause_seconds * 1000;
+    g.phase = 'retry_pause';
+    this._setTimer(() => { try { this.evaluate(this.now(), { force: true }); } catch (e) { this.log.error(`[FlowWatch] restart evaluate failed: ${e.message}`); } }, cfg.retry_pause_seconds * 1000 + 50);
+    this._sendNotify(RULES.pump_no_flow_shutdown.title, msg + (g.retry.dose.text || ''), 'critical');
+  }
+
+  async _pauseOrAbortDosing(reason, source) {
+    const ds = this.doseScheduler;
+    if (!ds) return { outcome: 'none', text: '' };
+    let running = false;
+    try { running = ds.isRunning(); } catch (_) { running = false; }
+    if (!running) return { outcome: 'none', text: '' };
+    try {
+      if (typeof ds.pauseDosing === 'function' && ds.pauseDosing(reason)) return { outcome: 'paused', text: '' };
+      const aborted = await ds.abortCycle(reason, { source });
+      return aborted
+        ? { outcome: 'aborted', text: ' The dose cycle runs on a fixed schedule and cannot pause, so it was aborted: the rest of this run gets NO fertiliser.' }
+        : { outcome: 'none', text: '' };
+    } catch (e) {
+      return { outcome: 'failed', text: ` Pausing dosing FAILED (${e.message}) — check the injector valves.` };
+    }
+  }
+
+  _resumeDosing(g) {
+    const ds = this.doseScheduler;
+    if (!ds || !g.retry || !g.retry.dose || g.retry.dose.outcome !== 'paused') return false;
+    try { return typeof ds.resumeDosing === 'function' ? !!ds.resumeDosing('flow watch cold restart') : false; } catch (_) { return false; }
+  }
+
+  async _retryRestart(g, nowMs) {
+    const cfg = this.getConfig();
+    const act = this._act();
+    const eqId = cfg.irrigation_equipment_id;
+    const r = g.retry;
+    const label = this._labelZone(cfg, r.zone);
+    const info = { zone: r.zone, noFlowMs: r.noFlowMs, noFlowSince: r.noFlowSince, minFlow: r.minFlow, retried: r.attempt };
+    if (this._isDisarmed()) {
+      g.phase = 'shutting_down';
+      await this._fullShutdown(g, { ...info, whyNoRetry: 'automations were disarmed during the retry pause (no restart)' }, this.now());
+      return;
+    }
+    if (!this._automationEnabled(g.automationId)) {
+      g.phase = 'shutting_down';
+      await this._fullShutdown(g, { ...info, whyNoRetry: 'the automation was disabled or deleted during the retry pause (no restart)' }, this.now());
+      return;
+    }
+    // Never two zones open: which zones are ON now?
+    const relays = this._relays(cfg, nowMs);
+    const onNow = relays.known ? relays.zones.filter(z => z.on).map(z => z.channel) : null;
+    if (onNow === null) {
+      g.phase = 'shutting_down';
+      await this._fullShutdown(g, { ...info, whyNoRetry: 'the irrigation relay state was unknown at the restart' }, this.now());
+      return;
+    }
+    const others = onNow.filter(ch => ch !== r.zone.channel);
+    let zoneToo = r.valveCycle;
+    let note = '';
+    if (others.length && !r.valveCycle) {
+      g.phase = 'shutting_down';
+      await this._fullShutdown(g, { ...info, whyNoRetry: 'another zone opened while the stuck zone was still energised' }, this.now());
+      return;
+    }
+    if (others.length) { zoneToo = false; note = ` ${r.zone.name} was superseded by the next zone during the pause; pumps restarted for that zone.`; }
+    const left = (r.segEndMs - nowMs) / 1000;
+    if (!others.length && left < cfg.retry_min_remaining_seconds) {
+      g.phase = 'shutting_down';
+      await this._fullShutdown(g, { ...info, whyNoRetry: `only ${Math.max(0, Math.round(left))} s of the zone were left at the restart` }, this.now());
+      return;
+    }
+    const chans = zoneToo ? [r.zone.channel, ...this._pumpChannels(cfg)] : this._pumpChannels(cfg);
+    let on;
+    try {
+      on = await act.writeOn(eqId, chans, { source: 'flow_watch_retry', automationId: g.automationId });
+    } catch (e) {
+      on = { confirmed: false, error: e.message };
+    }
+    if (!on || !on.confirmed) {
+      g.phase = 'shutting_down';
+      await this._fullShutdown(g, { ...info, whyNoRetry: `the cold restart ON was not confirmed (${(on && on.error) || 'read-back disagrees'})` }, this.now());
+      return;
+    }
+    const now2 = this.now();
+    // Auto-offs: the run's own planned ends still stand; only fill in a missing one,
+    // and extend the pumps (capped) when a valve-cycled zone ends after them.
+    try {
+      if (zoneToo && !act.getOffTimer(eqId, r.zone.channel)) act.scheduleOff(eqId, r.zone.channel, Math.max(1, (r.zoneEndMs - now2) / 1000), { source: 'flow_watch_retry_auto_off', automationId: g.automationId });
+      const cap = r.pumpEndMs + (cfg.retry_pause_seconds + 5) * 1000;
+      const wantPumpEnd = zoneToo && r.zoneEndMs > r.pumpEndMs ? Math.min(r.zoneEndMs, cap) : r.pumpEndMs;
+      for (const ch of this._pumpChannels(cfg)) {
+        const t = act.getOffTimer(eqId, ch);
+        if (!t || (wantPumpEnd > r.pumpEndMs && t.firesAt.getTime() < wantPumpEnd)) {
+          act.scheduleOff(eqId, ch, Math.max(1, (wantPumpEnd - now2) / 1000), { source: 'flow_watch_retry_auto_off', automationId: g.automationId });
+        }
+      }
+    } catch (e) { this.log.error(`[FlowWatch] retry auto-off scheduling failed: ${e.message}`); }
+    const resumed = this._resumeDosing(g);
+    r.restartedAt = now2;
+    r.note = note;
+    r.resumed = resumed;
+    g.phase = 'retry_watch';
+    this._relayCache = null;
+    this.log.warn(`[FlowWatch] cold restart: ${label} — ${chans.join(',')} ON (dosing ${resumed ? 'resumed' : r.dose && r.dose.outcome === 'aborted' ? 'aborted' : 'n/a'})${note}`);
+  }
+
+  _retryRecovered(g, nowMs, flow) {
+    const cfg = this.getConfig();
+    const r = g.retry;
+    g.phase = 'active';
+    const label = this._labelZone(cfg, r.zone);
+    const secs = fmtDur((nowMs - (r.restartedAt || nowMs)));
+    const msg = `${label} recovered after a cold restart (retry): no water for ${fmtDur(r.noFlowMs)} with the pumps running, so pumps${r.valveCycle ? ' and valve' : ''} were stopped ${cfg.retry_pause_seconds} s and restarted — flow back to ${fmtLph(flow)} L/h ${secs} after the restart.${r.note || ''}${r.dose && r.dose.outcome === 'aborted' ? ' Dosing had to be aborted (fixed schedule): no fertiliser for the rest of this run.' : r.resumed ? ' Dosing resumed with the zone target kept.' : ''} ${r.valveCycle ? 'The valve sticks when switched under pressure — check it.' : 'Check the zone valve.'}`;
+    r.outcome = 'recovered';
+    this._updateOpenAlert(r.fingerprint, { message: msg, severity: 'warning' });
+    this._recordGuardEpisode(cfg, g, 'retry_recovered', { zone: r.zone, since: r.noFlowSince, endMs: nowMs, recovered: 1, minFlow: r.minFlow, endFlow: flow, message: msg,
+      severity: 'warning', alertId: r.alertId, doseAborted: r.dose && r.dose.outcome === 'aborted', detail: { retry: this._retryDetail(r), automation_id: g.automationId, automation_name: g.automationName, run_key: g.runKey } });
+    this.log.log(`[FlowWatch] ${msg}`);
+    this._sendNotify('Irrigation recovered after a cold restart', msg, 'warning');
+  }
+
+  _retryEnded(g, nowMs, why) {
+    const cfg = this.getConfig();
+    const r = g.retry;
+    g.phase = 'active';
+    if (!r) return;
+    r.outcome = 'ended';
+    const msg = `${r.message} Restarted, but ${why}.`;
+    this._updateOpenAlert(r.fingerprint, { message: msg, severity: 'warning' });
+    this._recordGuardEpisode(cfg, g, 'retry_ended', { zone: r.zone, since: r.noFlowSince, endMs: nowMs, recovered: 0, minFlow: r.minFlow, message: msg,
+      severity: 'warning', alertId: r.alertId, detail: { retry: this._retryDetail(r), run_key: g.runKey, automation_id: g.automationId } });
+  }
+
+  _retryAbandoned(g, nowMs, why) {
+    const cfg = this.getConfig();
+    const r = g.retry;
+    g.phase = 'active';
+    r.outcome = 'abandoned';
+    this._resumeDosing(g); // the operator's stop aborts the dose cycle itself; a no-op then
+    const msg = `${r.message} Cold restart cancelled: ${why}. The pumps stay OFF.`;
+    this._updateOpenAlert(r.fingerprint, { message: msg, severity: 'critical' });
+    this._recordGuardEpisode(cfg, g, 'retry_abandoned', { zone: r.zone, since: r.noFlowSince, endMs: nowMs, recovered: 0, minFlow: r.minFlow, message: msg,
+      severity: 'critical', alertId: r.alertId, detail: { retry: this._retryDetail(r), run_key: g.runKey, automation_id: g.automationId } });
+    this.log.warn(`[FlowWatch] ${msg}`);
+  }
+
+  _retryDetail(r) {
+    return r ? {
+      attempt: r.attempt, valve_cycled: r.valveCycle, started_at: iso(r.startedAt), restarted_at: iso(r.restartedAt),
+      segment_end: iso(r.segEndMs), dose: r.dose ? r.dose.outcome : null, outcome: r.outcome || null,
+    } : null;
+  }
+
+  /** OFF with one retry of the whole write on failure; never throws. */
+  async _writeOffSafe(eqId, channels, source, automationId) {
+    const act = this._act();
+    let res = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        res = await act.writeOff(eqId, channels, { source, automationId });
+      } catch (e) {
+        res = { confirmed: false, error: e.message, items: [] };
+      }
+      if (res && res.confirmed) return { ...res, attempts: attempt };
+    }
+    return { ...(res || {}), confirmed: false, attempts: 2 };
+  }
+
+  async _fullShutdown(g, info, nowMs) {
+    const cfg = this.getConfig();
+    const act = this._act();
+    const st = this._staticInfo(cfg, nowMs);
+    const eqId = cfg.irrigation_equipment_id;
+    const zone = info.zone || null;
+    const fp = this._guardFingerprint(cfg, g, zone);
+    const label = this._labelZone(cfg, zone);
+    const retried = g.retry && zone && g.retry.zone && g.retry.zone.channel === zone.channel && g.retry.restartedAt ? g.retry : null;
+
+    // 0. Nothing of this run may start again: cancel its delayed starts first (auto-offs stay until OFF is confirmed).
+    let cancelled = [];
+    try { cancelled = act.cancelRunTimers(g.automationId, eqId) || []; } catch (e) { this.log.error(`[FlowWatch] timer cancel failed: ${e.message}`); }
+    // 1+2. pumps + zones OFF (first on the wire), dose cycle aborted right behind it.
+    const offP = this._writeOffSafe(eqId, this._runChannels(cfg), 'flow_watch_shutdown', g.automationId);
+    let doseP = Promise.resolve({ outcome: 'none' });
+    if (this.doseScheduler) {
+      doseP = (async () => {
+        try {
+          if (!this.doseScheduler.isRunning()) return { outcome: 'none' };
+          const cyc = this.doseScheduler.currentCycle ? this.doseScheduler.currentCycle() : null;
+          const ok = await this.doseScheduler.abortCycle(`flow_watch_shutdown: ${zone ? zone.name : 'pump'} no water flow`, { source: 'flow_watch_shutdown' });
+          return { outcome: ok ? 'aborted' : 'none', cycleLogId: cyc && cyc.cycleLogId };
+        } catch (e) { return { outcome: 'failed', error: e.message }; }
+      })();
+    }
+    const [off, dose] = await Promise.all([offP, doseP]);
+    const confirmedChs = (off.items || []).filter(i => i.confirmed).map(i => i.channel);
+    try { act.cancelOffTimers(eqId, confirmedChs, g.automationId); } catch (_) { /* the auto-off would only write OFF again */ }
+
+    // zones that will not get water this run
+    const notIrrigated = [];
+    if (zone) notIrrigated.push(zone.name);
+    const later = [...new Set(cancelled.filter(t => t.type === 'delay' && t.channel && cfg.zone_channels.includes(t.channel)).map(t => t.channel))];
+    for (const ch of later) { const nm = st.names[ch] || `Relay ${ch}`; if (!notIrrigated.includes(nm)) notIrrigated.push(nm); }
+
+    const what = zone
+      ? `${label} had no water for ${fmtDur(info.noFlowMs)} with the pumps running`
+      : `${label} ran with no zone open and no water flowing for ${fmtDur(info.noFlowMs)}`;
+    let msg = `Irrigation stopped: ${what} — pumps, zones and dosing switched off to prevent over-pressure.`;
+    if (retried) msg += ` A cold restart (pumps${retried.valveCycle ? ' + valve' : ''} off ${cfg.retry_pause_seconds} s, then on again) did not bring water.`;
+    else if (info.whyNoRetry && zone) msg += ` No cold restart: ${info.whyNoRetry}.`;
+    msg += ` Zones not irrigated this run: ${notIrrigated.length ? notIrrigated.join(', ') : 'none'}.`;
+    msg += zone ? ' Check the valve.' : ' Check why no zone was open.';
+    const outcome = [];
+    if (off.confirmed) outcome.push(`OFF confirmed on relays ${this._runChannels(cfg).join(', ')}`);
+    const nStarts = cancelled.filter(t => t.type !== 'off').length;
+    outcome.push(`${nStarts} pending start(s) cancelled`);
+    if (dose.outcome === 'aborted') outcome.push(`dose cycle${dose.cycleLogId ? ` #${dose.cycleLogId}` : ''} aborted`);
+    else if (dose.outcome === 'failed') outcome.push(`dose abort FAILED (${dose.error})`);
+    msg += ` (${outcome.join('; ')}.)`;
+    if (!off.confirmed) {
+      const bad = (off.items || []).filter(i => !i.confirmed).map(i => i.channel);
+      msg += ` WARNING: OFF NOT CONFIRMED on ${st.eqName} relay${bad.length === 1 ? '' : 's'} ${bad.length ? bad.join(', ') : this._runChannels(cfg).join(', ')}${off.error ? ` (${off.error})` : ''} — press Stop All or switch the pumps off at the panel NOW.`;
+      this._createAlert({ severity: 'critical', source: 'flow_watch', equipment_id: eqId, fingerprint: `flow_watch:shutdown_off_unconfirmed:${eqId}`,
+        message: `Irrigation shutdown could not confirm the pumps/zones OFF on ${st.eqName} (relays ${bad.length ? bad.join(', ') : 'all'}${off.error ? `: ${off.error}` : ''}). Press Stop All or switch the pumps off at the panel NOW.` });
+    }
+    const existing = retried ? retried.fingerprint === fp : false;
+    let alertId = retried ? retried.alertId : null;
+    if (existing) this._updateOpenAlert(fp, { message: msg, severity: 'critical' });
+    const row = existing ? null : this._createAlert({ severity: 'critical', source: 'flow_watch', equipment_id: eqId, fingerprint: fp, message: msg,
+      metadata: { rule: 'pump_no_flow_shutdown', phase: 'shutdown', run_key: g.runKey } });
+    if (row && row.id) alertId = row.id;
+    if (retried) retried.outcome = 'failed';
+
+    try {
+      if (g.automationId != null) act.logAutomationRun(g.automationId, 'failure', `ABORTED by flow watch (pump_no_flow_shutdown): ${what}; pumps/zones/dosing switched off. Zones not irrigated: ${notIrrigated.join(', ') || 'none'}.${off.confirmed ? '' : ' OFF NOT confirmed.'}`);
+    } catch (e) { this.log.error(`[FlowWatch] automation log failed: ${e.message}`); }
+
+    this._recordGuardEpisode(cfg, g, 'run_shutdown', {
+      zone, since: info.noFlowSince, endMs: this.now(), recovered: 0, minFlow: info.minFlow, message: msg, severity: 'critical', alertId,
+      doseAborted: dose.outcome === 'aborted',
+      detail: {
+        automation_id: g.automationId, automation_name: g.automationName, run_key: g.runKey,
+        zones_not_irrigated: notIrrigated, off_confirmed: !!off.confirmed, off_attempts: off.attempts || null,
+        timers_cancelled: cancelled.map(t => t.key), dose: dose.outcome, no_retry_reason: retried ? null : (info.whyNoRetry || null),
+        retry: this._retryDetail(retried),
+      },
+    });
+    g.phase = 'done';
+    g.lastShutdownAt = this.now();
+    this.log.warn(`[FlowWatch] RUN SHUTDOWN ${g.runKey}: ${msg}`);
+    this._sendNotify(RULES.pump_no_flow_shutdown.title, msg, 'critical');
+  }
+
+  _recordGuardEpisode(cfg, g, kind, e) {
+    try {
+      const startMs = e.since ?? this.now();
+      const endMs = e.endMs ?? this.now();
+      this.db.prepare(`
+        INSERT INTO irrigation_flow_episodes
+          (kind, equipment_id, channel, zone_name, started_at, ended_at, duration_s, expected_lph, min_flow_lph, max_flow_lph,
+           recovered, end_reason, alarmed, severity, alert_id, dosing_aborted, detail_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+      `).run(
+        kind, cfg.irrigation_equipment_id, e.zone ? e.zone.channel : cfg.pump_channel, e.zone ? e.zone.name : null,
+        iso(startMs), iso(endMs), Math.round((endMs - startMs) / 100) / 10, round(e.zone ? e.zone.expectedLph : null),
+        round(e.minFlow), round(e.endFlow ?? null), e.recovered, kind, e.severity, e.alertId ?? null, e.doseAborted ? 1 : 0,
+        JSON.stringify({ ...(e.detail || {}), message: e.message, end_flow_lph: round(e.endFlow ?? null) }), iso(this.now()), iso(this.now()),
+      );
+    } catch (err) {
+      this.log.error(`[FlowWatch] could not record ${kind} episode: ${err.message}`);
+    }
+  }
+
+  /** Stop-all / emergency stop: drop a pending cold restart so nothing re-energises afterwards. */
+  cancelPendingRetry(why = 'stop-all') {
+    const g = this.guard;
+    if (!g || !GUARD_RETRY.has(g.phase) || !g.retry) return false;
+    if (g.phase === 'retry_pause' || g.phase === 'retry_stopping') {
+      this._retryAbandoned(g, this.now(), why);
+      return true;
+    }
+    return false;
+  }
+
+  lastShutdown() {
+    try {
+      return this.formatEpisode(this.db.prepare("SELECT * FROM irrigation_flow_episodes WHERE kind IN ('run_shutdown', 'retry_recovered', 'retry_ended', 'retry_abandoned') ORDER BY started_at DESC, id DESC LIMIT 1").get());
+    } catch (_) { return null; }
+  }
+
+  guardStatus() {
+    const g = this.guard;
+    if (!g) return null;
+    const r = g.retry;
+    return {
+      phase: g.phase, run_key: g.runKey, automation_id: g.automationId, automation_name: g.automationName,
+      retry: r ? { zone: r.zone ? { channel: r.zone.channel, name: r.zone.name } : null, attempt: r.attempt, restart_at: iso(r.restartAt), restarted_at: iso(r.restartedAt), outcome: r.outcome || null } : null,
+    };
   }
 
   // ─── alerts + episodes ────────────────────────────────────────────────────
@@ -936,6 +1631,7 @@ class IrrigationFlowWatchService {
   }
 
   _onFire(inst, nowMs) {
+    if (inst.rule === 'pump_no_flow_shutdown') { this._onPumpNoFlow(inst, nowMs); return; }
     const cfg = this.getConfig();
     const def = RULES[inst.rule];
     let message = this._fireMessage(inst, nowMs);
@@ -1020,6 +1716,7 @@ class IrrigationFlowWatchService {
   }
 
   _onEnd(inst, nowMs) {
+    if (inst.rule === 'pump_no_flow_shutdown') return; // its alert/episode are owned by the guard
     const cfg = this.getConfig();
     const def = RULES[inst.rule];
     const endAt = inst.falseSince || nowMs;
@@ -1127,7 +1824,7 @@ class IrrigationFlowWatchService {
 
   getStatus(nowMs = this.now()) {
     const cfg = this.getConfig();
-    if (!cfg.enabled) return { enabled: false, state: 'disabled', evaluated_at: iso(nowMs), active: [], last_episode: this.lastEpisode(), config: cfg };
+    if (!cfg.enabled) return { enabled: false, state: 'disabled', evaluated_at: iso(nowMs), active: [], last_episode: this.lastEpisode(), last_shutdown: this.lastShutdown(), run_guard: this.guardStatus(), config: cfg };
     const last = this.lastEvaluation;
     const ev = last && last.relays && nowMs >= last.at && nowMs - last.at < TICK_MS + 1000 ? last : this.evaluate(nowMs, { force: true });
     const { relays, meter, dosing, current, onZones, settleEnd } = ev;
@@ -1143,7 +1840,9 @@ class IrrigationFlowWatchService {
       message: i.fired ? i.message : null,
     }));
     let state;
-    if (active.some(a => a.fired && a.level === 'alarm')) state = 'alarm';
+    const g = this.guard;
+    if (g && GUARD_RETRY.has(g.phase)) state = 'alarm';
+    else if (active.some(a => a.fired && a.level === 'alarm')) state = 'alarm';
     else if (active.some(a => a.fired)) state = 'caution';
     else if (active.length) state = 'checking';
     else if (!relays.known) state = 'unknown';
@@ -1192,6 +1891,9 @@ class IrrigationFlowWatchService {
       },
       active,
       last_episode: this.lastEpisode(),
+      // pump no-flow protection: the run being acted on (retry pause / restart) and the latest outcome
+      run_guard: this.guardStatus(),
+      last_shutdown: this.lastShutdown(),
       config: cfg,
     };
   }
@@ -1239,6 +1941,11 @@ class IrrigationFlowWatchService {
 }
 
 let singleton = null;
+/** The singleton only if it was already created (never builds one — for the stop-all hook). */
+function peekFlowWatchService() {
+  return singleton;
+}
+
 function getFlowWatchService() {
   if (!singleton) {
     const { db } = require('../utils/database');
@@ -1255,6 +1962,8 @@ function getFlowWatchService() {
 module.exports = {
   IrrigationFlowWatchService,
   getFlowWatchService,
+  peekFlowWatchService,
+  defaultActuator,
   validateConfigUpdate,
   DEFAULT_CONFIG,
   RULES,

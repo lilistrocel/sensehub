@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, Label, Reading } from '../ui';
 import { StatusMark } from './agronomist/SectionStatus';
 import { useAuth } from '../context/AuthContext';
+import LastCycleZones from './LastCycleZones';
 
 /**
  * Closed-loop dose controller card (GET /api/dose-controller/status, polled 4 s).
@@ -140,12 +141,8 @@ function LastRun({ run, when }) {
   if (run.status !== 'completed') flags.push(run.status);
   return (
     <div className="mt-3 pt-2 border-t border-line text-xs text-muted" data-testid="dose-last-run">
-      <div className="flex flex-wrap gap-x-2 gap-y-1 items-baseline">
-        <span className="font-semibold uppercase tracking-wider">Last run</span>
-        <span className="font-mono tabular">{when(run.started_at)}</span>
-        {run.automation_name && <span className="truncate max-w-[16rem]">{run.automation_name}</span>}
-        <span><span className="font-mono tabular text-ink">{fmtInt(run.water_l)}</span> L water</span>
-      </div>
+      <span className="block font-semibold uppercase tracking-wider">Last run</span>
+      <LastCycleZones run={run} formatTime={when} compact className="mt-1" />
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
         {[...(run.tanks || [])].sort((a, b) => a.tank_id - b.tank_id).map(t => (
           <span key={t.tank_id}>{t.name} <span className="font-mono tabular text-ink">1:{t.achieved_ratio ? fmtInt(t.achieved_ratio) : '—'}</span></span>

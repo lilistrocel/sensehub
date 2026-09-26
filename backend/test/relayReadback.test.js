@@ -43,7 +43,7 @@ test('confirmCoilWrite: read-back matches -> confirmed, source readback, FC01 wi
   assert.equal(r.retried, false);
   assert.deepEqual(r.item, { channel: 5, requested: true, readback: true, confirmed: true });
   assert.equal(client.calls.length, 1);
-  assert.deepEqual(client.calls[0].options, { timeout: 2000, retries: 1 });
+  assert.deepEqual(client.calls[0].options, { timeout: 2000, retries: 1, priority: 'high' });
   assert.equal(client.calls[0].quantity, 1);
 });
 

@@ -190,6 +190,23 @@ function readBlock(client, target, fc, address, quantity, options) {
 
 const defaultSleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * A TIMEOUT on a hole-spanning block is only remembered as 'split' after this
+ * many consecutive cycles in which the block timed out and its hole-free
+ * sub-blocks answered. One lost frame on a busy bus is not evidence against
+ * the hole: on 2026-09-26 11:30:15 a single timeout switched the SEKO K800
+ * (FC04 1000x9, which answers as one block) to four sub-block reads per cycle
+ * until the next config reload — 4x the requests on the shared irrigation bus
+ * during every run. A Modbus EXCEPTION is still remembered at once.
+ */
+const SPLIT_AFTER_TIMEOUTS = 3;
+const timeoutStreaks = new WeakMap(); // runModes Map -> Map<runKey, consecutive timed-out cycles>
+function streaksFor(runModes) {
+  let m = timeoutStreaks.get(runModes);
+  if (!m) { m = new Map(); timeoutStreaks.set(runModes, m); }
+  return m;
+}
+
 /** Read modes per run, from fewest requests to most. */
 const MODE_BLOCK = 'block';    // one read for the whole run (through holes <= maxHole)
 const MODE_SPLIT = 'split';    // one read per hole-free sub-run
@@ -239,6 +256,7 @@ async function readMappings(client, target, mappings, opts = {}) {
     requestOptions,
   } = opts;
 
+  const streaks = streaksFor(runModes);
   const { runs, unsupported } = buildRuns(mappings, limits);
   for (const u of unsupported) {
     log(`Unsupported function code ${u.fc} for "${u.mapping.name || u.address}" - skipped`);
@@ -292,10 +310,11 @@ async function readMappings(client, target, mappings, opts = {}) {
     const subRuns = splitOnHoles(run);
     let mode = run.items.length === 1 ? MODE_SINGLE : (runModes.get(key) || MODE_BLOCK);
     let outcome = null;
+    let blockTimedOut = false;
 
     if (mode === MODE_BLOCK) {
       outcome = await readGroup(run);
-      if (outcome === 'ok') continue;
+      if (outcome === 'ok') { streaks.delete(key); continue; }
       if (outcome === 'connection') break;
       if (outcome === 'exception') {
         mode = subRuns.length > 1 ? MODE_SPLIT : MODE_SINGLE;
@@ -303,6 +322,7 @@ async function readMappings(client, target, mappings, opts = {}) {
       } else if (subRuns.length > 1) {
         // Timed out while spanning a hole: try without the hole, decide after.
         mode = MODE_SPLIT;
+        blockTimedOut = true;
       } else {
         // Hole-free block timed out: a failed read, nothing smarter to try.
         continue;
@@ -324,7 +344,18 @@ async function readMappings(client, target, mappings, opts = {}) {
         remember(key, run, mode, `sub-block rejected (${lastError.message})`);
       } else {
         if (okCount > 0 && runModes.get(key) !== MODE_SPLIT) {
-          remember(key, run, MODE_SPLIT, 'fails as one block but answers hole-free sub-blocks');
+          const n = blockTimedOut ? (streaks.get(key) || 0) + 1 : SPLIT_AFTER_TIMEOUTS;
+          if (n >= SPLIT_AFTER_TIMEOUTS) {
+            streaks.delete(key);
+            remember(key, run, MODE_SPLIT, blockTimedOut
+              ? `timed out as one block ${n} cycles in a row but answers hole-free sub-blocks`
+              : 'fails as one block but answers hole-free sub-blocks');
+          } else {
+            streaks.set(key, n);
+            log(`${describe(run)} timed out as one block (${n}/${SPLIT_AFTER_TIMEOUTS}); read as hole-free sub-blocks this cycle only`);
+          }
+        } else if (okCount === 0 && blockTimedOut) {
+          streaks.delete(key); // everything timed out: a flaky bus, not the hole
         }
         continue;
       }
@@ -375,4 +406,5 @@ module.exports = {
   MODE_BLOCK,
   MODE_SPLIT,
   MODE_SINGLE,
+  SPLIT_AFTER_TIMEOUTS,
 };

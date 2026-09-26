@@ -199,13 +199,19 @@ export function formatDuration(seconds) {
  */
 export function collectTargets(actions, equipIndex) {
   const out = [];
-  const seen = new Set();
+  const seen = new Map();
   const push = (eqId, channel, action, extra) => {
     const key = `${eqId}:${channel}:${action}`;
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (seen.has(key)) {
+      // Same channel switched again later in the run (soft-switch: pumps once per zone).
+      const t = seen.get(key);
+      t.windows += 1;
+      const d = Number(extra.duration_seconds) > 0 ? Number(extra.duration_seconds) : null;
+      if (d !== t.duration) t.durationVaries = true;
+      return;
+    }
     const e = equipIndex?.get(Number(eqId));
-    out.push({
+    const target = {
       eqId: Number(eqId),
       eqName: e ? e.name : (extra.equipment_name || `Equipment #${eqId}`),
       channel,
@@ -215,7 +221,11 @@ export function collectTargets(actions, equipIndex) {
       duration: Number(extra.duration_seconds) > 0 ? Number(extra.duration_seconds) : null,
       delay: Number(extra.delay_seconds) > 0 ? Number(extra.delay_seconds) : null,
       online: e ? (e.enabled && e.status === 'online') : null,
-    });
+      windows: 1,
+      durationVaries: false,
+    };
+    seen.set(key, target);
+    out.push(target);
   };
 
   for (const a of Array.isArray(actions) ? actions : []) {
@@ -302,6 +312,11 @@ export function describeTargets(targets) {
       for (const seg of segs.values()) {
         if (seg.items.length === 1) {
           const t = seg.items[0];
+          if (t.windows > 1) {
+            const times = t.durationVaries || !seg.duration ? ` ${t.windows} times` : `${suffix(seg.duration, seg.value)} × ${t.windows}`;
+            parts.push(`${t.label} ${word}${times}${t.delay ? `, first after ${formatDuration(t.delay)}` : ''}`);
+            continue;
+          }
           parts.push(`${t.label} ${word}${suffix(seg.duration, seg.value)}${t.delay ? ` after ${formatDuration(t.delay)}` : ''}`);
           continue;
         }
@@ -802,5 +817,31 @@ export function buildSequence(actions, equipIndex) {
 
   // Headroom so an open-ended bar still reads as running past the last event.
   const scaleEnd = Math.max(openEnded ? total * 1.1 : total, 1);
-  return { items, show, total, openEnded, scaleEnd, gaps, overlaps, pumpCovered };
+  return { items, rows: groupSequenceRows(items), show, total, openEnded, scaleEnd, gaps, overlaps, pumpCovered };
+}
+
+/**
+ * One timeline row per relay channel: several windows of the same channel
+ * (soft-switch runs switch the pumps on once per zone) share a row as separate
+ * segments instead of one row per action. "All channels" actions keep their
+ * own row. Rows are ordered by their first start.
+ */
+export function groupSequenceRows(items) {
+  const rows = new Map();
+  for (const item of items || []) {
+    const key = item.channel === '*' ? `all:${item.key}` : `${item.eqId}:${item.channel}`;
+    let row = rows.get(key);
+    if (!row) {
+      row = { key, eqId: item.eqId, eqName: item.eqName, label: item.label, role: item.role, stagger: item.stagger || null, segments: [] };
+      rows.set(key, row);
+    }
+    row.segments.push(item);
+  }
+  const out = [...rows.values()];
+  for (const r of out) {
+    r.segments.sort((a, b) => a.start - b.start || a.index - b.index);
+    r.start = r.segments[0].start;
+    r.end = r.segments.some(s => s.kind === 'bar' && s.end === null) ? null : Math.max(...r.segments.map(s => s.end));
+  }
+  return out.sort((a, b) => a.start - b.start || a.segments[0].index - b.segments[0].index);
 }

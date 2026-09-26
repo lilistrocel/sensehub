@@ -33,7 +33,7 @@ class InterlockViolation extends Error {
 }
 
 const PARTNER_WRITE_OPTIONS = { timeout: 2000, retries: 1 };
-const PARTNER_READ_OPTIONS = { timeout: 2000, retries: 1 };
+const PARTNER_READ_OPTIONS = { timeout: 2000, retries: 1, priority: 'high' }; // part of an ON write: ahead of sensor reads
 
 function parseMappings(row) {
   if (!row) return [];

@@ -107,7 +107,7 @@ export default function AutomationDetailModal({ isOpen, onClose, automation, onE
                         <li key={i} className="flex items-center gap-2 px-3 py-1.5">
                           <span className="text-ink truncate">{t.eqName} · {t.label}</span>
                           <span className="ml-auto font-mono tabular text-xs text-muted whitespace-nowrap">
-                            {t.action.toUpperCase()}{t.value !== null && t.value !== undefined && t.action === 'set' ? ` ${t.value}` : ''}{t.duration ? ` ${formatDuration(t.duration)}` : ''}{t.delay ? ` +${formatDuration(t.delay)}` : ''}
+                            {t.action.toUpperCase()}{t.value !== null && t.value !== undefined && t.action === 'set' ? ` ${t.value}` : ''}{t.duration ? ` ${formatDuration(t.duration)}` : ''}{t.windows > 1 ? ` ×${t.windows}` : ''}{t.delay ? ` +${formatDuration(t.delay)}` : ''}
                           </span>
                           {t.online === false && <StatusPill state="caution">offline</StatusPill>}
                         </li>

@@ -11,7 +11,8 @@
  * alert helper so the module stays pure for tests.
  */
 
-const READBACK_OPTIONS = { timeout: 2000, retries: 1 };
+// priority 'high': the read-back belongs to the write it confirms and goes ahead of queued sensor reads.
+const READBACK_OPTIONS = { timeout: 2000, retries: 1, priority: 'high' };
 
 /**
  * Compare a read-back value with the requested one.

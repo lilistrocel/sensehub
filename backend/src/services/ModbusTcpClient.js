@@ -106,9 +106,24 @@ class ModbusConnection {
   }
 }
 
+// Request priorities on a shared host:port queue. Coil / register WRITES
+// default to HIGH, sensor/poll READS to NORMAL (see queueRequest). A high
+// request never overtakes an attempt already on the wire, but it does go
+// ahead of every queued normal request and of a normal request's next retry.
+// Incident 2026-09-26 15:32:35: a 12 s pH Down pulse stayed open 17 s while
+// its OFF waited behind SEKO reads and a 5 s timeout on the shared USR gateway.
+const PRIORITY = Object.freeze({ normal: 0, high: 1 });
+function priorityValue(p) {
+  if (typeof p === 'number' && Number.isFinite(p)) return p;
+  if (typeof p === 'string' && p in PRIORITY) return PRIORITY[p];
+  return PRIORITY.normal;
+}
+
+let requestSeq = 0;
+
 // Request queue item
 class QueuedRequest {
-  constructor(operation, resolve, reject, timeout = 5000, retries = 3) {
+  constructor(operation, resolve, reject, timeout = 5000, retries = 3, opts = {}) {
     this.operation = operation;
     this.resolve = resolve;
     this.reject = reject;
@@ -116,6 +131,10 @@ class QueuedRequest {
     this.retries = retries;
     this.attempts = 0;
     this.createdAt = Date.now();
+    this.priority = priorityValue(opts.priority);
+    this.retryDelayMs = Number.isFinite(opts.retryDelayMs) && opts.retryDelayMs >= 0 ? opts.retryDelayMs : null;
+    this.label = opts.label || null;
+    this.seq = ++requestSeq;
   }
 }
 
@@ -140,6 +159,7 @@ class ModbusTcpClient {
       connectTimeout: options.connectTimeout || 3000,
       maxPoolSize: options.maxPoolSize || 10,
       idleTimeout: options.idleTimeout || 60000, // Close idle connections after 1 minute
+      retryDelayMs: 1000, // pause before re-trying a failed attempt (per-request override: options.retryDelayMs)
       ...options
     };
 
@@ -150,6 +170,16 @@ class ModbusTcpClient {
     // Map<"host:port:unit", ms timestamp> when the last request to that unit
     // finished (resolved, rejected or timed out).
     this.lastRequestEnd = new Map();
+    // Map<"host:port", ms timestamp> when the last request to ANY unit behind
+    // that gateway finished. A unit with a request gap waits for the BUS to be
+    // quiet that long, not just for its own previous request: the SEKO K800
+    // drops a frame that follows other traffic on the RS485 line too closely
+    // (2026-09-26: "1/4 register(s) failed this cycle: Request timeout" during
+    // irrigation runs, when relay writes/polls to units 2 and 6 are frequent).
+    this.lastBusEnd = new Map();
+    // Map<"host:port", { priority, wake }> — the request currently sitting out
+    // its bus gap (nothing on the wire yet), woken by a higher-priority arrival.
+    this._gapWaiters = new Map();
     // Injectable clock/sleep so the gap timing is unit-testable.
     this._now = typeof options.now === 'function' ? options.now : () => Date.now();
     this._sleep = typeof options.sleep === 'function' ? options.sleep : (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -183,19 +213,57 @@ class ModbusTcpClient {
    * Wait until at least gap ms have passed since the last request to this
    * unit finished. Resolves immediately when no gap is configured.
    */
-  async waitForUnitGap(unitKey) {
-    const gap = this.unitGaps.get(unitKey);
-    if (!gap) return 0;
-    const last = this.lastRequestEnd.get(unitKey);
-    if (last === undefined) return 0;
-    const remaining = gap - (this._now() - last);
+  async waitForUnitGap(unitKey, busKey = null) {
+    const remaining = this.unitGapRemaining(unitKey, busKey);
     if (remaining <= 0) return 0;
     await this._sleep(remaining);
     return remaining;
   }
 
-  markRequestEnd(unitKey) {
-    this.lastRequestEnd.set(unitKey, this._now());
+  /** ms still to wait before a request to this unit may go on the wire (0 = now). */
+  unitGapRemaining(unitKey, busKey = null) {
+    const gap = this.unitGaps.get(unitKey);
+    if (!gap) return 0;
+    const lastUnit = this.lastRequestEnd.get(unitKey);
+    const lastBus = busKey ? this.lastBusEnd.get(busKey) : undefined;
+    const last = Math.max(lastUnit === undefined ? -Infinity : lastUnit, lastBus === undefined ? -Infinity : lastBus);
+    if (!Number.isFinite(last)) return 0;
+    return Math.max(0, gap - (this._now() - last));
+  }
+
+  markRequestEnd(unitKey, busKey = null) {
+    const t = this._now();
+    this.lastRequestEnd.set(unitKey, t);
+    if (busKey) this.lastBusEnd.set(busKey, t);
+  }
+
+  /** Insert by priority: after every queued request of the same or higher priority (FIFO within a class). */
+  _enqueue(queue, request, key = null) {
+    let i = queue.length;
+    while (i > 0 && queue[i - 1].priority < request.priority) i--;
+    queue.splice(i, 0, request);
+    // A lower-priority request sitting out its bus gap yields to this one.
+    const waiter = key ? this._gapWaiters.get(key) : null;
+    if (waiter && waiter.priority < request.priority) waiter.wake();
+  }
+
+  /** Put a yielded request back at the FRONT of its priority class (it keeps its turn). */
+  _requeueFront(queue, request) {
+    let i = 0;
+    while (i < queue.length && queue[i].priority > request.priority) i++;
+    queue.splice(i, 0, request);
+  }
+
+  /** True when a request of higher priority than `request` is waiting on this queue. */
+  _higherWaiting(key, request) {
+    const queue = this.requestQueues.get(key);
+    return !!(queue && queue.length && queue[0].priority > request.priority);
+  }
+
+  /** Queue depth by priority, for diagnostics. */
+  getQueueStats(host, port) {
+    const queue = this.requestQueues.get(this.getConnectionKey(host, port)) || [];
+    return { depth: queue.length, high: queue.filter(r => r.priority >= PRIORITY.high).length, processing: !!this.processing.get(this.getConnectionKey(host, port)) };
   }
 
   /**
@@ -291,7 +359,8 @@ class ModbusTcpClient {
         resolve,
         reject,
         options.timeout || this.config.defaultTimeout,
-        options.retries || this.config.defaultRetries
+        options.retries || this.config.defaultRetries,
+        { priority: options.priority, retryDelayMs: options.retryDelayMs, label: options.label ? `${key} u${unitId} ${options.label}` : `${key} u${unitId}` }
       );
       request.unitKey = this.getUnitKey(host, port, unitId);
 
@@ -301,7 +370,7 @@ class ModbusTcpClient {
         this.requestQueues.set(key, queue);
       }
 
-      queue.push(request);
+      this._enqueue(queue, request, key);
       this.processQueue(key);
     });
   }
@@ -317,12 +386,20 @@ class ModbusTcpClient {
 
     this.processing.set(key, true);
 
-    while (queue.length > 0) {
-      const request = queue.shift();
-      await this.executeRequest(key, request);
+    try {
+      while (queue.length > 0) {
+        const request = queue.shift();
+        const outcome = await this.executeRequest(key, request);
+        // A normal request that yielded to a higher-priority one (between two
+        // attempts, or before its first attempt while it was waiting out its
+        // bus gap) goes back to the front of its class and keeps its attempts.
+        if (outcome === 'yield') this._requeueFront(queue, request);
+      }
+    } finally {
+      this.processing.set(key, false);
     }
-
-    this.processing.set(key, false);
+    // Something may have been queued between the last shift and the flag reset.
+    if (queue.length > 0) this.processQueue(key);
   }
 
   /**
@@ -338,11 +415,30 @@ class ModbusTcpClient {
     const unitKey = request.unitKey || null;
 
     while (request.attempts < request.retries) {
-      request.attempts++;
-
       // Honour the per-unit inter-request gap (before every attempt, so a
-      // retry after a timeout also gives the device its breathing room).
-      if (unitKey) await this.waitForUnitGap(unitKey);
+      // retry after a timeout also gives the device its breathing room). The
+      // gap counts from the last request on the whole bus (host:port). While a
+      // normal request waits out its gap, a high-priority request that arrives
+      // goes first (nothing is on the wire yet, so nothing is interleaved).
+      if (this._higherWaiting(key, request)) return 'yield';
+      if (unitKey) {
+        let remaining = this.unitGapRemaining(unitKey, key);
+        while (remaining > 0) {
+          // Interruptible: a higher-priority request queued meanwhile wakes us.
+          let wake = null;
+          const woken = new Promise(resolve => { wake = resolve; });
+          this._gapWaiters.set(key, { priority: request.priority, wake });
+          try {
+            await Promise.race([this._sleep(remaining), woken]);
+          } finally {
+            this._gapWaiters.delete(key);
+          }
+          if (this._higherWaiting(key, request)) return 'yield';
+          remaining = this.unitGapRemaining(unitKey, key);
+        }
+      }
+
+      request.attempts++;
 
       let timer = null;
       try {
@@ -358,21 +454,21 @@ class ModbusTcpClient {
         ]);
 
         if (timer) clearTimeout(timer);
-        if (unitKey) this.markRequestEnd(unitKey);
+        if (unitKey) this.markRequestEnd(unitKey, key);
         connection.updateActivity();
         request.resolve(result);
-        return;
+        return 'done';
       } catch (error) {
         if (timer) clearTimeout(timer);
-        if (unitKey) this.markRequestEnd(unitKey);
-        console.error(`[Modbus] Request failed (attempt ${request.attempts}/${request.retries}):`, error.message);
+        if (unitKey) this.markRequestEnd(unitKey, key);
+        console.error(`[Modbus] Request failed (attempt ${request.attempts}/${request.retries}) ${request.label || key}${request.priority > 0 ? ' [high]' : ''}:`, error.message);
 
         // A Modbus exception response is the device deliberately refusing
         // the request (illegal address/function/value). Retrying gets the
         // same answer, so surface it right away.
         if (error && error.modbusCode !== undefined && error.modbusCode !== null) {
           request.reject(error);
-          return;
+          return 'done';
         }
 
         // Handle connection errors
@@ -385,20 +481,26 @@ class ModbusTcpClient {
             console.error(`[Modbus] Reconnect failed:`, reconnectError.message);
             if (request.attempts >= request.retries) {
               request.reject(reconnectError);
-              return;
+              return 'done';
             }
           }
         }
 
         if (request.attempts >= request.retries) {
           request.reject(error);
-          return;
+          return 'done';
         }
 
+        // A higher-priority request is waiting: let it use the bus now instead
+        // of holding the queue through this request's retry pause.
+        if (this._higherWaiting(key, request)) return 'yield';
+
         // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const delay = request.retryDelayMs !== null ? request.retryDelayMs : this.config.retryDelayMs;
+        if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
+    return 'done';
   }
 
   // ==========================================
@@ -421,7 +523,7 @@ class ModbusTcpClient {
       client.setID(unitId);
       const result = await client.readCoils(address, quantity);
       return result.data;
-    }, options);
+    }, { label: 'FC01', ...options });
   }
 
   /**
@@ -440,7 +542,7 @@ class ModbusTcpClient {
       client.setID(unitId);
       const result = await client.readDiscreteInputs(address, quantity);
       return result.data;
-    }, options);
+    }, { label: 'FC02', ...options });
   }
 
   /**
@@ -459,7 +561,7 @@ class ModbusTcpClient {
       client.setID(unitId);
       const result = await client.readHoldingRegisters(address, quantity);
       return result.data;
-    }, options);
+    }, { label: 'FC03', ...options });
   }
 
   /**
@@ -478,7 +580,7 @@ class ModbusTcpClient {
       client.setID(unitId);
       const result = await client.readInputRegisters(address, quantity);
       return result.data;
-    }, options);
+    }, { label: 'FC04', ...options });
   }
 
   // ==========================================
@@ -501,7 +603,7 @@ class ModbusTcpClient {
       client.setID(unitId);
       await client.writeCoil(address, value);
       return { address, value };
-    }, options);
+    }, { priority: 'high', label: 'FC05', ...options });
   }
 
   /**
@@ -545,7 +647,8 @@ class ModbusTcpClient {
         resolve,
         reject,
         3000, // timeout for the whole operation
-        1     // only 1 attempt — no retries for fire-and-forget
+        1,    // only 1 attempt — no retries for fire-and-forget
+        { priority: 'high', label: `${key} u${unitId} FC05 write-only` }
       );
       request.unitKey = this.getUnitKey(host, port, unitId);
 
@@ -554,7 +657,7 @@ class ModbusTcpClient {
         queue = [];
         this.requestQueues.set(key, queue);
       }
-      queue.push(request);
+      this._enqueue(queue, request, key);
       this.processQueue(key);
     });
   }
@@ -595,7 +698,8 @@ class ModbusTcpClient {
         resolve,
         reject,
         3000,
-        1
+        1,
+        { priority: 'high', label: `${key} u${unitId} FC15 write-only` }
       );
       request.unitKey = this.getUnitKey(host, port, unitId);
 
@@ -604,7 +708,7 @@ class ModbusTcpClient {
         queue = [];
         this.requestQueues.set(key, queue);
       }
-      queue.push(request);
+      this._enqueue(queue, request, key);
       this.processQueue(key);
     });
   }
@@ -625,7 +729,7 @@ class ModbusTcpClient {
       client.setID(unitId);
       await client.writeRegister(address, value);
       return { address, value };
-    }, options);
+    }, { priority: 'high', label: 'FC06', ...options });
   }
 
   /**
@@ -644,7 +748,7 @@ class ModbusTcpClient {
       client.setID(unitId);
       await client.writeCoils(address, values);
       return { address, quantity: values.length };
-    }, options);
+    }, { priority: 'high', label: 'FC15', ...options });
   }
 
   /**
@@ -663,7 +767,7 @@ class ModbusTcpClient {
       client.setID(unitId);
       await client.writeRegisters(address, values);
       return { address, quantity: values.length };
-    }, options);
+    }, { priority: 'high', label: 'FC16', ...options });
   }
 
   // ==========================================
@@ -756,5 +860,7 @@ const modbusTcpClient = new ModbusTcpClient();
 // Export both the class and singleton
 module.exports = {
   ModbusTcpClient,
-  modbusTcpClient
+  modbusTcpClient,
+  PRIORITY,
+  ModbusConnection,
 };
