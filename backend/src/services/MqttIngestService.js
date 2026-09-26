@@ -100,6 +100,29 @@ class MqttIngestService {
       tsFallbacks: 0,
     };
     this._stmts = null;
+    this._liveListeners = new Set();
+  }
+
+  /**
+   * Subscribe to the full-rate LIVE stream (flowmeter / dosing / irrigation
+   * state), i.e. every accepted non-retained sample before downsampling. Used by
+   * the irrigation flow watch. Listener errors are caught and never break
+   * ingest. Returns an unsubscribe function.
+   *
+   * Event: { kind: 'flowmeter'|'dosing'|'irrigation_state', farmId, equipmentId,
+   *          receivedMs, tsMs, live, values? , tanks?, active?, since? }
+   */
+  onLive(fn) {
+    this._liveListeners.add(fn);
+    return () => this._liveListeners.delete(fn);
+  }
+
+  _emitLive(evt) {
+    for (const fn of this._liveListeners) {
+      try { fn(evt); } catch (e) {
+        this._logLimited(`live:${e.message}`, `[MQTT] live listener failed: ${e.message}`);
+      }
+    }
   }
 
   // ─── lifecycle ────────────────────────────────────────────────────────────
@@ -484,6 +507,7 @@ class MqttIngestService {
     if ('error_flags' in values) this._onErrorFlags(m, values.error_flags);
     const recorded = this._record(m, P.flowmeterMetrics(values), ts.ms, this._isActive(m));
     this._touch(m);
+    this._emitLive({ kind: 'flowmeter', farmId: m.farmId, equipmentId: m.equipmentId, receivedMs, tsMs: ts.ms, live, values });
     return { ok: true, kind: 'flowmeter', recorded };
   }
 
@@ -496,6 +520,7 @@ class MqttIngestService {
     m.dosing = { tanks, tsMs: ts.ms, tsSource: ts.source, receivedMs };
     const recorded = this._record(m, P.dosingMetrics(tanks), ts.ms, this._isActive(m));
     this._touch(m);
+    this._emitLive({ kind: 'dosing', farmId: m.farmId, equipmentId: m.equipmentId, receivedMs, tsMs: ts.ms, live, tanks });
     return { ok: true, kind: 'dosing', recorded };
   }
 
@@ -523,6 +548,7 @@ class MqttIngestService {
       recorded = this._record(m, [{ name: 'Irrigation Active', value: active ? 1 : 0, unit: '' }], tsMs, active);
     }
     this._touch(m);
+    this._emitLive({ kind: 'irrigation_state', farmId: m.farmId, equipmentId: m.equipmentId, receivedMs, tsMs, live, active, since });
     return { ok: true, kind: 'irrigation_state', changed, recorded };
   }
 

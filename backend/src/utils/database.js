@@ -956,6 +956,13 @@ const initSchema = () => {
     console.error('mqtt ingest schema migration failed:', err.message);
   }
 
+  // Irrigation flow watch: detected no-flow / low-flow / dosing-without-water episodes.
+  try {
+    require('./flowWatchSchema').ensureFlowWatchSchema(db);
+  } catch (err) {
+    console.error('flow watch schema migration failed:', err.message);
+  }
+
   // Add calibration columns to existing equipment table if they don't exist
   try {
     const columns = db.pragma("table_info(equipment)").map(col => col.name);

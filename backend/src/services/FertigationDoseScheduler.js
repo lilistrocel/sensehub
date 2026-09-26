@@ -56,8 +56,8 @@ class FertigationDoseScheduler {
 
   currentCycle() {
     if (!this._active) return null;
-    const { programId, automationId, startedAt, endsAt, schedule, valveStates } = this._active;
-    return { programId, automationId, startedAt, endsAt, schedule, valveStates };
+    const { programId, automationId, cycleLogId, startedAt, endsAt, schedule, valveStates, dryRun } = this._active;
+    return { programId, automationId, cycleLogId, startedAt, endsAt, schedule, valveStates, dryRun: !!dryRun };
   }
 
   /**
@@ -322,9 +322,18 @@ class FertigationDoseScheduler {
     this._active = null;
   }
 
-  /** Abort the cycle immediately. Closes all valves, marks aborted. */
-  async abortCycle(reason = 'manual stop') {
+  /**
+   * Abort the cycle immediately. Closes all valves, marks aborted.
+   *
+   * @param {string} [reason]        stored in fertigation_dose_cycle_log.notes
+   * @param {object} [opts]
+   * @param {string} [opts.source]   relay_events source for the valve-close writes
+   *                                 (default 'dose_program_abort'; the irrigation
+   *                                 flow watch passes 'flow_watch')
+   */
+  async abortCycle(reason = 'manual stop', opts = {}) {
     if (!this._active) return false;
+    const source = (opts && opts.source) || 'dose_program_abort';
     const { cycleLogId, timers, schedule, dryRun } = this._active;
     for (const t of timers) clearTimeout(t);
     if (!dryRun) {
@@ -337,7 +346,7 @@ class FertigationDoseScheduler {
           const unitId = eq.slave_id || 1;
           if (eq.write_only) await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, tank.channel, false);
           else await modbusTcpClient.writeSingleCoil(host, port, unitId, tank.channel, false);
-          logRelayEvent(tank.equipment_id, tank.channel, false, 'dose_program_abort', this._active.automationId);
+          logRelayEvent(tank.equipment_id, tank.channel, false, source, this._active.automationId);
         } catch (_) {}
       }
     }

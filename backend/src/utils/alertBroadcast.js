@@ -138,4 +138,37 @@ function createAlert(opts = {}) {
   }
 }
 
-module.exports = { broadcastNewAlert, createAlert };
+/**
+ * Rewrite the OPEN (unacknowledged) alert with this fingerprint in place — new
+ * message and/or severity, last_seen_at = now — WITHOUT counting a new
+ * occurrence, and broadcast `alert_updated`. For a condition that has ended
+ * ("recovered after 25 s") or a follow-up on the same event (the outcome of an
+ * automatic action). The row stays open so the operator still sees it and
+ * acknowledges it as usual. Returns the enriched row, or null when there is no
+ * open row (e.g. already acknowledged) or the write failed (logged, never thrown).
+ *
+ * @param {string} fingerprint
+ * @param {{message?: string, severity?: 'info'|'warning'|'critical', metadata?: object}} changes
+ */
+function updateOpenAlert(fingerprint, changes = {}) {
+  try {
+    if (!fingerprint) return null;
+    const existing = db.prepare(
+      'SELECT id, message, severity FROM alerts WHERE fingerprint = ? AND acknowledged = 0 ORDER BY id DESC LIMIT 1'
+    ).get(fingerprint);
+    if (!existing) return null;
+    const severity = changes.severity || existing.severity;
+    if (!['info', 'warning', 'critical'].includes(severity)) throw new Error(`invalid severity "${severity}"`);
+    const message = changes.message ? String(changes.message).trim() : existing.message;
+    db.prepare("UPDATE alerts SET message = ?, severity = ?, last_seen_at = datetime('now') WHERE id = ?")
+      .run(message, severity, existing.id);
+    const row = getEnriched(existing.id);
+    if (row) safeBroadcast('alert_updated', { ...row, metadata: changes.metadata });
+    return row || null;
+  } catch (err) {
+    console.error('[alertBroadcast] updateOpenAlert failed:', err.message);
+    return null;
+  }
+}
+
+module.exports = { broadcastNewAlert, createAlert, updateOpenAlert };

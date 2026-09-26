@@ -4,6 +4,7 @@ import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
 import { useThrottledError } from '../hooks/useThrottledError';
 import { MeasuredDosingCard } from '../components/reports/MeasuredWater';
+import FlowWatchStatus from '../components/FlowWatchStatus';
 
 const API_BASE = '/api';
 
@@ -898,6 +899,7 @@ function TanksTab({ headers, canEdit, formatDateTime }) {
 
   return (
     <div className="space-y-4">
+      <FlowWatchStatus formatDateTime={formatDateTime} />
       <LiveDoseCycleBanner headers={headers} canEdit={canEdit} />
 
       <div className="flex items-center justify-between">
