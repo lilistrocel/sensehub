@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
 import { useThrottledError } from '../hooks/useThrottledError';
+import { MeasuredDosingCard } from '../components/reports/MeasuredWater';
 
 const API_BASE = '/api';
 
@@ -86,6 +87,8 @@ function ConsumptionTab({ headers, formatDateTime }) {
           <SummaryCard title="This Week" data={summary.week} />
         </div>
       )}
+
+      <MeasuredDosingCard headers={headers} />
 
       <div className="flex flex-wrap items-end gap-3">
         <div>

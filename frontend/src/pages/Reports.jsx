@@ -4,6 +4,10 @@ import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
 import { Card, Label, Reading, Kpi, Button, StatusPill, SectionHeader } from '../ui';
 import ConsumptionTracker from '../components/reports/ConsumptionTracker';
+import {
+  SourceTag, SourceKpi, MeasuredDaySection, CalibrationHint, fmtL, fmtDev,
+} from '../components/reports/MeasuredWater';
+import { StatusMark } from '../components/agronomist/SectionStatus';
 
 const API_BASE = '/api';
 
@@ -15,21 +19,41 @@ const formatDuration = (seconds) => {
   return `${m}m`;
 };
 
-const formatDate = (dateStr) => {
-  const d = new Date(dateStr + 'T12:00:00');
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-
-  if (dateStr === today.toISOString().split('T')[0]) return 'Today';
-  if (dateStr === yesterday.toISOString().split('T')[0]) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+/** Farm-local "today" (report days are the farm's local days, not the browser's). */
+const farmToday = (tz) => {
+  try { return new Date().toLocaleDateString('en-CA', { timeZone: tz || undefined }); } catch (_) { return new Date().toLocaleDateString('en-CA'); }
 };
 
+const formatDate = (dateStr, tz) => {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  const today = farmToday(tz);
+  const y = new Date(today + 'T12:00:00Z');
+  y.setUTCDate(y.getUTCDate() - 1);
+  if (dateStr === today) return 'Today';
+  if (dateStr === y.toISOString().slice(0, 10)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+};
+
+/** What a day row shows for water / fertigation: measured when the monitor has it, else the estimate. */
+function dayFigures(day) {
+  const m = day.measured;
+  const cmp = m && m.available ? m.comparison : null;
+  const water = cmp && cmp.water.measured_liters !== null
+    ? { liters: cmp.water.measured_liters, measured: true }
+    : { liters: day.water.total_liters || 0, measured: false };
+  const fert = cmp && cmp.fertigation.measured_liters !== null
+    ? { liters: cmp.fertigation.measured_liters, measured: true }
+    : { liters: day.fertigation.total_liters || 0, measured: false };
+  const partial = !!(m && m.available && !m.coverage.complete);
+  const flags = cmp ? cmp.flags.length : 0;
+  return { water, fert, partial, coverage: m && m.available ? m.coverage : null, flags };
+}
+
 /** Split litres into { value, unit, precision } so Reading can render mono + tabular. */
-const liters = (l) => {
+const liters = (l, small = false) => {
   const v = Number(l) || 0;
   if (v >= 1000) return { value: v / 1000, unit: 'm³', precision: 1 };
+  if (small && v < 100) return { value: v, unit: 'L', precision: 1 };
   return { value: Math.round(v), unit: 'L', precision: 0 };
 };
 
@@ -53,7 +77,23 @@ function Bar({ fraction, tone }) {
 function dayRail(day) {
   if (day.drift_events > 0 || day.automations.failures > 0) return 'alarm';
   if (day.automations.skipped_actions > 0) return 'caution';
+  if (day.measured?.available && day.measured.comparison.flags.length > 0) return 'caution';
   return 'idle';
+}
+
+/** Short source marker for the compact day row, with a caution mark when the monitor covered only part of the day. */
+function RowSource({ fig, coverage }) {
+  return (
+    <span className="inline-flex items-center gap-1 w-14 sm:w-16 shrink-0">
+      <SourceTag measured={fig.measured} short />
+      {fig.measured && coverage && !coverage.complete && (
+        <span title={`Monitor covered ${Math.round(coverage.fraction * 100)} % of this day`}>
+          <StatusMark status="caution" label={false} />
+          <span className="sr-only">partial day</span>
+        </span>
+      )}
+    </span>
+  );
 }
 
 export default function Reports() {
@@ -107,8 +147,12 @@ export default function Reports() {
   }), { water_seconds: 0, water_liters: 0, fert_seconds: 0, fert_liters: 0, water_events: 0, fert_events: 0, auto_runs: 0, failures: 0, skipped: 0, drift: 0, power_kwh: 0 });
 
   // Max values for bar scaling
-  const maxWater = data?.report ? Math.max(...data.report.map(d => d.water.total_seconds), 1) : 1;
-  const maxFert = data?.report ? Math.max(...data.report.map(d => d.fertigation.total_seconds), 1) : 1;
+  const figures = data?.report ? Object.fromEntries(data.report.map(d => [d.date, dayFigures(d)])) : {};
+  const maxWater = data?.report ? Math.max(...data.report.map(d => figures[d.date].water.liters), 1) : 1;
+  const maxFert = data?.report ? Math.max(...data.report.map(d => figures[d.date].fert.liters), 1) : 1;
+  const mt = data?.measured_totals;
+  const hasMeasured = (mt?.days_with_measurement || 0) > 0;
+  const devStatus = (dev) => (dev !== null && dev !== undefined && Math.abs(dev) > (mt?.threshold_pct ?? 15) ? 'caution' : 'ok');
   const maxPower = data?.report ? Math.max(...data.report.map(d => d.power?.total_kwh || 0), 1) : 1;
 
   // Per-meter totals across the period
@@ -162,10 +206,24 @@ export default function Reports() {
           {/* Period totals */}
           {totals && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6" data-testid="report-kpis">
-              <Kpi label="Total water" rail="water" value={tw.value} unit={tw.unit} precision={tw.precision}
-                hint={`${formatDuration(totals.water_seconds)} runtime · ${totals.water_events} cycles`} />
-              <Kpi label="Total fertigation" rail="water" value={tf.value} unit={tf.unit} precision={tf.precision}
-                hint={`${formatDuration(totals.fert_seconds)} runtime · ${totals.fert_events} cycles`} />
+              {hasMeasured ? (
+                <SourceKpi label="Water" rail="water" measured value={liters(mt.water.measured_liters)}
+                  status={devStatus(mt.water.deviation_pct)}
+                  secondary={`est. ${fmtL(mt.water.estimated_liters)} same window · ${fmtDev(mt.water.deviation_pct)}`}
+                  hint={`${mt.days_with_measurement} of ${data.report.length} days measured · ${data.report.length}-day estimate ${fmtL(totals.water_liters)}`} />
+              ) : (
+                <SourceKpi label="Total water" rail="water" measured={false} value={tw}
+                  secondary={`${formatDuration(totals.water_seconds)} runtime · ${totals.water_events} cycles`} />
+              )}
+              {hasMeasured ? (
+                <SourceKpi label="Fertigation" rail="water" measured value={liters(mt.fertigation.measured_liters, true)}
+                  status={devStatus(mt.fertigation.deviation_pct)}
+                  secondary={`est. ${fmtL(mt.fertigation.estimated_liters)} same window · ${fmtDev(mt.fertigation.deviation_pct)}`}
+                  hint={`metered tanks · ${data.report.length}-day estimate ${fmtL(totals.fert_liters)}`} />
+              ) : (
+                <SourceKpi label="Total fertigation" rail="water" measured={false} value={tf}
+                  secondary={`${formatDuration(totals.fert_seconds)} runtime · ${totals.fert_events} cycles`} />
+              )}
               <Kpi label="Total power" rail="lighting" value={tp.value} unit={tp.unit} precision={tp.precision}
                 hint={`${meterTotals.length} meter${meterTotals.length === 1 ? '' : 's'} imported`} />
               <Kpi label="Skipped by EC" rail={totals.skipped > 0 ? 'caution' : 'idle'} value={totals.skipped} precision={0}
@@ -179,8 +237,11 @@ export default function Reports() {
           <div className="space-y-2" data-testid="report-days">
             {data.report.map((day) => {
               const open = expandedDay === day.date;
+              const fig = figures[day.date];
               const w = liters(day.water.total_liters);
               const f = liters(day.fertigation.total_liters);
+              const rw = liters(fig.water.liters);
+              const rf = liters(fig.fert.liters, true);
               return (
                 <Card key={day.date} rail={dayRail(day)} padding="none" className="overflow-hidden">
                   <button
@@ -190,24 +251,29 @@ export default function Reports() {
                     className="w-full px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 hover:bg-field transition-colors text-left"
                   >
                     <div className="w-28 shrink-0">
-                      <p className="font-display text-sm font-semibold text-ink">{formatDate(day.date)}</p>
+                      <p className="font-display text-sm font-semibold text-ink">{formatDate(day.date, data.timezone)}</p>
                       <p className="text-xs font-mono tabular text-muted">{day.date}</p>
                     </div>
 
                     <div className="flex-1 min-w-[12rem] space-y-1.5">
                       <div className="flex items-center gap-2">
                         <Label className="w-5 shrink-0">W</Label>
-                        <Reading size="sm" value={w.value} unit={w.unit} precision={w.precision} className="w-16 sm:w-24 justify-end" />
-                        <Bar fraction={day.water.total_seconds / maxWater} tone="bg-state-water" />
+                        <Reading size="sm" value={rw.value} unit={rw.unit} precision={rw.precision} className="w-20 sm:w-24 justify-end" />
+                        <RowSource fig={fig.water} coverage={fig.coverage} />
+                        <Bar fraction={fig.water.liters / maxWater} tone="bg-state-water" />
                       </div>
                       <div className="flex items-center gap-2">
                         <Label className="w-5 shrink-0">F</Label>
-                        <Reading size="sm" value={f.value} unit={f.unit} precision={f.precision} className="w-16 sm:w-24 justify-end" />
-                        <Bar fraction={day.fertigation.total_seconds / maxFert} tone="bg-water-600 dark:bg-water-300" />
+                        <Reading size="sm" value={rf.value} unit={rf.unit} precision={rf.precision} className="w-20 sm:w-24 justify-end" />
+                        <RowSource fig={fig.fert} coverage={fig.coverage} />
+                        <Bar fraction={fig.fert.liters / maxFert} tone="bg-water-600 dark:bg-water-300" />
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
+                      {fig.flags > 0 && (
+                        <StatusPill state="caution" filled>{fig.flags} flag{fig.flags === 1 ? '' : 's'}</StatusPill>
+                      )}
                       {day.automations.skipped_actions > 0 && (
                         <StatusPill state="caution">{day.automations.skipped_actions} skipped</StatusPill>
                       )}
@@ -229,7 +295,10 @@ export default function Reports() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3">
                         {/* Water detail */}
                         <div>
-                          <Label className="mb-1">Water · {data.water_equipment?.name}</Label>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Label className="min-w-0">Water · {data.water_equipment?.name}</Label>
+                            <SourceTag measured={false} />
+                          </div>
                           <Reading value={w.value} unit={w.unit} precision={w.precision} />
                           <p className="text-xs text-muted">{formatDuration(day.water.total_seconds)} runtime, {day.water.events} cycles</p>
                           {Object.keys(day.water.channel_details || {}).length > 0 && (
@@ -250,7 +319,10 @@ export default function Reports() {
 
                         {/* Fertigation detail */}
                         <div>
-                          <Label className="mb-1">Fertigation · {data.fertigation_equipment?.name}</Label>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Label className="min-w-0">Fertigation · {data.fertigation_equipment?.name}</Label>
+                            <SourceTag measured={false} />
+                          </div>
                           <Reading value={f.value} unit={f.unit} precision={f.precision} />
                           <p className="text-xs text-muted">{formatDuration(day.fertigation.total_seconds)} runtime, {day.fertigation.events} cycles</p>
                           {Object.keys(day.fertigation.channel_details || {}).length > 0 && (
@@ -299,6 +371,7 @@ export default function Reports() {
                           </dl>
                         </div>
                       </div>
+                      <MeasuredDaySection day={day} data={data} />
                     </div>
                   )}
                 </Card>
@@ -311,7 +384,13 @@ export default function Reports() {
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-state-water" aria-hidden="true" /> W · Water ({data.water_equipment?.name || 'irrigation'})</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-water-600 dark:bg-water-300" aria-hidden="true" /> F · Fertigation ({data.fertigation_equipment?.name || 'fertigation'})</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-state-lighting" aria-hidden="true" /> Power (imported kWh)</span>
+            <span className="flex items-center gap-1.5"><SourceTag measured short /> {data.monitor?.name || 'irrigation monitor'}</span>
+            <span className="flex items-center gap-1.5"><SourceTag measured={false} short /> relay ON-time × configured flow</span>
           </div>
+
+          {data.monitor && (
+            <CalibrationHint calibration={data.calibration} remapAt={data.fertigation_relay_remap_at} tz={data.timezone} />
+          )}
 
           {/* Power consumption — per meter, per day */}
           {meterTotals.length > 0 && (
@@ -350,7 +429,7 @@ export default function Reports() {
                         return (
                           <tr key={day.date}>
                             <td className="px-3 py-2 align-top">
-                              <p className="text-xs font-semibold text-ink">{formatDate(day.date)}</p>
+                              <p className="text-xs font-semibold text-ink">{formatDate(day.date, data.timezone)}</p>
                               <p className="text-xs font-mono tabular text-muted">{day.date}</p>
                             </td>
                             {meterTotals.map(m => {
