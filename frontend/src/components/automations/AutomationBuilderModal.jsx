@@ -4,11 +4,12 @@ import { Button, Label } from '../../ui';
 import { getChannelDisplayName } from '../../utils/channelUtils';
 import TransitionEditor from './TransitionEditor';
 import DependencyEditor from './DependencyEditor';
+import SequenceTimeline from './SequenceTimeline';
 import { INPUT, INPUT_BARE, INPUT_SM, FIELD_LABEL, HELP, ERROR_TEXT, ICON_BUTTON, API_BASE } from './formStyles';
 import {
   buildEquipmentIndex, parseAutomation, parseRegisterMappings, writableCoils, equipmentLabel, channelLabel,
   summarizeForm, findHysteresisPartners, nextScheduleRun, formatNextRun, parseCron, formatDuration,
-  formatValueUnit, OP_SYM,
+  formatValueUnit, OP_SYM, buildSequence,
 } from './automationSummary';
 
 const emptyForm = () => ({
@@ -73,6 +74,43 @@ function RemoveButton({ onClick, label }) {
   );
 }
 
+/** Seconds shown in the builder's unit: 270 -> 4.5 (min) or 270 (s). */
+const toUnit = (seconds, unit) => (unit === 'min' ? Math.round((seconds / 60) * 100) / 100 : seconds);
+
+/**
+ * Number input that stores whole seconds but reads in the DO unit toggle.
+ * Empty -> null. `showZero` keeps an explicit 0 visible (Start after) where
+ * For hides it behind its placeholder.
+ */
+function SecondsField({ id, label, seconds, unit, onChange, placeholder, title, showZero = false, className = INPUT }) {
+  const n = Number(seconds);
+  const has = seconds !== null && seconds !== undefined && seconds !== '' && Number.isFinite(n);
+  const value = has && (n > 0 || (showZero && n === 0)) ? toUnit(n, unit) : '';
+  const onInput = (raw) => {
+    if (raw === '') { onChange(null); return; }
+    const v = parseFloat(raw);
+    if (!Number.isFinite(v)) return;
+    onChange(unit === 'min' ? Math.round(v * 60) : Math.round(v));
+  };
+  return (
+    <>
+      <label className={FIELD_LABEL} htmlFor={id}>{label} ({unit})</label>
+      <input
+        id={id}
+        type="number"
+        min="0"
+        step={unit === 'min' ? '0.5' : '1'}
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onInput(e.target.value)}
+        className={`${className} font-mono tabular`}
+        placeholder={placeholder}
+        title={title}
+      />
+    </>
+  );
+}
+
 function ControlRow({ action, index, equipment, equipIndex, durUnit, onChange, onRemove, error }) {
   const relaysFirst = useMemo(() => {
     const list = [...equipment];
@@ -81,21 +119,11 @@ function ControlRow({ action, index, equipment, equipIndex, durUnit, onChange, o
   }, [equipment]);
   const coils = writableCoils(equipIndex, action.equipment_id);
   const showDuration = action.action === 'on' || action.action === 'toggle';
-  const durationValue = action.duration_seconds > 0
-    ? (durUnit === 'min' ? Math.round((action.duration_seconds / 60) * 100) / 100 : action.duration_seconds)
-    : '';
-
-  const onDuration = (raw) => {
-    if (raw === '') { onChange({ duration_seconds: null }); return; }
-    const n = parseFloat(raw);
-    if (!Number.isFinite(n)) return;
-    onChange({ duration_seconds: durUnit === 'min' ? Math.round(n * 60) : Math.round(n) });
-  };
 
   return (
     <div className={`rounded-md border ${error ? 'border-alarm-300 dark:border-alarm-700' : 'border-line'} bg-panel p-3`}>
       <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end">
-        <div className="col-span-2 sm:col-span-4">
+        <div className="col-span-2 sm:col-span-6">
           <label className={FIELD_LABEL} htmlFor={`act-eq-${index}`}>Equipment</label>
           <select
             id={`act-eq-${index}`}
@@ -110,7 +138,7 @@ function ControlRow({ action, index, equipment, equipIndex, durUnit, onChange, o
             {relaysFirst.map(eq => <option key={eq.id} value={eq.id}>{eq.name}</option>)}
           </select>
         </div>
-        <div className="col-span-2 sm:col-span-3">
+        <div className="col-span-2 sm:col-span-5">
           <label className={FIELD_LABEL} htmlFor={`act-ch-${index}`}>Channel</label>
           <select
             id={`act-ch-${index}`}
@@ -127,7 +155,10 @@ function ControlRow({ action, index, equipment, equipIndex, durUnit, onChange, o
             {coils.map(c => <option key={c.register} value={c.register}>{c.label}</option>)}
           </select>
         </div>
-        <div className="sm:col-span-2">
+        <div className="order-last sm:order-none sm:col-span-1 flex justify-end">
+          <RemoveButton onClick={onRemove} label={`Remove action ${index + 1}`} />
+        </div>
+        <div className="sm:col-span-4">
           <label className={FIELD_LABEL} htmlFor={`act-do-${index}`}>Switch</label>
           <select id={`act-do-${index}`} value={action.action || 'on'} onChange={(e) => onChange({ action: e.target.value, value: e.target.value === 'set' ? (action.value ?? '') : null })} className={INPUT}>
             <option value="on">ON</option>
@@ -137,31 +168,36 @@ function ControlRow({ action, index, equipment, equipIndex, durUnit, onChange, o
           </select>
         </div>
         {action.action === 'set' && (
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-4">
             <label className={FIELD_LABEL} htmlFor={`act-val-${index}`}>Value</label>
             <input id={`act-val-${index}`} type="text" value={action.value ?? ''} onChange={(e) => onChange({ value: e.target.value })} className={INPUT} placeholder="75" />
           </div>
         )}
+        <div className="sm:col-span-4">
+          <SecondsField
+            id={`act-delay-${index}`}
+            label="Start after"
+            seconds={action.delay_seconds}
+            unit={durUnit}
+            onChange={(v) => onChange({ delay_seconds: v })}
+            placeholder="0"
+            title="Time after the trigger before this action runs. Empty = immediately."
+            showZero
+          />
+        </div>
         {showDuration && (
-          <div className="sm:col-span-2">
-            <label className={FIELD_LABEL} htmlFor={`act-dur-${index}`}>For ({durUnit})</label>
-            <input
+          <div className="sm:col-span-4">
+            <SecondsField
               id={`act-dur-${index}`}
-              type="number"
-              min="0"
-              step={durUnit === 'min' ? '0.5' : '1'}
-              inputMode="decimal"
-              value={durationValue}
-              onChange={(e) => onDuration(e.target.value)}
-              className={`${INPUT} font-mono tabular`}
+              label="For"
+              seconds={action.duration_seconds}
+              unit={durUnit}
+              onChange={(v) => onChange({ duration_seconds: v })}
               placeholder="stays on"
               title="Leave empty to stay on until another rule switches it off"
             />
           </div>
         )}
-        <div className="col-span-2 sm:col-span-1 flex justify-end">
-          <RemoveButton onClick={onRemove} label={`Remove action ${index + 1}`} />
-        </div>
       </div>
       {error && <p className={ERROR_TEXT}>{error}</p>}
     </div>
@@ -209,7 +245,7 @@ function LogRow({ action, index, onChange, onRemove }) {
   );
 }
 
-function TransitionRow({ action, index, equipment, equipIndex, onChange, onRemove, error }) {
+function TransitionRow({ action, index, equipment, equipIndex, durUnit, onChange, onRemove, error }) {
   const [open, setOpen] = useState(!action.equipment_id);
   const states = useMemo(() => {
     const s = {};
@@ -240,6 +276,19 @@ function TransitionRow({ action, index, equipment, equipIndex, onChange, onRemov
           <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(o => !o)} aria-expanded={open}>{open ? 'Hide channels' : 'Edit channels'}</Button>
           <RemoveButton onClick={onRemove} label={`Remove action ${index + 1}`} />
         </div>
+      </div>
+      <div className="mt-2 w-full sm:w-40">
+        <SecondsField
+          id={`act-delay-${index}`}
+          label="Start after"
+          seconds={action.delay_seconds}
+          unit={durUnit}
+          onChange={(v) => onChange({ delay_seconds: v })}
+          placeholder="0"
+          title="Time after the trigger before this transition runs. Empty = immediately."
+          showZero
+          className={INPUT_SM}
+        />
       </div>
       {!open && count > 0 && (
         <p className="mt-1 text-xs font-mono tabular text-muted truncate" title={(action.transitions || []).map(t => `${t.name || `ch${t.channel}`}=${t.state ? 'ON' : 'OFF'}`).join(', ')}>
@@ -301,7 +350,8 @@ export default function AutomationBuilderModal({
       setFormData(loaded);
       setNameDirty(true);
       // Durations that are not whole minutes are easier to read in seconds.
-      const oddDuration = loaded.actions.some(a => a && a.type === 'control' && a.duration_seconds > 0 && a.duration_seconds % 60 !== 0);
+      const odd = (v) => Number(v) > 0 && Number(v) % 60 !== 0;
+      const oddDuration = loaded.actions.some(a => a && a.type === 'control' && (odd(a.duration_seconds) || odd(a.delay_seconds)));
       setDurUnit(oddDuration ? 's' : 'min');
     } else {
       setFormData(emptyForm());
@@ -334,6 +384,7 @@ export default function AutomationBuilderModal({
 
   // Suggested name follows the rule until the user edits it.
   const summary = useMemo(() => summarizeForm(formData, equipIndex), [formData.trigger_config, formData.actions, equipIndex]);
+  const sequence = useMemo(() => buildSequence(formData.actions, equipIndex), [formData.actions, equipIndex]);
   const suggestedName = formData.actions.length ? summary.text : '';
   useEffect(() => {
     // Empty suggestion also covers the first render after opening in edit
@@ -523,8 +574,8 @@ export default function AutomationBuilderModal({
   if (formData.conditions.length) advancedHints.push(`${formData.conditions.length} condition${formData.conditions.length > 1 ? 's' : ''}`);
   const gated = formData.actions.filter(a => Array.isArray(a?.dependencies) && a.dependencies.length).length;
   if (gated) advancedHints.push(`${gated} gated action${gated > 1 ? 's' : ''}`);
-  const delayed = formData.actions.filter(a => a && (a.delay_seconds > 0 || a.stagger_delay_seconds > 0)).length;
-  if (delayed) advancedHints.push(`${delayed} delayed`);
+  const staggered = formData.actions.filter(a => a && a.stagger_delay_seconds > 0).length;
+  if (staggered) advancedHints.push(`${staggered} staggered`);
   if (formData.dose_program_id) advancedHints.push('dose program');
   if (formData.priority) advancedHints.push(`priority ${formData.priority}`);
   if (!formData.enabled) advancedHints.push('disabled');
@@ -785,7 +836,7 @@ export default function AutomationBuilderModal({
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <Label id="do-label">Do</Label>
-                  <p className={HELP}>Which channels switch, and for how long.</p>
+                  <p className={HELP}>Which channels switch, when, and for how long.</p>
                 </div>
                 <div className="inline-flex rounded-md border border-line overflow-hidden shrink-0" role="group" aria-label="Duration unit">
                   {['min', 's'].map(u => (
@@ -813,7 +864,7 @@ export default function AutomationBuilderModal({
                   if (a?.type === 'control') return <ControlRow key={i} {...common} equipment={equipment} equipIndex={equipIndex} durUnit={durUnit} />;
                   if (a?.type === 'alert') return <AlertRow key={i} {...common} />;
                   if (a?.type === 'log') return <LogRow key={i} {...common} />;
-                  if (a?.type === 'transition') return <TransitionRow key={i} {...common} equipment={equipment} equipIndex={equipIndex} />;
+                  if (a?.type === 'transition') return <TransitionRow key={i} {...common} equipment={equipment} equipIndex={equipIndex} durUnit={durUnit} />;
                   return (
                     <div key={i} className="rounded-md border border-line bg-panel p-3 flex items-center justify-between gap-2 text-sm text-muted">
                       <span>Unknown action type "{String(a?.type)}"</span>
@@ -823,8 +874,9 @@ export default function AutomationBuilderModal({
                 })}
               </div>
               {formData.actions.some(a => a?.type === 'control') && (
-                <p className={HELP}>An empty duration means the channel stays on until another rule switches it off.</p>
+                <p className={HELP}>Start after counts from the trigger (empty = immediately). An empty For means the channel stays on until another rule switches it off.</p>
               )}
+              <SequenceTimeline sequence={sequence} />
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="secondary" onClick={() => addAction('control')}>+ Relay action</Button>
                 <Button type="button" variant="ghost" onClick={() => addAction('alert')}>+ Alert</Button>
@@ -845,7 +897,7 @@ export default function AutomationBuilderModal({
               >
                 <span>
                   <span className="text-sm font-semibold text-ink">Advanced</span>
-                  <span className="ml-2 text-xs text-muted">{advancedHints.length ? advancedHints.join(' · ') : 'priority, description, dose program, gates, conditions, delays, atomic transitions'}</span>
+                  <span className="ml-2 text-xs text-muted">{advancedHints.length ? advancedHints.join(' · ') : 'priority, description, dose program, gates, conditions, stagger, atomic transitions'}</span>
                 </span>
                 <svg className={`h-4 w-4 text-muted transition-transform ${showAdvanced ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -902,8 +954,8 @@ export default function AutomationBuilderModal({
                   {/* Timing & gates per action */}
                   <div className="space-y-2">
                     <div>
-                      <p className="text-sm font-semibold text-ink">Timing and gates per action</p>
-                      <p className={HELP}>Delays are seconds after the trigger. Gates (dependencies) are checked at run time by the executor; they are the real runtime guard.</p>
+                      <p className="text-sm font-semibold text-ink">Stagger and gates per action</p>
+                      <p className={HELP}>Start delays are set on each action under Do (Start after). Gates (dependencies) are checked at run time by the executor; they are the real runtime guard.</p>
                     </div>
                     {formData.actions.length === 0 && <p className={HELP}>Add actions above first.</p>}
                     {formData.actions.map((a, i) => {
@@ -914,10 +966,6 @@ export default function AutomationBuilderModal({
                         <div key={i} className="rounded-md border border-line bg-field/40 p-3 space-y-2">
                           <p className="text-xs text-ink truncate"><span className="font-mono tabular text-muted mr-2">{i + 1}</span>{shortActionLabel(a, equipIndex)}</p>
                           <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end">
-                            <div className="sm:col-span-3">
-                              <label className={FIELD_LABEL} htmlFor={`adv-delay-${i}`}>Delay (s)</label>
-                              <input id={`adv-delay-${i}`} type="number" min="0" inputMode="numeric" value={a.delay_seconds ?? ''} onChange={(e) => updateAction(i, { delay_seconds: e.target.value === '' ? null : parseInt(e.target.value, 10) })} className={`${INPUT_SM} font-mono tabular`} placeholder="0" />
-                            </div>
                             {allChannels && (
                               <div className="sm:col-span-3">
                                 <label className={FIELD_LABEL} htmlFor={`adv-stagger-${i}`}>Stagger (s)</label>

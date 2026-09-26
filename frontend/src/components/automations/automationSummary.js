@@ -262,6 +262,25 @@ export function pluralize(kind, n) {
 
 const ACTION_WORD = { on: 'ON', off: 'OFF', toggle: 'TOGGLE', set: 'SET' };
 
+/**
+ * Same-kind targets with different start delays: "irrigation zones 1→4" +
+ * "in sequence" when each starts as the previous one's duration ends (±2 s),
+ * otherwise "staggered". Null when they all start together.
+ */
+function describeSequence(seg) {
+  const items = [...seg.items].sort((a, b) => (a.delay || 0) - (b.delay || 0));
+  const delays = new Set(items.map(t => t.delay || 0));
+  if (delays.size < 2) return null;
+  const chained = seg.duration > 0 && items.every((t, i) => i === 0 || Math.abs((t.delay || 0) - ((items[i - 1].delay || 0) + seg.duration)) <= 2);
+  const nums = items.map(t => { const m = /(\d+)\s*$/.exec(String(t.label)); return m ? parseInt(m[1], 10) : null; });
+  let subject = `${items.length} ${pluralize(seg.kind, items.length)}`;
+  if (nums.every(n => n !== null)) {
+    const consecutive = nums.every((n, i) => i === 0 || n === nums[i - 1] + 1);
+    subject = `${pluralize(seg.kind, items.length)} ${consecutive ? `${nums[0]}→${nums[nums.length - 1]}` : nums.join('→')}`;
+  }
+  return { subject, how: chained ? 'in sequence' : 'staggered' };
+}
+
 export function describeTargets(targets) {
   if (!targets.length) return '';
   const byAction = new Map();
@@ -281,8 +300,17 @@ export function describeTargets(targets) {
     const suffix = (dur, value) => `${action === 'set' && value !== null && value !== undefined ? ` ${value}` : ''}${dur ? ` ${formatDuration(dur)}` : ''}`;
     if (segs.size <= 3) {
       for (const seg of segs.values()) {
-        const subject = seg.items.length === 1 ? seg.items[0].label : `${seg.items.length} ${pluralize(seg.kind, seg.items.length)}`;
-        parts.push(`${subject} ${word}${suffix(seg.duration, seg.value)}`);
+        if (seg.items.length === 1) {
+          const t = seg.items[0];
+          parts.push(`${t.label} ${word}${suffix(seg.duration, seg.value)}${t.delay ? ` after ${formatDuration(t.delay)}` : ''}`);
+          continue;
+        }
+        const seq = describeSequence(seg);
+        if (seq) {
+          parts.push(`${seq.subject} ${word}${suffix(seg.duration, seg.value)}${seg.duration ? ' each' : ''}, ${seq.how}`);
+          continue;
+        }
+        parts.push(`${seg.items.length} ${pluralize(seg.kind, seg.items.length)} ${word}${suffix(seg.duration, seg.value)}`);
       }
     } else {
       const durations = list.map(t => t.duration || 0);
@@ -613,4 +641,166 @@ export function formatNextRun(date, now = new Date()) {
   const sameDay = date.toDateString() === now.toDateString();
   const dayPart = sameDay ? 'today' : `${DAY_SHORT[date.getDay()]} ${date.getDate()} ${date.toLocaleString('en-GB', { month: 'short' })}`;
   return `${dayPart} ${pad2(date.getHours())}:${pad2(date.getMinutes())} (${rel})`;
+}
+
+// ---------------------------------------------------------------------------
+// Sequence timeline (builder preview; read-only, informational)
+// ---------------------------------------------------------------------------
+
+/** 0 -> "0:00", 270 -> "4:30", 3725 -> "1:02:05". */
+export function formatClock(seconds) {
+  const s = Math.max(0, Math.round(Number(seconds) || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rest = s % 60;
+  return h ? `${h}:${pad2(m)}:${pad2(rest)}` : `${m}:${pad2(rest)}`;
+}
+
+/** Tolerance before a gap or an overlap is worth flagging. */
+export const SEQUENCE_TOLERANCE_S = 5;
+
+/** Main-line irrigation pumps (not mixing / dosing pumps). */
+export function isFeedPump(label) {
+  const s = String(label || '');
+  return /pump/i.test(s) && !/mix|dos|inject|stir|agitat|recirc/i.test(s);
+}
+
+/** Irrigation zones / field valves (not fertiliser injector valves). */
+export function isZoneChannel(label) {
+  const s = String(label || '');
+  return /zone|valve/i.test(s) && !/inject|tank|dos|fert|drain/i.test(s);
+}
+
+const secondsOrNull = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/** Merge [start, end) intervals (end may be Infinity). */
+function unionIntervals(list) {
+  const sorted = list.filter(i => i.end > i.start).sort((a, b) => a.start - b.start);
+  const out = [];
+  for (const i of sorted) {
+    const last = out[out.length - 1];
+    if (last && i.start <= last.end) last.end = Math.max(last.end, i.end);
+    else out.push({ start: i.start, end: i.end });
+  }
+  return out;
+}
+
+/** a minus b, both unions. */
+function subtractIntervals(a, b) {
+  const out = [];
+  for (const seg of a) {
+    let cursor = seg.start;
+    for (const cut of b) {
+      if (cut.end <= cursor || cut.start >= seg.end) continue;
+      if (cut.start > cursor) out.push({ start: cursor, end: Math.min(cut.start, seg.end) });
+      cursor = Math.max(cursor, cut.end);
+      if (cursor >= seg.end) break;
+    }
+    if (cursor < seg.end) out.push({ start: cursor, end: seg.end });
+  }
+  return out;
+}
+
+/**
+ * Lay the relay actions out on a time axis measured from the trigger.
+ * Mirrors AutomationExecutor: delay_seconds offsets the start, duration_seconds
+ * schedules the auto-OFF; no duration means the channel stays on until another
+ * rule switches it off (open-ended, never 0).
+ *
+ * @returns {{ items: object[], show: boolean, total: number, openEnded: boolean,
+ *   scaleEnd: number, gaps: object[], overlaps: object[], pumpCovered: boolean|null }}
+ */
+export function buildSequence(actions, equipIndex) {
+  const items = [];
+  const list = Array.isArray(actions) ? actions : [];
+  list.forEach((a, index) => {
+    if (!a || typeof a !== 'object') return;
+    const eqId = parseInt(a.equipment_id, 10);
+    if (!Number.isFinite(eqId)) return;
+    const start = secondsOrNull(a.delay_seconds) || 0;
+    const duration = secondsOrNull(a.duration_seconds);
+    const eqName = equipmentLabel(equipIndex, eqId) || a.equipment_name;
+    const push = (channel, label, on, extra = {}) => {
+      items.push({
+        key: `${index}:${channel}`,
+        index,
+        eqId,
+        eqName,
+        channel,
+        label,
+        kind: on ? 'bar' : 'point',
+        start,
+        end: on ? (duration ? start + duration : null) : start,
+        duration: on ? duration : null,
+        role: isFeedPump(label) ? 'pump' : isZoneChannel(label) ? 'zone' : null,
+        ...extra,
+      });
+    };
+    if (a.type === 'control') {
+      const on = (a.action || 'on') !== 'off';
+      if (a.channel === null || a.channel === undefined || a.channel === '') {
+        const n = writableCoils(equipIndex, eqId).length;
+        push('*', n ? `All channels (${n})` : 'All channels', on, {
+          role: null,
+          stagger: secondsOrNull(a.stagger_delay_seconds),
+          action: a.action || 'on',
+        });
+      } else {
+        const label = equipIndex?.get(eqId) ? channelLabel(equipIndex, eqId, a.channel) : (a.channel_name || `Channel ${a.channel}`);
+        push(toReg(a.channel), label, on, { action: a.action || 'on' });
+      }
+    } else if (a.type === 'transition' && Array.isArray(a.transitions)) {
+      for (const t of a.transitions) {
+        const ch = toReg(t.channel);
+        if (ch === null) continue;
+        const label = equipIndex?.get(eqId) ? channelLabel(equipIndex, eqId, ch) : (t.name || `Channel ${ch}`);
+        push(ch, label, !!t.state, { action: t.state ? 'on' : 'off', transition: true });
+      }
+    }
+  });
+
+  items.sort((x, y) => x.start - y.start || x.index - y.index);
+
+  const bars = items.filter(i => i.kind === 'bar');
+  const finiteEnds = bars.filter(b => b.end !== null).map(b => b.end);
+  const total = Math.max(0, ...finiteEnds, ...items.map(i => i.start));
+  const openEnded = bars.some(b => b.end === null);
+  const durations = new Set(bars.map(b => (b.end === null ? 'open' : b.duration)));
+  const anyDelay = items.some(i => i.start > 0 || i.stagger);
+  const show = items.length >= 2 && total > 0 && (anyDelay || durations.size > 1);
+
+  // Pump ON with no zone open (dead-heading), and zones on one board overlapping.
+  const TOL = SEQUENCE_TOLERANCE_S;
+  const span = (b) => ({ start: b.start, end: b.end === null ? Infinity : b.end });
+  const pumps = bars.filter(b => b.role === 'pump');
+  const zones = bars.filter(b => b.role === 'zone');
+  let gaps = [];
+  let pumpCovered = null;
+  if (pumps.length && zones.length) {
+    const raw = subtractIntervals(unionIntervals(pumps.map(span)), unionIntervals(zones.map(span)));
+    gaps = raw.filter(g => g.end - g.start > TOL).map(g => ({
+      start: g.start,
+      end: g.end === Infinity ? null : g.end,
+      pumps: pumps.filter(p => p.start < g.end && span(p).end > g.start).map(p => p.key),
+    }));
+    pumpCovered = gaps.length === 0;
+  }
+  const overlaps = [];
+  for (let i = 0; i < zones.length; i++) {
+    for (let j = i + 1; j < zones.length; j++) {
+      const a = zones[i];
+      const b = zones[j];
+      if (a.eqId !== b.eqId || a.channel === b.channel) continue;
+      const start = Math.max(a.start, b.start);
+      const end = Math.min(span(a).end, span(b).end);
+      if (end - start > TOL) overlaps.push({ a: a.key, b: b.key, aLabel: a.label, bLabel: b.label, start, end: end === Infinity ? null : end });
+    }
+  }
+
+  // Headroom so an open-ended bar still reads as running past the last event.
+  const scaleEnd = Math.max(openEnded ? total * 1.1 : total, 1);
+  return { items, show, total, openEnded, scaleEnd, gaps, overlaps, pumpCovered };
 }
