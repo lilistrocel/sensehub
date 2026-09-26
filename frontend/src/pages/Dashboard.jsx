@@ -16,12 +16,14 @@ import RunningGroups from '../components/dashboard/RunningGroups';
 import AutomationsPanel from '../components/dashboard/AutomationsPanel';
 import TrendsPanel, { useTrendSeries } from '../components/dashboard/TrendsPanel';
 import CropRecord from '../components/dashboard/CropRecord';
+import IrrigationCard from '../components/dashboard/IrrigationCard';
 
 /**
  * Operator STATUS BOARD.
  *
  * Top to bottom: Now (12 climate readings), Attention (only what is abnormal),
- * What's running (relay groups), Automations, Trends, Cloud crop record.
+ * Irrigation (live flow / zone / dosing from the MQTT monitor), What's running
+ * (relay groups), Automations, Trends, Cloud crop record.
  * Data: GET /api/dashboard/status-board every 15 s patched by WebSocket
  * relay_state_changed / sensor_reading events; chart series from
  * GET /api/dashboard/overview on range change and every 5 min.
@@ -51,6 +53,8 @@ export default function Dashboard() {
     setRefreshing(true);
     try { await Promise.all([refresh(), trends.refresh()]); } finally { setRefreshing(false); }
   };
+
+  const clockFormatter = useCallback((ms) => formatTime(new Date(ms)).replace(/:\d{2}(?=\s|$)/, ''), [formatTime]);
 
   const nowLabel = useMemo(() => (fetchedAt ? formatTime(new Date(fetchedAt)) : null), [fetchedAt, formatTime]);
 
@@ -93,7 +97,10 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* 3 + 4. What's running / Automations */}
+      {/* 3. Irrigation (safety-relevant: live flow vs open zone vs dosing) */}
+      <IrrigationCard token={token} subscribe={subscribe} board={board} formatClock={clockFormatter} />
+
+      {/* 4 + 5. What's running / Automations */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section aria-label="What is running">
           <SectionHeader
@@ -128,7 +135,7 @@ export default function Dashboard() {
         </section>
       </div>
 
-      {/* 5. Trends */}
+      {/* 6. Trends */}
       <section aria-label="Trends">
         <SectionHeader
           title="Trends"
@@ -144,7 +151,7 @@ export default function Dashboard() {
         />
       </section>
 
-      {/* 6. Cloud crop record */}
+      {/* 7. Cloud crop record */}
       <CropRecord token={token} formatDate={formatDate} notifyError={notifyBackgroundError} />
     </div>
   );
