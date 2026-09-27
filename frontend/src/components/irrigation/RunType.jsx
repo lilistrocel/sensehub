@@ -64,6 +64,8 @@ export function RunTypeTag({ run, short = false, className = '' }) {
 const STATUS = {
   ok: { mark: 'ok', text: 'ok', cls: 'text-ok-700 dark:text-ok-300' },
   cut_short: { mark: 'caution', text: 'cut short', cls: 'text-caution-700 dark:text-caution-300' },
+  // ended by the operator's Stop irrigation button
+  stopped: { mark: 'caution', text: 'stopped by operator', cls: 'text-caution-700 dark:text-caution-300' },
   no_water: { mark: 'alarm', text: 'no water', cls: 'text-alarm-600 dark:text-alarm-300' },
   shutdown: { mark: 'alarm', text: 'shut down', cls: 'text-alarm-600 dark:text-alarm-300' },
   manual: { mark: 'manual', text: 'manual', cls: 'text-ink' },

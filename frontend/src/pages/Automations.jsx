@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { Button, Card, SectionHeader } from '../ui';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AutomationRow from '../components/automations/AutomationRow';
+import StopIrrigationButton from '../components/irrigation/StopIrrigationButton';
 import AutomationBuilderModal from '../components/automations/AutomationBuilderModal';
 import AutomationDetailModal from '../components/automations/AutomationDetailModal';
 import { TemplateManagerModal, TemplatesModal } from '../components/automations/TemplateModals';
@@ -315,6 +316,7 @@ export default function Automations() {
               title={group.label}
               right={<span className="text-sm font-mono tabular text-muted">{group.items.length}</span>}
             />
+            {group.key === 'irrigation' && <StopIrrigationButton className="mb-2 bg-panel border border-line rounded-card p-3" />}
             <ul className="space-y-2">
               {group.items.map(item => (
                 <AutomationRow

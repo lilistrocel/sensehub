@@ -310,3 +310,24 @@ test('agronomist snapshot: one compact line per manual run (panel run -> zone un
   const app = manualRunLine(runAt(B.buildRuns(db, { fromMs: DAY26[0], toMs: DAY26[1], nowMs: NOW }).runs, '12:23'));
   assert.match(app, /manual \(app, ismail@a20core\.com\) 22 L, no dosing/);
 });
+
+test('Stop irrigation (2026-09-27): a run ended by the operator\'s Stop irrigation button is status "stopped" with the operator note; Stop All stays "cut_short"', () => {
+  for (const [source, want] of [['stop_irrigation', 'stopped'], ['stop_all', 'cut_short']]) {
+    seed();
+    const before = B.buildRuns(db, { fromMs: DAY27[0], toMs: DAY27[1], nowMs: NOW }).runs;
+    const r0 = runAt(before, '07:30');
+    const z2 = r0.zone_visits[1];
+    const stopMs = Date.parse(z2.started_at) + 60000;
+    const stopTs = new Date(stopMs).toISOString().replace('T', ' ').slice(0, 19);
+    // the rest of the run never happened: drop the automation's later events, then the stop's OFF writes
+    db.prepare("DELETE FROM relay_events WHERE automation_id = 95 AND created_at > ?").run(stopTs);
+    const re = db.prepare('INSERT INTO relay_events (equipment_id, channel, state, source, automation_id, user_email, confirmed, created_at) VALUES (1, ?, 0, ?, NULL, ?, 1, ?)');
+    for (const ch of [1, 2, 3, 4, 5, 6]) re.run(ch, source, 'operator@farm.test', stopTs);
+    const r = runAt(B.buildRuns(db, { fromMs: DAY27[0], toMs: DAY27[1], nowMs: NOW }).runs, '07:30');
+    assert.equal(r.status, want, source);
+    assert.ok(r.operator_stops.length >= 1);
+    assert.equal(r.operator_stops[0].source, source);
+    assert.equal(r.operator_stops[0].user, 'operator@farm.test');
+    if (source === 'stop_irrigation') assert.match(r.notes.join(' | '), /Stopped by the operator \(Stop irrigation, operator@farm\.test\) at \d\d:\d\d/);
+  }
+});

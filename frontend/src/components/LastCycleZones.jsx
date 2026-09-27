@@ -61,7 +61,7 @@ function shortZone(name, channel) {
   return m ? `Zone ${m[1]}` : (name || `relay ${channel}`);
 }
 
-const RUN_STATUS_TEXT = { shutdown: 'shut down', no_water: 'no water', cut_short: 'cut short', running: 'in progress' };
+const RUN_STATUS_TEXT = { shutdown: 'shut down', no_water: 'no water', cut_short: 'cut short', stopped: 'stopped by operator', running: 'in progress' };
 
 /** Target ratio: a single number when all tanks share it. */
 function targetOf(run) {
@@ -118,7 +118,7 @@ export default function LastCycleZones({ run, formatTime, compact = false, class
           <span className="text-caution-700 dark:text-caution-300">{run.status}{run.end_reason ? ` — ${String(run.end_reason).replace(/^flow_watch(_shutdown)?:\s*/, '')}` : ''}</span>
         )}
         {isRun && RUN_STATUS_TEXT[run.status] && (
-          <span className={run.status === 'running' ? 'text-ink' : run.status === 'cut_short' ? 'text-caution-700 dark:text-caution-300' : 'text-alarm-600 dark:text-alarm-300'} data-testid="last-cycle-status">
+          <span className={run.status === 'running' ? 'text-ink' : (run.status === 'cut_short' || run.status === 'stopped') ? 'text-caution-700 dark:text-caution-300' : 'text-alarm-600 dark:text-alarm-300'} data-testid="last-cycle-status">
             {RUN_STATUS_TEXT[run.status]}
           </span>
         )}

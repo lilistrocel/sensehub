@@ -5,6 +5,7 @@ import { useIrrigationLive } from './useIrrigationLive';
 import LastCycleZones from '../LastCycleZones';
 import RunList from '../irrigation/RunList';
 import { RunTypeTag } from '../irrigation/RunType';
+import StopIrrigationButton from '../irrigation/StopIrrigationButton';
 import {
   IRRIGATION,
   deriveIrrigationView,
@@ -117,9 +118,10 @@ function Hint({ hint }) {
 
 /**
  * Dashboard "Irrigation" card: live flow, which zone is open, pumps, dosing
- * per tank, today's measured totals and the last cycle. Read-only - it never
- * sends a command. Mismatch hints are visual; the backend flow-watch raises
- * the actual alerts.
+ * per tank, today's measured totals and the last cycle. Its one command is
+ * "Stop irrigation" (admin/operator, confirmed; pumps, zones and dosing only —
+ * fans and climate keep running). Mismatch hints are visual; the backend
+ * flow-watch raises the actual alerts.
  */
 export default function IrrigationCard({ token, subscribe, board, formatClock }) {
   const live = useIrrigationLive({ token, subscribe });
@@ -165,6 +167,9 @@ export default function IrrigationCard({ token, subscribe, board, formatClock })
   const runsToday = live.todayRuns && Array.isArray(live.todayRuns.runs) ? live.todayRuns : null;
   const manualToday = runsToday ? runsToday.runs.filter((r) => r.type !== 'automated').length : 0;
   const lastRunIsRun = !!(live.lastRun && live.lastRun.type);
+  // emphasise Stop irrigation while water runs or any irrigation / dosing relay is ON
+  const irrigationActive = view.irrigating || view.openZones.length > 0
+    || view.pumps.some((p) => p.state === 'on') || view.tanks.some((tk) => tk.relay === 'on');
 
   return (
     <section aria-label="Irrigation" data-testid="irrigation-card">
@@ -187,6 +192,8 @@ export default function IrrigationCard({ token, subscribe, board, formatClock })
             {view.hints.map((h) => <Hint key={h.key} hint={h} />)}
           </ul>
         )}
+
+        <StopIrrigationButton active={irrigationActive} formatTime={(iso) => clock(Date.parse(iso))} className="p-3 border-b border-line" />
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,1.35fr)] divide-y lg:divide-y-0 lg:divide-x divide-line">
           {/* Flow */}

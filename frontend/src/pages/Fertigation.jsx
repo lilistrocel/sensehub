@@ -6,6 +6,7 @@ import { useThrottledError } from '../hooks/useThrottledError';
 import { MeasuredDosingCard } from '../components/reports/MeasuredWater';
 import FlowWatchStatus from '../components/FlowWatchStatus';
 import DoseControllerStatus from '../components/DoseControllerStatus';
+import StopIrrigationButton from '../components/irrigation/StopIrrigationButton';
 
 const API_BASE = '/api';
 
@@ -900,6 +901,7 @@ function TanksTab({ headers, canEdit, formatDateTime }) {
 
   return (
     <div className="space-y-4">
+      <StopIrrigationButton className="bg-panel border border-line rounded-card p-3" />
       <FlowWatchStatus formatDateTime={formatDateTime} />
       <DoseControllerStatus formatDateTime={formatDateTime} />
       <LiveDoseCycleBanner headers={headers} canEdit={canEdit} />

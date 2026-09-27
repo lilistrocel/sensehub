@@ -14,7 +14,9 @@ import React, { useEffect, useRef } from 'react';
  *   title          string
  *   body           ReactNode (optional intro text)
  *   items          string[] (optional list of affected things, e.g. relay channel names)
- *   variant        'danger' | 'primary' (default 'primary')
+ *   variant        'danger' | 'destructive' | 'primary' (default 'primary')
+ *                  destructive = ghost button in alarm red (FARM-APP-STANDARDS 5:
+ *                  solid red is reserved for alarm state)
  *   confirmLabel   string (default 'Confirm')
  *   cancelLabel    string (default 'Cancel')
  *   busy           boolean - disables buttons while the action runs
@@ -83,7 +85,10 @@ export default function ConfirmDialog({
 
   const confirmClasses = variant === 'danger'
     ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500 text-white'
-    : 'bg-primary-600 hover:bg-primary-700 focus:ring-primary-500 text-white';
+    : variant === 'destructive'
+      ? 'bg-transparent border-2 border-alarm-600 text-alarm-700 hover:bg-alarm-50 dark:border-alarm-400 dark:text-alarm-300 dark:hover:bg-alarm-900/30 focus:ring-alarm-500 font-semibold'
+      : 'bg-primary-600 hover:bg-primary-700 focus:ring-primary-500 text-white';
+  const alarmTone = variant === 'danger' || variant === 'destructive';
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4" role="presentation">
@@ -104,7 +109,7 @@ export default function ConfirmDialog({
       >
         <div className="flex items-start gap-3">
           <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
-            variant === 'danger' ? 'bg-red-100 dark:bg-red-900/30 text-red-600' : 'bg-primary-100 dark:bg-primary-900/30 text-primary-600'
+            alarmTone ? 'bg-red-100 dark:bg-red-900/30 text-red-600' : 'bg-primary-100 dark:bg-primary-900/30 text-primary-600'
           }`}>
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />

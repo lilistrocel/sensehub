@@ -231,6 +231,68 @@ class RelayTimerService {
     return cancelled;
   }
 
+  /**
+   * Pending timers that switch a coil on one of `equipmentIds`, whoever armed them
+   * (Stop irrigation, 2026-09-27). Matched on the key, which always carries the
+   * target board: delay:<eq>:<ch>[:<action>], off:<eq>:<ch>,
+   * transition_delay:<eq>:<aid>:<i>, transition_off:<eq>:<aid>:<i>. Timers on any
+   * other board are never matched, even when the same automation owns them.
+   *
+   * @param {number[]} equipmentIds
+   * @param {object} [opts]
+   * @param {'all'|'starts'|'offs'} [opts.kind] starts = delay + transition_delay;
+   *        offs = off + transition_off (de-energising)
+   * @param {number[]|null} [opts.channels] only per-channel timers (delay/off) on these channels
+   * @param {boolean} [opts.includeRaw] include the per-board transition timers (no channel); default true
+   * @returns {Array<[string, object, number, string]>} matching [key, entry, equipmentId, purpose]
+   */
+  _equipmentTimers(equipmentIds, { kind = 'all', channels = null, includeRaw = true } = {}) {
+    const ids = new Set((equipmentIds || []).map(Number));
+    const out = [];
+    for (const [key, entry] of this.timers.entries()) {
+      const m = /^(delay|off|transition_delay|transition_off):(\d+):/.exec(key);
+      if (!m || !ids.has(Number(m[2]))) continue;
+      const purpose = m[1];
+      const isStart = purpose === 'delay' || purpose === 'transition_delay';
+      if (kind === 'starts' && !isStart) continue;
+      if (kind === 'offs' && isStart) continue;
+      const raw = purpose.startsWith('transition_');
+      if (raw && !includeRaw) continue;
+      if (!raw && Array.isArray(channels) && !channels.includes(entry.channel)) continue;
+      out.push([key, entry, Number(m[2]), purpose]);
+    }
+    return out;
+  }
+
+  _describe(key, entry, equipmentId, purpose) {
+    const raw = purpose.startsWith('transition_');
+    return {
+      key,
+      type: purpose === 'transition_delay' ? 'transition_delay' : purpose === 'transition_off' ? 'transition_off' : entry.type,
+      equipmentId,
+      channel: raw ? null : entry.channel,
+      automationId: entry.automationId ?? null,
+      firesAt: entry.firesAt ? entry.firesAt.toISOString() : null,
+    };
+  }
+
+  /** Read-only view of the timers _equipmentTimers matches. */
+  listTimersForEquipment(equipmentIds, opts = {}) {
+    return this._equipmentTimers(equipmentIds, opts).map(([key, entry, eq, purpose]) => this._describe(key, entry, eq, purpose));
+  }
+
+  /** Cancel the matches of _equipmentTimers; returns what was cancelled. */
+  cancelTimersForEquipment(equipmentIds, opts = {}) {
+    const cancelled = [];
+    for (const [key, entry, eq, purpose] of this._equipmentTimers(equipmentIds, opts)) {
+      clearTimeout(entry.timer);
+      this.timers.delete(key);
+      cancelled.push(this._describe(key, entry, eq, purpose));
+      console.log(`[RelayTimer] Cancelled ${key} (equipment ${eq} stopped)`);
+    }
+    return cancelled;
+  }
+
   /** Cancel one timer by its exact key. Returns true when one was pending. */
   cancelTimer(key) {
     const e = this.timers.get(key);

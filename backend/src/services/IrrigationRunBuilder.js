@@ -41,7 +41,8 @@
  * counters), A-D litres (monitor dosing mapped through the same tank_map as
  * DailyReportService), achieved ratio 1:N, EC (µS/cm) and pH avg/min/max
  * (DoseRunZoneStats: SEKO samples while flow >= 50 % expected), status
- * ok / cut_short / no_water / shutdown / not_run / manual, and
+ * ok / cut_short / no_water / shutdown / not_run / manual (run level also
+ * 'stopped': ended by the operator's Stop irrigation button), and
  * uncontrolled_dosing: tanks moved >= 0.5 L with no dosing-valve command from
  * SenseHub during the run.
  */
@@ -65,7 +66,9 @@ const DEFAULT_EXPECTED_LPH = 8820;
 const ONE_ZONE_TOL = 0.15;
 
 const MANUAL_SOURCES = new Set(['manual', 'manual_all', 'all_channels']);
-const OPERATOR_STOP_SOURCES = new Set(['stop_all', 'manual_all', 'all_channels', 'manual']);
+const OPERATOR_STOP_SOURCES = new Set(['stop_all', 'manual_all', 'all_channels', 'manual', 'stop_irrigation']);
+// The operator's "Stop irrigation" button (2026-09-27): the run is 'stopped', not just 'cut_short'.
+const STOP_IRRIGATION_SOURCE = 'stop_irrigation';
 
 const TYPE_LABEL = { automated: 'Scheduled', manual_app: 'Manual — app', manual_panel: 'Manual — panel' };
 
@@ -667,10 +670,11 @@ function buildAutomatedRun(db, ctx, w, cycles, intervals, events, nowMs) {
   else if (shutdownEv || segStatuses.includes('shutdown')) status = 'shutdown';
   else if (!cycles.length && ctx.monitorSeen && ctx.monitorSeen(w.first, w.end)) status = 'no_water';
   else if (segStatuses.includes('no_water')) status = 'no_water';
+  else if (stops.some(ev => ev.source === STOP_IRRIGATION_SOURCE)) status = 'stopped';
   else if (segStatuses.includes('cut_short') || stops.length) status = 'cut_short';
   const auto = w.aid !== null ? ctx.autoNames[w.aid] : null;
   const notes = [];
-  if (stops.length) notes.push(`Stopped by the operator (${stops[0].source}${stops[0].user ? `, ${stops[0].user}` : ''}) at ${clock(ctx.tz, stops[0].t)}`);
+  if (stops.length) notes.push(`Stopped by the operator (${stops[0].source === STOP_IRRIGATION_SOURCE ? 'Stop irrigation' : stops[0].source}${stops[0].user ? `, ${stops[0].user}` : ''}) at ${clock(ctx.tz, stops[0].t)}`);
   for (const m of manualIvs.filter(m => ctx.zoneSet.has(m.ch))) {
     notes.push(`${zoneName(ctx, m.ch)} was open manually during this run: opened ${clock(ctx.tz, m.s)} by ${m.onUser || m.onSource}, `
       + (m.open ? 'still ON' : `closed ${clock(ctx.tz, m.e)} by ${m.offUser || m.offSource}`));

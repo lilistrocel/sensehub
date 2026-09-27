@@ -432,8 +432,11 @@ export default function Layout({ children }) {
   // Deliberately NO confirmation dialog: a delayed stop is worse than an
   // accidental one, and an accidental stop is recoverable by re-running the
   // automation. Double-firing is prevented by the button's disabled state.
+  // Wording (2026-09-27): operators used this to end irrigation runs and it turned
+  // the fan boards off at ~35 °C; every Stop All text now says it stops ALL fans and
+  // climate relays too and points to "Stop irrigation" (irrigation only).
   const handleStopAll = useCallback(async () => {
-    const suffix = ' Automations stay armed and may re-fire.';
+    const suffix = ' ALL fans and climate relays are OFF too — switch them back on if they should run. (To stop only irrigation, use Stop irrigation on the dashboard Irrigation card.) Automations stay armed and may re-fire.';
     setStopMenuOpen(false);
     setStopBusy('stop-all');
     stopInFlightRef.current = true;
@@ -972,14 +975,15 @@ export default function Layout({ children }) {
 
                   {/* Stop all (admin + operator). One click, no confirmation.
                       Amber, deliberately NOT red: it stops what is running now
-                      but automations stay armed and may re-fire. */}
+                      but automations stay armed and may re-fire. It also stops
+                      ALL fans/climate; the texts point to "Stop irrigation". */}
                   {canEmergencyStop && (
                     <button
                       onClick={handleStopAll}
                       disabled={Boolean(stopBusy)}
                       className="flex items-center min-h-[44px] px-3 py-2 text-sm font-semibold bg-transparent text-caution-700 dark:text-caution-300 border-2 border-caution-400 rounded-md hover:bg-caution-50 dark:hover:bg-caution-900/40 focus:outline-none focus:ring-2 focus:ring-caution-400 focus:ring-offset-1 focus:ring-offset-panel transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                      title="Stop all - switches every relay OFF and cancels all pending timers. Automations stay armed and may re-fire."
-                      aria-label="Stop all: switch relays off and cancel pending timers, leaving automations armed"
+                      title="Stop All - switches EVERY relay OFF on every board, including ALL fans and climate relays, and cancels all pending timers. Automations stay armed and may re-fire. To stop only irrigation (fans keep running), use Stop irrigation on the dashboard Irrigation card."
+                      aria-label="Stop all: switch every relay off on every board, including all fans and climate relays, and cancel pending timers, leaving automations armed. Use Stop irrigation to stop only irrigation."
                     >
                       {/* Hollow stop-square glyph - lighter than the E-stop's filled one */}
                       <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
@@ -1005,7 +1009,7 @@ export default function Layout({ children }) {
                         }`}
                         title={armedState.disarmed
                           ? 'Automations are DISARMED. Choosing a duration stops everything again and extends the disarm.'
-                          : 'EMERGENCY STOP - switches all relays OFF, cancels every pending timer, and disarms automations so nothing re-fires'}
+                          : 'EMERGENCY STOP - switches ALL relays OFF on every board (including all fans and climate), cancels every pending timer, and disarms automations so nothing re-fires. To stop only irrigation use Stop irrigation on the dashboard.'}
                         aria-label="Emergency stop: switch all relays off and disarm automations"
                         aria-haspopup="menu"
                         aria-expanded={stopMenuOpen}
@@ -1034,9 +1038,10 @@ export default function Layout({ children }) {
                           className="absolute right-0 mt-2 w-72 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
                         >
                           <p className="px-3 pb-2 text-xs text-muted border-b border-line">
-                            Switches every relay off, cancels all pending timers, and{' '}
+                            Switches every relay off on every board — <span className="font-semibold text-ink">including ALL fans and climate relays</span> — cancels all pending timers, and{' '}
                             <span className="font-semibold text-alarm-600 dark:text-alarm-300">disarms automations</span>{' '}
                             so nothing re-fires. No climate control or irrigation runs while disarmed.
+                            To stop only irrigation, use <span className="font-semibold text-ink">Stop irrigation</span> on the dashboard Irrigation card.
                           </p>
                           <p className="px-3 pt-2 pb-1 text-label uppercase text-muted">
                             Keep disarmed for

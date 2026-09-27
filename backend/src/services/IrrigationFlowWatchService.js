@@ -90,13 +90,18 @@
  * retry, which DOES energise the irrigation pumps and one zone valve: only through
  * RelayInterlockService.guardWriteSet + read-back, refused while disarmed (then the
  * run is shut down instead), logged 'flow_watch_retry', bounded by the run's planned
- * auto-offs (and RelaySafetyWatchdogService max-on as a backstop).
+ * auto-offs (and RelaySafetyWatchdogService max-on as a backstop); (d) the
+ * operator's "Stop irrigation" (stopIrrigation(), POST /api/irrigation/stop,
+ * 2026-09-27): the same OFF path for the irrigation board AND the dosing valves,
+ * source 'stop_irrigation' + the operator's email, never touching another board.
  *
  * ALERTS: createAlert() with a stable fingerprint `flow_watch:<rule>:<eq>[:<ch>]`,
  * once per episode. When the condition ends the same open alert is rewritten via
  * updateOpenAlert() ("Resolved: ... recovered after 25 s" → info; ended without
  * recovering keeps its severity). Episodes go to irrigation_flow_episodes.
  */
+
+const { getSystemTimezone } = require('../utils/systemTimezone'); // pure (no DB handle of its own)
 
 const RULES = {
   valve_no_flow: { severity: 'critical', level: 'alarm', title: 'Irrigation: no water flow' },
@@ -113,7 +118,7 @@ const RULES = {
 const GUARD_BUSY = new Set(['retry_stopping', 'retry_pause', 'retry_restarting', 'shutting_down']);
 const GUARD_RETRY = new Set(['retry_stopping', 'retry_pause', 'retry_restarting', 'retry_watch']);
 // Operator actions on the irrigation board that end a pending retry (never restart after these).
-const OPERATOR_SOURCES = new Set(['manual', 'manual_all', 'all_channels', 'stop_all']);
+const OPERATOR_SOURCES = new Set(['manual', 'manual_all', 'all_channels', 'stop_all', 'stop_irrigation']);
 const OFF_WRITE_OPTIONS = Object.freeze({ priority: 'high', timeout: 1500, retries: 2, retryDelayMs: 200 });
 const ZONE_RULES = ['valve_no_flow', 'low_flow', 'flow_above_expected'];
 
@@ -133,6 +138,7 @@ const DEFAULT_CONFIG = {
   pump_channel: 1,
   zone_channels: [3, 4, 5, 6],
   dosing_equipment_id: 2,
+  dosing_channels: [1, 2, 3, 4, 5], // Stop irrigation switches these OFF: pH Down + Tanks A-D (relay 6 unused)
   expected_flow_lph: null,        // null = relay_channel_config.flow_rate of the zone
   settle_seconds: 20,
   no_flow_pct: 15,
@@ -191,6 +197,7 @@ const CONFIG_SCHEMA = {
   pump_channel: INT(1, 64),
   zone_channels: { type: 'channels' },
   dosing_equipment_id: INT(1, 1e9),
+  dosing_channels: { type: 'channels' },
   expected_flow_lph: { type: 'nullable_number', min: 1, max: 1e6 },
   settle_seconds: NUM(0, 600),
   no_flow_pct: NUM(1, 95),
@@ -334,7 +341,7 @@ function defaultActuator(db, log = console) {
     return { eq, target: { host: hp.host, port: hp.port, unitId: eq.slave_id || 1 } };
   };
   // Keeps the caller's order across runs (zone before pumps on a restart); adjacent channels share one FC15.
-  const writeRuns = async (eqId, channels, state, { source, automationId = null }) => {
+  const writeRuns = async (eqId, channels, state, { source, automationId = null, userEmail = null }) => {
     const { writeCoilsConfirmed, applyRelayCache } = exec();
     const { eq, target } = eqRow(eqId);
     const runs = [];
@@ -347,7 +354,7 @@ function defaultActuator(db, log = console) {
     let error = null;
     for (const run of runs) {
       try {
-        const rb = await writeCoilsConfirmed(eq, target, run.start, run.values, { source, automationId }, OFF_WRITE_OPTIONS);
+        const rb = await writeCoilsConfirmed(eq, target, run.start, run.values, { source, automationId, userEmail }, OFF_WRITE_OPTIONS);
         for (const it of rb.items) items.push({ channel: it.channel, requested: state, readback: it.readback, confirmed: it.confirmed });
       } catch (e) {
         error = e.message;
@@ -356,7 +363,7 @@ function defaultActuator(db, log = console) {
       }
     }
     const written = items.filter(i => !i.failed);
-    if (written.length) applyRelayCache(eq, written, { source, automationId });
+    if (written.length) applyRelayCache(eq, written, { source, automationId, userEmail });
     return { confirmed: items.length === channels.length && items.every(i => i.confirmed), items, error };
   };
   return {
@@ -376,6 +383,9 @@ function defaultActuator(db, log = console) {
       extraKeyPrefixes: [`delay:${eqId}:`, `transition_delay:${eqId}:`],
     }),
     cancelOffTimers: (eqId, channels) => channels.map(ch => timers().cancelTimer(`off:${eqId}:${ch}`)),
+    // Stop irrigation: every pending timer on these boards, whoever armed it (never another board's).
+    listEquipmentTimers: (eqIds, opts) => timers().listTimersForEquipment(eqIds, opts),
+    cancelEquipmentTimers: (eqIds, opts) => timers().cancelTimersForEquipment(eqIds, opts),
     getOffTimer: (eqId, ch) => timers().getOffTimer(eqId, ch),
     scheduleOff: (eqId, ch, seconds, { source, automationId = null }) => timers().scheduleOff(eqId, ch, seconds, async () => {
       const r = await writeRuns(eqId, [ch], false, { source, automationId });
@@ -404,7 +414,9 @@ class IrrigationFlowWatchService {
    *     writeOn(eqId, channels, {source, automationId}) -> same (guarded ON path; throws when refused),
    *     isDisarmed() -> bool, cancelRunTimers(automationId, eqId) -> [{key,type,channel,firesAt}],
    *     cancelOffTimers(eqId, channels, automationId), getOffTimer(eqId, ch) -> {firesAt: Date}|null,
-   *     scheduleOff(eqId, ch, seconds, {source, automationId}), logAutomationRun(automationId, status, message) }
+   *     scheduleOff(eqId, ch, seconds, {source, automationId}), logAutomationRun(automationId, status, message),
+   *     listEquipmentTimers(eqIds, {kind, channels, includeRaw}) / cancelEquipmentTimers(same) -> [{key,type,equipmentId,channel,automationId,firesAt}] }
+   *   writeOff/writeOn also take {userEmail} (relay_events.user_email for operator-triggered writes).
    * @param {Function} [deps.setTimer]       (fn, ms) => handle — retry restart wake-up (tests: no-op)
    */
   constructor(deps = {}) {
@@ -1458,11 +1470,18 @@ class IrrigationFlowWatchService {
       return;
     }
     const chans = zoneToo ? [r.zone.channel, ...this._pumpChannels(cfg)] : this._pumpChannels(cfg);
+    if (g.operatorStopped) { this._retryAbandoned(g, this.now(), 'Stop irrigation was pressed'); return; }
     let on;
     try {
       on = await act.writeOn(eqId, chans, { source: 'flow_watch_retry', automationId: g.automationId });
     } catch (e) {
       on = { confirmed: false, error: e.message };
+    }
+    if (g.operatorStopped) {
+      // Stop irrigation landed while the restart ON was on the wire: undo it at once.
+      const off = await this._writeOffSafe(eqId, this._runChannels(cfg), 'stop_irrigation', g.automationId, g.operatorStopped.by || null);
+      this._retryAbandoned(g, this.now(), `Stop irrigation was pressed during the restart${off.confirmed ? '' : ' (OFF NOT confirmed)'}`);
+      return;
     }
     if (!on || !on.confirmed) {
       g.phase = 'shutting_down';
@@ -1540,12 +1559,12 @@ class IrrigationFlowWatchService {
   }
 
   /** OFF with one retry of the whole write on failure; never throws. */
-  async _writeOffSafe(eqId, channels, source, automationId) {
+  async _writeOffSafe(eqId, channels, source, automationId, userEmail = null) {
     const act = this._act();
     let res = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        res = await act.writeOff(eqId, channels, { source, automationId });
+        res = await act.writeOff(eqId, channels, userEmail ? { source, automationId, userEmail } : { source, automationId });
       } catch (e) {
         res = { confirmed: false, error: e.message, items: [] };
       }
@@ -1568,19 +1587,10 @@ class IrrigationFlowWatchService {
     let cancelled = [];
     try { cancelled = act.cancelRunTimers(g.automationId, eqId) || []; } catch (e) { this.log.error(`[FlowWatch] timer cancel failed: ${e.message}`); }
     // 1+2. pumps + zones OFF (first on the wire), dose cycle aborted right behind it.
-    const offP = this._writeOffSafe(eqId, this._runChannels(cfg), 'flow_watch_shutdown', g.automationId);
-    let doseP = Promise.resolve({ outcome: 'none' });
-    if (this.doseScheduler) {
-      doseP = (async () => {
-        try {
-          if (!this.doseScheduler.isRunning()) return { outcome: 'none' };
-          const cyc = this.doseScheduler.currentCycle ? this.doseScheduler.currentCycle() : null;
-          const ok = await this.doseScheduler.abortCycle(`flow_watch_shutdown: ${zone ? zone.name : 'pump'} no water flow`, { source: 'flow_watch_shutdown' });
-          return { outcome: ok ? 'aborted' : 'none', cycleLogId: cyc && cyc.cycleLogId };
-        } catch (e) { return { outcome: 'failed', error: e.message }; }
-      })();
-    }
-    const [off, dose] = await Promise.all([offP, doseP]);
+    const { offs: [off], dose } = await this._shutdownWrites({
+      first: [{ eqId, channels: this._runChannels(cfg) }], source: 'flow_watch_shutdown', automationId: g.automationId,
+      abortReason: `flow_watch_shutdown: ${zone ? zone.name : 'pump'} no water flow`,
+    });
     const confirmedChs = (off.items || []).filter(i => i.confirmed).map(i => i.channel);
     try { act.cancelOffTimers(eqId, confirmedChs, g.automationId); } catch (_) { /* the auto-off would only write OFF again */ }
 
@@ -1639,6 +1649,36 @@ class IrrigationFlowWatchService {
     this._sendNotify(RULES.pump_no_flow_shutdown.title, msg, 'critical');
   }
 
+  /**
+   * The OFF half of a run shutdown, shared by the flow-watch pump protection and the
+   * operator's Stop irrigation. `first` boards are written OFF at once (FC15 + read-back,
+   * whole write re-sent once) in parallel with the dose-cycle abort; `afterDose` boards
+   * (the dosing valves) are written OFF with read-back once the abort has returned, so
+   * no dose-controller valve write can land after the confirming read-back. Never
+   * throws; OFF is never blocked by disarm.
+   * @returns {{ offs: Array<{eqId, channels, confirmed, items, error, attempts}>, dose: {outcome, cycleLogId?, error?} }}
+   */
+  async _shutdownWrites({ first = [], afterDose = [], source, automationId = null, userEmail = null, abortReason }) {
+    const write = (w) => this._writeOffSafe(w.eqId, w.channels, source, automationId, userEmail).then(r => ({ ...r, eqId: w.eqId, channels: w.channels }));
+    const firstP = Promise.all(first.map(write));
+    const doseP = this._abortDoseCycle(abortReason, source);
+    const afterP = doseP.then(() => Promise.all(afterDose.map(write)));
+    const [a, dose, b] = await Promise.all([firstP, doseP, afterP]);
+    return { offs: [...a, ...b], dose };
+  }
+
+  /** Abort the running dose cycle (valves closed by the scheduler's abort path). Never throws. */
+  async _abortDoseCycle(reason, source) {
+    const ds = this.doseScheduler;
+    if (!ds) return { outcome: 'none' };
+    try {
+      if (!ds.isRunning()) return { outcome: 'none' };
+      const cyc = ds.currentCycle ? ds.currentCycle() : null;
+      const ok = await ds.abortCycle(reason, { source });
+      return { outcome: ok ? 'aborted' : 'none', cycleLogId: cyc && cyc.cycleLogId, automationId: cyc ? cyc.automationId ?? null : null };
+    } catch (e) { return { outcome: 'failed', error: e.message }; }
+  }
+
   _recordGuardEpisode(cfg, g, kind, e) {
     try {
       const startMs = e.since ?? this.now();
@@ -1668,6 +1708,207 @@ class IrrigationFlowWatchService {
       return true;
     }
     return false;
+  }
+
+  // ─── operator "Stop irrigation" ───────────────────────────────────────────
+
+  /**
+   * Stop ONLY the irrigation side: irrigation pump, mixing pump, zones (irrigation
+   * board) and the dosing valves (dosing board). Requirement 2026-09-27, after
+   * operators used Stop All to end irrigation runs and it switched off all seven fan
+   * boards at ~35 °C (2026-09-26 09:43 and 15:39, 2026-09-27 14:15:54 and 14:16:55;
+   * boards 15/16 stayed off ~6 min).
+   *
+   * Same OFF path as the pump-protection run shutdown (_shutdownWrites): OFF writes
+   * only, FC15 + read-back, re-sent once, never blocked by disarm; relay_events source
+   * 'stop_irrigation' with the operator's email. Order: (0) drop a pending flow-watch
+   * cold restart, (1) cancel every pending START on the two boards (any automation,
+   * any manual timer — timers on other boards are never matched), (2) pumps + zones
+   * OFF in parallel with the dose-cycle abort, then the dosing valves OFF, (3) a second
+   * sweep for a start / dose cycle armed by an automation that was mid-trigger,
+   * (4) auto-offs of confirmed channels cancelled (kept where OFF is unconfirmed, as a
+   * backstop), (5) the runs marked in automation_logs, (6) one alert per press.
+   * Idempotent: pressed when idle it just writes and confirms everything OFF.
+   * Concurrent presses share one in-flight stop.
+   *
+   * @param {object} [opts] { userEmail }
+   * @returns {Promise<object>} see _stopIrrigation
+   */
+  stopIrrigation(opts = {}) {
+    if (this._stopInFlight) return this._stopInFlight;
+    const p = this._stopIrrigation(opts).finally(() => { if (this._stopInFlight === p) this._stopInFlight = null; });
+    this._stopInFlight = p;
+    return p;
+  }
+
+  _boardInfo(eqId) {
+    let row = null;
+    try { row = this.db.prepare('SELECT id, name, register_mappings, last_reading FROM equipment WHERE id = ?').get(eqId); } catch (_) { row = null; }
+    const names = {};
+    let states = {};
+    if (row) {
+      try {
+        for (const m of JSON.parse(row.register_mappings || '[]') || []) {
+          const ch = parseInt(m.register ?? m.address, 10);
+          if (Number.isInteger(ch) && (m.label || m.name)) names[ch] = m.label || m.name;
+        }
+      } catch (_) { /* unnamed */ }
+      try { states = (JSON.parse(row.last_reading || '{}') || {}).relayStates || {}; } catch (_) { states = {}; }
+    }
+    return { exists: !!row, name: row ? row.name : `equipment ${eqId}`, names, states };
+  }
+
+  async _stopIrrigation({ userEmail = null } = {}) {
+    const SOURCE = 'stop_irrigation';
+    const cfg = this.getConfig();
+    const act = this._act();
+    const nowMs = this.now();
+    const irrEq = cfg.irrigation_equipment_id;
+    const dosEq = cfg.dosing_equipment_id;
+    const boards = [irrEq, dosEq];
+    const irrChs = this._runChannels(cfg);
+    const dosChs = [...(cfg.dosing_channels || [])];
+    const who = userEmail || 'an operator';
+    const tz = getSystemTimezone(this.db);
+    const hm = new Date(nowMs).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
+    const irrInfo = this._boardInfo(irrEq);
+    const dosInfo = this._boardInfo(dosEq);
+    const chName = (eqId, ch) => (eqId === irrEq ? irrInfo : dosInfo).names[ch] || `Relay ${ch}`;
+    this.log.warn(`[FlowWatch] STOP IRRIGATION requested by ${who}: ${irrInfo.name} relays ${irrChs.join(',')} + ${dosInfo.name} relays ${dosChs.join(',')} OFF`);
+
+    // 0. a flow-watch cold restart must not re-energise the pumps behind the stop
+    const g = this.guard;
+    if (g) g.operatorStopped = { at: nowMs, by: userEmail };
+    let retryCancelled = false;
+    try { retryCancelled = this.cancelPendingRetry(`Stop irrigation by ${who}`); } catch (e) { this.log.error(`[FlowWatch] stop: retry cancel failed: ${e.message}`); }
+
+    // Who is running: automations owning a pending timer on the two boards, the dose
+    // cycle, the flow-watch guard, and whoever switched a channel that is ON now.
+    const aids = new Set();
+    let pending = [];
+    try { pending = act.listEquipmentTimers(boards) || []; } catch (_) { pending = []; }
+    for (const t of pending) if (t.automationId != null) aids.add(t.automationId);
+    try { const cyc = this.doseScheduler && this.doseScheduler.isRunning() && this.doseScheduler.currentCycle ? this.doseScheduler.currentCycle() : null; if (cyc && cyc.automationId != null) aids.add(cyc.automationId); } catch (_) { /* none */ }
+    if (g && g.automationId != null && g.phase !== 'done') aids.add(g.automationId);
+    const wasOn = [];
+    for (const [eqId, chs, info] of [[irrEq, irrChs, irrInfo], [dosEq, dosChs, dosInfo]]) {
+      for (const ch of chs) {
+        if (info.states[ch] !== true) continue;
+        wasOn.push({ eqId, ch });
+        try { const ev = this._latestEvent(eqId, ch); if (ev && ev.state === 1 && ev.automation_id != null) aids.add(ev.automation_id); } catch (_) { /* unknown owner */ }
+      }
+    }
+
+    // 1. nothing on these boards may start again
+    let cancelled = [];
+    try { cancelled = act.cancelEquipmentTimers(boards, { kind: 'starts' }) || []; } catch (e) { this.log.error(`[FlowWatch] stop: timer cancel failed: ${e.message}`); }
+
+    // 2. pumps + zones OFF with the dose abort alongside; dosing valves OFF behind the abort
+    const abortReason = `${SOURCE}: Stop irrigation pressed by ${who}`;
+    const plan = { first: [{ eqId: irrEq, channels: irrChs }], afterDose: dosChs.length ? [{ eqId: dosEq, channels: dosChs }] : [], source: SOURCE, userEmail, abortReason };
+    let { offs, dose } = await this._shutdownWrites(plan);
+
+    // 3. second sweep: an automation that was mid-trigger may have armed a start or a dose cycle after step 1
+    let late = [];
+    try { late = act.cancelEquipmentTimers(boards, { kind: 'starts' }) || []; } catch (_) { late = []; }
+    let lateDose = { outcome: 'none' };
+    try { if (this.doseScheduler && this.doseScheduler.isRunning()) lateDose = await this._abortDoseCycle(abortReason, SOURCE); } catch (_) { /* reported below */ }
+    if (late.length || lateDose.outcome === 'aborted') {
+      this.log.warn(`[FlowWatch] stop: second sweep found ${late.length} late start(s)${lateDose.outcome === 'aborted' ? ' and a late dose cycle' : ''} — writing OFF again`);
+      cancelled = cancelled.concat(late);
+      ({ offs } = await this._shutdownWrites(plan));
+      if (dose.outcome !== 'aborted' && lateDose.outcome === 'aborted') dose = lateDose;
+    }
+
+    // per-channel result
+    const channels = [];
+    for (const o of offs) {
+      const byCh = new Map((o.items || []).map(i => [i.channel, i]));
+      for (const ch of o.channels) {
+        const it = byCh.get(ch);
+        channels.push({
+          equipment_id: o.eqId, equipment: o.eqId === irrEq ? irrInfo.name : dosInfo.name, channel: ch, name: chName(o.eqId, ch),
+          was_on: (o.eqId === irrEq ? irrInfo : dosInfo).states[ch] ?? null,
+          confirmed: !!(it && it.confirmed), readback: it && typeof it.readback === 'boolean' ? it.readback : null,
+        });
+      }
+    }
+    const unconfirmed = channels.filter(c => !c.confirmed);
+    const ok = unconfirmed.length === 0;
+
+    // 4. auto-offs: cancel where OFF is confirmed; keep them as a backstop where it is not
+    for (const o of offs) {
+      const conf = (o.items || []).filter(i => i.confirmed).map(i => i.channel);
+      if (!conf.length) continue;
+      try { cancelled = cancelled.concat(act.cancelEquipmentTimers([o.eqId], { kind: 'offs', channels: conf, includeRaw: !!o.confirmed }) || []); } catch (_) { /* the auto-off would only write OFF again */ }
+    }
+    for (const t of cancelled) if (t.automationId != null) aids.add(t.automationId);
+
+    // zones: open when pressed + those whose later start was cancelled
+    const zoneSet = new Set(cfg.zone_channels);
+    const interrupted = wasOn.filter(x => x.eqId === irrEq && zoneSet.has(x.ch)).map(x => chName(irrEq, x.ch));
+    const notStarted = [...new Set(cancelled.filter(t => t.equipmentId === irrEq && (t.type === 'delay') && zoneSet.has(t.channel)).map(t => t.channel))]
+      .map(ch => chName(irrEq, ch)).filter(n => !interrupted.includes(n));
+
+    const runs = [...aids].map(id => {
+      let name = null;
+      try { const r = this.db.prepare('SELECT name FROM automations WHERE id = ?').get(id); name = r ? r.name : null; } catch (_) { /* unnamed */ }
+      return { automation_id: id, name };
+    });
+
+    // 5. mark the runs (automation_logs has no 'stopped' status; 'skipped' = the rest of the run skipped)
+    const starts = cancelled.filter(t => t.type === 'delay' || t.type === 'transition_delay');
+    for (const r of runs) {
+      try {
+        act.logAutomationRun(r.automation_id, 'skipped',
+          `STOPPED by operator (Stop irrigation, ${who}) at ${hm}: pumps, zones and dosing switched off; fans/climate not touched.`
+          + ` Zones interrupted: ${interrupted.join(', ') || 'none'}; zones not started: ${notStarted.join(', ') || 'none'}.`
+          + `${dose.outcome === 'aborted' && dose.automationId === r.automation_id ? ` Dose cycle${dose.cycleLogId ? ` #${dose.cycleLogId}` : ''} aborted.` : ''}${ok ? '' : ' OFF NOT confirmed on every channel.'}`);
+      } catch (e) { this.log.error(`[FlowWatch] stop: automation log failed: ${e.message}`); }
+    }
+
+    // 6. one alert per press (info when confirmed; critical + Telegram when not)
+    const irrOff = irrChs.map(ch => chName(irrEq, ch)).join(', ');
+    let message = `Irrigation stopped by ${who} at ${hm} — pumps, zones and dosing off; fans/climate unaffected.`;
+    const detail = [];
+    if (interrupted.length) detail.push(`interrupted ${interrupted.join(', ')}`);
+    if (notStarted.length) detail.push(`not started ${notStarted.join(', ')}`);
+    if (starts.length) detail.push(`${starts.length} pending start(s) cancelled`);
+    if (dose.outcome === 'aborted') detail.push(`dose cycle${dose.cycleLogId ? ` #${dose.cycleLogId}` : ''} aborted`);
+    else if (dose.outcome === 'failed') detail.push(`dose abort FAILED (${dose.error})`);
+    if (retryCancelled) detail.push('flow-watch cold restart cancelled');
+    if (runs.length) detail.push(`runs: ${runs.map(r => r.name || `automation ${r.automation_id}`).join(', ')}`);
+    if (ok) detail.push(`OFF confirmed: ${irrInfo.name} (${irrOff}); ${dosInfo.name} (${dosChs.map(ch => chName(dosEq, ch)).join(', ')})`);
+    if (detail.length) message += ` (${detail.join('; ')}.)`;
+    if (!ok) {
+      message += ` WARNING: OFF NOT CONFIRMED on ${unconfirmed.map(c => `${c.equipment} relay ${c.channel} (${c.name})`).join(', ')} — switch off at the panel NOW.`;
+    }
+    const row = this._createAlert({
+      severity: ok ? 'info' : 'critical', source: 'stop_irrigation', equipment_id: irrEq,
+      fingerprint: `stop_irrigation:${irrEq}:${nowMs}`, // one row per press
+      message, metadata: { user_email: userEmail, confirmed: ok },
+    });
+    if (!ok) this._sendNotify('Stop irrigation NOT confirmed', message, 'critical');
+    this.log.warn(`[FlowWatch] ${message}`);
+    this._relayCache = null;
+
+    return {
+      ok,
+      stopped_at: iso(nowMs),
+      stopped_by: userEmail,
+      message,
+      error: ok ? null : `OFF not confirmed on ${unconfirmed.map(c => `${c.name} (${c.equipment} relay ${c.channel})`).join(', ')} — switch off at the panel.`,
+      channels,
+      unconfirmed,
+      runs_cancelled: runs,
+      zones_interrupted: interrupted,
+      zones_not_started: notStarted,
+      timers_cancelled: cancelled.map(t => ({ key: t.key, type: t.type, equipment_id: t.equipmentId, channel: t.channel, automation_id: t.automationId, fires_at: t.firesAt })),
+      dose: { outcome: dose.outcome, cycle_log_id: dose.cycleLogId ?? null, error: dose.error || null },
+      retry_cancelled: retryCancelled,
+      untouched: 'fans, climate and every other board',
+      alert_id: row && row.id ? row.id : null,
+    };
   }
 
   lastShutdown() {
