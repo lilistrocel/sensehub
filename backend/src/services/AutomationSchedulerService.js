@@ -177,7 +177,8 @@ class AutomationSchedulerService {
           source: 'scheduler',
           automation_id: automation.id,
           fingerprint: `automation_consecutive_skips:${automation.id}`,
-          message: `Automation "${automation.name}" (id=${automation.id}) has skipped ${n} consecutive times. Verify the sensor reading driving the skip is correct.`,
+          messageKey: 'automation.consecutive_skips',
+          messageParams: { name: `${automation.name}`, id: `${automation.id}`, count: n },
         });
       }
       return;

@@ -1,4 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+/* i18n-check: physical-ok (renders dir="ltr": left/right are meant) */
+import { useTranslation } from 'react-i18next';
 
 /**
  * Chart - responsive SVG line chart with ONE Y-AXIS PER UNIT.
@@ -115,9 +117,11 @@ export default function Chart({
   formatTime,
   panelHeight = 150,
   precision = 1,
-  emptyText = 'No readings in this range',
+  emptyText,
   className = '',
 }) {
+  // `t` is time throughout this file, so the translator is `tc`.
+  const { t: tc } = useTranslation('common');
   const wrapRef = useRef(null);
   const width = useMeasuredWidth(wrapRef);
   const [hover, setHover] = useState(null); // { t }
@@ -210,10 +214,11 @@ export default function Chart({
   const flip = hoverX !== null && hoverX > MARGIN.left + plotW * 0.6;
 
   return (
-    <div ref={wrapRef} className={`relative w-full ${className}`.trim()}>
+    // Time runs left -> right in every language: the chart stays LTR in Arabic.
+    <div ref={wrapRef} dir="ltr" className={`relative w-full ${className}`.trim()}>
       {/* legend: line key + label + unit; identity never colour-alone */}
       {clean.length > 1 && (
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 mb-2 text-xs text-ink" aria-label="Series">
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 mb-2 text-xs text-ink" aria-label={tc('chart.series')}>
           {clean.map((s) => (
             <li key={s.key} className="inline-flex items-center gap-1.5">
               <span aria-hidden="true" className={`inline-block w-3 h-0.5 rounded-full ${toneOf(s.tone).bg}`} />
@@ -225,7 +230,7 @@ export default function Chart({
       )}
 
       {!hasData ? (
-        <div className="flex items-center justify-center text-sm text-muted" style={{ height: panelHeight }}>{emptyText}</div>
+        <div className="flex items-center justify-center text-sm text-muted" style={{ height: panelHeight }}>{emptyText ?? tc('chart.noReadings')}</div>
       ) : width > 0 && (
         <svg
           width={width}
@@ -254,7 +259,7 @@ export default function Chart({
             return (
               <g key={panel.unit || `panel-${pi}`}>
                 {/* unit label, top-left of the panel */}
-                <text x={MARGIN.left} y={top - 8} className="fill-muted font-mono tabular" fontSize="10">{panel.unit || 'value'}</text>
+                <text x={MARGIN.left} y={top - 8} className="fill-muted font-mono tabular" fontSize="10">{panel.unit || tc('chart.value')}</text>
                 {/* y grid + ticks */}
                 {panel.ticks.map((v) => (
                   <g key={v}>

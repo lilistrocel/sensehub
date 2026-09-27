@@ -1,0 +1,22 @@
+{
+  "message": "Sulama {who} tarafından {time} saatinde durduruldu — pompalar, bölgeler ve dozlama kapalı; fanlar/iklimlendirme etkilenmedi. {detail} {warning}",
+  "detail": "({items}.)",
+  "interrupted": "yarıda kesilen: {zones}",
+  "not_started": "başlatılmayan: {zones}",
+  "starts_cancelled": {
+    "one": "bekleyen {count} başlatma iptal edildi",
+    "other": "bekleyen {count} başlatma iptal edildi"
+  },
+  "dose_aborted": "dozlama döngüsü{cycle} iptal edildi",
+  "dose_abort_failed": "dozlama iptali BAŞARISIZ ({error})",
+  "retry_cancelled": "akış izleme soğuk yeniden başlatması iptal edildi",
+  "runs": "çalışmalar: {runs}",
+  "off_confirmed": "KAPALI doğrulandı: {irrigation} ({irrigation_channels}); {dosing} ({dosing_channels})",
+  "not_confirmed": "UYARI: {channels} üzerinde KAPATMA ONAYLANMADI — panodan HEMEN kapatın.",
+  "channel": "{equipment} röle {channel} ({name})",
+  "error_not_confirmed": "{channels} üzerinde KAPATMA onaylanmadı — panodan kapatın.",
+  "error_channel": "{name} ({equipment} röle {channel})",
+  "untouched": "fanlar, iklimlendirme ve diğer tüm kartlar",
+  "failed": "Sulamayı Durdur başarısız: {error} — panodan kapatın.",
+  "still_switching": "Hâlâ kapatılıyor (bir kart geç yanıt veriyor). Sonuç birazdan gelecek."
+}

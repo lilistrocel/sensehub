@@ -1,0 +1,20 @@
+{
+  "_comment": "Stop irrigation (IrrigationFlowWatchService.stopIrrigation + routes/irrigationStop.js). English identical to the pre-i18n texts.",
+  "message": "Irrigation stopped by {who} at {time} — pumps, zones and dosing off; fans/climate unaffected. {detail} {warning}",
+  "detail": "({items}.)",
+  "interrupted": "interrupted {zones}",
+  "not_started": "not started {zones}",
+  "starts_cancelled": "{count} pending start(s) cancelled",
+  "dose_aborted": "dose cycle{cycle} aborted",
+  "dose_abort_failed": "dose abort FAILED ({error})",
+  "retry_cancelled": "flow-watch cold restart cancelled",
+  "runs": "runs: {runs}",
+  "off_confirmed": "OFF confirmed: {irrigation} ({irrigation_channels}); {dosing} ({dosing_channels})",
+  "not_confirmed": "WARNING: OFF NOT CONFIRMED on {channels} — switch off at the panel NOW.",
+  "channel": "{equipment} relay {channel} ({name})",
+  "error_not_confirmed": "OFF not confirmed on {channels} — switch off at the panel.",
+  "error_channel": "{name} ({equipment} relay {channel})",
+  "untouched": "fans, climate and every other board",
+  "failed": "Stop irrigation failed: {error} — switch off at the panel.",
+  "still_switching": "Still switching off (a board is slow to answer). The result follows."
+}

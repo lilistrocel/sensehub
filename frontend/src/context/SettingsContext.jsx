@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from './AuthContext';
+import {
+  formatDateTime as fmtDateTime,
+  formatDate as fmtDate,
+  formatTime as fmtTime,
+  formatClock as fmtClock,
+  formatRelativeTime as fmtRelative,
+} from '../i18n/format';
 
 const SettingsContext = createContext(null);
 
@@ -43,110 +51,40 @@ export function SettingsProvider({ children }) {
     }
   }, [isAuthenticated, fetchSettings]);
 
+  // Formatters: the configured farm timezone + the active UI language
+  // (src/i18n/format.js). English output is unchanged (en-US); tr/ar get
+  // localized month names, 24 h clocks and Western digits.
+  const { i18n } = useTranslation(undefined, { useSuspense: false });
+  const lng = i18n.language;
+
   /**
    * Format a date/timestamp in the configured timezone
    * @param {string|Date} dateValue - The date to format
-   * @param {object} options - Optional Intl.DateTimeFormat options
-   * @returns {string} Formatted date string
+   * @param {object} options - Optional Intl.DateTimeFormat options (a field set to undefined is dropped)
+   * @returns {string} Formatted date string ('-' when missing)
    */
-  const formatDateTime = useCallback((dateValue, options = {}) => {
-    if (!dateValue) return '-';
+  const formatDateTime = useCallback(
+    (dateValue, options = {}) => fmtDateTime(dateValue, { ...options, timeZone: timezone, lng }),
+    [timezone, lng],
+  );
 
-    try {
-      // Normalize SQLite timestamps: datetime('now') returns "YYYY-MM-DD HH:MM:SS"
-      // without timezone indicator. Append 'Z' so JS parses them as UTC.
-      let normalized = dateValue;
-      if (typeof dateValue === 'string' && !dateValue.endsWith('Z') && !dateValue.includes('+')) {
-        normalized = dateValue.replace(' ', 'T') + 'Z';
-      }
-      const date = new Date(normalized);
-      if (isNaN(date.getTime())) return '-';
+  /** Date only (no time) in the configured timezone. */
+  const formatDate = useCallback((dateValue) => fmtDate(dateValue, { timeZone: timezone, lng }), [timezone, lng]);
 
-      const defaultOptions = {
-        timeZone: timezone,
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        ...options,
-      };
+  /** Time only (with seconds) in the configured timezone. */
+  const formatTime = useCallback((dateValue) => fmtTime(dateValue, { timeZone: timezone, lng }), [timezone, lng]);
 
-      return new Intl.DateTimeFormat('en-US', defaultOptions).format(date);
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return new Date(dateValue).toLocaleString();
-    }
-  }, [timezone]);
+  /** Time without seconds ("14:05" / "02:05 PM"). */
+  const formatClock = useCallback((dateValue) => fmtClock(dateValue, { timeZone: timezone, lng }), [timezone, lng]);
 
   /**
-   * Format a date only (no time) in the configured timezone
-   * @param {string|Date} dateValue - The date to format
-   * @returns {string} Formatted date string
+   * Relative time ("5 minutes ago", localized) for timestamps younger than
+   * `threshold` hours, otherwise the full date-time.
    */
-  const formatDate = useCallback((dateValue) => {
-    return formatDateTime(dateValue, {
-      hour: undefined,
-      minute: undefined,
-      second: undefined,
-    });
-  }, [formatDateTime]);
-
-  /**
-   * Format a time only (no date) in the configured timezone
-   * @param {string|Date} dateValue - The date to format
-   * @returns {string} Formatted time string
-   */
-  const formatTime = useCallback((dateValue) => {
-    return formatDateTime(dateValue, {
-      year: undefined,
-      month: undefined,
-      day: undefined,
-    });
-  }, [formatDateTime]);
-
-  /**
-   * Format a date as relative time (e.g., "5 minutes ago") for recent timestamps,
-   * or as a full date for older items
-   * @param {string|Date} dateValue - The date to format
-   * @param {number} threshold - Maximum age in hours to show relative time (default: 24)
-   * @returns {string} Formatted relative or absolute time string
-   */
-  const formatRelativeTime = useCallback((dateValue, threshold = 24) => {
-    if (!dateValue) return '-';
-
-    try {
-      const date = new Date(dateValue);
-      if (isNaN(date.getTime())) return '-';
-
-      const now = new Date();
-      const diffMs = now - date;
-      const diffSecs = Math.floor(diffMs / 1000);
-      const diffMins = Math.floor(diffSecs / 60);
-      const diffHours = Math.floor(diffMins / 60);
-      const diffDays = Math.floor(diffHours / 24);
-
-      // If older than threshold hours, show full date
-      if (diffHours >= threshold) {
-        return formatDateTime(dateValue);
-      }
-
-      // Show relative time for recent items
-      if (diffSecs < 60) {
-        return diffSecs <= 5 ? 'Just now' : `${diffSecs} seconds ago`;
-      } else if (diffMins < 60) {
-        return diffMins === 1 ? '1 minute ago' : `${diffMins} minutes ago`;
-      } else if (diffHours < 24) {
-        return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
-      } else {
-        return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
-      }
-    } catch (error) {
-      console.error('Error formatting relative time:', error);
-      return formatDateTime(dateValue);
-    }
-  }, [formatDateTime]);
+  const formatRelativeTime = useCallback(
+    (dateValue, threshold = 24) => fmtRelative(dateValue, { thresholdHours: threshold, timeZone: timezone, lng }),
+    [timezone, lng],
+  );
 
   /**
    * Refresh settings from the server
@@ -161,6 +99,7 @@ export function SettingsProvider({ children }) {
     formatDateTime,
     formatDate,
     formatTime,
+    formatClock,
     formatRelativeTime,
     refreshSettings,
   };

@@ -18,7 +18,11 @@ export const CLIMATE_BANDS = {
   water_ph: { min: 5.3, max: 6.8 },
 };
 
-/** Tile order and display names on the Now strip (keys from status-board.climate). */
+/**
+ * Tile order on the Now strip (keys from status-board.climate). Display names
+ * are translations: dashboard:climate.<key> (the English `label` is only the
+ * reference / fallback).
+ */
 export const CLIMATE_TILES = [
   { key: 'temp_shielded', label: 'Air temp, shielded', precision: 1 },
   { key: 'rh', label: 'Relative humidity', precision: 1 },
@@ -34,7 +38,7 @@ export const CLIMATE_TILES = [
   { key: 'water_temp', label: 'Water temp', precision: 1 },
 ];
 
-/** Time ranges for the trend charts. */
+/** Time ranges for the trend charts (labels: dashboard:range.<value>). */
 export const TIME_RANGES = [
   { value: '6', label: '6 h' },
   { value: '24', label: '24 h' },
@@ -42,7 +46,8 @@ export const TIME_RANGES = [
 ];
 
 /**
- * Trend charts. Each series maps a (equipment_id, metric) pair from
+ * Trend charts (titles: dashboard:trends.charts.<key>, series labels:
+ * dashboard:trends.series.<series key>). Each series maps a (equipment_id, metric) pair from
  * /api/dashboard/overview chartReadings to a house palette tone. Tones are
  * fixed per entity, never cycled; two-series panels use lighting + caution,
  * the only house pair that clears the CVD separation check.

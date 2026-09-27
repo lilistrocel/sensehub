@@ -5,11 +5,39 @@
  *   - telegram_bot_token: Bot token from @BotFather
  *   - telegram_chat_id: Chat/group ID to send messages to
  *   - telegram_enabled: Whether Telegram notifications are active
+ *   - telegram_language: 'en' | 'tr' | 'ar' (default 'en') — language of the
+ *     alert texts sent to the chat. Titles / bodies may be plain strings (sent
+ *     as-is) or i18n message specs ({ $k, $p } / { key, params }) rendered in it.
  */
 
 const https = require('https');
 const http = require('http');
 const { db } = require('../utils/database');
+const i18n = require('../i18n');
+const { getSystemTimezone } = require('../utils/systemTimezone');
+
+const SEVERITY_EMOJI = { info: 'ℹ️', warning: '⚠️', critical: '🚨', error: '❌' };
+
+/**
+ * Pure formatter of one Telegram alert (tests): title / details are strings or
+ * i18n specs, rendered in `lang`; timestamp in `tz` (24 h, Western digits for
+ * tr / ar; en keeps the historical en-US format).
+ */
+function formatTelegramAlert({ title, details, severity = 'warning', lang = 'en', tz, at = new Date() }) {
+  const L = i18n.normalizeLang(lang) || 'en';
+  const emoji = SEVERITY_EMOJI[severity] || '⚠️';
+  const titleText = i18n.render(L, title);
+  const body = i18n.render(L, details);
+  let timestamp;
+  try {
+    timestamp = L === 'en'
+      ? at.toLocaleString('en-US', { timeZone: tz || process.env.TZ || 'UTC' })
+      : at.toLocaleString('en-GB', { timeZone: tz || process.env.TZ || 'UTC', hour12: false, numberingSystem: 'latn' });
+  } catch (_) {
+    timestamp = at.toISOString();
+  }
+  return `${emoji} *${titleText}*\n\n${body}\n\n🕐 ${timestamp}`;
+}
 
 class TelegramService {
   constructor() {
@@ -29,7 +57,7 @@ class TelegramService {
 
     try {
       const rows = db.prepare(
-        "SELECT key, value FROM system_settings WHERE key IN ('telegram_bot_token', 'telegram_chat_id', 'telegram_enabled')"
+        "SELECT key, value FROM system_settings WHERE key IN ('telegram_bot_token', 'telegram_chat_id', 'telegram_enabled', 'telegram_language')"
       ).all();
 
       const config = {};
@@ -44,13 +72,14 @@ class TelegramService {
       this._configCache = {
         botToken: config.telegram_bot_token || '',
         chatId: config.telegram_chat_id || '',
-        enabled: config.telegram_enabled === true || config.telegram_enabled === 'true'
+        enabled: config.telegram_enabled === true || config.telegram_enabled === 'true',
+        language: i18n.normalizeLang(config.telegram_language) || 'en'
       };
       this._configCacheTime = now;
       return this._configCache;
     } catch (err) {
       console.error('[Telegram] Error reading config:', err.message);
-      return { botToken: '', chatId: '', enabled: false };
+      return { botToken: '', chatId: '', enabled: false, language: 'en' };
     }
   }
 
@@ -84,26 +113,27 @@ class TelegramService {
     return this._apiCall(config.botToken, 'sendMessage', payload);
   }
 
+  /** Language of Telegram texts (system_settings.telegram_language, default 'en'). */
+  getLanguage() {
+    return this.getConfig().language || 'en';
+  }
+
   /**
    * Send an alert notification with standard formatting.
+   * `title` / `details` may be English strings (sent as-is, as before) or i18n
+   * specs (i18n.M(key, params) / { key, params }) rendered in the configured
+   * telegram_language.
    */
   async sendAlert(title, details, severity = 'warning') {
-    const severityEmoji = {
-      info: 'ℹ️',
-      warning: '⚠️',
-      critical: '🚨',
-      error: '❌'
-    };
-
-    const emoji = severityEmoji[severity] || '⚠️';
-    const timestamp = new Date().toLocaleString('en-US', { timeZone: process.env.TZ || 'UTC' });
-
-    const message = `${emoji} *${title}*\n\n${details}\n\n🕐 ${timestamp}`;
+    let tz;
+    try { tz = getSystemTimezone(db); } catch (_) { tz = undefined; }
+    const message = formatTelegramAlert({ title, details, severity, lang: this.getLanguage(), tz });
+    const titleText = typeof title === 'string' ? title : i18n.render('en', title);
 
     try {
       return await this.sendMessage(message);
     } catch (err) {
-      console.error(`[Telegram] Failed to send alert "${title}":`, err.message);
+      console.error(`[Telegram] Failed to send alert "${titleText}":`, err.message);
       throw err;
     }
   }
@@ -111,10 +141,11 @@ class TelegramService {
   /**
    * Test the connection by sending a test message.
    */
-  async testConnection(botToken, chatId) {
+  async testConnection(botToken, chatId, lang = null) {
+    const L = i18n.normalizeLang(lang || '') || this.getLanguage();
     const payload = {
       chat_id: chatId,
-      text: '✅ *SenseHub Connected*\n\nTelegram notifications are working correctly.',
+      text: `✅ *${i18n.t(L, 'telegram.test_title')}*\n\n${i18n.t(L, 'telegram.test_body')}`,
       parse_mode: 'Markdown'
     };
 
@@ -177,4 +208,4 @@ class TelegramService {
 
 const telegramService = new TelegramService();
 
-module.exports = { telegramService };
+module.exports = { telegramService, TelegramService, formatTelegramAlert };

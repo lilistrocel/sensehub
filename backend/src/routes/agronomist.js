@@ -3,8 +3,15 @@ const fs = require('fs');
 const { agronomistService } = require('../services/AgronomistService');
 const { agronomistCaptureService } = require('../services/AgronomistCaptureService');
 const { requireRole } = require('../middleware/auth');
+const { agronomistTranslationService, TRANSLATION_LANGS } = require('../services/AgronomistTranslationService');
 
 const router = express.Router();
+
+// Reports are written in English; Turkish / Arabic versions are served by request
+// language (req.lang). ?original=1 forces the English text. Every report response
+// carries translation_status: 'ready' | 'pending' | 'failed' | 'original'.
+const wantsOriginal = (req) => /^(1|true|yes)$/i.test(String(req.query.original || ''));
+const localized = (req, report) => agronomistTranslationService.localizeReport(report, req.lang, { original: wantsOriginal(req) });
 
 const localToday = () => {
   const { db } = require('../utils/database');
@@ -100,7 +107,7 @@ router.post('/retry-now', requireRole('admin', 'operator'), async (req, res) => 
   const { date } = req.body || {};
   try {
     const report = await agronomistService.generateDailyReport(date || null, { force: false });
-    res.json({ ok: true, report, health: agronomistService.getHealth() });
+    res.json({ ok: true, report: localized(req, report), health: agronomistService.getHealth() });
   } catch (err) {
     if (err.code === 'ALREADY_EXISTS') {
       return res.status(409).json({ error: err.message, code: 'ALREADY_EXISTS', health: agronomistService.getHealth() });
@@ -131,7 +138,7 @@ router.put('/config', requireRole('admin'), (req, res) => {
 router.get('/reports', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 30, 100);
   const offset = parseInt(req.query.offset) || 0;
-  res.json(agronomistService.listReports(limit, offset));
+  res.json(agronomistTranslationService.localizeReportList(agronomistService.listReports(limit, offset), req.lang, { original: wantsOriginal(req) }));
 });
 
 // GET /api/agronomist/reports/:id
@@ -140,14 +147,36 @@ router.get('/reports/:id', (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid id' });
   const report = agronomistService.getReportById(id);
   if (!report) return res.status(404).json({ error: 'Not found' });
-  res.json(report);
+  res.json(localized(req, report));
 });
 
 // GET /api/agronomist/reports/by-date/:date — YYYY-MM-DD
 router.get('/reports/by-date/:date', (req, res) => {
   const report = agronomistService.getReportByDate(req.params.date);
   if (!report) return res.status(404).json({ error: 'Not found' });
-  res.json(report);
+  res.json(localized(req, report));
+});
+
+// POST /api/agronomist/reports/:id/translate — (re)translate a report on request (admin).
+// Body: { lang: 'tr' | 'ar' | 'all', wait?: boolean }. The only backfill path for
+// reports older than the translation feature (each language is one paid API call).
+// wait=false (default) → 202 { queued }; wait=true → 200 { results } after the call(s).
+router.post('/reports/:id/translate', requireRole('admin'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const { lang, wait } = req.body || {};
+  const langs = lang === 'all' ? TRANSLATION_LANGS : (TRANSLATION_LANGS.includes(lang) ? [lang] : null);
+  if (!langs) return res.status(400).json({ error: `lang must be one of: ${TRANSLATION_LANGS.join(', ')}, all` });
+  const report = agronomistService.getReportById(id);
+  if (!report) return res.status(404).json({ error: 'Not found' });
+  if (report.status !== 'success') return res.status(409).json({ error: 'Only a successful report can be translated' });
+  if (wait) {
+    const results = [];
+    for (const l of langs) results.push({ lang: l, ...(await agronomistTranslationService.translateReport(id, l, { force: true })) });
+    return res.json({ ok: results.every(r => r.status === 'ready'), report_id: id, results, statuses: agronomistTranslationService.statuses(report) });
+  }
+  const queued = agronomistTranslationService.enqueueReport(id, { langs, force: true, reason: 'admin' });
+  res.status(202).json({ ok: true, report_id: id, queued, statuses: agronomistTranslationService.statuses(report) });
 });
 
 // POST /api/agronomist/generate — manual trigger
@@ -156,7 +185,7 @@ router.post('/generate', requireRole('admin', 'operator'), async (req, res) => {
   const { date, force } = req.body || {};
   try {
     const report = await agronomistService.generateDailyReport(date || null, { force: !!force });
-    res.json({ ok: true, report });
+    res.json({ ok: true, report: localized(req, report) });
   } catch (err) {
     if (err.code === 'ALREADY_EXISTS') {
       return res.status(409).json({ error: err.message, code: 'ALREADY_EXISTS' });
@@ -229,7 +258,7 @@ router.post('/reports/:id/clarifications', requireRole('admin', 'operator'), asy
     if (regenerate) {
       try {
         const regenerated = await agronomistService.generateDailyReport(report.report_date, { force: true });
-        return res.json({ ok: true, clarification: clar, report: regenerated, regenerated: true });
+        return res.json({ ok: true, clarification: clar, report: localized(req, regenerated), regenerated: true });
       } catch (err) {
         // Clarification is saved even if regeneration fails; the report content is
         // kept (generateDailyReport never overwrites a success with a failure).

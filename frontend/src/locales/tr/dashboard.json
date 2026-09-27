@@ -1,0 +1,146 @@
+{
+  "now": {
+    "title": "Şimdi",
+    "boardRead": "pano okundu {{time}}",
+    "liveDisconnected": "canlı güncellemeler kesildi",
+    "loadingBoard": "Durum panosu yükleniyor…",
+    "notReportedSince": "{{time}} saatinden beri veri yok"
+  },
+  "climate": {
+    "temp_shielded": "Hava sıcaklığı, korumalı",
+    "rh": "Bağıl nem",
+    "vpd_leaf": "Yaprak VPD",
+    "temp_exposed": "Hava sıcaklığı, açık",
+    "substrate_temp": "Substrat sıcaklığı",
+    "substrate_moisture_far": "Substrat nemi, uzak",
+    "substrate_moisture_near": "Substrat nemi, yakın",
+    "pore_ec_far": "Gözenek EC, uzak",
+    "pore_ec_near": "Gözenek EC, yakın",
+    "water_ph": "Su pH",
+    "water_ec": "Su EC",
+    "water_temp": "Su sıcaklığı"
+  },
+  "range": {
+    "6": "6 sa",
+    "24": "24 sa",
+    "168": "7 gün"
+  },
+  "attention": {
+    "title": "Dikkat",
+    "critical_one": "{{count}} kritik",
+    "critical_other": "{{count}} kritik",
+    "warning_one": "{{count}} uyarı",
+    "warning_other": "{{count}} uyarı",
+    "info_one": "{{count}} bilgi",
+    "info_other": "{{count}} bilgi",
+    "disarmed": "Otomasyonlar askıda",
+    "pollingPaused": "Sorgulama duraklatıldı",
+    "devicesOffline_one": "{{total}} cihazdan {{count}} tanesi çevrim dışı",
+    "devicesOffline_other": "{{total}} cihazdan {{count}} tanesi çevrim dışı",
+    "devicesDisabled_one": "{{count}} devre dışı cihaz",
+    "devicesDisabled_other": "{{count}} devre dışı cihaz",
+    "camera": "Kamera {{name}}: {{status}}",
+    "cameraStatus": {
+      "online": "çevrim içi",
+      "offline": "çevrim dışı",
+      "unreachable": "ulaşılamıyor",
+      "error": "hata"
+    },
+    "noAlerts": "Açık alarm yok",
+    "allOnline_one": "{{count}} cihaz çevrim içi",
+    "allOnline_other": "{{count}} cihazın tümü çevrim içi",
+    "armed": "devrede",
+    "cameraOk": "kamera {{status}}"
+  },
+  "running": {
+    "title": "Neler çalışıyor",
+    "aria": "Neler çalışıyor",
+    "subtitle": "{{online}}/{{total}} cihaz çevrim içi · yaşam sinyalinde {{boards}}",
+    "heartbeatBoards_one": "{{count}} röle kartı",
+    "heartbeatBoards_other": "{{count}} röle kartı",
+    "pollingPaused": "Sorgulama duraklatıldı",
+    "viewerTitle": "İzleyici rolü: salt okunur. Bunu değiştirmesi için bir operatöre başvurun.",
+    "unknownTitle": "Durum bilinmiyor: kart veri göndermedi. Kart geri geldiğinde Ekipman sayfasından kontrol edin.",
+    "commandedTitle": "{{state}} komutu verildi, karttan onay bekleniyor",
+    "readbackFailed": "Son yazma, geri okuma kontrolünden geçemedi",
+    "tapToTurn": "{{state}} yapmak için dokunun",
+    "changedAt": "değişti {{time}}",
+    "bulkInterlocked": "Toplu kontrol devre dışı: bu grupta kilitlemeli kanallar var",
+    "bulkUnknown": "Bir kanalın durumu bilinmediği sürece toplu kontrol devre dışı",
+    "unknownCount_one": "{{count}} bilinmiyor",
+    "unknownCount_other": "{{count}} bilinmiyor",
+    "noChannels": "Bu grupta kanal yok.",
+    "allOn": "Tümünü aç",
+    "allOff": "Tümünü kapat",
+    "noBoards": "Hiçbir röle kartı veri göndermedi.",
+    "bulkFailed_one": "{{total}} komuttan {{count}} tanesi başarısız.",
+    "bulkFailed_other": "{{total}} komuttan {{count}} tanesi başarısız.",
+    "bulkDone_one": "{{group}}: {{count}} kanala {{state}} komutu verildi, onay bekleniyor",
+    "bulkDone_other": "{{group}}: {{count}} kanalın tümüne {{state}} komutu verildi, onay bekleniyor",
+    "confirmTitleOn": "{{group}}: tümü AÇIK",
+    "confirmTitleOff": "{{group}}: tümü KAPALI",
+    "confirmBodyOn": "Aşağıdaki her kanala AÇIK komutu gönderilir. Kart onaylayana kadar her biri sarı kalır.",
+    "confirmBodyOff": "Aşağıdaki her kanala KAPALI komutu gönderilir. Kart onaylayana kadar her biri sarı kalır.",
+    "confirmOn": "Tümünü AÇ",
+    "confirmOff": "Tümünü KAPAT"
+  },
+  "automations": {
+    "title": "Otomasyonlar",
+    "climateRules": "İklim kuralları",
+    "noRules": "Tanımlı iklim kuralı yok. <link>Bir tane oluşturun</link>.",
+    "ruleOn": "açık",
+    "ruleOff": "kapalı",
+    "neverRun": "hiç çalışmadı",
+    "runCount": "çalışma sayısı",
+    "recent": "Son çalışmalar",
+    "nothingRun": "Henüz hiçbir şey çalışmadı.",
+    "trigger": {
+      "scheduler": "zamanlayıcı",
+      "schedule": "program",
+      "threshold": "eşik",
+      "manual": "manuel",
+      "watchdog": "izleme servisi",
+      "watchdog_rearm": "izleme servisi",
+      "sensor": "sensör",
+      "event": "olay"
+    },
+    "enabledCount_one": "{{count}} otomasyon etkin",
+    "enabledCount_other": "{{count}} otomasyon etkin",
+    "all": "Tüm otomasyonlar"
+  },
+  "trends": {
+    "title": "Eğilimler",
+    "subtitle": "son {{range}}",
+    "rangeLabel": "Eğilim aralığı",
+    "rangeAria": "Eğilim zaman aralığı",
+    "energy": "Enerji:",
+    "seeReports": "Raporlara bakın",
+    "unavailable": "Eğilim verileri alınamıyor: {{error}}",
+    "charts": {
+      "air": "Hava sıcaklığı ve nemi",
+      "moisture": "Substrat nemi",
+      "pore_ec": "Gözenek EC"
+    },
+    "series": {
+      "temp_shielded": "Korumalı",
+      "temp_exposed": "Açık",
+      "rh": "Bağıl nem, korumalı",
+      "moisture_far": "Uzak",
+      "moisture_near": "Yakın",
+      "pore_ec_far": "Uzak",
+      "pore_ec_near": "Yakın"
+    }
+  },
+  "crop": {
+    "title": "Buluttaki ürün kaydı",
+    "noneSynced": "eşitlenmiş kayıt yok",
+    "unnamed": "Adsız ürün",
+    "planted": "dikim {{date}}",
+    "notVerified": "buluttan eşitlendi, yerinde doğrulanmadı",
+    "unavailable": "Buluttaki ürün kaydı alınamıyor: {{error}}"
+  },
+  "errors": {
+    "boardUnavailable": "Durum panosu alınamıyor: {{error}}",
+    "equipmentUnavailable": "Ekipman listesi alınamıyor: {{error}}"
+  }
+}

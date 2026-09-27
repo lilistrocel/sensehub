@@ -2,6 +2,9 @@
  * Irrigation flow watch API (services/IrrigationFlowWatchService.js).
  *
  *   GET /api/flow-watch/status      any role — live state, flow vs expected, active rules, last episode
+ *                                   (active[].message / relays.reason in the request language; active[] also
+ *                                   carries message_en / message_key / message_params. Episode detail texts
+ *                                   are stored English.)
  *   GET /api/flow-watch/episodes    any role — ?kind=&from=&to=&limit=&offset= (from/to ISO 8601)
  *   GET /api/flow-watch/config      admin — thresholds (system_settings 'irrigation_flow_watch') + defaults + baselines
  *   PUT /api/flow-watch/config      admin — partial update; { reset_baselines: true } clears learned baselines
@@ -17,7 +20,7 @@ const router = express.Router();
 
 router.get('/status', (req, res) => {
   try {
-    res.json(getFlowWatchService().getStatus());
+    res.json(getFlowWatchService().getStatus(undefined, { lang: req.lang || 'en' }));
   } catch (err) {
     res.status(500).json({ error: 'Internal Server Error', message: err.message });
   }

@@ -2,13 +2,42 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
+const { SUPPORTED_LANGS, normalizeLang } = require('../i18n');
+
+/** Validate a `language` body field: undefined → undefined (not sent), else 'en'|'tr'|'ar' or an error. */
+function parseLanguage(value) {
+  if (value === undefined) return { value: undefined };
+  const lang = typeof value === 'string' && SUPPORTED_LANGS.includes(value.trim().toLowerCase()) ? value.trim().toLowerCase() : null;
+  if (!lang) return { error: `language must be one of: ${SUPPORTED_LANGS.join(', ')}` };
+  return { value: lang };
+}
+
+/** Set a user's language (creating the preferences row when missing). */
+function setUserLanguage(userId, lang) {
+  const info = db.prepare("UPDATE user_preferences SET language = ?, updated_at = datetime('now') WHERE user_id = ?").run(lang, userId);
+  if (info.changes === 0) {
+    db.prepare('INSERT INTO user_preferences (user_id, sound_alerts_enabled, sound_volume, language) VALUES (?, 0, 0.5, ?)').run(userId, lang);
+  }
+}
+
+function formatPreferences(prefs) {
+  return {
+    sound_alerts_enabled: prefs.sound_alerts_enabled === 1,
+    sound_volume: prefs.sound_volume,
+    alert_sound_critical: prefs.alert_sound_critical,
+    alert_sound_warning: prefs.alert_sound_warning,
+    alert_sound_info: prefs.alert_sound_info,
+    language: normalizeLang(prefs.language) || 'en'
+  };
+}
 
 const router = express.Router();
 
 // GET /api/users - List all users (admin only)
 router.get('/', requireRole('admin'), (req, res) => {
   const users = db.prepare(
-    'SELECT id, email, name, role, is_cloud_synced, last_login, created_at FROM users ORDER BY created_at DESC'
+    `SELECT u.id, u.email, u.name, u.role, u.is_cloud_synced, u.last_login, u.created_at, COALESCE(p.language, 'en') AS language
+     FROM users u LEFT JOIN user_preferences p ON p.user_id = u.id ORDER BY u.created_at DESC`
   ).all();
 
   res.json(users);
@@ -17,6 +46,10 @@ router.get('/', requireRole('admin'), (req, res) => {
 // POST /api/users - Create user (admin only)
 router.post('/', requireRole('admin'), (req, res) => {
   const { email, password, name, role } = req.body;
+  const language = parseLanguage(req.body.language);
+  if (language.error) {
+    return res.status(400).json({ error: 'Bad Request', message: language.error });
+  }
 
   if (!email || !password || !name) {
     return res.status(400).json({ error: 'Bad Request', message: 'Email, password, and name are required' });
@@ -41,12 +74,15 @@ router.post('/', requireRole('admin'), (req, res) => {
     const result = db.prepare(
       'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)'
     ).run(email, passwordHash, name, userRole);
+    const lang = language.value || 'en';
+    setUserLanguage(Number(result.lastInsertRowid), lang);
 
     res.status(201).json({
       id: result.lastInsertRowid,
       email,
       name,
       role: userRole,
+      language: lang,
       message: 'User created successfully'
     });
   } catch (error) {
@@ -60,7 +96,8 @@ router.post('/', requireRole('admin'), (req, res) => {
 // GET /api/users/:id - Get user details (admin only)
 router.get('/:id', requireRole('admin'), (req, res) => {
   const user = db.prepare(
-    'SELECT id, email, name, role, is_cloud_synced, last_login, created_at, updated_at FROM users WHERE id = ?'
+    `SELECT u.id, u.email, u.name, u.role, u.is_cloud_synced, u.last_login, u.created_at, u.updated_at, COALESCE(p.language, 'en') AS language
+     FROM users u LEFT JOIN user_preferences p ON p.user_id = u.id WHERE u.id = ?`
   ).get(req.params.id);
 
   if (!user) {
@@ -74,6 +111,10 @@ router.get('/:id', requireRole('admin'), (req, res) => {
 router.put('/:id', requireRole('admin'), (req, res) => {
   const { email, name, role, password } = req.body;
   const userId = req.params.id;
+  const language = parseLanguage(req.body.language);
+  if (language.error) {
+    return res.status(400).json({ error: 'Bad Request', message: language.error });
+  }
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
 
@@ -112,15 +153,17 @@ router.put('/:id', requireRole('admin'), (req, res) => {
     params.push(bcrypt.hashSync(password, 10));
   }
 
-  if (updates.length === 0) {
+  if (updates.length === 0 && language.value === undefined) {
     return res.status(400).json({ error: 'Bad Request', message: 'No valid fields to update' });
   }
 
-  updates.push("updated_at = datetime('now')");
-  params.push(userId);
-
   try {
-    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    if (updates.length > 0) {
+      updates.push("updated_at = datetime('now')");
+      params.push(userId);
+      db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    }
+    if (language.value !== undefined) setUserLanguage(Number(userId), language.value);
     res.json({ message: 'User updated successfully' });
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === 'SQLITE_CONSTRAINT') {
@@ -177,19 +220,17 @@ router.get('/me/preferences', (req, res) => {
     prefs = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(userId);
   }
 
-  res.json({
-    sound_alerts_enabled: prefs.sound_alerts_enabled === 1,
-    sound_volume: prefs.sound_volume,
-    alert_sound_critical: prefs.alert_sound_critical,
-    alert_sound_warning: prefs.alert_sound_warning,
-    alert_sound_info: prefs.alert_sound_info
-  });
+  res.json(formatPreferences(prefs));
 });
 
 // PUT /api/users/preferences - Update current user's preferences
 router.put('/me/preferences', (req, res) => {
   const userId = req.user.id;
   const { sound_alerts_enabled, sound_volume, alert_sound_critical, alert_sound_warning, alert_sound_info } = req.body;
+  const language = parseLanguage(req.body.language);
+  if (language.error) {
+    return res.status(400).json({ error: 'Bad Request', message: language.error });
+  }
 
   // Check if preferences exist
   const existing = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(userId);
@@ -197,15 +238,16 @@ router.put('/me/preferences', (req, res) => {
   if (!existing) {
     // Create new preferences
     db.prepare(`
-      INSERT INTO user_preferences (user_id, sound_alerts_enabled, sound_volume, alert_sound_critical, alert_sound_warning, alert_sound_info)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO user_preferences (user_id, sound_alerts_enabled, sound_volume, alert_sound_critical, alert_sound_warning, alert_sound_info, language)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       userId,
       sound_alerts_enabled ? 1 : 0,
       sound_volume !== undefined ? sound_volume : 0.5,
       alert_sound_critical || 'alarm',
       alert_sound_warning || 'beep',
-      alert_sound_info || 'chime'
+      alert_sound_info || 'chime',
+      language.value || 'en'
     );
   } else {
     // Update existing preferences
@@ -237,6 +279,11 @@ router.put('/me/preferences', (req, res) => {
       params.push(alert_sound_info);
     }
 
+    if (language.value !== undefined) {
+      updates.push('language = ?');
+      params.push(language.value);
+    }
+
     if (updates.length > 0) {
       updates.push("updated_at = datetime('now')");
       params.push(userId);
@@ -249,14 +296,9 @@ router.put('/me/preferences', (req, res) => {
 
   res.json({
     message: 'Preferences updated successfully',
-    preferences: {
-      sound_alerts_enabled: prefs.sound_alerts_enabled === 1,
-      sound_volume: prefs.sound_volume,
-      alert_sound_critical: prefs.alert_sound_critical,
-      alert_sound_warning: prefs.alert_sound_warning,
-      alert_sound_info: prefs.alert_sound_info
-    }
+    preferences: formatPreferences(prefs)
   });
 });
 
 module.exports = router;
+module.exports.parseLanguage = parseLanguage;

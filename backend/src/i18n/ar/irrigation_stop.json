@@ -1,0 +1,26 @@
+{
+  "message": "أوقف {who} الري الساعة {time} — المضخات والمناطق والحقن متوقفة؛ المراوح/التحكم المناخي لم تتأثر. {detail} {warning}",
+  "detail": "({items}.)",
+  "interrupted": "مُقاطَعة: {zones}",
+  "not_started": "لم تبدأ: {zones}",
+  "starts_cancelled": {
+    "zero": "لم يُلغَ أي تشغيل معلّق",
+    "one": "أُلغي تشغيل معلّق واحد",
+    "two": "أُلغي تشغيلان معلّقان",
+    "few": "أُلغيت {count} تشغيلات معلّقة",
+    "many": "أُلغي {count} تشغيلًا معلّقًا",
+    "other": "أُلغي {count} تشغيل معلّق"
+  },
+  "dose_aborted": "أُلغيت دورة الحقن{cycle}",
+  "dose_abort_failed": "فشل إلغاء الحقن ({error})",
+  "retry_cancelled": "أُلغيت إعادة التشغيل الباردة لمراقب التدفق",
+  "runs": "عمليات التشغيل: {runs}",
+  "off_confirmed": "تأكد الإيقاف: {irrigation} ({irrigation_channels})؛ {dosing} ({dosing_channels})",
+  "not_confirmed": "تحذير: الإيقاف غير مؤكَّد على {channels} — أوقف التشغيل من اللوحة الآن.",
+  "channel": "{equipment} المرحّل {channel} ({name})",
+  "error_not_confirmed": "الإيقاف غير مؤكَّد على {channels} — أوقف التشغيل من اللوحة.",
+  "error_channel": "{name} ({equipment} المرحّل {channel})",
+  "untouched": "المراوح والتحكم المناخي وجميع اللوحات الأخرى",
+  "failed": "فشل إيقاف الري: {error} — أوقف التشغيل من اللوحة.",
+  "still_switching": "لا يزال الإيقاف جاريًا (إحدى اللوحات بطيئة في الاستجابة). ستصل النتيجة لاحقًا."
+}

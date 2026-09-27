@@ -1,0 +1,14 @@
+{
+  "_comment": "Relay safety watchdog force-OFF, relay write read-back, interlock (RelaySafetyWatchdogService, RelayReadback, RelayInterlockService).",
+  "state_on": "ON",
+  "state_off": "OFF",
+  "safety_force_off": "[Safety] Force-OFF {equipment} ch {channel}: Channel was ON for {elapsed}s (threshold {threshold}s, {basis}). Originally turned ON at {on_time}. Watchdog force-OFF complete.",
+  "safety_force_off_by_automation": "[Safety] Force-OFF {equipment} ch {channel}: Channel was ON for {elapsed}s (threshold {threshold}s, {basis}). Originally turned ON at {on_time} by automation #{automation_id} \"{automation}\". Watchdog force-OFF complete.",
+  "safety_basis_action": "expected {s}s + grace",
+  "safety_basis_equipment": "per-equipment override",
+  "safety_basis_global": "global default",
+  "unconfirmed": "{name} ch {channel}: relay write not confirmed — requested {requested}, hardware reads {readback}",
+  "interlock_violation": "[Interlock] {name} ch {channel}{src}: {error}",
+  "interlock_conflict_verified": "[Interlock] HARDWARE CONFLICT on {name}: \"{label_a}\" (ch {a}) and \"{label_b}\" (ch {b}) were both ON. Both forced OFF and verified.",
+  "interlock_conflict_unverified": "[Interlock] HARDWARE CONFLICT on {name}: \"{label_a}\" (ch {a}) and \"{label_b}\" (ch {b}) were both ON. Forced OFF; verified: {verified} — CHECK HARDWARE."
+}

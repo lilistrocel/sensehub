@@ -16,6 +16,10 @@
 const dns = require('dns');
 const { db } = require('../utils/database');
 const { createAlert } = require('../utils/alertBroadcast');
+const { M } = require('../i18n');
+
+// Weekday names for missed-weekly details (literal keys so the catalog test can scan them).
+const DAY_KEYS = ['watchdog.day.0', 'watchdog.day.1', 'watchdog.day.2', 'watchdog.day.3', 'watchdog.day.4', 'watchdog.day.5', 'watchdog.day.6'];
 const { telegramService } = require('./TelegramService');
 const { automationArmingService } = require('./AutomationArmingService');
 
@@ -187,10 +191,12 @@ class WatchdogService {
       if (gapMs > gapThresholdMs) {
         const gapSec = Math.round(gapMs / 1000);
         const durStr = this._formatDuration(gapMs);
+        const durSpec = this._durationSpec(gapMs);
         const msg = `System restarted after ${durStr} gap (last activity: ${lastEvent.created_at})`;
 
         logEvent.run('system', 'restart', 'restart', msg, null, gapSec);
-        createAlert({ severity: 'warning', source: 'watchdog', fingerprint: 'system_restart', message: `Watchdog: ${msg}` });
+        createAlert({ severity: 'warning', source: 'watchdog', fingerprint: 'system_restart',
+          messageKey: 'watchdog.restart_alert', messageParams: { dur: durSpec, at: lastEvent.created_at } });
 
         console.log(`[Watchdog] ${msg}`);
 
@@ -198,7 +204,11 @@ class WatchdogService {
         this._queueNotification(
           `System Restart Detected`,
           `SenseHub was offline for ${durStr}.\nLast activity: ${lastEvent.created_at}\nRestarted: ${now.toISOString()}`,
-          'warning'
+          'warning',
+          {
+            titleSpec: M('watchdog.restart_title'),
+            detailSpec: M('watchdog.restart_detail', { dur: durSpec, at: lastEvent.created_at, restarted: now.toISOString() }),
+          }
         );
 
         // If internet was last known as "down" before the restart, queue that original alert too
@@ -208,7 +218,11 @@ class WatchdogService {
           this._queueNotification(
             `Internet Outage Report`,
             `Internet has been down since ${inetState.downSince} (${this._formatDuration(totalDownSec * 1000)} so far). Will send recovery report when restored.`,
-            'warning'
+            'warning',
+            {
+              titleSpec: M('watchdog.internet_outage_title'),
+              detailSpec: M('watchdog.internet_outage_detail', { since: inetState.downSince, dur: this._durationSpec(totalDownSec * 1000) }),
+            }
           );
         }
       }
@@ -247,8 +261,16 @@ class WatchdogService {
 
   // ─── Notification Queue ───
 
-  _queueNotification(title, detail, severity) {
-    this._pendingNotifications.push({ title, detail, severity, queuedAt: new Date().toISOString() });
+  /**
+   * title / detail stay English strings (logs, the Internet de-dupe filter);
+   * specs.titleSpec / specs.detailSpec are the i18n versions Telegram renders
+   * in telegram_language (falls back to the English strings when absent).
+   */
+  _queueNotification(title, detail, severity, specs = {}) {
+    this._pendingNotifications.push({
+      title, detail, severity, queuedAt: new Date().toISOString(),
+      titleSpec: specs.titleSpec || null, detailSpec: specs.detailSpec || null,
+    });
   }
 
   async _flushPendingNotifications() {
@@ -259,7 +281,7 @@ class WatchdogService {
 
     for (const notif of toSend) {
       try {
-        await telegramService.sendAlert(notif.title, notif.detail, notif.severity);
+        await telegramService.sendAlert(notif.titleSpec || notif.title, notif.detailSpec || notif.detail, notif.severity);
         console.log(`[Watchdog] Queued notification sent: ${notif.title}`);
       } catch (err) {
         console.error(`[Watchdog] Failed to send queued notification "${notif.title}":`, err.message);
@@ -347,17 +369,22 @@ class WatchdogService {
       console.log(`[Watchdog] ${msg}`);
 
       // Log alert to DB immediately (always works, it's local)
-      createAlert({ severity: 'warning', source: 'watchdog', fingerprint: `connectivity_down:${target}`, message: `Watchdog: ${msg}` });
+      createAlert({ severity: 'warning', source: 'watchdog', fingerprint: `connectivity_down:${target}`,
+        messageKey: 'watchdog.conn_down_alert', messageParams: { target } });
 
       if (target === 'internet') {
         // Can't send Telegram — queue it for when internet returns
-        this._queueNotification(`Internet Connection Lost`, `Internet went offline at ${now.toISOString()}. Recovery report will follow.`, 'warning');
+        this._queueNotification(`Internet Connection Lost`, `Internet went offline at ${now.toISOString()}. Recovery report will follow.`, 'warning', {
+          titleSpec: M('watchdog.internet_lost_title'),
+          detailSpec: M('watchdog.internet_lost_detail', { at: now.toISOString() }),
+        });
       } else if (telegramService.isConfigured()) {
         // Non-internet service down — try sending immediately, queue on failure
+        const specs = { titleSpec: M('watchdog.service_offline_title', { target }), detailSpec: M('watchdog.conn_down', { target }) };
         try {
-          await telegramService.sendAlert(`Service Offline: ${target}`, msg, 'warning');
+          await telegramService.sendAlert(specs.titleSpec, specs.detailSpec, 'warning');
         } catch {
-          this._queueNotification(`Service Offline: ${target}`, msg, 'warning');
+          this._queueNotification(`Service Offline: ${target}`, msg, 'warning', specs);
         }
       }
 
@@ -369,6 +396,7 @@ class WatchdogService {
       }
       state.up = true;
       const durStr = durationSec ? this._formatDuration(durationSec * 1000) : 'unknown';
+      const durSpec = durationSec ? this._durationSpec(durationSec * 1000) : M('common.unknown');
       const msg = `${target} back online (was down ${durStr})`;
       logEvent.run('connectivity', target, 'up', msg, null, durationSec);
       state.downSince = null;
@@ -376,22 +404,32 @@ class WatchdogService {
       console.log(`[Watchdog] ${msg}`);
 
       // Log alert to DB
-      createAlert({ severity: 'info', source: 'watchdog', fingerprint: `connectivity_up:${target}`, message: `Watchdog: ${msg}` });
+      createAlert({ severity: 'info', source: 'watchdog', fingerprint: `connectivity_up:${target}`,
+        messageKey: 'watchdog.conn_up_alert', messageParams: { target, dur: durSpec } });
 
       if (target === 'internet') {
         // Internet just recovered — build a full outage report
         const report = `Internet connectivity restored.\nDowntime: ${durStr}${durationSec ? ` (${durationSec}s)` : ''}\nDown since: ${state.downSince || 'unknown'}\nRecovered: ${now.toISOString()}`;
+        const reportSpec = M('watchdog.internet_restored_detail', {
+          downtime: durationSec ? M('watchdog.dur_with_secs', { dur: durSpec, s: String(durationSec) }) : durSpec,
+          since: state.downSince || M('common.unknown'),
+          at: now.toISOString(),
+        });
 
         // Replace any pending "Internet Connection Lost" with the full report
         this._pendingNotifications = this._pendingNotifications.filter(n => !n.title.includes('Internet'));
-        this._queueNotification(`Internet Restored (down ${durStr})`, report, 'info');
+        this._queueNotification(`Internet Restored (down ${durStr})`, report, 'info', {
+          titleSpec: M('watchdog.internet_restored_title', { dur: durSpec }),
+          detailSpec: reportSpec,
+        });
         // Flush will happen on the next part of _tick() since internet is now up
 
       } else if (telegramService.isConfigured()) {
+        const specs = { titleSpec: M('watchdog.service_recovered_title', { target }), detailSpec: M('watchdog.conn_up', { target, dur: durSpec }) };
         try {
-          await telegramService.sendAlert(`Service Recovered: ${target}`, msg, 'info');
+          await telegramService.sendAlert(specs.titleSpec, specs.detailSpec, 'info');
         } catch {
-          this._queueNotification(`Service Recovered: ${target}`, msg, 'info');
+          this._queueNotification(`Service Recovered: ${target}`, msg, 'info', specs);
         }
       }
     }
@@ -459,7 +497,8 @@ class WatchdogService {
             automationId: auto.id,
             name: auto.name,
             type: 'schedule_missed',
-            detail: missedInfo.detail
+            detail: missedInfo.detail,
+            detailSpec: missedInfo.detailSpec || null,
           });
         }
       } else if (triggerType === 'threshold') {
@@ -477,6 +516,7 @@ class WatchdogService {
               name: auto.name,
               type: 'threshold_met_not_fired',
               detail: missedInfo.detail,
+              detailSpec: missedInfo.detailSpec || null,
             });
             continue;
           }
@@ -531,6 +571,9 @@ class WatchdogService {
               name: auto.name,
               type: 'threshold_met_not_fired',
               detail: missedInfo.detail + (rearmError ? `\nAuto-rearm error: ${rearmError}` : ''),
+              detailSpec: rearmError && missedInfo.detailSpec
+                ? M('watchdog.with_rearm_error', { detail: missedInfo.detailSpec, error: rearmError })
+                : (missedInfo.detailSpec || null),
             });
           } else {
             // Update last_watchdog_alert so the next tick's de-dupe window applies
@@ -546,6 +589,10 @@ class WatchdogService {
         const title = alert.type === 'schedule_missed'
           ? `Automation Missed: ${alert.name}`
           : `Threshold Met But Not Fired: ${alert.name}`;
+        const titleSpec = alert.type === 'schedule_missed'
+          ? M('watchdog.title_automation_missed', { name: alert.name })
+          : M('watchdog.title_threshold_not_fired', { name: alert.name });
+        const detailSpec = alert.detailSpec || alert.detail;
 
         db.prepare("UPDATE automations SET last_watchdog_alert = datetime('now') WHERE id = ?").run(alert.automationId);
         createAlert({
@@ -555,15 +602,16 @@ class WatchdogService {
           fingerprint: alert.type === 'schedule_missed'
             ? `watchdog_missed:${alert.automationId}`
             : `watchdog_rearm:${alert.automationId}`,
-          message: `Watchdog: ${title} - ${alert.detail}`,
+          messageKey: 'watchdog.automation_alert',
+          messageParams: { title: titleSpec, detail: detailSpec },
         });
         logEvent.run('automation', alert.name, alert.type, title, alert.detail, null);
 
         // Try sending immediately, queue on failure
         try {
-          await telegramService.sendAlert(title, alert.detail, 'warning');
+          await telegramService.sendAlert(titleSpec, detailSpec, 'warning');
         } catch {
-          this._queueNotification(title, alert.detail, 'warning');
+          this._queueNotification(title, alert.detail, 'warning', { titleSpec, detailSpec });
         }
 
         console.log(`[Watchdog] Alert sent: ${title}`);
@@ -595,15 +643,24 @@ class WatchdogService {
       if (alreadyNotified && lastAlert && (now - lastAlert) < DIGEST_MS) continue;
 
       const downDuration = lastComm ? this._formatDuration(now - lastComm) : 'unknown';
+      const downSpec = lastComm ? this._durationSpec(now - lastComm) : M('common.unknown');
       const errText = eq.error_log || eq.error_message;
       const detail = eq.status === 'error'
         ? `Equipment "${eq.name}" has errors. Last communication: ${downDuration} ago.${errText ? `\nError: ${errText}` : ''}`
         : `Equipment "${eq.name}" is offline. Last communication: ${downDuration} ago.`;
+      const detailSpec = eq.status === 'error'
+        ? (errText
+          ? M('watchdog.equipment_error_detail_with_error', { name: eq.name, dur: downSpec, error: String(errText) })
+          : M('watchdog.equipment_error_detail', { name: eq.name, dur: downSpec }))
+        : M('watchdog.equipment_offline_detail', { name: eq.name, dur: downSpec });
 
       try {
         const severity = eq.status === 'error' ? 'error' : 'warning';
         const kind = alreadyNotified ? 'Still Down' : (eq.status === 'error' ? 'Error' : 'Offline');
         const title = `Equipment ${kind}: ${eq.name}`;
+        const titleSpec = alreadyNotified
+          ? M('watchdog.title_equipment_still_down', { name: eq.name })
+          : (eq.status === 'error' ? M('watchdog.title_equipment_error', { name: eq.name }) : M('watchdog.title_equipment_offline', { name: eq.name }));
         db.prepare("UPDATE equipment SET last_watchdog_alert = datetime('now') WHERE id = ?").run(eq.id);
 
         // One open (unacknowledged) alerts row per device: the stable fingerprint
@@ -614,15 +671,16 @@ class WatchdogService {
           source: 'watchdog',
           equipment_id: eq.id,
           fingerprint: `equipment_offline:${eq.id}`,
-          message: `Watchdog: ${detail}`,
+          messageKey: 'watchdog.equipment_alert',
+          messageParams: { detail: detailSpec },
         });
         const downSeconds = lastComm ? Math.round((now - lastComm) / 1000) : null;
         logEvent.run('equipment', eq.name, eq.status, title, detail, downSeconds);
 
         try {
-          await telegramService.sendAlert(title, detail, severity);
+          await telegramService.sendAlert(titleSpec, detailSpec, severity);
         } catch {
-          this._queueNotification(title, detail, severity);
+          this._queueNotification(title, detail, severity, { titleSpec, detailSpec });
         }
         this._eqDownNotified.add(eq.id);
 
@@ -650,6 +708,10 @@ class WatchdogService {
       const lastAlert = eq.last_watchdog_alert ? this._parseUtcTimestamp(eq.last_watchdog_alert) : null;
       const msg = `Equipment "${eq.name}" is back online${lastAlert ? ` (alerted ${this._formatDuration(now - lastAlert)} ago)` : ''}.`;
       const title = `Equipment Recovered: ${eq.name}`;
+      const titleSpec = M('watchdog.title_equipment_recovered', { name: eq.name });
+      const msgSpec = lastAlert
+        ? M('watchdog.equipment_recovered_alerted', { name: eq.name, dur: this._durationSpec(now - lastAlert) })
+        : M('watchdog.equipment_recovered', { name: eq.name });
       try {
         logEvent.run('equipment', eq.name, 'recovered', title, msg, null);
         createAlert({
@@ -657,12 +719,13 @@ class WatchdogService {
           source: 'watchdog',
           equipment_id: eq.id,
           fingerprint: `equipment_recovered:${eq.id}`,
-          message: `Watchdog: ${msg}`,
+          messageKey: 'watchdog.equipment_alert',
+          messageParams: { detail: msgSpec },
         });
         try {
-          await telegramService.sendAlert(title, msg, 'info');
+          await telegramService.sendAlert(titleSpec, msgSpec, 'info');
         } catch {
-          this._queueNotification(title, msg, 'info');
+          this._queueNotification(title, msg, 'info', { titleSpec, detailSpec: msgSpec });
         }
         console.log(`[Watchdog] Equipment recovered: ${eq.name}`);
       } catch (err) {
@@ -800,6 +863,7 @@ class WatchdogService {
           return {
             missed: true,
             detail: `Daily automation scheduled for ${triggerConfig.time} has not fired today.${lastRun ? ` Last run: ${lastRun.toISOString()}` : ' Never run.'}`,
+            detailSpec: M('watchdog.missed_daily', { time: String(triggerConfig.time), last: this._lastRunSpec(lastRun) }),
             windowMs: 24 * 3600000
           };
         }
@@ -821,6 +885,10 @@ class WatchdogService {
           return {
             missed: true,
             detail: `Weekly automation (${days[dayOfWeek]} at ${triggerConfig.time}) has not fired this week.${lastRun ? ` Last run: ${lastRun.toISOString()}` : ' Never run.'}`,
+            detailSpec: M('watchdog.missed_weekly', {
+              day: DAY_KEYS[dayOfWeek] ? M(DAY_KEYS[dayOfWeek]) : String(days[dayOfWeek]),
+              time: String(triggerConfig.time), last: this._lastRunSpec(lastRun),
+            }),
             windowMs: 7 * 24 * 3600000
           };
         }
@@ -837,6 +905,7 @@ class WatchdogService {
           return {
             missed: true,
             detail: `Hourly automation (at :${String(minute).padStart(2, '0')}) has not fired this hour.${lastRun ? ` Last run: ${lastRun.toISOString()}` : ' Never run.'}`,
+            detailSpec: M('watchdog.missed_hourly', { minute: String(minute).padStart(2, '0'), last: this._lastRunSpec(lastRun) }),
             windowMs: 3600000
           };
         }
@@ -954,7 +1023,11 @@ class WatchdogService {
     const opSymbols = { gt: '>', gte: '>=', lt: '<', lte: '<=', eq: '==', neq: '!=' };
     return {
       missed: true,
-      detail: `Threshold condition met for ${sustainedMinutes}+ minutes (${sensorType}: ${currentValue} ${opSymbols[operator] || operator} ${threshold}${triggerConfig.unit || ''}) but automation hasn't fired.${lastRun ? ` Last run: ${lastRun.toISOString()}` : ' Never run.'}\nEquipment: ${equipment.name}`
+      detail: `Threshold condition met for ${sustainedMinutes}+ minutes (${sensorType}: ${currentValue} ${opSymbols[operator] || operator} ${threshold}${triggerConfig.unit || ''}) but automation hasn't fired.${lastRun ? ` Last run: ${lastRun.toISOString()}` : ' Never run.'}\nEquipment: ${equipment.name}`,
+      detailSpec: M('watchdog.threshold_met', {
+        minutes: `${sustainedMinutes}`, sensor: `${sensorType}`, value: `${currentValue}`, op: `${opSymbols[operator] || operator}`,
+        threshold: `${threshold}`, unit: `${triggerConfig.unit || ''}`, last: this._lastRunSpec(lastRun), equipment: `${equipment.name}`,
+      }),
     };
   }
 
@@ -976,6 +1049,23 @@ class WatchdogService {
       ? sqliteDateStr
       : sqliteDateStr.replace(' ', 'T') + 'Z';
     return new Date(str);
+  }
+
+  /** "Last run: <iso>" / "Never run." as an i18n spec (English identical to the detail strings). */
+  _lastRunSpec(lastRun) {
+    return lastRun ? M('watchdog.last_run', { at: lastRun.toISOString() }) : M('watchdog.never_run');
+  }
+
+  /** _formatDuration() as an i18n spec: English renders byte-identical ("45s", "12m", "2h 5m", "3d 4h"). */
+  _durationSpec(ms) {
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return M('watchdog.dur.s', { s: String(seconds) });
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return M('watchdog.dur.m', { m: String(minutes) });
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return M('watchdog.dur.hm', { h: String(hours), m: String(minutes % 60) });
+    const days = Math.floor(hours / 24);
+    return M('watchdog.dur.dh', { d: String(days), h: String(hours % 24) });
   }
 
   _formatDuration(ms) {

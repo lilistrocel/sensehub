@@ -1,0 +1,22 @@
+{
+  "type": {
+    "automated": "مجدول",
+    "manual_app": "يدوي — التطبيق",
+    "manual_panel": "يدوي — اللوحة",
+    "automation": "الأتمتة"
+  },
+  "stop_irrigation": "إيقاف الري",
+  "zone_unknown": "منطقة غير معروفة",
+  "note": {
+    "stopped_by_operator": "أوقفه المشغّل ({source}{user}) عند {at}",
+    "user_suffix": "، {user}",
+    "manual_open_still_on": "كانت {zone} مفتوحة يدويًا أثناء هذا التشغيل: فُتحت {opened} بواسطة {by}، وما زالت مشغّلة",
+    "manual_open_closed": "كانت {zone} مفتوحة يدويًا أثناء هذا التشغيل: فُتحت {opened} بواسطة {by}، وأُغلقت {closed} بواسطة {closed_by}",
+    "no_automation_id": "تسلسل SenseHub بدون معرّف أتمتة (اختبار / تشغيل الآن).",
+    "panel_run": "لم يشغّل أي مرحّل مضخة أو منطقة من SenseHub هذا الماء — تم التشغيل من لوحة التسميد بالري.",
+    "app_switches": "تبديلات المرحّلات من التطبيق أثناء التشغيل (ليست ما شغّل الماء): {switches}",
+    "app_switch": "{zone} {at} بواسطة {by}",
+    "uncontrolled_dosing": "حقن خارج تحكم SenseHub: {tanks}",
+    "tank_litres": "{tank} {litres} L"
+  }
+}

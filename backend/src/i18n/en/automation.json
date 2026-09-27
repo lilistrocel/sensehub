@@ -1,0 +1,8 @@
+{
+  "_comment": "AutomationExecutor / AutomationSchedulerService. User-written alert-action messages are stored as typed (not translated).",
+  "default_alert": "Automation triggered",
+  "consecutive_skips": {
+    "one": "Automation \"{name}\" (id={id}) has skipped {count} consecutive time. Verify the sensor reading driving the skip is correct.",
+    "other": "Automation \"{name}\" (id={id}) has skipped {count} consecutive times. Verify the sensor reading driving the skip is correct."
+  }
+}

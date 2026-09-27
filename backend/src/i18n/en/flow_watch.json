@@ -1,0 +1,163 @@
+{
+  "_comment": "Irrigation flow watch (services/IrrigationFlowWatchService.js). English must stay identical to the pre-i18n texts. Optional fragments are separate keys; {extra}/{note}/... render empty when absent.",
+  "semi": "{a}; {b}",
+  "all": "all",
+  "label": {
+    "zone": "{zone} ({equipment} relay {channel})",
+    "pump": "the irrigation pump ({equipment} relay {channel})",
+    "irrigation": "Irrigation"
+  },
+  "title": {
+    "valve_no_flow": "Irrigation: no water flow",
+    "low_flow": "Irrigation: low flow",
+    "flow_above_expected": "Irrigation: more flow than one zone",
+    "dosing_without_water": "Fertigation: dosing without water",
+    "water_without_valve": "Irrigation: flow with no zone open",
+    "flow_after_pump_off": "Irrigation: flow with pump OFF",
+    "monitor_blind": "Irrigation: flow not verifiable",
+    "manual_panel": "Manual irrigation detected (panel)",
+    "pump_no_flow_shutdown": "Irrigation stopped: no water flow",
+    "resolved": "{title} — resolved",
+    "ended": "{title} — ended",
+    "retry_recovered": "Irrigation recovered after a cold restart",
+    "stop_unconfirmed": "Stop irrigation NOT confirmed"
+  },
+  "fire": {
+    "valve_no_flow": "{label} is ON with the irrigation pump running, but no water is flowing: {flow} L/h for {dur}, expected ~{expected} L/h. Valve not opening? Check the zone valve (then the pump).",
+    "low_flow": "{label}: low flow — {flow} L/h is {pct} % of the expected ~{expected} L/h for {dur}. Valve partly open, blocked filter or pump problem?",
+    "flow_above_expected": "{label}: more water than one zone should take — {mean} L/h ({window} s average) vs ~{base} L/h for this zone (+{pct} %, limit +{limit} %, {basis}) for {dur}. Another valve may be open (manual override or bleed left open?).",
+    "dosing_without_water": "Fertiliser is dosing into a line with no water flow: {tanks} (water {flow} L/h, below {max} L/h for {dur}). {extra}",
+    "water_without_valve": "Water is flowing ({flow} L/h for {dur}) but no irrigation zone relay on {equipment} is ON — stuck-open valve, leak or a manual valve?",
+    "water_without_valve_panel": "Manual irrigation (panel) needs attention: {why}. Water {flow} L/h, started {start}, {water} L so far; {tanks}{ratio}. No SenseHub pump or zone relay is ON — check at the panel.",
+    "manual_panel": "Manual irrigation detected (panel) — water {flow} L/h, started {start}. No SenseHub pump or zone relay is ON, so the zone is unknown {hint} and dosing is outside SenseHub control. {extra}",
+    "flow_after_pump_off": "Water is flowing ({flow} L/h for {dur}) while the irrigation pump relay ({equipment} relay {channel}) is OFF — pump run by hand at the panel, or siphoning?",
+    "monitor_blind": "The irrigation pump is ON but water flow cannot be verified: {why}. Zone, low-flow and dosing checks are paused until it reports again.",
+    "generic": "{rule}"
+  },
+  "basis": {
+    "learned": "learned from {minutes} steady minute(s)",
+    "configured": "configured flow (no baseline learned yet)",
+    "none": "none"
+  },
+  "blind": {
+    "unhealthy": "the flow meter is unhealthy (signal {signal}, error flags {flags}) for {dur}",
+    "no_data": "no data from the flow meter for {dur}"
+  },
+  "dosing": {
+    "stop_disabled": "Automatic dosing stop is OFF (abort_dosing_on_no_water = false) — stop dosing manually.",
+    "stop_pending": "Stopping dosing automatically (aborting dose cycle{cycle})…",
+    "not_running": "The injector valves are open but no dose cycle is running under the scheduler, so the flow watch cannot stop them — close them manually."
+  },
+  "abort": {
+    "closed_body": "dose cycle{cycle} aborted by the flow watch, injector valves closed ({tanks}). Pumps and zone valves were not touched",
+    "missing_body": "dose cycle{cycle} aborted, but closing {tanks} was NOT confirmed — check the injector valves now",
+    "stopped": "Dosing stopped automatically: {body}.",
+    "none_open": "none open",
+    "already_ended": "The dose cycle had already ended.",
+    "failed": "Automatic dosing stop FAILED ({error}) — stop the dose cycle and close the injector valves now."
+  },
+  "end": {
+    "valve_no_flow_recovered": "Resolved: {label} — water flow recovered after {dur} with no flow (now {flow} L/h, expected ~{expected} L/h). The valve opened late.",
+    "valve_no_flow": "{label} ran {dur} with no water flowing (lowest {min} L/h, expected ~{expected} L/h) until the zone/pump switched off at {time}. Check the zone valve before the next run.",
+    "low_flow_recovered": "Resolved: {label} — flow back to {flow} L/h after {dur} of low flow.",
+    "low_flow_escalated": "{label}: low flow turned into no flow after {dur} — see the no-flow alarm.",
+    "low_flow": "{label} ran {dur} at low flow (lowest {min} L/h, expected ~{expected} L/h) until it switched off at {time}.",
+    "flow_above_expected_recovered": "Resolved: {label} — flow back within +{pct} % of the zone baseline after {dur}.",
+    "flow_above_expected": "{label} took more water than one zone for {dur} (highest {max} L/h, {baseline}) until the zone changed at {time}. Check for another valve left open.",
+    "baseline": "baseline ~{base} L/h",
+    "no_baseline": "no baseline",
+    "dosing_recovered": "Resolved: dosing without water ({tanks}) ended after {dur}: water flow recovered ({flow} L/h). {aborted} {litres}",
+    "dosing_had_been_stopped": "Dosing had been stopped automatically (dose cycle aborted).",
+    "dosing": "Dosing without water ({tanks}) lasted {dur}; {how}. {litres} Find out why there was no water flow before the next run.",
+    "litres": "About {litres} L of concentrate went in with no water flow.",
+    "how_aborted_detail": "dosing stopped automatically — {body}",
+    "how_aborted_plain": "dosing stopped automatically (the flow watch aborted the dose cycle)",
+    "how_pending": "automatic dosing stop in progress",
+    "how_failed": "the automatic dosing stop FAILED",
+    "how_stopped": "dosing stopped",
+    "panel_attention": "Manual irrigation (panel) that needed attention ended at {time}: {dur}, {water} L, {tanks}{ratio}. Escalated because {why}.",
+    "water_without_valve_recovered": "Resolved: water flow with no zone open stopped after {dur}.",
+    "water_without_valve": "Water flowed with no zone open for {dur} until a zone opened at {time} (highest {max} L/h).",
+    "manual_panel": "Manual irrigation (panel) ended: {start}–{end}, {dur}, {water} L water, {tanks}{ratio}. {taken} {escalated}",
+    "relays_took_over": "SenseHub relays took over.",
+    "flow_after_pump_off_recovered": "Resolved: water flow with the pump relay OFF stopped after {dur}.",
+    "flow_after_pump_off": "Water flowed with the pump relay OFF for {dur} until the pump was switched on at {time} (highest {max} L/h).",
+    "monitor_blind_recovered": "Resolved: flow meter data is back (was unverifiable for {dur}).",
+    "monitor_blind": "Flow could not be verified for {dur} of pumping; the pump is now OFF. Check the irrigation monitor.",
+    "generic": "{rule} ended after {dur}"
+  },
+  "panel": {
+    "why_long": "running {dur}, longer than {max} min",
+    "why_ratio": "tanks dosing stronger than 1:{max} (1:{ratio})",
+    "why_dosing_low_flow": "tanks still dosing ({litres} L in {dur}) with water below {max} L/h",
+    "why_default": "needs attention",
+    "hint_one": "(≈ one zone's flow)",
+    "hint_two": "(≈ two zones' flow)",
+    "no_dosing": "no dosing measured",
+    "escalated": "Escalated to caution: {why}."
+  },
+  "retry": {
+    "start_valve": "{label} had no water for {dur} with the pumps running (flow {flow} L/h, below {threshold} L/h). Pumps and the zone valve switched off and dosing paused; cold restart of pumps + zone in {pause} s (retry {attempt} of {max}). {extra}",
+    "start_pumps": "{label} had no water for {dur} with the pumps running (flow {flow} L/h, below {threshold} L/h). Pumps switched off and dosing paused; cold restart of the pumps in {pause} s (retry {attempt} of {max}). {extra}",
+    "dose_aborted": "The dose cycle runs on a fixed schedule and cannot pause, so it was aborted: the rest of this run gets NO fertiliser.",
+    "dose_failed": "Pausing dosing FAILED ({error}) — check the injector valves.",
+    "notify": "{message} {dose}",
+    "recovered_valve": "{label} recovered after a cold restart (retry): no water for {dur} with the pumps running, so pumps and valve were stopped {pause} s and restarted — flow back to {flow} L/h {after} after the restart. {note} {dose} The valve sticks when switched under pressure — check it.",
+    "recovered_pumps": "{label} recovered after a cold restart (retry): no water for {dur} with the pumps running, so pumps were stopped {pause} s and restarted — flow back to {flow} L/h {after} after the restart. {note} {dose} Check the zone valve.",
+    "superseded": "{zone} was superseded by the next zone during the pause; pumps restarted for that zone.",
+    "recovered_dose_aborted": "Dosing had to be aborted (fixed schedule): no fertiliser for the rest of this run.",
+    "recovered_dose_resumed": "Dosing resumed with the zone target kept.",
+    "ended": "Restarted, but {why}.",
+    "abandoned": "Cold restart cancelled: {why}. The pumps stay OFF.",
+    "legacy": "{message} {extra}"
+  },
+  "why": {
+    "retry_off": "cold-restart retry is switched off",
+    "no_zone": "no zone was open (pump dead-heading)",
+    "retry_failed": "the cold restart did not bring water",
+    "several_zones": "more than one zone was open",
+    "disarmed": "automations are disarmed (no restart allowed)",
+    "no_pump_end": "no planned pump end (not a scheduled run)",
+    "no_zone_end": "no planned zone end (not a scheduled run)",
+    "too_little_left": "only {seconds} s of the zone would be left after the pause",
+    "off_unconfirmed": "the pumps could not be confirmed OFF for the retry ({error})",
+    "readback_disagrees": "read-back disagrees",
+    "disarmed_in_pause": "automations were disarmed during the retry pause (no restart)",
+    "automation_gone": "the automation was disabled or deleted during the retry pause (no restart)",
+    "relays_unknown": "the irrigation relay state was unknown at the restart",
+    "other_zone_opened": "another zone opened while the stuck zone was still energised",
+    "too_little_left_at_restart": "only {seconds} s of the zone were left at the restart",
+    "on_unconfirmed": "the cold restart ON was not confirmed ({error})",
+    "pump_off_early": "the pump switched off before water was confirmed",
+    "operator_action": "operator action on {equipment} ({source})",
+    "stop_pressed": "Stop irrigation was pressed",
+    "stop_pressed_restart": "Stop irrigation was pressed during the restart",
+    "stop_pressed_restart_unconfirmed": "Stop irrigation was pressed during the restart (OFF NOT confirmed)",
+    "stop_irrigation_by": "Stop irrigation by {who}",
+    "stop_all": "Stop All"
+  },
+  "shutdown": {
+    "main": "Irrigation stopped: {what} — pumps, zones and dosing switched off to prevent over-pressure. {retry} Zones not irrigated this run: {zones}. {check} ({outcome}.) {warning}",
+    "what_zone": "{label} had no water for {dur} with the pumps running",
+    "what_no_zone": "{label} ran with no zone open and no water flowing for {dur}",
+    "retry_failed_valve": "A cold restart (pumps + valve off {pause} s, then on again) did not bring water.",
+    "retry_failed_pumps": "A cold restart (pumps off {pause} s, then on again) did not bring water.",
+    "no_retry": "No cold restart: {why}.",
+    "check_valve": "Check the valve.",
+    "check_no_zone": "Check why no zone was open.",
+    "off_confirmed": "OFF confirmed on relays {relays}",
+    "starts_cancelled": "{count} pending start(s) cancelled",
+    "dose_aborted": "dose cycle{cycle} aborted",
+    "dose_abort_failed": "dose abort FAILED ({error})",
+    "not_confirmed": {
+      "one": "WARNING: OFF NOT CONFIRMED on {equipment} relay {relays}{error} — press Stop All or switch the pumps off at the panel NOW.",
+      "other": "WARNING: OFF NOT CONFIRMED on {equipment} relays {relays}{error} — press Stop All or switch the pumps off at the panel NOW."
+    },
+    "off_unconfirmed_alert": "Irrigation shutdown could not confirm the pumps/zones OFF on {equipment} (relays {relays}{error}). Press Stop All or switch the pumps off at the panel NOW."
+  },
+  "relay_reason": {
+    "not_found": "irrigation equipment #{id} not found",
+    "stale": "irrigation relay board state is stale",
+    "not_reported": "irrigation relay state not reported"
+  }
+}

@@ -1,20 +1,20 @@
 import React from 'react';
 
 /**
- * Panel-on-line card, 8px radius, with an optional 3px LEFT RAIL that carries
- * state. Status is shape + colour: the rail is always paired with a pill or
+ * Panel-on-line card, 8px radius, with an optional 3px state rail on the
+ * START edge (left in LTR, right in Arabic RTL). Status is shape + colour: the rail is always paired with a pill or
  * LED elsewhere in the card, never the only signal.
  *
  * rail: 'idle' | 'ok' | 'caution' | 'alarm' | 'lighting' | 'water' | 'stale' | null
  */
 const RAIL = {
-  idle: 'border-l-[3px] border-l-state-idle',
-  ok: 'border-l-[3px] border-l-state-ok',
-  caution: 'border-l-[3px] border-l-state-caution',
-  alarm: 'border-l-[3px] border-l-state-alarm',
-  lighting: 'border-l-[3px] border-l-state-lighting',
-  water: 'border-l-[3px] border-l-state-water',
-  stale: 'border-l-[3px] border-l-state-caution border-dashed',
+  idle: 'border-s-[3px] border-s-state-idle',
+  ok: 'border-s-[3px] border-s-state-ok',
+  caution: 'border-s-[3px] border-s-state-caution',
+  alarm: 'border-s-[3px] border-s-state-alarm',
+  lighting: 'border-s-[3px] border-s-state-lighting',
+  water: 'border-s-[3px] border-s-state-water',
+  stale: 'border-s-[3px] border-s-state-caution border-dashed',
 };
 
 const PADDING = {

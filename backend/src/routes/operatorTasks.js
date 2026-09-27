@@ -11,8 +11,16 @@
 const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
+const { agronomistTranslationService } = require('../services/AgronomistTranslationService');
 
 const router = express.Router();
+
+// Agronomist-created tasks are written in English; with req.lang tr / ar their
+// title / description / instructions / expected_outcome come from the cached
+// translation (translation_status 'ready'), else English ('pending' | 'failed' |
+// 'original'). ?original=1 forces English.
+const wantsOriginal = (req) => /^(1|true|yes)$/i.test(String(req.query.original || ''));
+const localizeTasks = (req, rows) => agronomistTranslationService.localizeTasks(rows, req.lang, { original: wantsOriginal(req) });
 
 const PRIORITY_ORDER = "CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END";
 
@@ -43,7 +51,7 @@ router.get('/', (req, res) => {
       ORDER BY ${PRIORITY_ORDER}, t.created_at DESC
       LIMIT ?
     `;
-    res.json(db.prepare(sql).all(...args, limit));
+    res.json(localizeTasks(req, db.prepare(sql).all(...args, limit)));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -85,7 +93,7 @@ router.get('/:id', (req, res) => {
       WHERE t.id = ?
     `).get(req.params.id);
     if (!t) return res.status(404).json({ error: 'Task not found' });
-    res.json(t);
+    res.json(localizeTasks(req, t));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

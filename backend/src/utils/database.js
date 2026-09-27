@@ -984,6 +984,13 @@ const initSchema = () => {
     console.error('audit log schema migration failed:', err.message);
   }
 
+  // Multilingual (en/tr/ar): alert message keys, per-user language, AI translation caches.
+  try {
+    require('./i18nSchema').ensureI18nSchema(db);
+  } catch (err) {
+    console.error('i18n schema migration failed:', err.message);
+  }
+
   // SEKO Kontrol 800 EC register auto-ranges (x10 below 2000 µS, x1 above): decode it.
   try {
     require('./sekoEcAutoRange').ensureSekoEcAutoRange(db);

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Chart, Label } from '../../ui';
+import { intlLocale } from '../../i18n/languages';
 import { toEpochMs } from '../../utils/freshness';
 import { API_BASE, TREND_CHARTS, TRENDS_POLL_MS } from './constants';
 import { usePoll } from '../../hooks/usePoll';
@@ -9,6 +11,7 @@ import { usePoll } from '../../hooks/usePoll';
  * change and every 5 minutes. Rows: { equipment_id, name, unit, timestamp, value }.
  */
 export function useTrendSeries({ token, hours, notifyError }) {
+  const { t } = useTranslation('dashboard');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const inFlight = useRef(false);
@@ -22,12 +25,12 @@ export function useTrendSeries({ token, hours, notifyError }) {
       const data = await r.json();
       setRows(Array.isArray(data.chartReadings) ? data.chartReadings : []);
     } catch (e) {
-      notifyError?.(`Trend data unavailable: ${e.message}`, 'trends');
+      notifyError?.(t('trends.unavailable', { error: e.message }), 'trends');
     } finally {
       inFlight.current = false;
       setLoading(false);
     }
-  }, [token, hours, notifyError]);
+  }, [token, hours, notifyError, t]);
 
   useEffect(() => { setLoading(true); }, [fetchRows]);
   usePoll(fetchRows, TRENDS_POLL_MS);
@@ -60,19 +63,31 @@ export function buildTrendCharts(rows, disabledDevices = []) {
 }
 
 export default function TrendsPanel({ rows, hours, disabledDevices, timezone, loading }) {
-  const charts = useMemo(() => buildTrendCharts(rows, disabledDevices), [rows, disabledDevices]);
+  const { t, i18n } = useTranslation('dashboard');
+  const built = useMemo(() => buildTrendCharts(rows, disabledDevices), [rows, disabledDevices]);
+  const charts = useMemo(() => built.map((c) => ({
+    ...c,
+    title: t(`trends.charts.${c.key}`, { defaultValue: c.title }),
+    series: c.series.map((s) => ({ ...s, label: t(`trends.series.${s.key}`, { defaultValue: s.label }) })),
+  })), [built, t]);
   const domain = useMemo(() => {
     const end = Date.now();
     return [end - Number(hours) * 3600 * 1000, end];
   }, [hours, rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const long = Number(hours) > 48;
+  const lng = i18n.language;
   const formatTime = useMemo(() => {
     const tz = timezone || 'UTC';
-    const short = new Intl.DateTimeFormat('en-GB', long ? { timeZone: tz, day: 'numeric', month: 'short' } : { timeZone: tz, hour: '2-digit', minute: '2-digit' });
-    const full = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    // Axis ticks: localized month names, Western digits, 24 h (en-GB style for English axes).
+    const locale = lng === 'en' ? 'en-GB' : intlLocale(lng);
+    const make = (o) => {
+      try { return new Intl.DateTimeFormat(locale, { hourCycle: 'h23', ...o, timeZone: tz }); } catch { return new Intl.DateTimeFormat('en-GB', { ...o, timeZone: 'UTC' }); }
+    };
+    const short = make(long ? { day: 'numeric', month: 'short' } : { hour: '2-digit', minute: '2-digit' });
+    const full = make({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     return (ms, opts) => (opts && opts.long ? full : short).format(new Date(ms));
-  }, [timezone, long]);
+  }, [timezone, long, lng]);
 
   return (
     <div className={`grid grid-cols-1 xl:grid-cols-2 gap-4 ${loading ? 'opacity-70' : ''}`} data-testid="trends">

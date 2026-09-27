@@ -21,6 +21,11 @@
  *
  * Non-GET requests are never retried or replayed (not idempotent); they only
  * feed the connectivity status.
+ *
+ * Every /api request (any method) also carries `Accept-Language: <ui lang>`
+ * unless the caller set one, so server-generated texts (alerts, flow-watch and
+ * dose-controller messages, report summaries) come back in the user's language
+ * without touching the ~270 call sites. See docs/i18n-guide.md.
  */
 import {
   installConnectivity,
@@ -36,6 +41,7 @@ import {
   onResume,
   LONG_HIDE_MS,
 } from './connectivity';
+import { getApiLanguage } from '../i18n/current';
 
 const MIN_RETRIES = 2;
 const MAX_RETRIES = 8;
@@ -87,6 +93,27 @@ function authKey(input, init) {
   } catch {
     return '';
   }
+}
+
+/**
+ * Copy of `init` with Accept-Language added (headers from `init`, else from a
+ * Request `input`). Returns `init` untouched when the caller already set the
+ * header or no language is known.
+ */
+export function withLanguageHeader(input, init, lang) {
+  if (!lang) return init;
+  const src = (init && init.headers)
+    || (input && typeof input === 'object' && !(input instanceof URL) && input.headers)
+    || undefined;
+  let headers;
+  try {
+    headers = new Headers(src || undefined);
+  } catch {
+    return init;
+  }
+  if (headers.has('Accept-Language')) return init;
+  headers.set('Accept-Language', lang);
+  return { ...(init || {}), headers };
 }
 
 export function installResilientFetch() {
@@ -231,9 +258,10 @@ export function installResilientFetch() {
     }
   }
 
-  window.fetch = function resilientFetch(input, init) {
+  window.fetch = function resilientFetch(input, rawInit) {
     const url = requestUrl(input);
-    if (!isApiUrl(url)) return baseFetch(input, init);
+    if (!isApiUrl(url)) return baseFetch(input, rawInit);
+    const init = withLanguageHeader(input, rawInit, getApiLanguage());
     const method = requestMethod(input, init);
     if (method === 'GET' || method === 'HEAD') return resilientGet(input, init);
     // Non-idempotent: never retried; only feeds the connectivity status.
@@ -245,6 +273,6 @@ export function installResilientFetch() {
 }
 
 // Exposed for unit tests.
-export const __test = { backoffMs, isApiUrl, requestMethod, MIN_RETRIES, MAX_RETRIES, inResumeWindow };
+export const __test = { backoffMs, isApiUrl, requestMethod, withLanguageHeader, MIN_RETRIES, MAX_RETRIES, inResumeWindow };
 
 export default installResilientFetch;

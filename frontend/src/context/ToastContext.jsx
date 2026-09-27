@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { shouldSuppressErrorText, subscribe as subscribeConnectivity, getSessionExpiredAt } from '../utils/connectivity';
+import i18n from '../i18n';
+
+// Default titles are resolved when the toast is raised, in the active language.
+const defaultTitle = (type) => i18n.t(`common:toast.${type}`);
 
 const ToastContext = createContext(null);
 
@@ -58,19 +62,19 @@ export function ToastProvider({ children }) {
   }, []);
 
   // Convenience methods
-  const showSuccess = useCallback((message, title = 'Success') => {
+  const showSuccess = useCallback((message, title = defaultTitle('success')) => {
     return addToast({ type: 'success', title, message });
   }, [addToast]);
 
-  const showError = useCallback((message, title = 'Error') => {
+  const showError = useCallback((message, title = defaultTitle('error')) => {
     return addToast({ type: 'error', title, message });
   }, [addToast]);
 
-  const showWarning = useCallback((message, title = 'Warning') => {
+  const showWarning = useCallback((message, title = defaultTitle('warning')) => {
     return addToast({ type: 'warning', title, message });
   }, [addToast]);
 
-  const showInfo = useCallback((message, title = 'Info') => {
+  const showInfo = useCallback((message, title = defaultTitle('info')) => {
     return addToast({ type: 'info', title, message });
   }, [addToast]);
 

@@ -1,0 +1,12 @@
+{
+  "titled": "{title}: {message}",
+  "none": "لا يوجد",
+  "unknown": "غير معروف",
+  "an_operator": "أحد المشغّلين",
+  "relay": "المرحّل {channel}",
+  "relays": "المرحّلات {channels}",
+  "equipment_relay": "{equipment} المرحّل {channel}",
+  "tank": "الخزان {id}",
+  "automation": "الأتمتة {id}",
+  "translation_failed_note": "الترجمة غير متاحة حاليًا — يُعرض النص الإنجليزي الأصلي."
+}

@@ -1,0 +1,14 @@
+{
+  "_comment": "AgronomistSchedulerService provider/failure alert (billing, auth, rate limit, cut-off output). The provider error text is passed through as-is.",
+  "label": {
+    "billing": "Anthropic credit balance exhausted",
+    "auth": "Anthropic API key rejected",
+    "rate_limit": "Anthropic rate limit hit",
+    "other": "Anthropic API error",
+    "truncated_output": "Report output cut off or invalid",
+    "max_tokens": "Report hit the output token limit",
+    "refusal": "Report declined by the model"
+  },
+  "provider_alert": "[Agronomist] {label} — {count} consecutive failed report(s). Last error: {error}",
+  "provider_alert_paused": "[Agronomist] {label} — {count} consecutive failed report(s); scheduled runs paused until settings are saved or Retry now succeeds. Last error: {error}"
+}

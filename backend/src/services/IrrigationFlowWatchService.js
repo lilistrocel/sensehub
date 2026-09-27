@@ -102,6 +102,32 @@
  */
 
 const { getSystemTimezone } = require('../utils/systemTimezone'); // pure (no DB handle of its own)
+const i18n = require('../i18n'); // pure (catalog + renderer)
+
+// ─── i18n: every operator-facing text is an i18n spec ({ $k, $p }, see src/i18n) ───
+// Alerts store the English render in alerts.message plus message_key / message_params;
+// the API / Telegram render the same spec in tr / ar. English output is identical to
+// the pre-i18n texts. Episode detail / automation_logs keep the English render.
+const { M } = i18n;
+const en = (spec) => i18n.render('en', spec);
+/** createAlert / updateOpenAlert arguments of a spec. */
+const keyArgs = (spec) => ({ messageKey: spec.$k, messageParams: spec.$p || {} });
+/** Same spec with its trailing {extra} fragment set (follow-ups: abort outcome, escalation, retry end). */
+const withExtra = (spec, extra) => ({ $k: spec.$k, $p: { ...(spec.$p || {}), extra } });
+/** "a; b; c" in the target language. */
+const semi = (items) => items.slice(1).reduce((acc, x) => M('flow_watch.semi', { a: acc, b: x }), items[0]);
+const cycleRef = (id) => (id ? ` #${id}` : '');
+const TITLES = {
+  valve_no_flow: M('flow_watch.title.valve_no_flow'),
+  low_flow: M('flow_watch.title.low_flow'),
+  flow_above_expected: M('flow_watch.title.flow_above_expected'),
+  dosing_without_water: M('flow_watch.title.dosing_without_water'),
+  water_without_valve: M('flow_watch.title.water_without_valve'),
+  flow_after_pump_off: M('flow_watch.title.flow_after_pump_off'),
+  monitor_blind: M('flow_watch.title.monitor_blind'),
+  manual_panel: M('flow_watch.title.manual_panel'),
+  pump_no_flow_shutdown: M('flow_watch.title.pump_no_flow_shutdown'),
+};
 
 const RULES = {
   valve_no_flow: { severity: 'critical', level: 'alarm', title: 'Irrigation: no water flow' },
@@ -617,7 +643,8 @@ class IrrigationFlowWatchService {
     const eq = this.db.prepare('SELECT last_reading, last_communication FROM equipment WHERE id = ?').get(eqId);
     let value;
     if (!eq) {
-      value = { known: false, reason: `irrigation equipment #${eqId} not found`, ageMs: null };
+      const reasonSpec = M('flow_watch.relay_reason.not_found', { id: String(eqId) });
+      value = { known: false, reason: en(reasonSpec), reasonSpec, ageMs: null };
     } else {
       const commMs = parseDbTs(eq.last_communication);
       const ageMs = commMs === null ? null : nowMs - commMs;
@@ -627,7 +654,8 @@ class IrrigationFlowWatchService {
       const channels = [cfg.pump_channel, ...cfg.zone_channels];
       const haveAll = states && channels.every(ch => typeof states[ch] === 'boolean');
       if (!fresh || !haveAll) {
-        value = { known: false, reason: !fresh ? 'irrigation relay board state is stale' : 'irrigation relay state not reported', ageMs };
+        const reasonSpec = !fresh ? M('flow_watch.relay_reason.stale') : M('flow_watch.relay_reason.not_reported');
+        value = { known: false, reason: en(reasonSpec), reasonSpec, ageMs };
       } else {
         const chan = (ch) => {
           const on = states[ch] === true;
@@ -808,9 +836,16 @@ class IrrigationFlowWatchService {
   }
 
   _aboveThreshold(cfg, zone) {
-    if (zone.baselineLph) return { base: zone.baselineLph, pct: cfg.above_expected_pct, basis: `learned from ${zone.baselineMinutes} steady minute(s)`, threshold: zone.baselineLph * (1 + cfg.above_expected_pct / 100) };
-    if (zone.configuredLph) return { base: zone.configuredLph, pct: cfg.above_expected_fallback_pct, basis: 'configured flow (no baseline learned yet)', threshold: zone.configuredLph * (1 + cfg.above_expected_fallback_pct / 100) };
-    return { base: null, pct: null, basis: 'none', threshold: Infinity };
+    if (zone.baselineLph) {
+      const basisSpec = M('flow_watch.basis.learned', { minutes: String(zone.baselineMinutes) });
+      return { base: zone.baselineLph, pct: cfg.above_expected_pct, basis: en(basisSpec), basisSpec, threshold: zone.baselineLph * (1 + cfg.above_expected_pct / 100) };
+    }
+    if (zone.configuredLph) {
+      const basisSpec = M('flow_watch.basis.configured');
+      return { base: zone.configuredLph, pct: cfg.above_expected_fallback_pct, basis: en(basisSpec), basisSpec, threshold: zone.configuredLph * (1 + cfg.above_expected_fallback_pct / 100) };
+    }
+    const basisSpec = M('flow_watch.basis.none');
+    return { base: null, pct: null, basis: en(basisSpec), basisSpec, threshold: Infinity };
   }
 
   // ─── evaluation ───────────────────────────────────────────────────────────
@@ -1111,9 +1146,10 @@ class IrrigationFlowWatchService {
       if (why) {
         c.escalated = { ...why, at: nowMs };
         this.log.warn(`[FlowWatch] manual panel run escalated: ${why.kind}`);
-        const base = inst.message || this._fireMessage(inst, inst.firedAt || nowMs);
-        inst.message = `${base} Escalated to caution: ${this._panelWhy(c, nowMs)}.`;
-        this._updateOpenAlert(this._fingerprint(inst), { message: inst.message, severity: 'info' });
+        const base = inst.msg || this._fireSpec(inst, inst.firedAt || nowMs);
+        inst.msg = withExtra(base, M('flow_watch.panel.escalated', { why: this._panelWhy(c, nowMs) }));
+        inst.message = en(inst.msg);
+        this._updateOpenAlert(this._fingerprint(inst), { ...keyArgs(inst.msg), severity: 'info' });
         if (inst.episodeId) {
           try { this.db.prepare('UPDATE irrigation_flow_episodes SET severity = ?, updated_at = ? WHERE id = ?').run('warning', iso(nowMs), inst.episodeId); } catch (_) { /* best-effort */ }
         }
@@ -1148,17 +1184,17 @@ class IrrigationFlowWatchService {
     const nutrient = dosed.filter(d => d.nutrient);
     const mean = nutrient.length ? nutrient.reduce((a, d) => a + d.litres, 0) / nutrient.length : 0;
     const ratio = mean > 0 && c.waterL > 0 ? Math.round(c.waterL / mean) : null;
-    const tanks = dosed.filter(d => d.litres > 0).map(d => `${shortTankName(d.name, d.id)} ${fmtL2(d.litres)} L`).join(', ');
-    return { tanks: tanks || 'no dosing measured', ratio, water: fmtLph(c.waterL) };
+    const items = dosed.filter(d => d.litres > 0).map(d => `${shortTankName(d.name, d.id)} ${fmtL2(d.litres)} L`);
+    return { tanks: items.length ? i18n.list(items) : M('flow_watch.panel.no_dosing'), ratio, water: fmtLph(c.waterL) };
   }
 
   _panelWhy(c, nowMs) {
     const cfg = this.getConfig();
     const e = c.escalated || {};
-    if (e.kind === 'long') return `running ${fmtDur(nowMs - c.startMs)}, longer than ${cfg.manual_panel_max_minutes} min`;
-    if (e.kind === 'ratio') return `tanks dosing stronger than 1:${cfg.manual_panel_max_ratio} (1:${Math.round(e.ratio)})`;
-    if (e.kind === 'dosing_low_flow') return `tanks still dosing (${fmtL2(e.litres)} L in ${fmtDur(e.forMs)}) with water below ${fmtLph(cfg.dosing_max_flow_lph)} L/h`;
-    return 'needs attention';
+    if (e.kind === 'long') return M('flow_watch.panel.why_long', { dur: i18n.dur(nowMs - c.startMs), max: String(cfg.manual_panel_max_minutes) });
+    if (e.kind === 'ratio') return M('flow_watch.panel.why_ratio', { max: String(cfg.manual_panel_max_ratio), ratio: String(Math.round(e.ratio)) });
+    if (e.kind === 'dosing_low_flow') return M('flow_watch.panel.why_dosing_low_flow', { litres: fmtL2(e.litres), dur: i18n.dur(e.forMs), max: fmtLph(cfg.dosing_max_flow_lph) });
+    return M('flow_watch.panel.why_default');
   }
 
   _panelZoneHint(c) {
@@ -1166,11 +1202,11 @@ class IrrigationFlowWatchService {
     const exp = st ? Object.values(st.expected || {}).filter(v => v > 0) : [];
     const one = median(exp) || 8820;
     const f = c.startFlow;
-    if (typeof f !== 'number' || !(f > 0)) return '';
+    if (typeof f !== 'number' || !(f > 0)) return null;
     const k = f / one;
-    if (Math.abs(k - 1) <= 0.15) return " (≈ one zone's flow)";
-    if (Math.abs(k - 2) <= 0.3) return " (≈ two zones' flow)";
-    return '';
+    if (Math.abs(k - 1) <= 0.15) return M('flow_watch.panel.hint_one');
+    if (Math.abs(k - 2) <= 0.3) return M('flow_watch.panel.hint_two');
+    return null;
   }
 
   // ─── pump no-flow protection: shutdown / cold-restart retry ──────────────
@@ -1197,7 +1233,7 @@ class IrrigationFlowWatchService {
     // Forget a finished run: pump OFF, no zone ON for 60 s and nothing in progress.
     if (g && !GUARD_BUSY.has(g.phase) && relays.known && !relays.pump.on && onZones.length === 0) {
       if (g.idleSince == null) g.idleSince = nowMs;
-      if (g.phase === 'retry_watch') this._retryEnded(g, nowMs, 'the pump switched off before water was confirmed');
+      if (g.phase === 'retry_watch') this._retryEnded(g, nowMs, M('flow_watch.why.pump_off_early'));
       if (nowMs - g.idleSince >= 60000) { this.guard = null; g = null; }
     } else if (g) {
       g.idleSince = null;
@@ -1209,7 +1245,7 @@ class IrrigationFlowWatchService {
       // Pumps are OFF on purpose (retry pause) or an action is on the wire.
       if (g.phase === 'retry_pause') {
         const op = this._operatorActionSince(cfg, g.retry && g.retry.eventMark);
-        if (op) this._retryAbandoned(g, nowMs, `operator action on ${st.eqName} (${op})`);
+        if (op) this._retryAbandoned(g, nowMs, M('flow_watch.why.operator_action', { equipment: st.eqName, source: String(op) }));
         else if (nowMs >= g.retry.restartAt) {
           g.phase = 'retry_restarting';
           this._track(this._retryRestart(g, nowMs));
@@ -1342,32 +1378,34 @@ class IrrigationFlowWatchService {
 
   _retryDecision(cfg, g, ctx, nowMs) {
     const zone = ctx.zone;
-    if (cfg.max_retries <= 0) return { retry: false, reason: 'cold-restart retry is switched off' };
-    if (!zone) return { retry: false, reason: 'no zone was open (pump dead-heading)' };
-    if ((g.retries.get(zone.channel) || 0) >= cfg.max_retries) return { retry: false, reason: 'the cold restart did not bring water' };
-    if ((ctx.otherZones || []).length) return { retry: false, reason: 'more than one zone was open' };
-    if (this._isDisarmed()) return { retry: false, reason: 'automations are disarmed (no restart allowed)' };
+    if (cfg.max_retries <= 0) return { retry: false, reason: M('flow_watch.why.retry_off') };
+    if (!zone) return { retry: false, reason: M('flow_watch.why.no_zone') };
+    if ((g.retries.get(zone.channel) || 0) >= cfg.max_retries) return { retry: false, reason: M('flow_watch.why.retry_failed') };
+    if ((ctx.otherZones || []).length) return { retry: false, reason: M('flow_watch.why.several_zones') };
+    if (this._isDisarmed()) return { retry: false, reason: M('flow_watch.why.disarmed') };
     const act = this._act();
     const eqId = cfg.irrigation_equipment_id;
     const pumpOff = act.getOffTimer(eqId, cfg.pump_channel);
-    if (!pumpOff) return { retry: false, reason: 'no planned pump end (not a scheduled run)' };
+    if (!pumpOff) return { retry: false, reason: M('flow_watch.why.no_pump_end') };
     // Soft-switch: the zone valve opened >= 1 s before the pumps (no pressure) — keep it
     // energised and cycle only the pumps. Otherwise the valve was switched under
     // pressure: cycle it together with the pumps (cold start, as at 09:52).
     const valveCycle = !(zone.openedAt !== null && ctx.pumpOpenedAt !== null && zone.openedAt <= ctx.pumpOpenedAt - 1000);
     const zoneOff = act.getOffTimer(eqId, zone.channel);
-    if (!zoneOff) return { retry: false, reason: 'no planned zone end (not a scheduled run)' };
+    if (!zoneOff) return { retry: false, reason: M('flow_watch.why.no_zone_end') };
     const pumpEndMs = pumpOff.firesAt.getTime();
     const zoneEndMs = zoneOff.firesAt.getTime();
     const segEndMs = valveCycle ? zoneEndMs : Math.min(pumpEndMs, zoneEndMs);
     const left = (segEndMs - (nowMs + cfg.retry_pause_seconds * 1000)) / 1000;
-    if (left < cfg.retry_min_remaining_seconds) return { retry: false, reason: `only ${Math.max(0, Math.round(left))} s of the zone would be left after the pause` };
+    if (left < cfg.retry_min_remaining_seconds) return { retry: false, reason: M('flow_watch.why.too_little_left', { seconds: String(Math.max(0, Math.round(left))) }) };
     return { retry: true, valveCycle, pumpEndMs, zoneEndMs, segEndMs };
   }
 
   _labelZone(cfg, zone) {
     const st = this._staticInfo(cfg, this.now());
-    return zone ? `${zone.name} (${st.eqName} relay ${zone.channel})` : `the irrigation pump (${st.eqName} relay ${cfg.pump_channel})`;
+    return zone
+      ? M('flow_watch.label.zone', { zone: zone.name, equipment: st.eqName, channel: String(zone.channel) })
+      : M('flow_watch.label.pump', { equipment: st.eqName, channel: String(cfg.pump_channel) });
   }
 
   async _retryStart(g, info, nowMs) {
@@ -1383,9 +1421,15 @@ class IrrigationFlowWatchService {
       restartedAt: null, attempt: g.retries.get(zone.channel), fingerprint: fp, eventMark: this._eventMark(), dose: null,
     };
     const chans = info.valveCycle ? [...this._pumpChannels(cfg), zone.channel] : this._pumpChannels(cfg);
-    const msg = `${label} had no water for ${fmtDur(info.noFlowMs)} with the pumps running (flow ${fmtLph(info.flow)} L/h, below ${fmtLph(info.threshold)} L/h). Pumps${info.valveCycle ? ' and the zone valve' : ''} switched off and dosing paused; cold restart ${info.valveCycle ? 'of pumps + zone ' : 'of the pumps '}in ${cfg.retry_pause_seconds} s (retry ${g.retry.attempt} of ${cfg.max_retries}).`;
+    const startParams = {
+      label, dur: i18n.dur(info.noFlowMs), flow: fmtLph(info.flow), threshold: fmtLph(info.threshold),
+      pause: String(cfg.retry_pause_seconds), attempt: String(g.retry.attempt), max: String(cfg.max_retries),
+    };
+    const spec = info.valveCycle ? M('flow_watch.retry.start_valve', startParams) : M('flow_watch.retry.start_pumps', startParams);
+    const msg = en(spec);
     g.retry.message = msg;
-    const row = this._createAlert({ severity: 'critical', source: 'flow_watch', equipment_id: eqId, fingerprint: fp, message: msg,
+    g.retry.msg = spec;
+    const row = this._createAlert({ severity: 'critical', source: 'flow_watch', equipment_id: eqId, fingerprint: fp, ...keyArgs(spec),
       metadata: { rule: 'pump_no_flow_shutdown', phase: 'retry', run_key: g.runKey } });
     g.retry.alertId = row && row.id ? row.id : null;
     this.log.warn(`[FlowWatch] ALARM pump_no_flow ${g.runKey}: ${msg}`);
@@ -1396,14 +1440,14 @@ class IrrigationFlowWatchService {
     const off = await this._writeOffSafe(eqId, chans, 'flow_watch_retry', g.automationId);
     if (!off.confirmed) {
       g.phase = 'shutting_down';
-      await this._fullShutdown(g, { ...info, whyNoRetry: `the pumps could not be confirmed OFF for the retry (${off.error || 'read-back disagrees'})` }, this.now());
+      await this._fullShutdown(g, { ...info, whyNoRetry: M('flow_watch.why.off_unconfirmed', { error: off.error || M('flow_watch.why.readback_disagrees') }) }, this.now());
       return;
     }
     // 3. pause, then restart from evaluate() (tick / samples) or the wake-up timer
     g.retry.restartAt = this.now() + cfg.retry_pause_seconds * 1000;
     g.phase = 'retry_pause';
     this._setTimer(() => { try { this.evaluate(this.now(), { force: true }); } catch (e) { this.log.error(`[FlowWatch] restart evaluate failed: ${e.message}`); } }, cfg.retry_pause_seconds * 1000 + 50);
-    this._sendNotify(RULES.pump_no_flow_shutdown.title, msg + (g.retry.dose.text || ''), 'critical');
+    this._sendNotify(TITLES.pump_no_flow_shutdown, M('flow_watch.retry.notify', { message: spec, dose: g.retry.dose.spec || null }), 'critical');
   }
 
   async _pauseOrAbortDosing(reason, source) {
@@ -1415,11 +1459,12 @@ class IrrigationFlowWatchService {
     try {
       if (typeof ds.pauseDosing === 'function' && ds.pauseDosing(reason)) return { outcome: 'paused', text: '' };
       const aborted = await ds.abortCycle(reason, { source });
-      return aborted
-        ? { outcome: 'aborted', text: ' The dose cycle runs on a fixed schedule and cannot pause, so it was aborted: the rest of this run gets NO fertiliser.' }
-        : { outcome: 'none', text: '' };
+      if (!aborted) return { outcome: 'none', text: '' };
+      const spec = M('flow_watch.retry.dose_aborted');
+      return { outcome: 'aborted', text: ` ${en(spec)}`, spec };
     } catch (e) {
-      return { outcome: 'failed', text: ` Pausing dosing FAILED (${e.message}) — check the injector valves.` };
+      const spec = M('flow_watch.retry.dose_failed', { error: e.message });
+      return { outcome: 'failed', text: ` ${en(spec)}`, spec };
     }
   }
 
@@ -1438,12 +1483,12 @@ class IrrigationFlowWatchService {
     const info = { zone: r.zone, noFlowMs: r.noFlowMs, noFlowSince: r.noFlowSince, minFlow: r.minFlow, retried: r.attempt };
     if (this._isDisarmed()) {
       g.phase = 'shutting_down';
-      await this._fullShutdown(g, { ...info, whyNoRetry: 'automations were disarmed during the retry pause (no restart)' }, this.now());
+      await this._fullShutdown(g, { ...info, whyNoRetry: M('flow_watch.why.disarmed_in_pause') }, this.now());
       return;
     }
     if (!this._automationEnabled(g.automationId)) {
       g.phase = 'shutting_down';
-      await this._fullShutdown(g, { ...info, whyNoRetry: 'the automation was disabled or deleted during the retry pause (no restart)' }, this.now());
+      await this._fullShutdown(g, { ...info, whyNoRetry: M('flow_watch.why.automation_gone') }, this.now());
       return;
     }
     // Never two zones open: which zones are ON now?
@@ -1451,7 +1496,7 @@ class IrrigationFlowWatchService {
     const onNow = relays.known ? relays.zones.filter(z => z.on).map(z => z.channel) : null;
     if (onNow === null) {
       g.phase = 'shutting_down';
-      await this._fullShutdown(g, { ...info, whyNoRetry: 'the irrigation relay state was unknown at the restart' }, this.now());
+      await this._fullShutdown(g, { ...info, whyNoRetry: M('flow_watch.why.relays_unknown') }, this.now());
       return;
     }
     const others = onNow.filter(ch => ch !== r.zone.channel);
@@ -1459,18 +1504,19 @@ class IrrigationFlowWatchService {
     let note = '';
     if (others.length && !r.valveCycle) {
       g.phase = 'shutting_down';
-      await this._fullShutdown(g, { ...info, whyNoRetry: 'another zone opened while the stuck zone was still energised' }, this.now());
+      await this._fullShutdown(g, { ...info, whyNoRetry: M('flow_watch.why.other_zone_opened') }, this.now());
       return;
     }
-    if (others.length) { zoneToo = false; note = ` ${r.zone.name} was superseded by the next zone during the pause; pumps restarted for that zone.`; }
+    let noteSpec = null;
+    if (others.length) { zoneToo = false; noteSpec = M('flow_watch.retry.superseded', { zone: r.zone.name }); note = ` ${en(noteSpec)}`; }
     const left = (r.segEndMs - nowMs) / 1000;
     if (!others.length && left < cfg.retry_min_remaining_seconds) {
       g.phase = 'shutting_down';
-      await this._fullShutdown(g, { ...info, whyNoRetry: `only ${Math.max(0, Math.round(left))} s of the zone were left at the restart` }, this.now());
+      await this._fullShutdown(g, { ...info, whyNoRetry: M('flow_watch.why.too_little_left_at_restart', { seconds: String(Math.max(0, Math.round(left))) }) }, this.now());
       return;
     }
     const chans = zoneToo ? [r.zone.channel, ...this._pumpChannels(cfg)] : this._pumpChannels(cfg);
-    if (g.operatorStopped) { this._retryAbandoned(g, this.now(), 'Stop irrigation was pressed'); return; }
+    if (g.operatorStopped) { this._retryAbandoned(g, this.now(), M('flow_watch.why.stop_pressed')); return; }
     let on;
     try {
       on = await act.writeOn(eqId, chans, { source: 'flow_watch_retry', automationId: g.automationId });
@@ -1480,12 +1526,12 @@ class IrrigationFlowWatchService {
     if (g.operatorStopped) {
       // Stop irrigation landed while the restart ON was on the wire: undo it at once.
       const off = await this._writeOffSafe(eqId, this._runChannels(cfg), 'stop_irrigation', g.automationId, g.operatorStopped.by || null);
-      this._retryAbandoned(g, this.now(), `Stop irrigation was pressed during the restart${off.confirmed ? '' : ' (OFF NOT confirmed)'}`);
+      this._retryAbandoned(g, this.now(), off.confirmed ? M('flow_watch.why.stop_pressed_restart') : M('flow_watch.why.stop_pressed_restart_unconfirmed'));
       return;
     }
     if (!on || !on.confirmed) {
       g.phase = 'shutting_down';
-      await this._fullShutdown(g, { ...info, whyNoRetry: `the cold restart ON was not confirmed (${(on && on.error) || 'read-back disagrees'})` }, this.now());
+      await this._fullShutdown(g, { ...info, whyNoRetry: M('flow_watch.why.on_unconfirmed', { error: (on && on.error) || M('flow_watch.why.readback_disagrees') }) }, this.now());
       return;
     }
     const now2 = this.now();
@@ -1505,10 +1551,11 @@ class IrrigationFlowWatchService {
     const resumed = this._resumeDosing(g);
     r.restartedAt = now2;
     r.note = note;
+    r.noteSpec = noteSpec;
     r.resumed = resumed;
     g.phase = 'retry_watch';
     this._relayCache = null;
-    this.log.warn(`[FlowWatch] cold restart: ${label} — ${chans.join(',')} ON (dosing ${resumed ? 'resumed' : r.dose && r.dose.outcome === 'aborted' ? 'aborted' : 'n/a'})${note}`);
+    this.log.warn(`[FlowWatch] cold restart: ${en(label)} — ${chans.join(',')} ON (dosing ${resumed ? 'resumed' : r.dose && r.dose.outcome === 'aborted' ? 'aborted' : 'n/a'})${note}`);
   }
 
   _retryRecovered(g, nowMs, flow) {
@@ -1516,14 +1563,19 @@ class IrrigationFlowWatchService {
     const r = g.retry;
     g.phase = 'active';
     const label = this._labelZone(cfg, r.zone);
-    const secs = fmtDur((nowMs - (r.restartedAt || nowMs)));
-    const msg = `${label} recovered after a cold restart (retry): no water for ${fmtDur(r.noFlowMs)} with the pumps running, so pumps${r.valveCycle ? ' and valve' : ''} were stopped ${cfg.retry_pause_seconds} s and restarted — flow back to ${fmtLph(flow)} L/h ${secs} after the restart.${r.note || ''}${r.dose && r.dose.outcome === 'aborted' ? ' Dosing had to be aborted (fixed schedule): no fertiliser for the rest of this run.' : r.resumed ? ' Dosing resumed with the zone target kept.' : ''} ${r.valveCycle ? 'The valve sticks when switched under pressure — check it.' : 'Check the zone valve.'}`;
+    const recParams = {
+      label, dur: i18n.dur(r.noFlowMs), pause: String(cfg.retry_pause_seconds), flow: fmtLph(flow),
+      after: i18n.dur(nowMs - (r.restartedAt || nowMs)), note: r.noteSpec || null,
+      dose: r.dose && r.dose.outcome === 'aborted' ? M('flow_watch.retry.recovered_dose_aborted') : r.resumed ? M('flow_watch.retry.recovered_dose_resumed') : null,
+    };
+    const spec = r.valveCycle ? M('flow_watch.retry.recovered_valve', recParams) : M('flow_watch.retry.recovered_pumps', recParams);
+    const msg = en(spec);
     r.outcome = 'recovered';
-    this._updateOpenAlert(r.fingerprint, { message: msg, severity: 'warning' });
+    this._updateOpenAlert(r.fingerprint, { ...keyArgs(spec), severity: 'warning' });
     this._recordGuardEpisode(cfg, g, 'retry_recovered', { zone: r.zone, since: r.noFlowSince, endMs: nowMs, recovered: 1, minFlow: r.minFlow, endFlow: flow, message: msg,
       severity: 'warning', alertId: r.alertId, doseAborted: r.dose && r.dose.outcome === 'aborted', detail: { retry: this._retryDetail(r), automation_id: g.automationId, automation_name: g.automationName, run_key: g.runKey } });
     this.log.log(`[FlowWatch] ${msg}`);
-    this._sendNotify('Irrigation recovered after a cold restart', msg, 'warning');
+    this._sendNotify(M('flow_watch.title.retry_recovered'), spec, 'warning');
   }
 
   _retryEnded(g, nowMs, why) {
@@ -1532,8 +1584,9 @@ class IrrigationFlowWatchService {
     g.phase = 'active';
     if (!r) return;
     r.outcome = 'ended';
-    const msg = `${r.message} Restarted, but ${why}.`;
-    this._updateOpenAlert(r.fingerprint, { message: msg, severity: 'warning' });
+    const spec = withExtra(this._retryBase(r), M('flow_watch.retry.ended', { why }));
+    const msg = en(spec);
+    this._updateOpenAlert(r.fingerprint, { ...keyArgs(spec), severity: 'warning' });
     this._recordGuardEpisode(cfg, g, 'retry_ended', { zone: r.zone, since: r.noFlowSince, endMs: nowMs, recovered: 0, minFlow: r.minFlow, message: msg,
       severity: 'warning', alertId: r.alertId, detail: { retry: this._retryDetail(r), run_key: g.runKey, automation_id: g.automationId } });
   }
@@ -1544,11 +1597,17 @@ class IrrigationFlowWatchService {
     g.phase = 'active';
     r.outcome = 'abandoned';
     this._resumeDosing(g); // the operator's stop aborts the dose cycle itself; a no-op then
-    const msg = `${r.message} Cold restart cancelled: ${why}. The pumps stay OFF.`;
-    this._updateOpenAlert(r.fingerprint, { message: msg, severity: 'critical' });
+    const spec = withExtra(this._retryBase(r), M('flow_watch.retry.abandoned', { why }));
+    const msg = en(spec);
+    this._updateOpenAlert(r.fingerprint, { ...keyArgs(spec), severity: 'critical' });
     this._recordGuardEpisode(cfg, g, 'retry_abandoned', { zone: r.zone, since: r.noFlowSince, endMs: nowMs, recovered: 0, minFlow: r.minFlow, message: msg,
       severity: 'critical', alertId: r.alertId, detail: { retry: this._retryDetail(r), run_key: g.runKey, automation_id: g.automationId } });
     this.log.warn(`[FlowWatch] ${msg}`);
+  }
+
+  /** The retry-start alert spec (a retry built without one — tests — falls back to its English text). */
+  _retryBase(r) {
+    return r.msg || M('flow_watch.retry.legacy', { message: r.message || '' });
   }
 
   _retryDetail(r) {
@@ -1600,31 +1659,46 @@ class IrrigationFlowWatchService {
     const later = [...new Set(cancelled.filter(t => t.type === 'delay' && t.channel && cfg.zone_channels.includes(t.channel)).map(t => t.channel))];
     for (const ch of later) { const nm = st.names[ch] || `Relay ${ch}`; if (!notIrrigated.includes(nm)) notIrrigated.push(nm); }
 
-    const what = zone
-      ? `${label} had no water for ${fmtDur(info.noFlowMs)} with the pumps running`
-      : `${label} ran with no zone open and no water flowing for ${fmtDur(info.noFlowMs)}`;
-    let msg = `Irrigation stopped: ${what} — pumps, zones and dosing switched off to prevent over-pressure.`;
-    if (retried) msg += ` A cold restart (pumps${retried.valveCycle ? ' + valve' : ''} off ${cfg.retry_pause_seconds} s, then on again) did not bring water.`;
-    else if (info.whyNoRetry && zone) msg += ` No cold restart: ${info.whyNoRetry}.`;
-    msg += ` Zones not irrigated this run: ${notIrrigated.length ? notIrrigated.join(', ') : 'none'}.`;
-    msg += zone ? ' Check the valve.' : ' Check why no zone was open.';
+    const whatSpec = zone
+      ? M('flow_watch.shutdown.what_zone', { label, dur: i18n.dur(info.noFlowMs) })
+      : M('flow_watch.shutdown.what_no_zone', { label, dur: i18n.dur(info.noFlowMs) });
+    const what = en(whatSpec);
+    let retrySpec = null;
+    if (retried) {
+      retrySpec = retried.valveCycle
+        ? M('flow_watch.shutdown.retry_failed_valve', { pause: String(cfg.retry_pause_seconds) })
+        : M('flow_watch.shutdown.retry_failed_pumps', { pause: String(cfg.retry_pause_seconds) });
+    } else if (info.whyNoRetry && zone) retrySpec = M('flow_watch.shutdown.no_retry', { why: info.whyNoRetry });
     const outcome = [];
-    if (off.confirmed) outcome.push(`OFF confirmed on relays ${this._runChannels(cfg).join(', ')}`);
+    if (off.confirmed) outcome.push(M('flow_watch.shutdown.off_confirmed', { relays: i18n.list(this._runChannels(cfg).map(String)) }));
     const nStarts = cancelled.filter(t => t.type !== 'off').length;
-    outcome.push(`${nStarts} pending start(s) cancelled`);
-    if (dose.outcome === 'aborted') outcome.push(`dose cycle${dose.cycleLogId ? ` #${dose.cycleLogId}` : ''} aborted`);
-    else if (dose.outcome === 'failed') outcome.push(`dose abort FAILED (${dose.error})`);
-    msg += ` (${outcome.join('; ')}.)`;
+    outcome.push(M('flow_watch.shutdown.starts_cancelled', { count: nStarts }));
+    if (dose.outcome === 'aborted') outcome.push(M('flow_watch.shutdown.dose_aborted', { cycle: cycleRef(dose.cycleLogId) }));
+    else if (dose.outcome === 'failed') outcome.push(M('flow_watch.shutdown.dose_abort_failed', { error: String(dose.error) }));
+    let warningSpec = null;
     if (!off.confirmed) {
       const bad = (off.items || []).filter(i => !i.confirmed).map(i => i.channel);
-      msg += ` WARNING: OFF NOT CONFIRMED on ${st.eqName} relay${bad.length === 1 ? '' : 's'} ${bad.length ? bad.join(', ') : this._runChannels(cfg).join(', ')}${off.error ? ` (${off.error})` : ''} — press Stop All or switch the pumps off at the panel NOW.`;
+      const relays = (bad.length ? bad : this._runChannels(cfg)).map(String);
+      warningSpec = M('flow_watch.shutdown.not_confirmed', {
+        count: bad.length === 1 ? 1 : 2, equipment: st.eqName, relays: i18n.list(relays), error: off.error ? ` (${off.error})` : '',
+      });
+      const unconfSpec = M('flow_watch.shutdown.off_unconfirmed_alert', {
+        equipment: st.eqName, relays: bad.length ? i18n.list(bad.map(String)) : M('flow_watch.all'), error: off.error ? `: ${off.error}` : '',
+      });
       this._createAlert({ severity: 'critical', source: 'flow_watch', equipment_id: eqId, fingerprint: `flow_watch:shutdown_off_unconfirmed:${eqId}`,
-        message: `Irrigation shutdown could not confirm the pumps/zones OFF on ${st.eqName} (relays ${bad.length ? bad.join(', ') : 'all'}${off.error ? `: ${off.error}` : ''}). Press Stop All or switch the pumps off at the panel NOW.` });
+        ...keyArgs(unconfSpec) });
     }
+    const spec = M('flow_watch.shutdown.main', {
+      what: whatSpec, retry: retrySpec,
+      zones: notIrrigated.length ? i18n.list(notIrrigated) : M('common.none'),
+      check: zone ? M('flow_watch.shutdown.check_valve') : M('flow_watch.shutdown.check_no_zone'),
+      outcome: semi(outcome), warning: warningSpec,
+    });
+    const msg = en(spec);
     const existing = retried ? retried.fingerprint === fp : false;
     let alertId = retried ? retried.alertId : null;
-    if (existing) this._updateOpenAlert(fp, { message: msg, severity: 'critical' });
-    const row = existing ? null : this._createAlert({ severity: 'critical', source: 'flow_watch', equipment_id: eqId, fingerprint: fp, message: msg,
+    if (existing) this._updateOpenAlert(fp, { ...keyArgs(spec), severity: 'critical' });
+    const row = existing ? null : this._createAlert({ severity: 'critical', source: 'flow_watch', equipment_id: eqId, fingerprint: fp, ...keyArgs(spec),
       metadata: { rule: 'pump_no_flow_shutdown', phase: 'shutdown', run_key: g.runKey } });
     if (row && row.id) alertId = row.id;
     if (retried) retried.outcome = 'failed';
@@ -1639,14 +1713,14 @@ class IrrigationFlowWatchService {
       detail: {
         automation_id: g.automationId, automation_name: g.automationName, run_key: g.runKey,
         zones_not_irrigated: notIrrigated, off_confirmed: !!off.confirmed, off_attempts: off.attempts || null,
-        timers_cancelled: cancelled.map(t => t.key), dose: dose.outcome, no_retry_reason: retried ? null : (info.whyNoRetry || null),
+        timers_cancelled: cancelled.map(t => t.key), dose: dose.outcome, no_retry_reason: retried ? null : (info.whyNoRetry ? en(info.whyNoRetry) : null),
         retry: this._retryDetail(retried),
       },
     });
     g.phase = 'done';
     g.lastShutdownAt = this.now();
     this.log.warn(`[FlowWatch] RUN SHUTDOWN ${g.runKey}: ${msg}`);
-    this._sendNotify(RULES.pump_no_flow_shutdown.title, msg, 'critical');
+    this._sendNotify(TITLES.pump_no_flow_shutdown, spec, 'critical');
   }
 
   /**
@@ -1704,7 +1778,8 @@ class IrrigationFlowWatchService {
     const g = this.guard;
     if (!g || !GUARD_RETRY.has(g.phase) || !g.retry) return false;
     if (g.phase === 'retry_pause' || g.phase === 'retry_stopping') {
-      this._retryAbandoned(g, this.now(), why);
+      // callers pass an i18n spec, or an English string ('Stop All' from stop-all is translated)
+      this._retryAbandoned(g, this.now(), why === 'Stop All' ? M('flow_watch.why.stop_all') : why);
       return true;
     }
     return false;
@@ -1768,7 +1843,8 @@ class IrrigationFlowWatchService {
     const boards = [irrEq, dosEq];
     const irrChs = this._runChannels(cfg);
     const dosChs = [...(cfg.dosing_channels || [])];
-    const who = userEmail || 'an operator';
+    const whoSpec = userEmail || M('common.an_operator');
+    const who = en(whoSpec);
     const tz = getSystemTimezone(this.db);
     const hm = new Date(nowMs).toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
     const irrInfo = this._boardInfo(irrEq);
@@ -1780,7 +1856,7 @@ class IrrigationFlowWatchService {
     const g = this.guard;
     if (g) g.operatorStopped = { at: nowMs, by: userEmail };
     let retryCancelled = false;
-    try { retryCancelled = this.cancelPendingRetry(`Stop irrigation by ${who}`); } catch (e) { this.log.error(`[FlowWatch] stop: retry cancel failed: ${e.message}`); }
+    try { retryCancelled = this.cancelPendingRetry(M('flow_watch.why.stop_irrigation_by', { who: whoSpec })); } catch (e) { this.log.error(`[FlowWatch] stop: retry cancel failed: ${e.message}`); }
 
     // Who is running: automations owning a pending timer on the two boards, the dose
     // cycle, the flow-watch guard, and whoever switched a channel that is ON now.
@@ -1868,27 +1944,38 @@ class IrrigationFlowWatchService {
     }
 
     // 6. one alert per press (info when confirmed; critical + Telegram when not)
-    const irrOff = irrChs.map(ch => chName(irrEq, ch)).join(', ');
-    let message = `Irrigation stopped by ${who} at ${hm} — pumps, zones and dosing off; fans/climate unaffected.`;
     const detail = [];
-    if (interrupted.length) detail.push(`interrupted ${interrupted.join(', ')}`);
-    if (notStarted.length) detail.push(`not started ${notStarted.join(', ')}`);
-    if (starts.length) detail.push(`${starts.length} pending start(s) cancelled`);
-    if (dose.outcome === 'aborted') detail.push(`dose cycle${dose.cycleLogId ? ` #${dose.cycleLogId}` : ''} aborted`);
-    else if (dose.outcome === 'failed') detail.push(`dose abort FAILED (${dose.error})`);
-    if (retryCancelled) detail.push('flow-watch cold restart cancelled');
-    if (runs.length) detail.push(`runs: ${runs.map(r => r.name || `automation ${r.automation_id}`).join(', ')}`);
-    if (ok) detail.push(`OFF confirmed: ${irrInfo.name} (${irrOff}); ${dosInfo.name} (${dosChs.map(ch => chName(dosEq, ch)).join(', ')})`);
-    if (detail.length) message += ` (${detail.join('; ')}.)`;
-    if (!ok) {
-      message += ` WARNING: OFF NOT CONFIRMED on ${unconfirmed.map(c => `${c.equipment} relay ${c.channel} (${c.name})`).join(', ')} — switch off at the panel NOW.`;
+    if (interrupted.length) detail.push(M('irrigation_stop.interrupted', { zones: i18n.list(interrupted) }));
+    if (notStarted.length) detail.push(M('irrigation_stop.not_started', { zones: i18n.list(notStarted) }));
+    if (starts.length) detail.push(M('irrigation_stop.starts_cancelled', { count: starts.length }));
+    if (dose.outcome === 'aborted') detail.push(M('irrigation_stop.dose_aborted', { cycle: cycleRef(dose.cycleLogId) }));
+    else if (dose.outcome === 'failed') detail.push(M('irrigation_stop.dose_abort_failed', { error: String(dose.error) }));
+    if (retryCancelled) detail.push(M('irrigation_stop.retry_cancelled'));
+    if (runs.length) detail.push(M('irrigation_stop.runs', { runs: i18n.list(runs.map(r => r.name || M('common.automation', { id: String(r.automation_id) }))) }));
+    if (ok) {
+      detail.push(M('irrigation_stop.off_confirmed', {
+        irrigation: irrInfo.name, irrigation_channels: i18n.list(irrChs.map(ch => chName(irrEq, ch))),
+        dosing: dosInfo.name, dosing_channels: i18n.list(dosChs.map(ch => chName(dosEq, ch))),
+      }));
     }
+    const spec = M('irrigation_stop.message', {
+      who: whoSpec, time: hm,
+      detail: detail.length ? M('irrigation_stop.detail', { items: semi(detail) }) : null,
+      warning: ok ? null : M('irrigation_stop.not_confirmed', {
+        channels: i18n.list(unconfirmed.map(c => M('irrigation_stop.channel', { equipment: c.equipment, channel: String(c.channel), name: c.name }))),
+      }),
+    });
+    const message = en(spec);
+    const errorSpec = ok ? null : M('irrigation_stop.error_not_confirmed', {
+      channels: i18n.list(unconfirmed.map(c => M('irrigation_stop.error_channel', { name: c.name, equipment: c.equipment, channel: String(c.channel) }))),
+    });
+    const untouchedSpec = M('irrigation_stop.untouched');
     const row = this._createAlert({
       severity: ok ? 'info' : 'critical', source: 'stop_irrigation', equipment_id: irrEq,
       fingerprint: `stop_irrigation:${irrEq}:${nowMs}`, // one row per press
-      message, metadata: { user_email: userEmail, confirmed: ok },
+      ...keyArgs(spec), metadata: { user_email: userEmail, confirmed: ok },
     });
-    if (!ok) this._sendNotify('Stop irrigation NOT confirmed', message, 'critical');
+    if (!ok) this._sendNotify(M('flow_watch.title.stop_unconfirmed'), spec, 'critical');
     this.log.warn(`[FlowWatch] ${message}`);
     this._relayCache = null;
 
@@ -1897,7 +1984,12 @@ class IrrigationFlowWatchService {
       stopped_at: iso(nowMs),
       stopped_by: userEmail,
       message,
-      error: ok ? null : `OFF not confirmed on ${unconfirmed.map(c => `${c.name} (${c.equipment} relay ${c.channel})`).join(', ')} — switch off at the panel.`,
+      // i18n: `message` / `error` / `untouched` are English; routes render the specs in the request language
+      message_key: spec.$k,
+      message_params: spec.$p,
+      error: errorSpec ? en(errorSpec) : null,
+      error_key: errorSpec ? errorSpec.$k : null,
+      error_params: errorSpec ? errorSpec.$p : null,
       channels,
       unconfirmed,
       runs_cancelled: runs,
@@ -1906,7 +1998,8 @@ class IrrigationFlowWatchService {
       timers_cancelled: cancelled.map(t => ({ key: t.key, type: t.type, equipment_id: t.equipmentId, channel: t.channel, automation_id: t.automationId, fires_at: t.firesAt })),
       dose: { outcome: dose.outcome, cycle_log_id: dose.cycleLogId ?? null, error: dose.error || null },
       retry_cancelled: retryCancelled,
-      untouched: 'fans, climate and every other board',
+      untouched: en(untouchedSpec),
+      untouched_key: untouchedSpec.$k,
       alert_id: row && row.id ? row.id : null,
     };
   }
@@ -1932,7 +2025,9 @@ class IrrigationFlowWatchService {
   _fingerprint(inst) { return `flow_watch:${inst.key}`; }
 
   _zoneLabel(ctx) {
-    return ctx.zone ? `${ctx.zone.name} (${ctx.eqName} relay ${ctx.zone.channel})` : 'Irrigation';
+    return ctx.zone
+      ? M('flow_watch.label.zone', { zone: ctx.zone.name, equipment: ctx.eqName, channel: String(ctx.zone.channel) })
+      : M('flow_watch.label.irrigation');
   }
 
   _litresDosed(ctx) {
@@ -1946,84 +2041,108 @@ class IrrigationFlowWatchService {
     return any ? total : null;
   }
 
-  _fireMessage(inst, nowMs) {
+  /** English text of the fire message (kept for callers / logs). */
+  _fireMessage(inst, nowMs) { return en(this._fireSpec(inst, nowMs)); }
+
+  /** i18n spec of the alert text when a rule fires. */
+  _fireSpec(inst, nowMs) {
     const cfg = this.getConfig();
     const c = inst.ctx;
-    const dur = fmtDur(nowMs - inst.start);
+    const dur = i18n.dur(nowMs - inst.start);
     const flow = this.flow ? this.flow.values.flow_lph : null;
+    const tankRates = (list) => i18n.list((list || []).map(t => `${shortTankName(t.name, t.id)} ${fmtLph(t.rate_lph)} L/h`));
     switch (inst.rule) {
       case 'valve_no_flow':
-        return `${this._zoneLabel(c)} is ON with the irrigation pump running, but no water is flowing: ${fmtLph(flow)} L/h for ${dur}, expected ~${fmtLph(c.expected)} L/h. Valve not opening? Check the zone valve (then the pump).`;
+        return M('flow_watch.fire.valve_no_flow', { label: this._zoneLabel(c), flow: fmtLph(flow), dur, expected: fmtLph(c.expected) });
       case 'low_flow':
-        return `${this._zoneLabel(c)}: low flow — ${fmtLph(flow)} L/h is ${Math.round((flow / c.expected) * 100)} % of the expected ~${fmtLph(c.expected)} L/h for ${dur}. Valve partly open, blocked filter or pump problem?`;
+        return M('flow_watch.fire.low_flow', { label: this._zoneLabel(c), flow: fmtLph(flow), pct: String(Math.round((flow / c.expected) * 100)), expected: fmtLph(c.expected), dur });
       case 'flow_above_expected': {
         const a = c.above || {};
         const pct = a.base ? Math.round(((a.mean - a.base) / a.base) * 1000) / 10 : null;
-        return `${this._zoneLabel(c)}: more water than one zone should take — ${fmtLph(a.mean)} L/h (${cfg.above_expected_window_seconds} s average) vs ~${fmtLph(a.base)} L/h for this zone (+${pct} %, limit +${a.pct} %, ${a.basis}) for ${dur}. Another valve may be open (manual override or bleed left open?).`;
+        return M('flow_watch.fire.flow_above_expected', {
+          label: this._zoneLabel(c), mean: fmtLph(a.mean), window: String(cfg.above_expected_window_seconds), base: fmtLph(a.base),
+          pct: String(pct), limit: String(a.pct), basis: a.basisSpec || (a.basis !== undefined ? String(a.basis) : 'undefined'), dur,
+        });
       }
-      case 'dosing_without_water': {
-        const tanks = (c.dosing.active || []).map(t => `${shortTankName(t.name, t.id)} ${fmtLph(t.rate_lph)} L/h`).join(', ');
-        return `Fertiliser is dosing into a line with no water flow: ${tanks} (water ${fmtLph(flow)} L/h, below ${fmtLph(cfg.dosing_max_flow_lph)} L/h for ${dur}).`;
-      }
+      case 'dosing_without_water':
+        return M('flow_watch.fire.dosing_without_water', { tanks: tankRates(c.dosing.active), flow: fmtLph(flow), max: fmtLph(cfg.dosing_max_flow_lph), dur, extra: null });
       case 'water_without_valve':
         if (c.panel) {
           const p = c.panel;
           const sum = this._panelSummary(p);
-          return `Manual irrigation (panel) needs attention: ${this._panelWhy(p, nowMs)}. Water ${fmtLph(flow)} L/h, started ${fmtHm(p.startMs)}, ${sum.water} L so far; ${sum.tanks}${sum.ratio ? ` (1:${sum.ratio})` : ''}. No SenseHub pump or zone relay is ON — check at the panel.`;
+          return M('flow_watch.fire.water_without_valve_panel', {
+            why: this._panelWhy(p, nowMs), flow: fmtLph(flow), start: fmtHm(p.startMs), water: sum.water, tanks: sum.tanks, ratio: sum.ratio ? ` (1:${sum.ratio})` : '',
+          });
         }
-        return `Water is flowing (${fmtLph(flow)} L/h for ${dur}) but no irrigation zone relay on ${c.eqName} is ON — stuck-open valve, leak or a manual valve?`;
+        return M('flow_watch.fire.water_without_valve', { flow: fmtLph(flow), dur, equipment: c.eqName });
       case 'manual_panel':
-        return `Manual irrigation detected (panel) — water ${fmtLph(c.startFlow ?? flow)} L/h, started ${fmtHm(inst.start)}. No SenseHub pump or zone relay is ON, so the zone is unknown${this._panelZoneHint(c)} and dosing is outside SenseHub control.`;
+        return M('flow_watch.fire.manual_panel', { flow: fmtLph(c.startFlow ?? flow), start: fmtHm(inst.start), hint: this._panelZoneHint(c), extra: null });
       case 'flow_after_pump_off':
-        return `Water is flowing (${fmtLph(flow)} L/h for ${dur}) while the irrigation pump relay (${c.eqName} relay ${c.pumpChannel}) is OFF — pump run by hand at the panel, or siphoning?`;
+        return M('flow_watch.fire.flow_after_pump_off', { flow: fmtLph(flow), dur, equipment: c.eqName, channel: String(c.pumpChannel) });
       case 'monitor_blind': {
         const w = c.why || {};
         const why = w.kind === 'unhealthy'
-          ? `the flow meter is unhealthy (signal ${w.signal ?? '?'}, error flags ${w.errorFlags ?? '?'}) for ${fmtDur(w.forMs)}`
-          : `no data from the flow meter for ${fmtDur(w.forMs || 0)}`;
-        return `The irrigation pump is ON but water flow cannot be verified: ${why}. Zone, low-flow and dosing checks are paused until it reports again.`;
+          ? M('flow_watch.blind.unhealthy', { signal: String(w.signal ?? '?'), flags: String(w.errorFlags ?? '?'), dur: i18n.dur(w.forMs) })
+          : M('flow_watch.blind.no_data', { dur: i18n.dur(w.forMs || 0) });
+        return M('flow_watch.fire.monitor_blind', { why });
       }
       default:
-        return `${inst.rule}`;
+        return M('flow_watch.fire.generic', { rule: `${inst.rule}` });
     }
   }
 
+  /**
+   * Alert text when a fired rule ends: { message (English), severity, messageKey, messageParams, spec }
+   * — ready for updateOpenAlert().
+   */
   _endMessage(inst, nowMs) {
     const c = inst.ctx;
     const endAt = inst.falseSince || nowMs;
-    const dur = fmtDur(endAt - inst.start);
+    const dur = i18n.dur(endAt - inst.start);
     const endFlow = c.endFlow;
     const recovered = inst.falseReason === 'recovered';
     let severity = recovered ? 'info' : RULES[inst.rule].severity;
-    let message;
+    let spec;
+    const label = this._zoneLabel(c);
     switch (inst.rule) {
       case 'valve_no_flow':
-        message = recovered
-          ? `Resolved: ${this._zoneLabel(c)} — water flow recovered after ${dur} with no flow (now ${fmtLph(endFlow)} L/h, expected ~${fmtLph(c.expected)} L/h). The valve opened late.`
-          : `${this._zoneLabel(c)} ran ${dur} with no water flowing (lowest ${fmtLph(inst.minFlow)} L/h, expected ~${fmtLph(c.expected)} L/h) until the zone/pump switched off at ${fmtClock(endAt)}. Check the zone valve before the next run.`;
+        spec = recovered
+          ? M('flow_watch.end.valve_no_flow_recovered', { label, dur, flow: fmtLph(endFlow), expected: fmtLph(c.expected) })
+          : M('flow_watch.end.valve_no_flow', { label, dur, min: fmtLph(inst.minFlow), expected: fmtLph(c.expected), time: fmtClock(endAt) });
         break;
       case 'low_flow':
-        if (recovered) message = `Resolved: ${this._zoneLabel(c)} — flow back to ${fmtLph(endFlow)} L/h after ${dur} of low flow.`;
-        else if (inst.falseReason === 'escalated') { message = `${this._zoneLabel(c)}: low flow turned into no flow after ${dur} — see the no-flow alarm.`; severity = 'warning'; }
-        else message = `${this._zoneLabel(c)} ran ${dur} at low flow (lowest ${fmtLph(inst.minFlow)} L/h, expected ~${fmtLph(c.expected)} L/h) until it switched off at ${fmtClock(endAt)}.`;
+        if (recovered) spec = M('flow_watch.end.low_flow_recovered', { label, flow: fmtLph(endFlow), dur });
+        else if (inst.falseReason === 'escalated') { spec = M('flow_watch.end.low_flow_escalated', { label, dur }); severity = 'warning'; }
+        else spec = M('flow_watch.end.low_flow', { label, dur, min: fmtLph(inst.minFlow), expected: fmtLph(c.expected), time: fmtClock(endAt) });
         break;
-      case 'flow_above_expected':
-        message = recovered
-          ? `Resolved: ${this._zoneLabel(c)} — flow back within +${(c.above || {}).pct} % of the zone baseline after ${dur}.`
-          : `${this._zoneLabel(c)} took more water than one zone for ${dur} (highest ${fmtLph(inst.maxFlow)} L/h, ${cfgPct(c)}) until the zone changed at ${fmtClock(endAt)}. Check for another valve left open.`;
+      case 'flow_above_expected': {
+        const a = c.above || {};
+        spec = recovered
+          ? M('flow_watch.end.flow_above_expected_recovered', { label, pct: String(a.pct), dur })
+          : M('flow_watch.end.flow_above_expected', {
+            label, dur, max: fmtLph(inst.maxFlow), time: fmtClock(endAt),
+            baseline: a.base ? M('flow_watch.end.baseline', { base: fmtLph(a.base) }) : M('flow_watch.end.no_baseline'),
+          });
         break;
+      }
       case 'dosing_without_water': {
         const litres = this._litresDosed(c);
-        const lit = litres === null ? '' : ` About ${litres.toFixed(2)} L of concentrate went in with no water flow.`;
-        const tanks = ((c.firedTanks || (c.dosing && c.dosing.active)) || []).map(t => `${shortTankName(t.name, t.id)} ${fmtLph(t.rate_lph)} L/h`).join(', ');
+        const lit = litres === null ? null : M('flow_watch.end.litres', { litres: litres.toFixed(2) });
+        const tanks = i18n.list(((c.firedTanks || (c.dosing && c.dosing.active)) || []).map(t => `${shortTankName(t.name, t.id)} ${fmtLph(t.rate_lph)} L/h`));
         const outcome = c.abort ? c.abort.outcome : null;
-        const how = outcome === 'aborted' ? `dosing stopped automatically${c.abort.text ? ` —${c.abort.text.replace(/^ Dosing stopped automatically:/, '')}` : ' (the flow watch aborted the dose cycle)'}`
-          : outcome === 'pending' ? 'automatic dosing stop in progress'
-          : outcome === 'failed' ? 'the automatic dosing stop FAILED'
-          : 'dosing stopped';
-        if (recovered) message = `Resolved: dosing without water (${tanks}) ended after ${dur}: water flow recovered (${fmtLph(endFlow)} L/h).${outcome === 'aborted' ? ' Dosing had been stopped automatically (dose cycle aborted).' : ''}${lit}`;
-        else {
-          message = `Dosing without water (${tanks}) lasted ${dur}; ${how.replace(/\.$/, '')}.${lit} Find out why there was no water flow before the next run.`;
+        const how = outcome === 'aborted'
+          ? (c.abort.body ? M('flow_watch.end.how_aborted_detail', { body: c.abort.body })
+            : c.abort.text ? `dosing stopped automatically —${c.abort.text.replace(/^ Dosing stopped automatically:/, '').replace(/\.$/, '')}`
+              : M('flow_watch.end.how_aborted_plain'))
+          : outcome === 'pending' ? M('flow_watch.end.how_pending')
+            : outcome === 'failed' ? M('flow_watch.end.how_failed')
+              : M('flow_watch.end.how_stopped');
+        if (recovered) {
+          spec = M('flow_watch.end.dosing_recovered', {
+            tanks, dur, flow: fmtLph(endFlow), aborted: outcome === 'aborted' ? M('flow_watch.end.dosing_had_been_stopped') : null, litres: lit,
+          });
+        } else {
+          spec = M('flow_watch.end.dosing', { tanks, dur, how, litres: lit });
           // an automatic stop (or a failed one) stays an alarm; a cycle that simply ended is a caution
           severity = outcome === 'aborted' || outcome === 'failed' || outcome === 'pending' ? 'critical' : 'warning';
         }
@@ -2033,44 +2152,46 @@ class IrrigationFlowWatchService {
         if (c.panel) {
           const p = c.panel;
           const sum = this._panelSummary(p);
-          message = `Manual irrigation (panel) that needed attention ended at ${fmtClock(endAt)}: ${fmtDur(endAt - p.startMs)}, ${sum.water} L, ${sum.tanks}${sum.ratio ? ` (1:${sum.ratio})` : ''}. Escalated because ${this._panelWhy(p, (p.escalated && p.escalated.at) || endAt)}.`;
+          spec = M('flow_watch.end.panel_attention', {
+            time: fmtClock(endAt), dur: i18n.dur(endAt - p.startMs), water: sum.water, tanks: sum.tanks, ratio: sum.ratio ? ` (1:${sum.ratio})` : '',
+            why: this._panelWhy(p, (p.escalated && p.escalated.at) || endAt),
+          });
           severity = 'warning';
           break;
         }
-        message = recovered
-          ? `Resolved: water flow with no zone open stopped after ${dur}.`
-          : `Water flowed with no zone open for ${dur} until a zone opened at ${fmtClock(endAt)} (highest ${fmtLph(inst.maxFlow)} L/h).`;
+        spec = recovered
+          ? M('flow_watch.end.water_without_valve_recovered', { dur })
+          : M('flow_watch.end.water_without_valve', { dur, time: fmtClock(endAt), max: fmtLph(inst.maxFlow) });
         if (!recovered) severity = 'info';
         break;
       case 'manual_panel': {
         const sum = this._panelSummary(c);
         const endAt = this._panelEndAt(inst, inst.falseSince || nowMs);
-        const taken = inst.falseReason === 'ended' ? ' SenseHub relays took over.' : '';
-        message = `Manual irrigation (panel) ended: ${fmtHm(inst.start)}–${fmtHm(endAt)}, ${fmtDur(endAt - inst.start)}, ${sum.water} L water, ${sum.tanks}${sum.ratio ? ` (1:${sum.ratio})` : ''}.${taken}${c.escalated ? ` Escalated to caution: ${this._panelWhy(c, c.escalated.at)}.` : ''}`;
+        spec = M('flow_watch.end.manual_panel', {
+          start: fmtHm(inst.start), end: fmtHm(endAt), dur: i18n.dur(endAt - inst.start), water: sum.water, tanks: sum.tanks,
+          ratio: sum.ratio ? ` (1:${sum.ratio})` : '',
+          taken: inst.falseReason === 'ended' ? M('flow_watch.end.relays_took_over') : null,
+          escalated: c.escalated ? M('flow_watch.panel.escalated', { why: this._panelWhy(c, c.escalated.at) }) : null,
+        });
         severity = 'info';
         break;
       }
       case 'flow_after_pump_off':
-        message = recovered
-          ? `Resolved: water flow with the pump relay OFF stopped after ${dur}.`
-          : `Water flowed with the pump relay OFF for ${dur} until the pump was switched on at ${fmtClock(endAt)} (highest ${fmtLph(inst.maxFlow)} L/h).`;
+        spec = recovered
+          ? M('flow_watch.end.flow_after_pump_off_recovered', { dur })
+          : M('flow_watch.end.flow_after_pump_off', { dur, time: fmtClock(endAt), max: fmtLph(inst.maxFlow) });
         if (!recovered) severity = 'info';
         break;
       case 'monitor_blind':
-        message = recovered
-          ? `Resolved: flow meter data is back (was unverifiable for ${dur}).`
-          : `Flow could not be verified for ${dur} of pumping; the pump is now OFF. Check the irrigation monitor.`;
+        spec = recovered
+          ? M('flow_watch.end.monitor_blind_recovered', { dur })
+          : M('flow_watch.end.monitor_blind', { dur });
         if (!recovered) severity = 'warning';
         break;
       default:
-        message = `${inst.rule} ended after ${dur}`;
+        spec = M('flow_watch.end.generic', { rule: `${inst.rule}`, dur });
     }
-    return { message, severity };
-
-    function cfgPct(ctx) {
-      const a = ctx.above || {};
-      return a.base ? `baseline ~${fmtLph(a.base)} L/h` : 'no baseline';
-    }
+    return { message: en(spec), severity, ...keyArgs(spec), spec };
   }
 
   _alertEquipmentId(inst) {
@@ -2084,37 +2205,39 @@ class IrrigationFlowWatchService {
     if (inst.rule === 'pump_no_flow_shutdown') { this._onPumpNoFlow(inst, nowMs); return; }
     const cfg = this.getConfig();
     const def = RULES[inst.rule];
-    let message = this._fireMessage(inst, nowMs);
+    let spec = this._fireSpec(inst, nowMs);
     let abortPlanned = false;
     if (inst.rule === 'dosing_without_water') {
       const d = inst.ctx.dosing;
       inst.ctx.firedTanks = d.active;
       if (!cfg.abort_dosing_on_no_water) {
-        message += ' Automatic dosing stop is OFF (abort_dosing_on_no_water = false) — stop dosing manually.';
+        spec = withExtra(spec, M('flow_watch.dosing.stop_disabled'));
         inst.ctx.abort = { outcome: 'disabled' };
       } else if (d.cycle && !d.cycle.dryRun && this.doseScheduler) {
-        message += ` Stopping dosing automatically (aborting dose cycle${d.cycle.cycleLogId ? ` #${d.cycle.cycleLogId}` : ''})…`;
+        spec = withExtra(spec, M('flow_watch.dosing.stop_pending', { cycle: cycleRef(d.cycle.cycleLogId) }));
         abortPlanned = true;
         inst.ctx.abort = { outcome: 'pending' };
       } else {
-        message += ' The injector valves are open but no dose cycle is running under the scheduler, so the flow watch cannot stop them — close them manually.';
+        spec = withExtra(spec, M('flow_watch.dosing.not_running'));
         inst.ctx.abort = { outcome: 'not_running' };
       }
     }
+    const message = en(spec);
     inst.message = message;
+    inst.msg = spec;
     const row = this._createAlert({
       severity: def.severity,
       source: 'flow_watch',
       equipment_id: this._alertEquipmentId(inst),
       fingerprint: this._fingerprint(inst),
-      message,
+      ...keyArgs(spec),
       metadata: { rule: inst.rule, key: inst.key },
     });
     inst.alertId = row && row.id ? row.id : null;
     this.log.warn(`[FlowWatch] ${def.level.toUpperCase()} ${inst.key}: ${message}`);
     this._openEpisode(inst, nowMs);
     if (abortPlanned) this._track(this._abortDosing(inst));
-    else if (def.severity === 'critical') this._sendNotify(def.title, message, def.severity);
+    else if (def.severity === 'critical') this._sendNotify(TITLES[inst.rule], spec, def.severity);
   }
 
   /** Abort the running dose cycle via the scheduler's existing abort path, then report the outcome. */
@@ -2124,12 +2247,14 @@ class IrrigationFlowWatchService {
     const tanks = (cycle.schedule && cycle.schedule.tanks) || [];
     let outcome;
     let text;
+    let textSpec;
+    let body = null;
     try {
       const before = this.db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM relay_events').get().id;
       const aborted = await this.doseScheduler.abortCycle('flow_watch: dosing without water flow', { source: 'flow_watch' });
       if (!aborted) {
         outcome = 'not_running';
-        text = ' The dose cycle had already ended.';
+        textSpec = M('flow_watch.abort.already_ended');
       } else {
         const closed = new Set(this.db.prepare(
           "SELECT equipment_id, channel FROM relay_events WHERE id > ? AND source = 'flow_watch' AND state = 0"
@@ -2137,23 +2262,26 @@ class IrrigationFlowWatchService {
         const missing = tanks.filter(t => !closed.has(`${t.equipment_id}:${t.channel}`));
         const names = tanks.map(t => shortTankName(t.tank_name, t.tank_id)).join(', ');
         outcome = 'aborted';
-        text = missing.length === 0
-          ? ` Dosing stopped automatically: dose cycle${cycle.cycleLogId ? ` #${cycle.cycleLogId}` : ''} aborted by the flow watch, injector valves closed (${names || 'none open'}). Pumps and zone valves were not touched.`
-          : ` Dosing stopped automatically: dose cycle${cycle.cycleLogId ? ` #${cycle.cycleLogId}` : ''} aborted, but closing ${missing.map(t => shortTankName(t.tank_name, t.tank_id)).join(', ')} was NOT confirmed — check the injector valves now.`;
+        body = missing.length === 0
+          ? M('flow_watch.abort.closed_body', { cycle: cycleRef(cycle.cycleLogId), tanks: names ? i18n.list(tanks.map(t => shortTankName(t.tank_name, t.tank_id))) : M('flow_watch.abort.none_open') })
+          : M('flow_watch.abort.missing_body', { cycle: cycleRef(cycle.cycleLogId), tanks: i18n.list(missing.map(t => shortTankName(t.tank_name, t.tank_id))) });
+        textSpec = M('flow_watch.abort.stopped', { body });
       }
     } catch (e) {
       outcome = 'failed';
-      text = ` Automatic dosing stop FAILED (${e.message}) — stop the dose cycle and close the injector valves now.`;
+      textSpec = M('flow_watch.abort.failed', { error: e.message });
     }
-    inst.ctx.abort = { outcome, text };
-    const base = inst.message.replace(/ Stopping dosing automatically.*$/, '');
-    inst.message = base + text;
+    text = ` ${en(textSpec)}`;
+    inst.ctx.abort = { outcome, text, spec: textSpec, body };
+    // the fire message with the outcome in place of "Stopping dosing automatically…"
+    inst.msg = withExtra(inst.msg || this._fireSpec(inst, inst.firedAt || this.now()), textSpec);
+    inst.message = en(inst.msg);
     if (inst.ended) {
       // The condition already ended while the abort was in flight: the alert
       // carries the end summary, rebuilt now that the outcome is known.
       this._updateOpenAlert(this._fingerprint(inst), this._endMessage(inst, inst.endedAt));
     } else {
-      this._updateOpenAlert(this._fingerprint(inst), { message: inst.message, severity: def.severity });
+      this._updateOpenAlert(this._fingerprint(inst), { ...keyArgs(inst.msg), severity: def.severity });
     }
     if (inst.episodeId) {
       try {
@@ -2162,7 +2290,7 @@ class IrrigationFlowWatchService {
       } catch (_) { /* best-effort */ }
     }
     this.log.warn(`[FlowWatch] dosing abort outcome: ${outcome}`);
-    this._sendNotify(def.title, inst.message, def.severity);
+    this._sendNotify(TITLES[inst.rule], inst.msg, def.severity);
   }
 
   _onEnd(inst, nowMs) {
@@ -2173,10 +2301,16 @@ class IrrigationFlowWatchService {
     inst.ended = true;
     inst.endedAt = nowMs;
     if (inst.fired) {
-      const { message, severity } = this._endMessage(inst, nowMs);
-      this._updateOpenAlert(this._fingerprint(inst), { message, severity });
+      const end = this._endMessage(inst, nowMs);
+      const { message, severity } = end;
+      this._updateOpenAlert(this._fingerprint(inst), end);
       this.log.log(`[FlowWatch] ended ${inst.key} (${inst.falseReason}): ${message}`);
-      if (def.severity === 'critical') this._sendNotify(`${def.title} — ${inst.falseReason === 'recovered' ? 'resolved' : 'ended'}`, message, severity);
+      if (def.severity === 'critical') {
+        const title = inst.falseReason === 'recovered'
+          ? M('flow_watch.title.resolved', { title: TITLES[inst.rule] })
+          : M('flow_watch.title.ended', { title: TITLES[inst.rule] });
+        this._sendNotify(title, end.spec, severity);
+      }
     } else if (inst.rule === 'valve_no_flow' && endAt - inst.start >= cfg.episode_min_seconds * 1000 && !inst.episodeId) {
       this._openEpisode(inst, inst.start);
     }
@@ -2261,25 +2395,37 @@ class IrrigationFlowWatchService {
     }
   }
 
+  /**
+   * Telegram. `title` / `text` are i18n specs (or English strings). The default path
+   * renders them in the configured telegram_language; an injected deps.notify (tests)
+   * receives the English render plus { titleSpec, bodySpec }.
+   */
   _sendNotify(title, text, severity) {
     const cfg = this.getConfig();
     if (!cfg.telegram) return;
-    let fn = this._notify;
-    if (!fn) {
-      fn = async (t, body, sev) => {
-        const { telegramService } = require('./TelegramService');
-        if (!telegramService.isConfigured()) return;
-        await telegramService.sendAlert(t, body, sev);
-      };
-    }
     // Legacy Telegram Markdown chokes on _ * [ ` in free text.
     const clean = (s) => String(s).replace(/[_*`[\]]/g, ' ');
-    this._track(Promise.resolve().then(() => fn(clean(title), clean(text), severity)));
+    const fn = this._notify;
+    if (fn) {
+      this._track(Promise.resolve().then(() => fn(clean(en(title)), clean(en(text)), severity, { titleSpec: title, bodySpec: text })));
+      return;
+    }
+    this._track(Promise.resolve().then(async () => {
+      const { telegramService } = require('./TelegramService');
+      if (!telegramService.isConfigured()) return;
+      const lang = typeof telegramService.getLanguage === 'function' ? telegramService.getLanguage() : 'en';
+      await telegramService.sendAlert(clean(i18n.render(lang, title)), clean(i18n.render(lang, text)), severity);
+    }));
   }
 
   // ─── read API ─────────────────────────────────────────────────────────────
 
-  getStatus(nowMs = this.now()) {
+  /**
+   * @param {number} [nowMs]
+   * @param {{lang?: 'en'|'tr'|'ar'}} [opts]  language of active[].message / relays.reason (default English);
+   *        active[] also carries message_en / message_key / message_params.
+   */
+  getStatus(nowMs = this.now(), { lang = 'en' } = {}) {
     const cfg = this.getConfig();
     if (!cfg.enabled) return { enabled: false, state: 'disabled', evaluated_at: iso(nowMs), active: [], last_episode: this.lastEpisode(), last_shutdown: this.lastShutdown(), run_guard: this.guardStatus(), config: cfg };
     const last = this.lastEvaluation;
@@ -2294,7 +2440,10 @@ class IrrigationFlowWatchService {
       since: iso(i.start),
       fired_at: iso(i.firedAt),
       zone: i.ctx.zone || null,
-      message: i.fired ? i.message : null,
+      message: i.fired ? (i.msg ? i18n.render(lang, i.msg) : i.message) : null,
+      message_en: i.fired ? i.message : null,
+      message_key: i.fired && i.msg ? i.msg.$k : null,
+      message_params: i.fired && i.msg ? i.msg.$p || {} : null,
     }));
     let state;
     const g = this.guard;
@@ -2328,7 +2477,7 @@ class IrrigationFlowWatchService {
       },
       relays: {
         known: relays.known,
-        reason: relays.known ? null : relays.reason,
+        reason: relays.known ? null : (relays.reasonSpec ? i18n.render(lang, relays.reasonSpec) : relays.reason),
         age_s: relays.ageMs === null || relays.ageMs === undefined ? null : Math.round(relays.ageMs / 1000),
         pump_on: relays.known ? relays.pump.on : null,
         zones: relays.known ? relays.zones.map(z => ({

@@ -2,6 +2,8 @@
  * Closed-loop dose controller API (services/DoseController.js).
  *
  *   GET /api/dose-controller/status              any role — live mode, per-tank target vs dosed, pH, acid use, last run
+ *                                                reasons (mode_reason, reason, tanks[].why, ph.gate, warnings, paused.reason,
+ *                                                end_reason) in req.lang; English originals in sibling *_en fields
  *   GET /api/dose-controller/runs                any role — ?date=YYYY-MM-DD&from=&to=&limit=&offset= (run records)
  *   GET /api/dose-controller/runs/last           any role — latest finished run (per-zone table), { run: null } if none
  *   GET /api/dose-controller/config              admin — settings (system_settings 'dose_controller') + defaults + programs' control_mode
@@ -14,13 +16,13 @@
 const express = require('express');
 const { requireRole } = require('../middleware/auth');
 const { db } = require('../utils/database');
-const { getDoseController, DEFAULT_CONFIG } = require('../services/DoseController');
+const { getDoseController, DEFAULT_CONFIG, localizeStatus, localizeRun } = require('../services/DoseController');
 
 const router = express.Router();
 
 router.get('/status', (req, res) => {
   try {
-    res.json(getDoseController().getStatus());
+    res.json(localizeStatus(getDoseController().getStatus(), req.lang));
   } catch (err) {
     res.status(500).json({ error: 'Internal Server Error', message: err.message });
   }
@@ -28,7 +30,7 @@ router.get('/status', (req, res) => {
 
 router.get('/runs/last', (req, res) => {
   try {
-    res.json({ run: getDoseController().lastRun() });
+    res.json({ run: localizeRun(getDoseController().lastRun(), req.lang) });
   } catch (err) {
     res.status(500).json({ error: 'Internal Server Error', message: err.message });
   }
@@ -48,7 +50,8 @@ router.get('/runs', (req, res) => {
   const date = req.query.date ? String(req.query.date) : null;
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Bad Request', message: 'date must be YYYY-MM-DD' });
   try {
-    res.json(getDoseController().listRuns({ limit, offset, from, to, date }));
+    const out = getDoseController().listRuns({ limit, offset, from, to, date });
+    res.json({ ...out, runs: (out.runs || []).map(r => localizeRun(r, req.lang)) });
   } catch (err) {
     res.status(500).json({ error: 'Internal Server Error', message: err.message });
   }

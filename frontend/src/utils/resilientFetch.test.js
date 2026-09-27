@@ -182,3 +182,35 @@ describe('connectivity status and toast suppression', () => {
     expect(C.getStatus()).toBe('offline');
   });
 });
+
+describe('Accept-Language on /api requests (i18n contract with the backend)', () => {
+  const headerOf = (call) => new Headers(call.init && call.init.headers).get('Accept-Language');
+  let L;
+  beforeAll(async () => { L = await import('../i18n/current'); });
+
+  it('sends the UI language on GET and non-GET /api requests', async () => {
+    L.setCurrentLanguage('ar');
+    await window.fetch('/api/dashboard/status-board', { headers: { Authorization: 'Bearer t' } });
+    await window.fetch('/api/irrigation/stop', { method: 'POST', headers: { Authorization: 'Bearer t' } });
+    expect(calls.map(headerOf)).toEqual(['ar', 'ar']);
+    // the Authorization header survives the rewrite
+    expect(new Headers(calls[0].init.headers).get('Authorization')).toBe('Bearer t');
+    L.setCurrentLanguage('en');
+  });
+
+  it('keeps a caller-set Accept-Language and leaves non-api URLs alone', async () => {
+    L.setCurrentLanguage('tr');
+    await window.fetch('/api/reports/daily', { headers: { 'Accept-Language': 'en' } });
+    await window.fetch('/assets/logo.svg');
+    expect(headerOf(calls[0])).toBe('en');
+    expect(calls[1].init).toBeUndefined();
+    L.setCurrentLanguage('en');
+  });
+
+  it('sends en for the dev pseudo-locale', async () => {
+    L.setCurrentLanguage('pseudo');
+    await window.fetch('/api/alerts');
+    expect(headerOf(calls[0])).toBe('en');
+    L.setCurrentLanguage('en');
+  });
+});

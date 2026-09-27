@@ -88,6 +88,8 @@ app.use(cors({
 }));
 console.log(`CORS origins: ${allowAnyOrigin ? '* (any)' : allowedOrigins.join(', ')}`);
 app.use(express.json());
+// Request language (en/tr/ar) → req.lang; authMiddleware refines it with the user's saved language.
+app.use('/api', require('./middleware/language').languageMiddleware);
 
 // Request logging middleware - logs to database for network analysis
 const requestLogDb = require('./utils/database').db;

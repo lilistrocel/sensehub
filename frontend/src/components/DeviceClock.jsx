@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSettings } from '../context/SettingsContext';
 
 /**
@@ -20,8 +21,9 @@ function makeFormatters(timezone) {
   }
 }
 
-function zoneLabel(tz, offsetFmt, date) {
-  const city = tz ? (tz.split('/').pop() || tz).replace(/_/g, ' ') : 'Local';
+// The city is the IANA zone id ("Dubai"): an identifier, shown untranslated.
+function zoneLabel(tz, offsetFmt, date, localLabel) {
+  const city = tz ? (tz.split('/').pop() || tz).replace(/_/g, ' ') : localLabel;
   let off = '';
   if (offsetFmt) {
     const part = offsetFmt.formatToParts(date).find((p) => p.type === 'timeZoneName');
@@ -33,6 +35,7 @@ function zoneLabel(tz, offsetFmt, date) {
 
 export default function DeviceClock({ className = '' }) {
   const { timezone } = useSettings();
+  const { t } = useTranslation('shell');
   const fmt = useMemo(() => makeFormatters(timezone), [timezone]);
   const [now, setNow] = useState(() => new Date());
 
@@ -48,13 +51,14 @@ export default function DeviceClock({ className = '' }) {
 
   // en-GB with hour12:false can yield "24:00:00" at midnight in some engines.
   const time = fmt.time.format(now).replace(/^24:/, '00:');
-  const label = zoneLabel(fmt.tz, fmt.offset, now);
+  const label = zoneLabel(fmt.tz, fmt.offset, now, t('clock.local'));
 
   return (
     <div
+      dir="ltr"
       className={`hidden md:flex flex-col items-end leading-none shrink-0 ${className}`.trim()}
-      title={`Device time - ${label}`}
-      aria-label={`Device time ${time} ${label}`}
+      title={t('clock.title', { zone: label })}
+      aria-label={t('clock.aria', { time, zone: label })}
       data-testid="device-clock"
     >
       <span className="font-mono tabular text-sm font-medium text-ink" data-testid="device-clock-time">{time}</span>

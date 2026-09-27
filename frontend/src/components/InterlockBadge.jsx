@@ -1,13 +1,15 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Small lock glyph shown next to a relay channel that is interlocked with
  * another channel on the same board.
  */
 export default function InterlockBadge({ partnerLabel, className = '' }) {
+  const { t } = useTranslation('common');
   const title = partnerLabel
-    ? `Interlocked with ${partnerLabel}: turning this on switches the partner off`
-    : 'Interlocked channel';
+    ? t('interlock.withPartner', { partner: partnerLabel })
+    : t('interlock.generic');
   return (
     <span
       title={title}

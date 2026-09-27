@@ -1,0 +1,114 @@
+{
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "retry": "Retry",
+    "tryAgain": "Try again",
+    "confirm": "Confirm",
+    "dismiss": "Dismiss",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "open": "Open",
+    "edit": "Edit",
+    "delete": "Delete",
+    "add": "Add",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "apply": "Apply",
+    "reset": "Reset",
+    "search": "Search",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "working": "Working…",
+    "saving": "Saving…"
+  },
+  "status": {
+    "loading": "Loading…",
+    "loadingShort": "loading…",
+    "noData": "No data",
+    "unknown": "unknown",
+    "on": "ON",
+    "off": "OFF",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "online": "online",
+    "offline": "offline",
+    "never": "never",
+    "success": "success",
+    "failed": "failed",
+    "armed": "Armed",
+    "disarmed": "Disarmed"
+  },
+  "severity": {
+    "critical": "critical",
+    "warning": "warning",
+    "info": "info"
+  },
+  "state": {
+    "ok": "OK",
+    "caution": "Caution",
+    "alarm": "Alarm",
+    "stale": "stale",
+    "unknown": "unknown"
+  },
+  "role": {
+    "admin": "admin",
+    "operator": "operator",
+    "viewer": "viewer"
+  },
+  "toast": {
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "reading": {
+    "noReading": "No reading",
+    "notReportedSince": "Not reported since {{time}}",
+    "unknownTime": "unknown"
+  },
+  "connectivity": {
+    "reconnecting": {
+      "text": "Reconnecting…",
+      "title": "Reconnecting to SenseHub. Showing the last data received."
+    },
+    "offline": {
+      "text": "Offline",
+      "title": "This device has no network connection. Showing the last data received."
+    },
+    "down": {
+      "text": "Server unreachable",
+      "title": "SenseHub is not answering. Data on screen is stale."
+    },
+    "updated": "updated {{age}}"
+  },
+  "errorBoundary": {
+    "title": "This page could not be displayed.",
+    "body": "The header controls still work. Try again, or open another page from the menu."
+  },
+  "language": {
+    "title": "Language",
+    "choose": "Choose language",
+    "current": "Language: {{name}}",
+    "settingHelp": "Your language is saved to your account and used on every device you sign in on. Readings always use Western digits and a decimal point, like the equipment panels.",
+    "savedOnDeviceOnly": "The language changed on this device, but it could not be saved to your account. Other devices keep the previous language."
+  },
+  "theme": {
+    "toLight": "Switch to light mode",
+    "toDark": "Switch to dark mode"
+  },
+  "chart": {
+    "noReadings": "No readings in this range",
+    "series": "Series",
+    "value": "value"
+  },
+  "interlock": {
+    "withPartner": "Interlocked with {{partner}}: turning this on switches the partner off",
+    "generic": "Interlocked channel"
+  }
+}

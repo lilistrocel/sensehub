@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { API_BASE, STATUS_BOARD_POLL_MS } from './constants';
+import { getApiLanguage } from '../../i18n/current';
 import { usePoll } from '../../hooks/usePoll';
 
 /** Recount on/total/unknown for a group after its channels changed. */
@@ -79,10 +81,15 @@ export function useStatusBoard({ token, subscribe, notifyError }) {
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
   const inFlight = useRef(false);
+  const { t } = useTranslation('dashboard');
 
+  const fetchBoardRef = useRef(null);
   const fetchBoard = useCallback(async () => {
     if (!token || inFlight.current) return;
     inFlight.current = true;
+    // The board carries server-localized texts (alerts, group labels): if the
+    // UI language changes while this request is in flight, fetch again after.
+    const lang = getApiLanguage();
     try {
       const r = await fetch(`${API_BASE}/dashboard/status-board`, { headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -90,12 +97,14 @@ export function useStatusBoard({ token, subscribe, notifyError }) {
       setBoard(data);
       setFetchedAt(Date.now());
     } catch (e) {
-      notifyError?.(`Status board unavailable: ${e.message}`, 'status-board');
+      notifyError?.(t('errors.boardUnavailable', { error: e.message }), 'status-board');
     } finally {
       inFlight.current = false;
       setLoading(false);
+      if (lang !== getApiLanguage()) setTimeout(() => fetchBoardRef.current?.(), 0);
     }
-  }, [token, notifyError]);
+  }, [token, notifyError, t]);
+  fetchBoardRef.current = fetchBoard;
 
   const fetchEquipment = useCallback(async () => {
     if (!token) return;
@@ -111,9 +120,9 @@ export function useStatusBoard({ token, subscribe, notifyError }) {
       });
       setEquipmentById(map);
     } catch (e) {
-      notifyError?.(`Equipment list unavailable: ${e.message}`, 'equipment-list');
+      notifyError?.(t('errors.equipmentUnavailable', { error: e.message }), 'equipment-list');
     }
-  }, [token, notifyError]);
+  }, [token, notifyError, t]);
 
   // Board: now, every 15 s while visible, once on resume. Equipment list: once.
   usePoll(fetchBoard, STATUS_BOARD_POLL_MS);

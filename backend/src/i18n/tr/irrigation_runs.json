@@ -1,0 +1,22 @@
+{
+  "type": {
+    "automated": "Zamanlanmış",
+    "manual_app": "Manuel — uygulama",
+    "manual_panel": "Manuel — pano",
+    "automation": "Otomasyon"
+  },
+  "stop_irrigation": "Sulamayı Durdur",
+  "zone_unknown": "Bölge bilinmiyor",
+  "note": {
+    "stopped_by_operator": "Operatör tarafından durduruldu ({source}{user}), saat {at}",
+    "user_suffix": ", {user}",
+    "manual_open_still_on": "{zone} bu çalışma sırasında manuel olarak açıktı: {opened} saatinde {by} tarafından açıldı, hâlâ AÇIK",
+    "manual_open_closed": "{zone} bu çalışma sırasında manuel olarak açıktı: {opened} saatinde {by} tarafından açıldı, {closed} saatinde {closed_by} tarafından kapatıldı",
+    "no_automation_id": "Otomasyon kimliği olmayan SenseHub dizisi (test / şimdi çalıştır).",
+    "panel_run": "Bu suyu hiçbir SenseHub pompa veya bölge rölesi sağlamadı — fertigasyon panosundan çalıştırıldı.",
+    "app_switches": "Çalışma sırasında uygulamadan yapılan röle anahtarlamaları (suyu sağlayan bunlar değildi): {switches}",
+    "app_switch": "{zone} {at}, {by}",
+    "uncontrolled_dosing": "SenseHub kontrolü dışında dozlama: {tanks}",
+    "tank_litres": "{tank} {litres} L"
+  }
+}

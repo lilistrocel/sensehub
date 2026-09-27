@@ -48,6 +48,8 @@
  */
 
 const zoneStats = require('./DoseRunZoneStats');
+const i18n = require('../i18n');
+const { M } = i18n;
 const DR = require('./DailyReportService');
 
 const PAD_MS = 20000;                 // monitor clock vs relay events, valve lead
@@ -673,15 +675,25 @@ function buildAutomatedRun(db, ctx, w, cycles, intervals, events, nowMs) {
   else if (stops.some(ev => ev.source === STOP_IRRIGATION_SOURCE)) status = 'stopped';
   else if (segStatuses.includes('cut_short') || stops.length) status = 'cut_short';
   const auto = w.aid !== null ? ctx.autoNames[w.aid] : null;
-  const notes = [];
-  if (stops.length) notes.push(`Stopped by the operator (${stops[0].source === STOP_IRRIGATION_SOURCE ? 'Stop irrigation' : stops[0].source}${stops[0].user ? `, ${stops[0].user}` : ''}) at ${clock(ctx.tz, stops[0].t)}`);
-  for (const m of manualIvs.filter(m => ctx.zoneSet.has(m.ch))) {
-    notes.push(`${zoneName(ctx, m.ch)} was open manually during this run: opened ${clock(ctx.tz, m.s)} by ${m.onUser || m.onSource}, `
-      + (m.open ? 'still ON' : `closed ${clock(ctx.tz, m.e)} by ${m.offUser || m.offSource}`));
+  // notes: English text (as before) + notes_i18n (catalog specs) for tr / ar at read time
+  const noteSpecs = [];
+  if (stops.length) {
+    noteSpecs.push(M('irrigation_runs.note.stopped_by_operator', {
+      source: stops[0].source === STOP_IRRIGATION_SOURCE ? M('irrigation_runs.stop_irrigation') : String(stops[0].source),
+      user: stops[0].user ? M('irrigation_runs.note.user_suffix', { user: String(stops[0].user) }) : '',
+      at: clock(ctx.tz, stops[0].t),
+    }));
   }
-  if (w.aid === null) notes.push('SenseHub sequence without an automation id (test / run-now).');
+  for (const m of manualIvs.filter(m => ctx.zoneSet.has(m.ch))) {
+    const base = { zone: zoneName(ctx, m.ch), opened: clock(ctx.tz, m.s), by: `${m.onUser || m.onSource}` };
+    noteSpecs.push(m.open
+      ? M('irrigation_runs.note.manual_open_still_on', base)
+      : M('irrigation_runs.note.manual_open_closed', { ...base, closed: clock(ctx.tz, m.e), closed_by: `${m.offUser || m.offSource}` }));
+  }
+  if (w.aid === null) noteSpecs.push(M('irrigation_runs.note.no_automation_id'));
   const unc = uncontrolledDosing(ctx, intervals, dosing, s, e);
   if (w.aid === null) run.type_label = 'Automation';
+  const notes = noteSpecs.map(n => i18n.render('en', n));
   return finish(run, decorated, {
     key: `a:${w.aid ?? 'none'}:${toSqlTs(w.first).replace(' ', 'T')}`,
     status,
@@ -698,6 +710,7 @@ function buildAutomatedRun(db, ctx, w, cycles, intervals, events, nowMs) {
     manual_overlap: manualIvs.map(m => relayNote(ctx, m)),
     operator_stops: stops.map(ev => ({ at: iso(ev.t), source: ev.source, channel: ev.channel, user: ev.user || null })),
     notes,
+    notes_i18n: noteSpecs,
     ...flowHint(ctx, run.water_l, cycles.length ? cycles.reduce((a, c) => a + c.duration_s, 0) : 0),
     zone_hint: null,
     ...unc,
@@ -756,12 +769,21 @@ function buildManualRun(db, ctx, group, intervals) {
     }];
   }
   const unc = uncontrolledDosing(ctx, intervals, dosing, s, e);
-  const notes = [];
+  const noteSpecs = [];
   if (type === 'manual_panel') {
-    notes.push('No SenseHub pump or zone relay drove this water — run from the fertigation panel.');
-    if (appIvs.length) notes.push(`App relay switches during the run (not what drove it): ${appIvs.map(iv => `${zoneName(ctx, iv.ch)} ${clock(ctx.tz, iv.s)} by ${iv.onUser || iv.onSource}`).join(', ')}`);
+    noteSpecs.push(M('irrigation_runs.note.panel_run'));
+    if (appIvs.length) {
+      noteSpecs.push(M('irrigation_runs.note.app_switches', {
+        switches: i18n.list(appIvs.map(iv => M('irrigation_runs.note.app_switch', { zone: zoneName(ctx, iv.ch), at: clock(ctx.tz, iv.s), by: `${iv.onUser || iv.onSource}` }))),
+      }));
+    }
   }
-  if (unc.uncontrolled_dosing) notes.push(`Dosing outside SenseHub control: ${unc.uncontrolled_tanks.map(t => `${t.name.split(' — ')[0]} ${t.dosed_l} L`).join(', ')}`);
+  if (unc.uncontrolled_dosing) {
+    noteSpecs.push(M('irrigation_runs.note.uncontrolled_dosing', {
+      tanks: i18n.list(unc.uncontrolled_tanks.map(t => M('irrigation_runs.note.tank_litres', { tank: t.name.split(' — ')[0], litres: `${t.dosed_l}` }))),
+    }));
+  }
+  const notes = noteSpecs.map(n => i18n.render('en', n));
   return finish(run, visits.map(withRatio), {
     key: `c:${group[0].cycle_id}`,
     status: 'manual',
@@ -776,6 +798,7 @@ function buildManualRun(db, ctx, group, intervals) {
     app_relay_coverage_pct: Math.round(coverage * 100),
     blips_absorbed: group.length - boundCycles.length,
     notes,
+    notes_i18n: noteSpecs,
     ...hint,
     ...unc,
   });

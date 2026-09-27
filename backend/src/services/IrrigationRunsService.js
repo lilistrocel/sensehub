@@ -23,6 +23,39 @@ const TICK_WINDOW_MS = 3 * 3600000;
 const BACKFILL_DAYS = 7;
 
 const iso = (ms) => new Date(ms).toISOString();
+const i18n = require('../i18n');
+
+const TYPE_LABEL_SPECS = {
+  automated: i18n.M('irrigation_runs.type.automated'),
+  manual_app: i18n.M('irrigation_runs.type.manual_app'),
+  manual_panel: i18n.M('irrigation_runs.type.manual_panel'),
+  automation: i18n.M('irrigation_runs.type.automation'),
+};
+
+/**
+ * A formatted run in `lang` (read time): type_label, notes (from notes_i18n
+ * when the stored run has it; runs built before i18n keep their English notes)
+ * and the "Zone unknown" visit name. English originals stay in type_label_en /
+ * notes_en. English (or null) is returned unchanged.
+ */
+function localizeRun(run, lang) {
+  const L = i18n.normalizeLang(lang) || 'en';
+  if (!run || typeof run !== 'object' || L === 'en') return run;
+  const out = { ...run };
+  const labelSpec = run.type_label === 'Automation' ? TYPE_LABEL_SPECS.automation : TYPE_LABEL_SPECS[run.type];
+  if (labelSpec && typeof run.type_label === 'string') { out.type_label_en = run.type_label; out.type_label = i18n.render(L, labelSpec); }
+  if (Array.isArray(run.notes)) {
+    out.notes_en = run.notes;
+    if (Array.isArray(run.notes_i18n) && run.notes_i18n.length === run.notes.length) {
+      out.notes = run.notes_i18n.map((spec, i) => { try { return i18n.render(L, spec) || run.notes[i]; } catch (_) { return run.notes[i]; } });
+    }
+  }
+  const unknown = i18n.render(L, i18n.M('irrigation_runs.zone_unknown'));
+  const locVisit = (v) => (v && v.zone_unknown && v.name === 'Zone unknown' ? { ...v, name: unknown, name_en: v.name } : v);
+  if (Array.isArray(run.zone_visits)) out.zone_visits = run.zone_visits.map(locVisit);
+  if (Array.isArray(run.zones)) out.zones = run.zones.map(locVisit);
+  return out;
+}
 
 class IrrigationRunsService {
   /**
@@ -221,4 +254,4 @@ function getIrrigationRunsService() {
   return singleton;
 }
 
-module.exports = { IrrigationRunsService, getIrrigationRunsService, TYPES: Object.keys(builder.TYPE_LABEL) };
+module.exports = { IrrigationRunsService, getIrrigationRunsService, localizeRun, TYPES: Object.keys(builder.TYPE_LABEL) };

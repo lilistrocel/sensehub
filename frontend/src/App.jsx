@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
@@ -6,6 +7,7 @@ import { AlertSoundProvider } from './context/AlertSoundContext';
 import { ToastProvider } from './context/ToastContext';
 import { SettingsProvider } from './context/SettingsContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { LanguageProvider } from './context/LanguageContext';
 import Layout from './components/Layout';
 import { ToastContainer } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -34,13 +36,14 @@ import RelayEvents from './pages/RelayEvents';
 import Logs from './pages/Logs';
 import NotFound from './pages/NotFound';
 
-// Loading spinner component
+// Loading spinner component. Never suspends itself (it is a Suspense fallback).
 function LoadingSpinner() {
+  const { t } = useTranslation('common', { useSuspense: false });
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-canvas flex items-center justify-center">
       <div className="text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-muted">{t('status.loading')}</p>
       </div>
     </div>
   );
@@ -356,10 +359,14 @@ function App() {
               <WebSocketProvider>
                 <AlertSoundProvider>
                   <ToastProvider>
-                    <ErrorBoundary>
-                      <AppRoutes />
-                    </ErrorBoundary>
-                    <ToastContainer />
+                    <LanguageProvider>
+                      <ErrorBoundary>
+                        <Suspense fallback={<LoadingSpinner />}>
+                          <AppRoutes />
+                        </Suspense>
+                      </ErrorBoundary>
+                      <ToastContainer />
+                    </LanguageProvider>
                   </ToastProvider>
                 </AlertSoundProvider>
               </WebSocketProvider>

@@ -107,6 +107,21 @@
     @apply text-label uppercase text-muted font-sans;
   }
 
+  /* ---- Languages (docs/i18n-guide.md) ------------------------------------
+     <html lang dir> is set by src/i18n. Arabic letters join: letter-spacing
+     and uppercase break the joins, so both are off for every element under
+     lang=ar, and the 11px label grows a step (Arabic at 11px bold is not
+     readable in sun). Turkish keeps the uppercase labels: with lang=tr the
+     browser uppercases i -> İ and ı -> I correctly. */
+  :lang(ar) {
+    letter-spacing: normal !important;
+    text-transform: none !important;
+  }
+  :lang(ar) .text-label {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
   /* Visible focus rings in brand on all interactive elements */
   a:focus-visible,
   button:focus-visible,
@@ -153,15 +168,16 @@
     @apply bg-panel border border-line rounded-card p-6;
   }
 
-  /* Card left rail carrying state (3px). Use with `border` on a panel. */
-  .rail { @apply border-l-[3px]; }
-  .rail-idle { @apply border-l-[3px] border-l-state-idle; }
-  .rail-ok { @apply border-l-[3px] border-l-state-ok; }
-  .rail-caution { @apply border-l-[3px] border-l-state-caution; }
-  .rail-alarm { @apply border-l-[3px] border-l-state-alarm; }
-  .rail-lighting { @apply border-l-[3px] border-l-state-lighting; }
-  .rail-water { @apply border-l-[3px] border-l-state-water; }
-  .rail-stale { @apply border-l-[3px] border-l-state-caution border-dashed; }
+  /* Card state rail (3px) on the START edge: left in LTR, right in Arabic.
+     Use with `border` on a panel. */
+  .rail { @apply border-s-[3px]; }
+  .rail-idle { @apply border-s-[3px] border-s-state-idle; }
+  .rail-ok { @apply border-s-[3px] border-s-state-ok; }
+  .rail-caution { @apply border-s-[3px] border-s-state-caution; }
+  .rail-alarm { @apply border-s-[3px] border-s-state-alarm; }
+  .rail-lighting { @apply border-s-[3px] border-s-state-lighting; }
+  .rail-water { @apply border-s-[3px] border-s-state-water; }
+  .rail-stale { @apply border-s-[3px] border-s-state-caution border-dashed; }
 }
 
 @layer utilities {

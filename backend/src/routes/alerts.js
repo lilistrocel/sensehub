@@ -1,6 +1,7 @@
 const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
+const { localizeAlert } = require('../utils/alertBroadcast');
 
 const router = express.Router();
 
@@ -46,6 +47,9 @@ function buildFilters({ severity, equipment_id, acknowledged, automation_id, sou
 //   ?limit=100 (max 500) &offset=0 &acknowledged=true|false &severity=info|warning|critical
 //   &equipment_id=N &automation_id=N &source=...
 // Response: { items, total, unacknowledged, limit, offset }
+//   items[].message is rendered in the request language (req.lang) from message_key +
+//   message_params when the alert has a key; message_en / message_key / message_params
+//   are returned raw. Alerts stored before i18n have no key and stay English.
 //   total         = rows matching the filters
 //   unacknowledged = global open-alert count (independent of filters; same number as
 //                    /unacknowledged/count so the UI can show a badge without a second call)
@@ -56,7 +60,7 @@ router.get('/', (req, res) => {
 
   const items = db.prepare(
     `${ENRICHED_SELECT}${where} ORDER BY COALESCE(a.last_seen_at, a.created_at) DESC, a.id DESC LIMIT ? OFFSET ?`
-  ).all(...params, limit, offset);
+  ).all(...params, limit, offset).map(a => localizeAlert(a, req.lang));
   const { total } = db.prepare(`SELECT COUNT(*) as total FROM alerts a${where}`).get(...params);
   const { unacknowledged } = db.prepare('SELECT COUNT(*) as unacknowledged FROM alerts WHERE acknowledged = 0').get();
 
@@ -130,7 +134,7 @@ router.post('/:id/acknowledge', requireRole('admin', 'operator'), (req, res) => 
   const updated = db.prepare(`${ENRICHED_SELECT} WHERE a.id = ?`).get(alertId);
   global.broadcast('alert_acknowledged', updated);
 
-  res.json(updated);
+  res.json(localizeAlert(updated, req.lang));
 });
 
 module.exports = router;

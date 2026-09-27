@@ -1,0 +1,201 @@
+{
+  "actor": {
+    "stop_all": "إيقاف الكل",
+    "stop_irrigation": "إيقاف الري",
+    "relay_safety": "مراقب أمان المرحّلات",
+    "interlock": "القفل البيني",
+    "dose_controller": "متحكم الجرعات",
+    "ph_controller": "متحكم pH",
+    "dose_program": "برنامج الحقن",
+    "flow_watch": "مراقبة التدفق",
+    "watchdog": "المراقب",
+    "camera": "مراقب الكاميرا",
+    "agronomist": "المهندس الزراعي",
+    "automation": "الأتمتة",
+    "automation_named": "الأتمتة '{name}'",
+    "system": "النظام",
+    "relay_monitor": "مراقب المرحّلات",
+    "someone_at_panel": "شخص عند اللوحة",
+    "irrigation": "الري"
+  },
+  "unknown_user": "مستخدم غير معروف",
+  "someone": "شخص ما",
+  "automation_word": "أتمتة",
+  "user_id": "المستخدم #{id}",
+  "paren": "({text})",
+  "more": {
+    "zero": "{list}",
+    "one": "{list} و{count} آخر",
+    "two": "{list} و{count} آخران",
+    "few": "{list} و{count} أخرى",
+    "many": "{list} و{count} أخرى",
+    "other": "{list} و{count} أخرى"
+  },
+  "occurrences": "(×{count})",
+  "severity": {
+    "info": "معلومة",
+    "warning": "تحذير",
+    "critical": "حرج"
+  },
+  "state": {
+    "on": "مشغّل",
+    "off": "متوقف"
+  },
+  "trigger": {
+    "schedule": "جدول",
+    "manual": "تشغيل يدوي",
+    "watchdog_rearm": "إعادة تفعيل من المراقب",
+    "threshold": "عتبة"
+  },
+  "relay": {
+    "summary": "{lead}: {where}",
+    "lead_automation": "'{name}' {what}",
+    "lead_auto_off": "إيقاف تلقائي بعد المدة ('{name}') {what}",
+    "lead_actor": "{who} {what}",
+    "switched_on": "شغّل",
+    "switched_off": "أوقف",
+    "switched_mixed": "شغّل {on} وأوقف {off}",
+    "channels_on_board": {
+      "zero": "{count} قناة على {board} ({names})",
+      "one": "قناة واحدة على {board} ({names})",
+      "two": "قناتان على {board} ({names})",
+      "few": "{count} قنوات على {board} ({names})",
+      "many": "{count} قناة على {board} ({names})",
+      "other": "{count} قناة على {board} ({names})"
+    },
+    "channels_on_boards": {
+      "zero": "{count} قناة على {boards} لوحات ({names})",
+      "one": "قناة واحدة على {boards} لوحات ({names})",
+      "two": "قناتان على {boards} لوحات ({names})",
+      "few": "{count} قنوات على {boards} لوحات ({names})",
+      "many": "{count} قناة على {boards} لوحات ({names})",
+      "other": "{count} قناة على {boards} لوحات ({names})"
+    },
+    "after_write_by": "(بعد أمر من {user})",
+    "pressed_by": "(ضغطه {user})",
+    "unconfirmed": "— {count} لم يُؤكَّد بالقراءة الراجعة",
+    "from_device": "(من {device})",
+    "boards": {
+      "zero": "{count} لوحة",
+      "one": "لوحة واحدة",
+      "two": "لوحتان",
+      "few": "{count} لوحات",
+      "many": "{count} لوحة",
+      "other": "{count} لوحة"
+    }
+  },
+  "automation": {
+    "failed": "فشل '{name}': {message}",
+    "failed_trig": "فشل '{name}' ({trigger}): {message}",
+    "skipped": "تم تخطي '{name}': {message}",
+    "skipped_trig": "تم تخطي '{name}' ({trigger}): {message}",
+    "ran": "تم تشغيل '{name}'",
+    "ran_trig": "تم تشغيل '{name}' ({trigger})",
+    "held_back": {
+      "zero": "— لم يُحجب أي إجراء",
+      "one": "— حُجب إجراء واحد بسبب الاعتماديات",
+      "two": "— حُجب إجراءان بسبب الاعتماديات",
+      "few": "— حُجبت {count} إجراءات بسبب الاعتماديات",
+      "many": "— حُجب {count} إجراءً بسبب الاعتماديات",
+      "other": "— حُجب {count} إجراء بسبب الاعتماديات"
+    }
+  },
+  "alert": {
+    "raised": "تنبيه {severity}: {message}",
+    "acknowledged_many": {
+      "zero": "لم يُؤكَّد أي تنبيه",
+      "one": "تم تأكيد تنبيه واحد",
+      "two": "تم تأكيد تنبيهين",
+      "few": "تم تأكيد {count} تنبيهات",
+      "many": "تم تأكيد {count} تنبيهًا",
+      "other": "تم تأكيد {count} تنبيه"
+    },
+    "acknowledged_one": "تم تأكيد التنبيه: {message}"
+  },
+  "flow": {
+    "kind": {
+      "valve_no_flow": "لا تدفق للماء والمنطقة مفتوحة",
+      "run_shutdown": "أوقفت مراقبة التدفق تشغيل الري",
+      "pump_no_flow": "لا تدفق للماء والمضخة تعمل",
+      "low_flow": "تدفق ماء منخفض",
+      "water_without_valve": "الماء يتدفق دون فتح أي منطقة",
+      "dosing_without_water": "حقن بدون تدفق ماء",
+      "flow_above_expected": "تدفق أعلى من المتوقع",
+      "flow_after_pump_off": "تدفق والمضخة متوقفة",
+      "monitor_blind": "المراقب لا يرى",
+      "manual_panel": "ري يدوي من اللوحة",
+      "retry_recovered": "نجحت إعادة المحاولة",
+      "retry_ended": "انتهت إعادة المحاولة",
+      "retry_abandoned": "أُلغيت إعادة المحاولة"
+    },
+    "zone": "— {zone}",
+    "for": "لمدة {duration}",
+    "recovered": "(تعافى)",
+    "retry_n": "؛ إعادة تشغيل باردة رقم {attempt} {outcome}",
+    "retry": "؛ إعادة تشغيل باردة {outcome}",
+    "retry_outcome": {
+      "recovered": "نجحت",
+      "ended": "انتهت",
+      "abandoned": "أُلغيت",
+      "failed": "فشلت",
+      "tried": "جُرّبت"
+    },
+    "not_irrigated": "؛ لم تُروَ: {zones}",
+    "dosing_aborted": "؛ أُلغي الحقن",
+    "ongoing": "(مستمر)"
+  },
+  "run": {
+    "head": "تشغيل ري، {type}",
+    "type": {
+      "automated": "آلي",
+      "manual_app": "يدوي (التطبيق)",
+      "manual_panel": "يدوي (اللوحة)"
+    },
+    "status": {
+      "running": "قيد التشغيل",
+      "shutdown": "أُوقف",
+      "no_water": "لا ماء",
+      "stopped": "أُوقف يدويًا",
+      "cut_short": "انقطع مبكرًا",
+      "aborted": "أُلغي",
+      "no_flow": "لا تدفق"
+    },
+    "automation": "— '{name}'",
+    "by": "بواسطة {operators}",
+    "water_in": ": {litres} L خلال {duration}",
+    "water": ": {litres} L",
+    "in": ": خلال {duration}",
+    "status_suffix": "— {status}",
+    "uncontrolled": "— حقن بدون تحكم",
+    "in_progress": "(قيد التنفيذ)",
+    "run_id": "التشغيل #{id}"
+  },
+  "dose": {
+    "status": "— {status}",
+    "status_reason": "— {status} ({reason})",
+    "status_notes": "— {status}: {notes}",
+    "run": "تشغيل جرعات بحلقة مغلقة",
+    "run_prog": "تشغيل جرعات بحلقة مغلقة '{program}'",
+    "run_auto": "تشغيل جرعات بحلقة مغلقة لـ '{automation}'",
+    "run_prog_auto": "تشغيل جرعات بحلقة مغلقة '{program}' لـ '{automation}'",
+    "water": "{litres} L ماء",
+    "ph_avg": "متوسط pH {ph}",
+    "ec_avg": "متوسط EC {ec}",
+    "cycle": "دورة الحقن",
+    "cycle_prog": "دورة الحقن '{program}'",
+    "cycle_auto": "دورة الحقن لـ '{automation}'",
+    "cycle_prog_auto": "دورة الحقن '{program}' لـ '{automation}'",
+    "state": {
+      "running": "قيد التشغيل",
+      "completed": "اكتملت",
+      "aborted": "أُلغيت",
+      "failed": "فشلت",
+      "interrupted": "انقطعت"
+    }
+  },
+  "drift": {
+    "summary": "انحراف المرحّل {channel}: المتوقع {expected}، المقروء {actual}",
+    "last_write": "(آخر أمر: {source})",
+    "last_write_ago": "(آخر أمر: {source}، قبل {ago})"
+  }
+}

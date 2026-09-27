@@ -4,6 +4,8 @@ const { modbusPollingService } = require('../services/ModbusPollingService');
 const { automationArmingService } = require('../services/AutomationArmingService');
 const sb = require('../services/StatusBoardHelpers');
 
+const { localizeAlert } = require('../utils/alertBroadcast');
+
 const router = express.Router();
 
 // ---------------------------------------------------------------------------
@@ -12,7 +14,8 @@ const router = express.Router();
 // tabs). Pure grouping / unknown / stale logic lives in StatusBoardHelpers.
 // ---------------------------------------------------------------------------
 const STATUS_BOARD_CACHE_MS = 5000;
-let statusBoardCache = { at: 0, body: null };
+// Per request language (the latest alerts are rendered in it).
+const statusBoardCache = new Map(); // lang -> { at, body }
 
 function readTimezone() {
   try {
@@ -25,7 +28,7 @@ function readTimezone() {
   }
 }
 
-function buildStatusBoard() {
+function buildStatusBoard(lang = 'en') {
   const nowMs = Date.now();
   const equipment = db.prepare(`
     SELECT id, name, type, enabled, write_only, status, polling_interval_ms, last_communication, last_reading, register_mappings
@@ -76,11 +79,11 @@ function buildStatusBoard() {
     FROM alerts WHERE acknowledged = 0
   `).get();
   const latestAlerts = db.prepare(`
-    SELECT id, severity, message, created_at, last_seen_at, occurrence_count
+    SELECT id, severity, message, message_key, message_params, created_at, last_seen_at, occurrence_count
     FROM alerts WHERE acknowledged = 0
     ORDER BY COALESCE(last_seen_at, created_at) DESC, id DESC LIMIT 3
-  `).all().map(a => ({
-    id: a.id, severity: a.severity, message: a.message,
+  `).all().map(r => localizeAlert(r, lang)).map(a => ({
+    id: a.id, severity: a.severity, message: a.message, message_en: a.message_en, message_key: a.message_key, message_params: a.message_params,
     ts: sb.toIso(a.last_seen_at || a.created_at), occurrence_count: a.occurrence_count || 1,
   }));
 
@@ -120,12 +123,14 @@ function buildStatusBoard() {
 router.get('/status-board', (req, res) => {
   try {
     const now = Date.now();
-    if (statusBoardCache.body && now - statusBoardCache.at < STATUS_BOARD_CACHE_MS) {
+    const lang = req.lang || 'en';
+    const cached = statusBoardCache.get(lang);
+    if (cached && cached.body && now - cached.at < STATUS_BOARD_CACHE_MS) {
       res.set('X-Cache', 'HIT');
-      return res.json(statusBoardCache.body);
+      return res.json(cached.body);
     }
-    const body = buildStatusBoard();
-    statusBoardCache = { at: now, body };
+    const body = buildStatusBoard(lang);
+    statusBoardCache.set(lang, { at: now, body });
     res.set('X-Cache', 'MISS');
     res.json(body);
   } catch (err) {
@@ -209,7 +214,7 @@ router.get('/overview', (req, res) => {
     LEFT JOIN equipment e ON a.equipment_id = e.id
     ORDER BY a.created_at DESC
     LIMIT 5
-  `).all();
+  `).all().map(a => localizeAlert(a, req.lang));
 
   // Recent automation runs
   const recentAutomations = db.prepare(`
@@ -347,7 +352,7 @@ router.get('/zone/:id', (req, res) => {
   // Zone alerts
   const alerts = db.prepare(`
     SELECT * FROM alerts WHERE zone_id = ? ORDER BY created_at DESC LIMIT 10
-  `).all(zoneId);
+  `).all(zoneId).map(a => localizeAlert(a, req.lang));
 
   res.json({
     zone,
@@ -374,7 +379,7 @@ router.get('/equipment/:id', (req, res) => {
   // Equipment alerts
   const alerts = db.prepare(`
     SELECT * FROM alerts WHERE equipment_id = ? ORDER BY created_at DESC LIMIT 10
-  `).all(equipmentId);
+  `).all(equipmentId).map(a => localizeAlert(a, req.lang));
 
   // Zones
   const zones = db.prepare(`

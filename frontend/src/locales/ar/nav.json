@@ -1,0 +1,46 @@
+{
+  "sections": {
+    "operate": "التشغيل",
+    "automate": "الأتمتة",
+    "analyse": "التحليل",
+    "system": "النظام"
+  },
+  "items": {
+    "dashboard": "لوحة المتابعة",
+    "equipment": "المعدات",
+    "zones": "المناطق",
+    "cameras": "الكاميرات",
+    "alerts": "التنبيهات",
+    "automations": "قواعد الأتمتة",
+    "templates": "القوالب",
+    "planner": "المخطِّط",
+    "tasks": "المهام",
+    "fertigation": "التسميد بالري",
+    "amic": "محلّل AMIC",
+    "reports": "التقارير",
+    "dataExport": "تصدير البيانات",
+    "labAnalysis": "التحاليل المخبرية",
+    "calibration": "المعايرة",
+    "agronomist": "المهندس الزراعي",
+    "relayEvents": "أحداث المرحّلات",
+    "logs": "السجلات",
+    "settings": "الإعدادات",
+    "debug": "تصحيح الأخطاء"
+  },
+  "settingsTabs": {
+    "profile": "الملف الشخصي",
+    "users": "المستخدمون",
+    "system": "النظام",
+    "cloud": "السحابة",
+    "backup": "النسخ الاحتياطي"
+  },
+  "openMenu": "فتح القائمة",
+  "closeMenu": "إغلاق القائمة",
+  "sidebarAria": "التنقل في الشريط الجانبي",
+  "mobileAria": "التنقل على الهاتف",
+  "desktopAria": "التنقل على سطح المكتب",
+  "breadcrumbAria": "مسار التنقل",
+  "user": "مستخدم",
+  "role": "الدور",
+  "logout": "تسجيل الخروج"
+}

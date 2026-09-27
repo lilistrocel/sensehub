@@ -1,0 +1,165 @@
+{
+  "semi": "{a}; {b}",
+  "all": "tümü",
+  "label": {
+    "zone": "{zone} ({equipment} röle {channel})",
+    "pump": "sulama pompası ({equipment} röle {channel})",
+    "irrigation": "Sulama"
+  },
+  "title": {
+    "valve_no_flow": "Sulama: su akışı yok",
+    "low_flow": "Sulama: düşük debi",
+    "flow_above_expected": "Sulama: bir bölgeden fazla debi",
+    "dosing_without_water": "Fertigasyon: su olmadan dozlama",
+    "water_without_valve": "Sulama: açık bölge yokken akış",
+    "flow_after_pump_off": "Sulama: pompa KAPALIyken akış",
+    "monitor_blind": "Sulama: akış doğrulanamıyor",
+    "manual_panel": "Manuel sulama algılandı (pano)",
+    "pump_no_flow_shutdown": "Sulama durduruldu: su akışı yok",
+    "resolved": "{title} — çözüldü",
+    "ended": "{title} — sona erdi",
+    "retry_recovered": "Sulama soğuk yeniden başlatmadan sonra düzeldi",
+    "stop_unconfirmed": "Sulamayı Durdur ONAYLANMADI"
+  },
+  "fire": {
+    "valve_no_flow": "{label} AÇIK ve sulama pompası çalışıyor, ancak su akmıyor: {dur} boyunca {flow} L/h, beklenen ~{expected} L/h. Vana açılmıyor mu? Bölge vanasını kontrol edin (sonra pompayı).",
+    "low_flow": "{label}: düşük debi — {dur} boyunca {flow} L/h (beklenen ~{expected} L/h, oran %{pct}). Vana kısmen mi açık, filtre mi tıkalı, yoksa pompa sorunu mu?",
+    "flow_above_expected": "{label}: bir bölgenin alması gerekenden fazla su — {dur} boyunca {mean} L/h ({window} sn ortalama), bu bölge için ~{base} L/h (+%{pct}, sınır +%{limit}, {basis}). Başka bir vana açık olabilir (manuel müdahale veya açık bırakılmış tahliye?).",
+    "dosing_without_water": "Su akışı olmayan bir hatta gübre dozlanıyor: {tanks} (su {flow} L/h, {dur} boyunca {max} L/h altında). {extra}",
+    "water_without_valve": "Su akıyor ({dur} boyunca {flow} L/h) ama {equipment} üzerinde hiçbir sulama bölgesi rölesi AÇIK değil — açık kalmış vana, sızıntı veya manuel vana mı?",
+    "water_without_valve_panel": "Manuel sulama (pano) dikkat gerektiriyor: {why}. Su {flow} L/h, başlangıç {start}, şimdiye kadar {water} L; {tanks}{ratio}. Hiçbir SenseHub pompa veya bölge rölesi AÇIK değil — panoda kontrol edin.",
+    "manual_panel": "Manuel sulama algılandı (pano) — su {flow} L/h, başlangıç {start}. Hiçbir SenseHub pompa veya bölge rölesi AÇIK değil, bu yüzden bölge bilinmiyor {hint} ve dozlama SenseHub kontrolü dışında. {extra}",
+    "flow_after_pump_off": "Su akıyor ({dur} boyunca {flow} L/h) ancak sulama pompası rölesi ({equipment} röle {channel}) KAPALI — pompa panodan elle mi çalıştırıldı, yoksa sifonlama mı?",
+    "monitor_blind": "Sulama pompası AÇIK ama su akışı doğrulanamıyor: {why}. Bölge, düşük debi ve dozlama kontrolleri, veri yeniden gelene kadar duraklatıldı.",
+    "generic": "{rule}"
+  },
+  "basis": {
+    "learned": "{minutes} kararlı dakikadan öğrenildi",
+    "configured": "yapılandırılmış debi (henüz referans öğrenilmedi)",
+    "none": "yok"
+  },
+  "blind": {
+    "unhealthy": "debimetre sağlıksız (sinyal {signal}, hata bayrakları {flags}), süre {dur}",
+    "no_data": "{dur} boyunca debimetreden veri yok"
+  },
+  "dosing": {
+    "stop_disabled": "Otomatik dozlama durdurma KAPALI (abort_dosing_on_no_water = false) — dozlamayı elle durdurun.",
+    "stop_pending": "Dozlama otomatik olarak durduruluyor (dozlama döngüsü{cycle} iptal ediliyor)…",
+    "not_running": "Enjektör vanaları açık ama zamanlayıcı altında çalışan bir dozlama döngüsü yok, bu yüzden akış izleme onları durduramaz — elle kapatın."
+  },
+  "abort": {
+    "closed_body": "dozlama döngüsü{cycle} akış izleme tarafından iptal edildi, enjektör vanaları kapatıldı ({tanks}). Pompalara ve bölge vanalarına dokunulmadı",
+    "missing_body": "dozlama döngüsü{cycle} iptal edildi, ancak {tanks} kapatılması ONAYLANMADI — enjektör vanalarını hemen kontrol edin",
+    "stopped": "Dozlama otomatik olarak durduruldu: {body}.",
+    "none_open": "hiçbiri açık değil",
+    "already_ended": "Dozlama döngüsü zaten sona ermişti.",
+    "failed": "Otomatik dozlama durdurma BAŞARISIZ ({error}) — dozlama döngüsünü durdurun ve enjektör vanalarını hemen kapatın."
+  },
+  "end": {
+    "valve_no_flow_recovered": "Çözüldü: {label} — {dur} akışsız kaldıktan sonra su akışı geri geldi (şimdi {flow} L/h, beklenen ~{expected} L/h). Vana geç açıldı.",
+    "valve_no_flow": "{label} {dur} boyunca su akmadan çalıştı (en düşük {min} L/h, beklenen ~{expected} L/h), bölge/pompa {time} saatinde kapanana kadar. Bir sonraki çalışmadan önce bölge vanasını kontrol edin.",
+    "low_flow_recovered": "Çözüldü: {label} — {dur} düşük debiden sonra debi {flow} L/h değerine döndü.",
+    "low_flow_escalated": "{label}: düşük debi {dur} sonra akışsızlığa dönüştü — akış yok alarmına bakın.",
+    "low_flow": "{label} {dur} boyunca düşük debiyle çalıştı (en düşük {min} L/h, beklenen ~{expected} L/h), {time} saatinde kapanana kadar.",
+    "flow_above_expected_recovered": "Çözüldü: {label} — {dur} sonra debi bölge referansının +%{pct} sınırı içine döndü.",
+    "flow_above_expected": "{label} {dur} boyunca bir bölgeden fazla su aldı (en yüksek {max} L/h, {baseline}), bölge {time} saatinde değişene kadar. Açık bırakılmış başka bir vana olup olmadığını kontrol edin.",
+    "baseline": "referans ~{base} L/h",
+    "no_baseline": "referans yok",
+    "dosing_recovered": "Çözüldü: su olmadan dozlama ({tanks}) {dur} sonra sona erdi: su akışı geri geldi ({flow} L/h). {aborted} {litres}",
+    "dosing_had_been_stopped": "Dozlama otomatik olarak durdurulmuştu (dozlama döngüsü iptal edildi).",
+    "dosing": "Su olmadan dozlama ({tanks}) {dur} sürdü; {how}. {litres} Bir sonraki çalışmadan önce neden su akışı olmadığını araştırın.",
+    "litres": "Yaklaşık {litres} L konsantre su akışı olmadan verildi.",
+    "how_aborted_detail": "dozlama otomatik olarak durduruldu — {body}",
+    "how_aborted_plain": "dozlama otomatik olarak durduruldu (akış izleme dozlama döngüsünü iptal etti)",
+    "how_pending": "otomatik dozlama durdurma sürüyor",
+    "how_failed": "otomatik dozlama durdurma BAŞARISIZ oldu",
+    "how_stopped": "dozlama durdu",
+    "panel_attention": "Dikkat gerektiren manuel sulama (pano) {time} saatinde sona erdi: {dur}, {water} L, {tanks}{ratio}. Yükseltilme nedeni: {why}.",
+    "water_without_valve_recovered": "Çözüldü: açık bölge yokken su akışı {dur} sonra durdu.",
+    "water_without_valve": "Açık bölge yokken {dur} boyunca su aktı, {time} saatinde bir bölge açılana kadar (en yüksek {max} L/h).",
+    "manual_panel": "Manuel sulama (pano) sona erdi: {start}–{end}, {dur}, {water} L su, {tanks}{ratio}. {taken} {escalated}",
+    "relays_took_over": "SenseHub röleleri devraldı.",
+    "flow_after_pump_off_recovered": "Çözüldü: pompa rölesi KAPALIyken su akışı {dur} sonra durdu.",
+    "flow_after_pump_off": "Pompa rölesi KAPALIyken {dur} boyunca su aktı, pompa {time} saatinde açılana kadar (en yüksek {max} L/h).",
+    "monitor_blind_recovered": "Çözüldü: debimetre verisi geri geldi ({dur} boyunca doğrulanamamıştı).",
+    "monitor_blind": "Pompalama sırasında {dur} boyunca akış doğrulanamadı; pompa şimdi KAPALI. Sulama monitörünü kontrol edin.",
+    "generic": "{rule} {dur} sonra sona erdi"
+  },
+  "panel": {
+    "why_long": "{dur} çalışıyor, {max} dk sınırından uzun",
+    "why_ratio": "tanklar 1:{max} oranından güçlü dozluyor (1:{ratio})",
+    "why_dosing_low_flow": "tanklar hâlâ dozluyor ({dur} içinde {litres} L) ve su {max} L/h altında",
+    "why_default": "dikkat gerektiriyor",
+    "hint_one": "(≈ bir bölgenin debisi)",
+    "hint_two": "(≈ iki bölgenin debisi)",
+    "no_dosing": "dozlama ölçülmedi",
+    "escalated": "Dikkat seviyesine yükseltildi: {why}."
+  },
+  "retry": {
+    "start_valve": "{label} pompalar çalışırken {dur} boyunca susuz kaldı (debi {flow} L/h, {threshold} L/h altında). Pompalar ve bölge vanası kapatıldı, dozlama duraklatıldı; pompalar + bölge {pause} sn içinde soğuk yeniden başlatılacak (deneme {attempt}/{max}). {extra}",
+    "start_pumps": "{label} pompalar çalışırken {dur} boyunca susuz kaldı (debi {flow} L/h, {threshold} L/h altında). Pompalar kapatıldı, dozlama duraklatıldı; pompalar {pause} sn içinde soğuk yeniden başlatılacak (deneme {attempt}/{max}). {extra}",
+    "dose_aborted": "Dozlama döngüsü sabit bir programla çalışıyor ve duraklatılamıyor, bu yüzden iptal edildi: bu çalışmanın geri kalanında gübre YOK.",
+    "dose_failed": "Dozlamayı duraklatma BAŞARISIZ ({error}) — enjektör vanalarını kontrol edin.",
+    "notify": "{message} {dose}",
+    "recovered_valve": "{label} soğuk yeniden başlatmadan (deneme) sonra düzeldi: pompalar çalışırken {dur} boyunca su yoktu, bu yüzden pompalar ve vana {pause} sn durduruldu ve yeniden başlatıldı — yeniden başlatmadan {after} sonra debi {flow} L/h değerine döndü. {note} {dose} Vana basınç altında anahtarlandığında takılıyor — kontrol edin.",
+    "recovered_pumps": "{label} soğuk yeniden başlatmadan (deneme) sonra düzeldi: pompalar çalışırken {dur} boyunca su yoktu, bu yüzden pompalar {pause} sn durduruldu ve yeniden başlatıldı — yeniden başlatmadan {after} sonra debi {flow} L/h değerine döndü. {note} {dose} Bölge vanasını kontrol edin.",
+    "superseded": "Duraklama sırasında {zone} yerine sıradaki bölge geçti; pompalar o bölge için yeniden başlatıldı.",
+    "recovered_dose_aborted": "Dozlama iptal edilmek zorunda kalındı (sabit program): bu çalışmanın geri kalanında gübre yok.",
+    "recovered_dose_resumed": "Dozlama, bölge hedefi korunarak devam etti.",
+    "ended": "Yeniden başlatıldı, ancak {why}.",
+    "abandoned": "Soğuk yeniden başlatma iptal edildi: {why}. Pompalar KAPALI kalıyor.",
+    "legacy": "{message} {extra}"
+  },
+  "why": {
+    "retry_off": "soğuk yeniden başlatma denemesi kapalı",
+    "no_zone": "hiçbir bölge açık değildi (pompa kapalı hatta çalışıyor)",
+    "retry_failed": "soğuk yeniden başlatma su getirmedi",
+    "several_zones": "birden fazla bölge açıktı",
+    "disarmed": "otomasyonlar devre dışı (yeniden başlatmaya izin yok)",
+    "no_pump_end": "planlanmış pompa bitişi yok (programlı bir çalışma değil)",
+    "no_zone_end": "planlanmış bölge bitişi yok (programlı bir çalışma değil)",
+    "too_little_left": "duraklamadan sonra bölgeye yalnızca {seconds} sn kalacaktı",
+    "off_unconfirmed": "deneme için pompaların KAPALI olduğu doğrulanamadı ({error})",
+    "readback_disagrees": "geri okuma uyuşmuyor",
+    "disarmed_in_pause": "deneme duraklaması sırasında otomasyonlar devre dışı bırakıldı (yeniden başlatma yok)",
+    "automation_gone": "deneme duraklaması sırasında otomasyon devre dışı bırakıldı veya silindi (yeniden başlatma yok)",
+    "relays_unknown": "yeniden başlatmada sulama rölelerinin durumu bilinmiyordu",
+    "other_zone_opened": "takılan bölge hâlâ enerjiliyken başka bir bölge açıldı",
+    "too_little_left_at_restart": "yeniden başlatmada bölgeye yalnızca {seconds} sn kalmıştı",
+    "on_unconfirmed": "soğuk yeniden başlatma AÇMA komutu doğrulanmadı ({error})",
+    "pump_off_early": "su doğrulanmadan pompa kapandı",
+    "operator_action": "{equipment} üzerinde operatör işlemi ({source})",
+    "stop_pressed": "Sulamayı Durdur basıldı",
+    "stop_pressed_restart": "yeniden başlatma sırasında Sulamayı Durdur basıldı",
+    "stop_pressed_restart_unconfirmed": "yeniden başlatma sırasında Sulamayı Durdur basıldı (KAPATMA ONAYLANMADI)",
+    "stop_irrigation_by": "Sulamayı Durdur, {who} tarafından",
+    "stop_all": "Tümünü Durdur"
+  },
+  "shutdown": {
+    "main": "Sulama durduruldu: {what} — aşırı basıncı önlemek için pompalar, bölgeler ve dozlama kapatıldı. {retry} Bu çalışmada sulanmayan bölgeler: {zones}. {check} ({outcome}.) {warning}",
+    "what_zone": "{label} pompalar çalışırken {dur} boyunca susuz kaldı",
+    "what_no_zone": "{label} {dur} boyunca açık bölge olmadan ve su akmadan çalıştı",
+    "retry_failed_valve": "Soğuk yeniden başlatma (pompalar + vana {pause} sn kapalı, sonra tekrar açık) su getirmedi.",
+    "retry_failed_pumps": "Soğuk yeniden başlatma (pompalar {pause} sn kapalı, sonra tekrar açık) su getirmedi.",
+    "no_retry": "Soğuk yeniden başlatma yok: {why}.",
+    "check_valve": "Vanayı kontrol edin.",
+    "check_no_zone": "Neden hiçbir bölgenin açık olmadığını kontrol edin.",
+    "off_confirmed": "KAPALI durumu röleler {relays} üzerinde doğrulandı",
+    "starts_cancelled": {
+      "one": "bekleyen {count} başlatma iptal edildi",
+      "other": "bekleyen {count} başlatma iptal edildi"
+    },
+    "dose_aborted": "dozlama döngüsü{cycle} iptal edildi",
+    "dose_abort_failed": "dozlama iptali BAŞARISIZ ({error})",
+    "not_confirmed": {
+      "one": "UYARI: {equipment} röle {relays} üzerinde KAPATMA ONAYLANMADI{error} — Tümünü Durdur'a basın veya pompaları panodan HEMEN kapatın.",
+      "other": "UYARI: {equipment} röleler {relays} üzerinde KAPATMA ONAYLANMADI{error} — Tümünü Durdur'a basın veya pompaları panodan HEMEN kapatın."
+    },
+    "off_unconfirmed_alert": "Sulama kapatması {equipment} üzerinde pompaların/bölgelerin KAPALI olduğunu doğrulayamadı (röleler {relays}{error}). Tümünü Durdur'a basın veya pompaları panodan HEMEN kapatın."
+  },
+  "relay_reason": {
+    "not_found": "sulama ekipmanı #{id} bulunamadı",
+    "stale": "sulama röle kartı durumu eski",
+    "not_reported": "sulama röle durumu bildirilmedi"
+  }
+}

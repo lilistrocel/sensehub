@@ -1,0 +1,4 @@
+{
+  "_comment": "MqttIngestService (irrigation monitor).",
+  "error_flags": "{name}: flow meter reports error_flags={flags} (0x{hex}). Flow readings may be unreliable until it clears."
+}

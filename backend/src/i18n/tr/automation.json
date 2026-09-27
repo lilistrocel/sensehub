@@ -1,0 +1,6 @@
+{
+  "default_alert": "Otomasyon tetiklendi",
+  "consecutive_skips": {
+    "other": "\"{name}\" otomasyonu (id={id}) art arda {count} kez atlandı. Atlamaya neden olan sensör okumasının doğru olduğunu kontrol edin."
+  }
+}

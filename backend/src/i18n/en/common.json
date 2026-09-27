@@ -1,0 +1,13 @@
+{
+  "_comment": "Shared fragments. English is canonical; tr/ar are machine translations pending native review (docs/i18n-review.md).",
+  "titled": "{title}: {message}",
+  "none": "none",
+  "unknown": "unknown",
+  "an_operator": "an operator",
+  "relay": "relay {channel}",
+  "relays": "relays {channels}",
+  "equipment_relay": "{equipment} relay {channel}",
+  "tank": "Tank {id}",
+  "automation": "automation {id}",
+  "translation_failed_note": "Translation is not available right now — showing the original English text."
+}

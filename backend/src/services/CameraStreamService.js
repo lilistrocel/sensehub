@@ -213,7 +213,8 @@ class CameraStreamService {
         console.log(`[CameraStream] Camera "${camera.name}" (${camera.ip_address}) reachable again (was unreachable since ${since})`);
         createAlert({
           severity: 'info', source: 'camera', fingerprint: `camera_recovered:${camera.id}`,
-          message: `Camera "${camera.name}" (${camera.ip_address}) is reachable again (unreachable since ${since})`,
+          messageKey: 'camera.recovered',
+          messageParams: { name: `${camera.name}`, ip: `${camera.ip_address}`, since: `${since}` },
         });
       }
       if (camera.status !== 'online' || camera.error_message) {
@@ -241,7 +242,8 @@ class CameraStreamService {
     }
     createAlert({
       severity: 'warning', source: 'camera', fingerprint: `camera_unreachable:${camera.id}`,
-      message: `Camera "${camera.name}" (${camera.ip_address}) unreachable since ${since} — check power/network; if it uses DHCP its IP may have changed (set a DHCP reservation)`,
+      messageKey: 'camera.unreachable',
+      messageParams: { name: `${camera.name}`, ip: `${camera.ip_address}`, since: `${since}` },
     });
     return false;
   }

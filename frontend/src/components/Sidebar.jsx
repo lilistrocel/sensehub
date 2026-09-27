@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 
 // Icon components (simple SVG icons)
@@ -142,51 +143,53 @@ const TasksIcon = () => (
   </svg>
 );
 
-// Navigation grouped into sections. Items with `visible(user)` are gated;
-// everything else is shown to every authenticated user (role gating unchanged).
+// Navigation grouped into sections. `key` is the i18n key under nav:items /
+// nav:sections (the same item keys label the breadcrumb). Items with
+// `visible(user)` are gated; everything else is shown to every authenticated
+// user (role gating unchanged).
 const navSections = [
   {
-    title: 'Operate',
+    key: 'operate',
     items: [
-      { name: 'Dashboard', path: '/', icon: DashboardIcon },
-      { name: 'Equipment', path: '/equipment', icon: EquipmentIcon },
-      { name: 'Zones', path: '/zones', icon: ZonesIcon },
-      { name: 'Cameras', path: '/cameras', icon: CameraIcon },
-      { name: 'Alerts', path: '/alerts', icon: AlertsIcon },
+      { key: 'dashboard', path: '/', icon: DashboardIcon },
+      { key: 'equipment', path: '/equipment', icon: EquipmentIcon },
+      { key: 'zones', path: '/zones', icon: ZonesIcon },
+      { key: 'cameras', path: '/cameras', icon: CameraIcon },
+      { key: 'alerts', path: '/alerts', icon: AlertsIcon },
     ],
   },
   {
-    title: 'Automate',
+    key: 'automate',
     items: [
-      { name: 'Automations', path: '/automations', icon: AutomationsIcon },
-      { name: 'Templates', path: '/templates', icon: TemplatesIcon },
-      { name: 'Planner', path: '/planner', icon: PlannerIcon },
-      { name: 'Tasks', path: '/tasks', icon: TasksIcon },
-      { name: 'Fertigation', path: '/fertigation', icon: FertigationIcon },
-      { name: 'AMIC Analyzer', path: '/amic', icon: AmicIcon },
+      { key: 'automations', path: '/automations', icon: AutomationsIcon },
+      { key: 'templates', path: '/templates', icon: TemplatesIcon },
+      { key: 'planner', path: '/planner', icon: PlannerIcon },
+      { key: 'tasks', path: '/tasks', icon: TasksIcon },
+      { key: 'fertigation', path: '/fertigation', icon: FertigationIcon },
+      { key: 'amic', path: '/amic', icon: AmicIcon },
     ],
   },
   {
-    title: 'Analyse',
+    key: 'analyse',
     items: [
-      { name: 'Reports', path: '/reports', icon: ReportsIcon },
-      { name: 'Data Export', path: '/analytics', icon: AnalyticsIcon },
-      { name: 'Lab Analysis', path: '/lab-analysis', icon: LabIcon },
-      { name: 'Calibration', path: '/calibration', icon: CalibrationIcon },
-      { name: 'Agronomist', path: '/agronomist', icon: AgronomistIcon },
-      { name: 'Relay Events', path: '/relay-events', icon: RelayEventsIcon },
+      { key: 'reports', path: '/reports', icon: ReportsIcon },
+      { key: 'dataExport', path: '/analytics', icon: AnalyticsIcon },
+      { key: 'labAnalysis', path: '/lab-analysis', icon: LabIcon },
+      { key: 'calibration', path: '/calibration', icon: CalibrationIcon },
+      { key: 'agronomist', path: '/agronomist', icon: AgronomistIcon },
+      { key: 'relayEvents', path: '/relay-events', icon: RelayEventsIcon },
       // Activity / audit log: operators and admins (the API refuses viewers).
-      { name: 'Logs', path: '/logs', icon: LogsIcon, visible: (user) => user?.role === 'admin' || user?.role === 'operator' },
+      { key: 'logs', path: '/logs', icon: LogsIcon, visible: (user) => user?.role === 'admin' || user?.role === 'operator' },
     ],
   },
   {
-    title: 'System',
+    key: 'system',
     items: [
-      { name: 'Settings', path: '/settings', icon: SettingsIcon },
+      { key: 'settings', path: '/settings', icon: SettingsIcon },
       // /debug is only mounted in dev builds (see App.jsx) and only for admins,
       // so the link must follow the exact same rule or it 404s in production.
       {
-        name: 'Debug',
+        key: 'debug',
         path: '/debug',
         icon: DebugIcon,
         visible: (user) => import.meta.env.DEV && user?.role === 'admin',
@@ -198,6 +201,7 @@ const navSections = [
 export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation(['nav', 'common']);
 
   const visibleSections = navSections
     .map((section) => ({
@@ -225,47 +229,47 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
         <div className="flex items-center gap-2.5 min-w-0">
           <span aria-hidden="true" className="w-2.5 h-6 rounded-sm bg-brand-600 shrink-0" />
           <span className="flex flex-col leading-tight min-w-0">
-            <span className="text-label uppercase text-muted">A20Core</span>
-            <span className="font-display text-lg font-bold text-ink truncate">SenseHub</span>
+            <span className="text-label uppercase text-muted" lang="en">A20Core</span>
+            <span className="font-display text-lg font-bold text-ink truncate" lang="en">SenseHub</span>
           </span>
         </div>
         {/* Close button for mobile */}
         <button
           onClick={() => setMobileMenuOpen(false)}
           className="md:hidden p-2 rounded-md text-muted hover:text-ink hover:bg-field focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
-          aria-label="Close menu"
+          aria-label={t('nav:closeMenu')}
         >
           <CloseIcon />
         </button>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-2 py-3 overflow-y-auto" aria-label="Sidebar navigation">
+      <nav className="flex-1 px-2 py-3 overflow-y-auto" aria-label={t('nav:sidebarAria')}>
         {visibleSections.map((section, sectionIdx) => (
-          <div key={section.title} className={sectionIdx > 0 ? 'mt-4' : ''}>
+          <div key={section.key} className={sectionIdx > 0 ? 'mt-4' : ''}>
             <h2
               className="px-3 mb-1.5 text-label uppercase text-muted select-none"
-              id={`nav-section-${section.title.toLowerCase()}`}
+              id={`nav-section-${section.key}`}
             >
-              {section.title}
+              {t(`nav:sections.${section.key}`)}
             </h2>
-            <div className="space-y-1" role="group" aria-labelledby={`nav-section-${section.title.toLowerCase()}`}>
+            <div className="space-y-1" role="group" aria-labelledby={`nav-section-${section.key}`}>
               {section.items.map((item) => (
                 <NavLink
-                  key={item.name}
+                  key={item.key}
                   to={item.path}
                   end={item.path === '/'}
                   onClick={handleNavClick}
                   className={({ isActive }) =>
-                    `flex items-center px-3 py-2 text-sm font-medium rounded-md border-l-[3px] transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
+                    `flex items-center px-3 py-2 text-sm font-medium rounded-md border-s-[3px] transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
                       isActive
-                        ? 'border-l-brand-600 dark:border-l-brand-400 bg-brand-50 dark:bg-brand-900/50 text-brand-700 dark:text-brand-200'
-                        : 'border-l-transparent text-gray-600 dark:text-gray-300 hover:bg-field hover:text-ink'
+                        ? 'border-s-brand-600 dark:border-s-brand-400 bg-brand-50 dark:bg-brand-900/50 text-brand-700 dark:text-brand-200'
+                        : 'border-s-transparent text-gray-600 dark:text-gray-300 hover:bg-field hover:text-ink'
                     }`
                   }
                 >
                   <item.icon />
-                  <span className="ml-3">{item.name}</span>
+                  <span className="ms-3">{t(`nav:items.${item.key}`)}</span>
                 </NavLink>
               ))}
             </div>
@@ -279,9 +283,11 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
           <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white font-semibold text-sm">
             {user?.name?.charAt(0) || 'U'}
           </div>
-          <div className="ml-3 flex-1 min-w-0">
-            <p className="text-sm font-medium text-ink truncate">{user?.name || 'User'}</p>
-            <p className="text-label uppercase text-muted truncate">{user?.role || 'Role'}</p>
+          <div className="ms-3 flex-1 min-w-0">
+            <p className="text-sm font-medium text-ink truncate">{user?.name || t('nav:user')}</p>
+            <p className="text-label uppercase text-muted truncate">
+              {user?.role ? t(`common:role.${user.role}`, { defaultValue: user.role }) : t('nav:role')}
+            </p>
           </div>
         </div>
         <button
@@ -289,7 +295,7 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
           className="flex items-center w-full min-h-touch px-3 py-2 text-sm font-medium text-muted hover:bg-field hover:text-ink rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
         >
           <LogoutIcon />
-          <span className="ml-3">Logout</span>
+          <span className="ms-3">{t('nav:logout')}</span>
         </button>
       </div>
     </>
@@ -300,8 +306,8 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
       {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileMenuOpen(true)}
-        className="md:hidden fixed top-3 left-3 z-40 p-2.5 rounded-md bg-panel border border-line shadow-sm text-muted hover:text-ink hover:bg-field focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
-        aria-label="Open menu"
+        className="md:hidden fixed top-3 start-3 z-40 p-2.5 rounded-md bg-panel border border-line shadow-sm text-muted hover:text-ink hover:bg-field focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+        aria-label={t('nav:openMenu')}
       >
         <MenuIcon />
       </button>
@@ -317,11 +323,11 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
 
       {/* Mobile sidebar */}
       <aside
-        className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-panel border-r border-line shadow-xl transform transition-transform duration-300 ease-in-out ${
-          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`md:hidden fixed inset-y-0 start-0 z-50 w-64 bg-panel border-e border-line shadow-xl transform transition-transform duration-300 ease-in-out ${
+          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full'
         }`}
         role="navigation"
-        aria-label="Mobile navigation"
+        aria-label={t('nav:mobileAria')}
       >
         <div className="flex flex-col h-full">
           <NavContent />
@@ -332,9 +338,9 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
       <aside
         className="hidden md:flex md:flex-shrink-0"
         role="navigation"
-        aria-label="Desktop navigation"
+        aria-label={t('nav:desktopAria')}
       >
-        <div className="w-64 bg-panel border-r border-line flex flex-col h-screen">
+        <div className="w-64 bg-panel border-e border-line flex flex-col h-screen">
           <NavContent />
         </div>
       </aside>

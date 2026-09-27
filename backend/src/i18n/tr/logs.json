@@ -1,0 +1,171 @@
+{
+  "actor": {
+    "stop_all": "Tümünü Durdur",
+    "stop_irrigation": "Sulamayı Durdur",
+    "relay_safety": "Röle güvenlik bekçisi",
+    "interlock": "Kilitleme",
+    "dose_controller": "Doz kontrolcüsü",
+    "ph_controller": "pH kontrolcüsü",
+    "dose_program": "Dozlama programı",
+    "flow_watch": "Debi izleme",
+    "watchdog": "Bekçi",
+    "camera": "Kamera izleme",
+    "agronomist": "Ziraat mühendisi",
+    "automation": "Otomasyon",
+    "automation_named": "Otomasyon '{name}'",
+    "system": "Sistem",
+    "relay_monitor": "Röle izleme",
+    "someone_at_panel": "Panodaki biri",
+    "irrigation": "Sulama"
+  },
+  "unknown_user": "Bilinmeyen kullanıcı",
+  "someone": "Biri",
+  "automation_word": "otomasyon",
+  "user_id": "kullanıcı #{id}",
+  "paren": "({text})",
+  "more": {
+    "other": "{list} +{count} daha"
+  },
+  "occurrences": "(×{count})",
+  "severity": {
+    "info": "BİLGİ",
+    "warning": "UYARI",
+    "critical": "KRİTİK"
+  },
+  "state": {
+    "on": "AÇIK",
+    "off": "KAPALI"
+  },
+  "trigger": {
+    "schedule": "zamanlama",
+    "manual": "elle çalıştırma",
+    "watchdog_rearm": "bekçi yeniden kurma",
+    "threshold": "eşik"
+  },
+  "relay": {
+    "summary": "{lead}: {where}",
+    "lead_automation": "'{name}' {what}",
+    "lead_auto_off": "Süre sonunda otomatik kapatma ('{name}') {what}",
+    "lead_actor": "{who} {what}",
+    "switched_on": "AÇTI",
+    "switched_off": "KAPATTI",
+    "switched_mixed": "{on} AÇTI, {off} KAPATTI",
+    "channels_on_board": {
+      "other": "{board} üzerinde {count} kanal ({names})"
+    },
+    "channels_on_boards": {
+      "other": "{boards} panoda {count} kanal ({names})"
+    },
+    "after_write_by": "({user} yazmasından sonra)",
+    "pressed_by": "({user} bastı)",
+    "unconfirmed": "— {count} tanesi geri okumayla doğrulanmadı",
+    "from_device": "({device} üzerinden)",
+    "boards": {
+      "other": "{count} pano"
+    }
+  },
+  "automation": {
+    "failed": "'{name}' başarısız: {message}",
+    "failed_trig": "'{name}' başarısız ({trigger}): {message}",
+    "skipped": "'{name}' atlandı: {message}",
+    "skipped_trig": "'{name}' atlandı ({trigger}): {message}",
+    "ran": "'{name}' çalıştı",
+    "ran_trig": "'{name}' çalıştı ({trigger})",
+    "held_back": {
+      "other": "— {count} eylem bağımlılıklar nedeniyle bekletildi"
+    }
+  },
+  "alert": {
+    "raised": "{severity} uyarısı: {message}",
+    "acknowledged_many": {
+      "other": "{count} uyarı onaylandı"
+    },
+    "acknowledged_one": "Uyarı onaylandı: {message}"
+  },
+  "flow": {
+    "kind": {
+      "valve_no_flow": "Bölge açıkken su akışı yok",
+      "run_shutdown": "Debi izleme sulama çalışmasını durdurdu",
+      "pump_no_flow": "Pompa çalışırken su akışı yok",
+      "low_flow": "Düşük su debisi",
+      "water_without_valve": "Hiçbir bölge açık değilken su akıyor",
+      "dosing_without_water": "Su akışı olmadan dozlama",
+      "flow_above_expected": "beklenenden yüksek debi",
+      "flow_after_pump_off": "pompa kapalıyken debi",
+      "monitor_blind": "izleme kör",
+      "manual_panel": "manuel pano sulaması",
+      "retry_recovered": "yeniden deneme başarılı",
+      "retry_ended": "yeniden deneme sona erdi",
+      "retry_abandoned": "yeniden deneme iptal edildi"
+    },
+    "zone": "— {zone}",
+    "for": "{duration} boyunca",
+    "recovered": "(düzeldi)",
+    "retry_n": "; soğuk yeniden başlatma denemesi #{attempt} {outcome}",
+    "retry": "; soğuk yeniden başlatma denemesi {outcome}",
+    "retry_outcome": {
+      "recovered": "düzeldi",
+      "ended": "sona erdi",
+      "abandoned": "iptal edildi",
+      "failed": "başarısız",
+      "tried": "denendi"
+    },
+    "not_irrigated": "; sulanmayan: {zones}",
+    "dosing_aborted": "; dozlama iptal edildi",
+    "ongoing": "(devam ediyor)"
+  },
+  "run": {
+    "head": "Sulama çalışması, {type}",
+    "type": {
+      "automated": "otomatik",
+      "manual_app": "manuel (uygulama)",
+      "manual_panel": "manuel (pano)"
+    },
+    "status": {
+      "running": "çalışıyor",
+      "shutdown": "kapatıldı",
+      "no_water": "su yok",
+      "stopped": "durduruldu",
+      "cut_short": "erken kesildi",
+      "aborted": "iptal edildi",
+      "no_flow": "debi yok"
+    },
+    "automation": "— '{name}'",
+    "by": "{operators} tarafından",
+    "water_in": ": {duration} içinde {litres} L",
+    "water": ": {litres} L",
+    "in": ": {duration} içinde",
+    "status_suffix": "— {status}",
+    "uncontrolled": "— kontrolsüz dozlama",
+    "in_progress": "(devam ediyor)",
+    "run_id": "çalışma #{id}"
+  },
+  "dose": {
+    "status": "— {status}",
+    "status_reason": "— {status} ({reason})",
+    "status_notes": "— {status}: {notes}",
+    "run": "Kapalı döngü doz çalışması",
+    "run_prog": "Kapalı döngü doz çalışması '{program}'",
+    "run_auto": "'{automation}' için kapalı döngü doz çalışması",
+    "run_prog_auto": "'{automation}' için kapalı döngü doz çalışması '{program}'",
+    "water": "{litres} L su",
+    "ph_avg": "ort. pH {ph}",
+    "ec_avg": "ort. EC {ec}",
+    "cycle": "Dozlama döngüsü",
+    "cycle_prog": "Dozlama döngüsü '{program}'",
+    "cycle_auto": "'{automation}' için dozlama döngüsü",
+    "cycle_prog_auto": "'{automation}' için dozlama döngüsü '{program}'",
+    "state": {
+      "running": "çalışıyor",
+      "completed": "tamamlandı",
+      "aborted": "iptal edildi",
+      "failed": "başarısız",
+      "interrupted": "yarıda kesildi"
+    }
+  },
+  "drift": {
+    "summary": "{channel} rölesinde sapma: beklenen {expected}, okunan {actual}",
+    "last_write": "(son yazma: {source})",
+    "last_write_ago": "(son yazma: {source}, {ago} önce)"
+  }
+}

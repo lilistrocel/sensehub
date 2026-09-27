@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Kpi } from '../../ui';
 import { isStale } from '../../utils/freshness';
 import { CLIMATE_BANDS, CLIMATE_TILES, STALE_FACTOR } from './constants';
@@ -20,6 +21,7 @@ export function climateRail(tile) {
  * number (rule 4.1).
  */
 export default function NowStrip({ climate = [], formatSince, now = Date.now() }) {
+  const { t } = useTranslation('dashboard');
   const byKey = new Map((climate || []).map((c) => [c.key, c]));
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3" data-testid="now-strip">
@@ -28,11 +30,11 @@ export default function NowStrip({ climate = [], formatSince, now = Date.now() }
         const stale = !tile || tile.stale || isStale(tile.ts, tile.pollMs, STALE_FACTOR, now);
         const unknown = !tile || tile.value === null || tile.value === undefined || !tile.ts;
         const rail = stale ? 'stale' : climateRail(tile);
-        const hint = stale && !unknown && formatSince ? `not reported since ${formatSince(tile.ts)}` : null;
+        const hint = stale && !unknown && formatSince ? t('now.notReportedSince', { time: formatSince(tile.ts) }) : null;
         return (
           <Kpi
             key={spec.key}
-            label={spec.label}
+            label={t(`climate.${spec.key}`, { defaultValue: spec.label })}
             rail={rail}
             padding="sm"
             value={unknown ? null : tile.value}

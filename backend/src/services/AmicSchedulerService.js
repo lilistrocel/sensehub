@@ -120,7 +120,8 @@ class AmicSchedulerService {
         createAlert({
           severity: 'info',
           source: 'amic',
-          message: `[AMIC] Scheduled Calibration triggered at ${slot.hour}:${String(slot.minute).padStart(2,'0')}${label}`,
+          messageKey: 'amic.calibration_triggered',
+          messageParams: { time: `${slot.hour}:${String(slot.minute).padStart(2,'0')}`, label }, // label = ' (<slot label>)' or ''
         });
       } catch (err) {
         console.error('[AmicScheduler] Failed to trigger Calibrate:', err.message);
@@ -129,7 +130,8 @@ class AmicSchedulerService {
           severity: 'warning',
           source: 'amic',
           fingerprint: `amic_scheduled_calibrate_failed:${slot.hour}:${slot.minute}`,
-          message: `[AMIC] Scheduled Calibration FAILED to trigger at ${slot.hour}:${String(slot.minute).padStart(2,'0')}: ${err.message}`,
+          messageKey: 'amic.calibration_failed',
+          messageParams: { time: `${slot.hour}:${String(slot.minute).padStart(2,'0')}`, error: `${err.message}` },
         });
       }
     }

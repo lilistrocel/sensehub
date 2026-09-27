@@ -10,6 +10,11 @@
  *   GET /api/logs/facets
  *   GET /api/logs/export.csv  (same filters, capped rows)
  *   GET /api/logs/:source/:id
+ *
+ * Language: system items' summary / actor_label / target_name are rendered at read
+ * time in req.lang (English originals in summary_en / actor_label_en / target_name_en);
+ * the `q` search matches both. audit_log summaries, automation_logs messages and
+ * dose-cycle notes are stored English text and stay English.
  */
 
 const express = require('express');
@@ -23,7 +28,7 @@ const EXPORT_MAX_ROWS = 5000;
 
 router.get('/', (req, res) => {
   try {
-    res.json(queryLogs(req.query));
+    res.json(queryLogs(req.query, { lang: req.lang }));
   } catch (err) {
     console.error('[Logs] query failed:', err.message);
     res.status(500).json({ error: 'Internal Server Error', message: err.message });
@@ -57,7 +62,7 @@ function localTime(iso, tz) {
 
 router.get('/export.csv', (req, res) => {
   try {
-    const { items, truncated, timezone } = collectLogs(req.query, EXPORT_MAX_ROWS);
+    const { items, truncated, timezone } = collectLogs(req.query, EXPORT_MAX_ROWS, { lang: req.lang });
     const header = ['time_utc', `time_local (${timezone})`, 'actor_type', 'actor', 'role', 'device', 'ip', 'category', 'action', 'target_type', 'target_id', 'target_name', 'summary', 'result', 'status_code', 'severity', 'count', 'source', 'id'];
     const lines = [header.map(csvCell).join(',')];
     for (const it of items) {
@@ -82,7 +87,7 @@ router.get('/:source/:id', (req, res) => {
   const { source, id } = req.params;
   if (!SOURCES.includes(source)) return res.status(400).json({ error: 'Bad Request', message: `unknown source '${source}'` });
   try {
-    const d = getLogDetail(source, id);
+    const d = getLogDetail(source, id, { lang: req.lang });
     if (!d) return res.status(404).json({ error: 'Not Found', message: 'Log entry not found' });
     res.json(d);
   } catch (err) {

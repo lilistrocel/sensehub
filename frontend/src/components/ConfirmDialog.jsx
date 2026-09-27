@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Accessible confirmation modal.
@@ -17,8 +18,8 @@ import React, { useEffect, useRef } from 'react';
  *   variant        'danger' | 'destructive' | 'primary' (default 'primary')
  *                  destructive = ghost button in alarm red (FARM-APP-STANDARDS 5:
  *                  solid red is reserved for alarm state)
- *   confirmLabel   string (default 'Confirm')
- *   cancelLabel    string (default 'Cancel')
+ *   confirmLabel   string (default common:actions.confirm)
+ *   cancelLabel    string (default common:actions.cancel)
  *   busy           boolean - disables buttons while the action runs
  *   onConfirm      () => void
  *   onCancel       () => void
@@ -29,12 +30,13 @@ export default function ConfirmDialog({
   body,
   items,
   variant = 'primary',
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   busy = false,
   onConfirm,
   onCancel,
 }) {
+  const { t } = useTranslation('common');
   const dialogRef = useRef(null);
   const cancelRef = useRef(null);
   const previouslyFocused = useRef(null);
@@ -105,7 +107,7 @@ export default function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-6 text-left"
+        className="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-6 text-start"
       >
         <div className="flex items-start gap-3">
           <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${
@@ -142,7 +144,7 @@ export default function ConfirmDialog({
             disabled={busy}
             className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 disabled:opacity-50"
           >
-            {cancelLabel}
+            {cancelLabel ?? t('actions.cancel')}
           </button>
           <button
             type="button"
@@ -150,7 +152,7 @@ export default function ConfirmDialog({
             disabled={busy}
             className={`w-full sm:w-auto px-4 py-2.5 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 ${confirmClasses}`}
           >
-            {busy ? 'Working...' : confirmLabel}
+            {busy ? t('actions.working') : (confirmLabel ?? t('actions.confirm'))}
           </button>
         </div>
       </div>

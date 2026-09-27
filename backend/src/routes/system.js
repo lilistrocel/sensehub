@@ -165,14 +165,15 @@ router.get('/logs', requireRole('admin'), (req, res) => {
     // Add some system events from alerts
     try {
       const alertLogs = db.prepare(`
-        SELECT 'alert' as source, severity as level, message,
+        SELECT 'alert' as source, severity as level, message, message_key, message_params,
                created_at as timestamp
         FROM alerts
         ORDER BY created_at DESC
         LIMIT 20
       `).all();
 
-      alertLogs.forEach(log => {
+      const { localizeAlert } = require('../utils/alertBroadcast');
+      alertLogs.map(l => localizeAlert(l, req.lang)).forEach(log => {
         logs.push({
           timestamp: log.timestamp || new Date().toISOString(),
           level: log.level === 'critical' ? 'error' : (log.level === 'warning' ? 'warning' : 'info'),

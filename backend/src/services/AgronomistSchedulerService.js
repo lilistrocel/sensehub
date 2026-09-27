@@ -9,6 +9,7 @@
 
 const { agronomistService } = require('./AgronomistService');
 const { createAlert } = require('../utils/alertBroadcast');
+const { M } = require('../i18n');
 
 const PROVIDER_ALERT_FINGERPRINT = 'agronomist_provider_error';
 
@@ -45,18 +46,24 @@ class AgronomistSchedulerService {
 
   _raiseProviderAlert(health) {
     if (!health?.lastErrorClass) return;
-    const label = { billing: 'Anthropic credit balance exhausted', auth: 'Anthropic API key rejected',
-                    rate_limit: 'Anthropic rate limit hit', other: 'Anthropic API error',
-                    // Output rejected by the report checks (nothing saved as a success).
-                    truncated_output: 'Report output cut off or invalid', max_tokens: 'Report hit the output token limit',
-                    refusal: 'Report declined by the model' }[health.lastErrorClass] || 'Anthropic API error';
+    // Catalog labels (agronomist_jobs.label.*); output rejected by the report checks
+    // (truncated_output / max_tokens / refusal) = nothing saved as a success.
+    const labelKey = {
+      billing: 'agronomist_jobs.label.billing', auth: 'agronomist_jobs.label.auth',
+      rate_limit: 'agronomist_jobs.label.rate_limit', other: 'agronomist_jobs.label.other',
+      truncated_output: 'agronomist_jobs.label.truncated_output', max_tokens: 'agronomist_jobs.label.max_tokens',
+      refusal: 'agronomist_jobs.label.refusal',
+    }[health.lastErrorClass] || 'agronomist_jobs.label.other';
     createAlert({
       severity: health.paused ? 'critical' : 'warning',
       source: 'agronomist',
       fingerprint: PROVIDER_ALERT_FINGERPRINT,
-      message: `[Agronomist] ${label} — ${health.consecutiveFailures} consecutive failed report(s)` +
-        (health.paused ? '; scheduled runs paused until settings are saved or Retry now succeeds' : '') +
-        `. Last error: ${String(health.lastErrorMessage || '').slice(0, 300)}`,
+      messageKey: health.paused ? 'agronomist_jobs.provider_alert_paused' : 'agronomist_jobs.provider_alert',
+      messageParams: {
+        label: M(labelKey),
+        count: `${health.consecutiveFailures}`,
+        error: String(health.lastErrorMessage || '').slice(0, 300), // provider text, passed through as-is
+      },
     });
   }
 

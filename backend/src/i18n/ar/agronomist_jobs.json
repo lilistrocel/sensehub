@@ -1,0 +1,13 @@
+{
+  "label": {
+    "billing": "نفد رصيد Anthropic",
+    "auth": "تم رفض مفتاح Anthropic API",
+    "rate_limit": "تم بلوغ حد الطلبات في Anthropic",
+    "other": "خطأ في Anthropic API",
+    "truncated_output": "مخرجات التقرير مقطوعة أو غير صالحة",
+    "max_tokens": "بلغ التقرير حد رموز المخرجات",
+    "refusal": "رفض النموذج إعداد التقرير"
+  },
+  "provider_alert": "[المهندس الزراعي] {label} — {count} تقرير فاشل متتالٍ. آخر خطأ: {error}",
+  "provider_alert_paused": "[المهندس الزراعي] {label} — {count} تقرير فاشل متتالٍ؛ أُوقفت التشغيلات المجدولة مؤقتًا حتى تُحفظ الإعدادات أو تنجح إعادة المحاولة الآن. آخر خطأ: {error}"
+}

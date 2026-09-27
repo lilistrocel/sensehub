@@ -1,0 +1,178 @@
+{
+  "_comment": "Unified activity log (services/UnifiedLogService.js) — rendered at read time. audit_log summaries, automation_logs messages and dose-cycle notes are stored English text and stay English.",
+  "actor": {
+    "stop_all": "Stop All",
+    "stop_irrigation": "Stop Irrigation",
+    "relay_safety": "Relay safety watchdog",
+    "interlock": "Interlock",
+    "dose_controller": "Dose controller",
+    "ph_controller": "pH controller",
+    "dose_program": "Dose program",
+    "flow_watch": "Flow watch",
+    "watchdog": "Watchdog",
+    "camera": "Camera monitor",
+    "agronomist": "Agronomist",
+    "automation": "Automation",
+    "automation_named": "Automation '{name}'",
+    "system": "System",
+    "relay_monitor": "Relay monitor",
+    "someone_at_panel": "Someone at the panel",
+    "irrigation": "Irrigation"
+  },
+  "unknown_user": "Unknown user",
+  "someone": "Someone",
+  "automation_word": "automation",
+  "user_id": "user #{id}",
+  "paren": "({text})",
+  "more": {
+    "one": "{list} +{count} more",
+    "other": "{list} +{count} more"
+  },
+  "occurrences": "(×{count})",
+  "severity": {
+    "info": "INFO",
+    "warning": "WARNING",
+    "critical": "CRITICAL"
+  },
+  "state": {
+    "on": "ON",
+    "off": "OFF"
+  },
+  "trigger": {
+    "schedule": "schedule",
+    "manual": "run by hand",
+    "watchdog_rearm": "watchdog re-arm",
+    "threshold": "threshold"
+  },
+  "relay": {
+    "summary": "{lead} {where}",
+    "lead_automation": "'{name}' {what}",
+    "lead_auto_off": "Auto-off after duration ('{name}') {what}",
+    "lead_actor": "{who} {what}",
+    "switched_on": "switched ON",
+    "switched_off": "switched OFF",
+    "switched_mixed": "switched {on} ON, {off} OFF",
+    "channels_on_board": {
+      "one": "{count} channel on {board} ({names})",
+      "other": "{count} channels on {board} ({names})"
+    },
+    "channels_on_boards": {
+      "one": "{count} channel on {boards} boards ({names})",
+      "other": "{count} channels on {boards} boards ({names})"
+    },
+    "after_write_by": "(after a write by {user})",
+    "pressed_by": "(pressed by {user})",
+    "unconfirmed": "— {count} not confirmed by read-back",
+    "from_device": "(from {device})",
+    "boards": {
+      "one": "{count} board",
+      "other": "{count} boards"
+    }
+  },
+  "automation": {
+    "failed": "'{name}' failed: {message}",
+    "failed_trig": "'{name}' failed ({trigger}): {message}",
+    "skipped": "'{name}' skipped: {message}",
+    "skipped_trig": "'{name}' skipped ({trigger}): {message}",
+    "ran": "'{name}' ran",
+    "ran_trig": "'{name}' ran ({trigger})",
+    "held_back": {
+      "one": "— {count} action(s) held back by dependencies",
+      "other": "— {count} action(s) held back by dependencies"
+    }
+  },
+  "alert": {
+    "raised": "{severity} alert: {message}",
+    "acknowledged_many": {
+      "one": "Acknowledged {count} alert",
+      "other": "Acknowledged {count} alerts"
+    },
+    "acknowledged_one": "Acknowledged alert: {message}"
+  },
+  "flow": {
+    "kind": {
+      "valve_no_flow": "No water flow with the zone open",
+      "run_shutdown": "Flow watch shut the irrigation run down",
+      "pump_no_flow": "No water flow with the pump running",
+      "low_flow": "Low water flow",
+      "water_without_valve": "Water flowing with no zone open",
+      "dosing_without_water": "Dosing without water flow",
+      "flow_above_expected": "flow above expected",
+      "flow_after_pump_off": "flow after pump off",
+      "monitor_blind": "monitor blind",
+      "manual_panel": "manual panel",
+      "retry_recovered": "retry recovered",
+      "retry_ended": "retry ended",
+      "retry_abandoned": "retry abandoned"
+    },
+    "zone": "— {zone}",
+    "for": "for {duration}",
+    "recovered": "(recovered)",
+    "retry_n": "; cold-restart retry #{attempt} {outcome}",
+    "retry": "; cold-restart retry {outcome}",
+    "retry_outcome": {
+      "recovered": "recovered",
+      "ended": "ended",
+      "abandoned": "abandoned",
+      "failed": "failed",
+      "tried": "tried"
+    },
+    "not_irrigated": "; not irrigated: {zones}",
+    "dosing_aborted": "; dosing aborted",
+    "ongoing": "(ongoing)"
+  },
+  "run": {
+    "head": "Irrigation run, {type}",
+    "type": {
+      "automated": "automated",
+      "manual_app": "manual (app)",
+      "manual_panel": "manual (panel)"
+    },
+    "status": {
+      "running": "running",
+      "shutdown": "shutdown",
+      "no_water": "no water",
+      "stopped": "stopped",
+      "cut_short": "cut short",
+      "aborted": "aborted",
+      "no_flow": "no flow"
+    },
+    "automation": "— '{name}'",
+    "by": "by {operators}",
+    "water_in": ": {litres} L in {duration}",
+    "water": ": {litres} L",
+    "in": ": in {duration}",
+    "status_suffix": "— {status}",
+    "uncontrolled": "— dosing without control",
+    "in_progress": "(in progress)",
+    "run_id": "run #{id}"
+  },
+  "dose": {
+    "status": "— {status}",
+    "status_reason": "— {status} ({reason})",
+    "status_notes": "— {status}: {notes}",
+    "run": "Closed-loop dose run",
+    "run_prog": "Closed-loop dose run '{program}'",
+    "run_auto": "Closed-loop dose run for '{automation}'",
+    "run_prog_auto": "Closed-loop dose run '{program}' for '{automation}'",
+    "water": "{litres} L water",
+    "ph_avg": "pH avg {ph}",
+    "ec_avg": "EC avg {ec}",
+    "cycle": "Dose cycle",
+    "cycle_prog": "Dose cycle '{program}'",
+    "cycle_auto": "Dose cycle for '{automation}'",
+    "cycle_prog_auto": "Dose cycle '{program}' for '{automation}'",
+    "state": {
+      "running": "running",
+      "completed": "completed",
+      "aborted": "aborted",
+      "failed": "failed",
+      "interrupted": "interrupted"
+    }
+  },
+  "drift": {
+    "summary": "Relay drift on {channel}: expected {expected}, polled {actual}",
+    "last_write": "(last write: {source})",
+    "last_write_ago": "(last write: {source}, {ago} earlier)"
+  }
+}

@@ -159,7 +159,8 @@ export function useIrrigationLive({ token, subscribe }) {
       setError(null);
       if (m?.equipment_id) seedFlow(m.equipment_id);
     } catch (e) {
-      setError(`Irrigation monitor unavailable: ${e.message}`);
+      // Raw message; IrrigationCard renders it inside a translated sentence.
+      setError(e.message || String(e));
     } finally {
       inFlight.current = false;
       setLoading(false);

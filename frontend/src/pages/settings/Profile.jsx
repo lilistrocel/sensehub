@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
+import LanguageSwitcher from '../../components/LanguageSwitcher';
 
 const API_BASE = '/api';
 
 export default function Profile() {
   const { user, token } = useAuth();
+  const { t } = useTranslation('common');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -172,6 +175,13 @@ export default function Profile() {
             <p className="text-gray-900 capitalize">{user?.role}</p>
           </div>
         </div>
+      </div>
+
+      {/* Language (per user; stored with the preferences) */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6" data-testid="profile-language">
+        <h3 className="text-md font-medium text-gray-900 mb-1">{t('language.title')}</h3>
+        <p className="text-sm text-gray-500 mb-4">{t('language.settingHelp')}</p>
+        <LanguageSwitcher variant="list" />
       </div>
 
       {/* Change Password Card */}

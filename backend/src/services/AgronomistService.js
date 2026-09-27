@@ -196,6 +196,10 @@ class AgronomistService {
       capture_frames: 3,             // frames per session (1-5)
       capture_spacing_seconds: 30,   // gap between frames
       capture_frames_to_send: 3,     // frames attached to the report (1-3)
+      // Turkish / Arabic versions produced right after each report (AgronomistTranslationService).
+      // The report itself is always written in English.
+      translation_enabled: true,
+      translation_languages: ['tr', 'ar'],
     };
     try {
       const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(DEFAULT_CONFIG_KEY);
@@ -230,6 +234,10 @@ class AgronomistService {
       capture_frames: clampInt(merged.capture_frames, 1, 5, 3),
       capture_spacing_seconds: clampInt(merged.capture_spacing_seconds, 5, 120, 30),
       capture_frames_to_send: clampInt(merged.capture_frames_to_send, 1, MAX_IMAGES_PER_REPORT, 3),
+      translation_enabled: merged.translation_enabled !== false,
+      translation_languages: Array.isArray(merged.translation_languages)
+        ? [...new Set(merged.translation_languages.filter(l => ['tr', 'ar'].includes(l)))]
+        : ['tr', 'ar'],
     };
     // updated_at is stamped so the scheduler can tell "config was re-saved after the
     // last provider failure" — saving settings re-enables a paused schedule.
@@ -1431,6 +1439,17 @@ class AgronomistService {
       ttx();
     }
 
+    // Turkish / Arabic versions: marked pending now, translated in the background.
+    // Never blocks or fails the English report (enqueueReport does not throw or await).
+    if (saved?.id && opts.translate !== false) {
+      try {
+        require('./AgronomistTranslationService').agronomistTranslationService
+          .enqueueReport(saved.id, { reason: opts.force ? 'regenerate' : 'generate' });
+      } catch (err) {
+        console.error('[Agronomist] could not queue report translation:', err.message);
+      }
+    }
+
     return saved;
   }
 
@@ -1683,6 +1702,8 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
     });
     return [
       '## User clarifications and corrections from prior generations of this report',
+      '',
+      'The notes may be written in any language (for example Turkish or Arabic): read and understand them in the language they are written in, but write the whole report in English. Do not translate the notes back into their language and do not reply in it.',
       '',
       'The farm operator has left the following clarifications. Treat each as authoritative — if a sensor or process is flagged as broken, miscalibrated, or unreliable, factor that into your analysis. If a previous draft of this report made a recommendation based on data the user has explicitly said is wrong, drop or revise it. Acknowledge the correction in the report (e.g. "Note: pH readings are excluded from this analysis because the AMIC pH probe has not been calibrated yet, per operator note") so the audit trail is clear.',
       '',

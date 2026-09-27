@@ -1,0 +1,162 @@
+{
+  "durations": {
+    "minutes_one": "{{count}} dakika",
+    "minutes_other": "{{count}} dakika",
+    "hours_one": "{{count}} saat",
+    "hours_other": "{{count}} saat"
+  },
+  "count": {
+    "board_one": "{{count}} kart",
+    "board_other": "{{count}} kart",
+    "channel_one": "{{count}} kanal",
+    "channel_other": "{{count}} kanal",
+    "timer_one": "{{count}} zamanlayıcı",
+    "timer_other": "{{count}} zamanlayıcı",
+    "pendingTimer_one": "{{count}} bekleyen zamanlayıcı",
+    "pendingTimer_other": "{{count}} bekleyen zamanlayıcı"
+  },
+  "alerts": {
+    "unacknowledged_one": "{{count}} onaylanmamış alarm",
+    "unacknowledged_other": "{{count}} onaylanmamış alarm"
+  },
+  "polling": {
+    "pause": "Sensör sorgulamayı duraklat",
+    "paused": "Duraklatıldı",
+    "pausedClick": "Sensör sorgulama duraklatıldı - devam ettirmek için tıklayın",
+    "pausedClickReason": "Sensör sorgulama duraklatıldı ({{reason}}) - devam ettirmek için tıklayın",
+    "resumeAria": "Sensör sorgulamayı devam ettir",
+    "menuAria": "Sensör sorgulamayı duraklatma süresi",
+    "menuHelp": "Sensör sorgulamayı duraklatır. Röle kartları 15 sn'lik yaşam sinyali sorgusunu sürdürür; böylece kart yazılımındaki arıza emniyeti tetiklenmez.",
+    "pauseFor": "Duraklatma süresi",
+    "untilResume": "Ben devam ettirene kadar",
+    "pausedUntilResumed": "Sensör sorgulama, siz devam ettirene kadar duraklatıldı.",
+    "pausedAutoResume": "Sensör sorgulama duraklatıldı. {{duration}} sonra otomatik olarak devam edecek.",
+    "pauseFailed": "Sensör sorgulama duraklatılamadı",
+    "resumed": "Sensör sorgulama devam ediyor.",
+    "resumeFailed": "Sensör sorgulama devam ettirilemedi"
+  },
+  "timers": {
+    "type": {
+      "delay": "Gecikmeli başlatma",
+      "off": "Otomatik kapanma",
+      "raw": "Geçiş geri alma",
+      "generic": "Zamanlayıcı"
+    },
+    "equipmentFallback": "Ekipman #{{id}}",
+    "equipmentChannel": "{{name}} - kanal {{channel}}",
+    "describe": "{{label}}: {{name}} - tetiklenme {{time}}",
+    "describeChannel": "{{label}}: {{name}} kn {{channel}} - tetiklenme {{time}}",
+    "tooltipHead_one": "{{count}} röle zamanlayıcısı kurulu:",
+    "tooltipHead_other": "{{count}} röle zamanlayıcısı kurulu:",
+    "buttonAria_one": "{{count}} röle zamanlayıcısı kurulu - ayrıntıları göster",
+    "buttonAria_other": "{{count}} röle zamanlayıcısı kurulu - ayrıntıları göster",
+    "armed": "kurulu",
+    "menuAria": "Bekleyen röle zamanlayıcıları",
+    "menuHelp": "Bu röleler kendiliğinden anahtarlanacak şekilde zamanlandı. İki durdurma düğmesinden herhangi biri hepsini iptal eder."
+  },
+  "stop": {
+    "stopping": "Durduruluyor…",
+    "stoppingProgress": "Durduruluyor… ({{done}}/{{total}})",
+    "failedTitle": "{{label}} BAŞARISIZ",
+    "error": {
+      "forbidden": "Hesabınızın bu işlemi çalıştırma yetkisi yok. Hiçbir şey kapatılmadı.",
+      "notSupported": "Bu denetleyici sürümü bu işlemi henüz desteklemiyor. Hiçbir şey kapatılmadı.",
+      "failed": "{{message}}. Röleler hâlâ enerjili olabilir - panodan kapatın.",
+      "httpStatus": "İstek başarısız (HTTP {{status}})",
+      "network": "ağ hatası"
+    },
+    "result": {
+      "counts": "{{channels}} kapatıldı, {{timers}} iptal edildi.",
+      "doseAborted": "Fertigasyon dozlama döngüsü iptal edildi.",
+      "equipmentFallback": "ekipman #{{id}}",
+      "channelList": "kn {{list}}",
+      "legacyFailure": "{{equipment}} kanal {{channel}}",
+      "incompleteTitle": "{{label}} TAMAMLANMADI",
+      "boardsNotConfirmed": "{{failed}} tüm kanalların kapandığını DOĞRULAMADI; bunlar hâlâ enerjili olabilir: {{detail}}. Yerinde fiziksel olarak kontrol edin.",
+      "sweepIncomplete": "Röle taraması tamamlanmadı. Röleler hâlâ enerjili olabilir - panodan kapatın.",
+      "sweepIncompleteError": "Röle taraması tamamlanmadı ({{error}}). Röleler hâlâ enerjili olabilir - panodan kapatın.",
+      "completeTitle": "{{label}} tamamlandı",
+      "unconfirmedTitle": "{{label}} DOĞRULANMADI",
+      "unconfirmed": "Denetleyici durdurma komutunu kabul etti ancak sonucu hiç bildirmedi (yanıt kesilmeden önce {{done}}/{{total}} kart doğrulandı). Röleler hâlâ enerjili olabilir - panodan kontrol edin."
+    }
+  },
+  "stopAll": {
+    "label": "Tümünü durdur",
+    "short": "Durdur",
+    "long": "Tümünü Durdur",
+    "tooltip": "Tümünü Durdur - TÜM fanlar ve iklim röleleri dahil, her karttaki HER röleyi KAPATIR ve bekleyen tüm zamanlayıcıları iptal eder. Otomasyonlar devrede kalır ve yeniden tetiklenebilir. Yalnızca sulamayı durdurmak için (fanlar çalışmaya devam eder) gösterge panelindeki Sulama kartında Sulamayı Durdur'u kullanın.",
+    "aria": "Tümünü durdur: fanlar ve iklim röleleri dahil her karttaki her röleyi kapatır ve bekleyen zamanlayıcıları iptal eder; otomasyonlar devrede kalır. Yalnızca sulamayı durdurmak için Sulamayı Durdur'u kullanın.",
+    "resultSuffix": "TÜM fanlar ve iklim röleleri de KAPALI — çalışmaları gerekiyorsa yeniden açın. (Yalnızca sulamayı durdurmak için gösterge panelindeki Sulama kartında Sulamayı Durdur'u kullanın.) Otomasyonlar devrede kalır ve yeniden tetiklenebilir.",
+    "unreachable": "Denetleyiciye ulaşılamadı ({{error}}). Hiçbir şeyin durduğu doğrulanmadı - fiziksel panoyu kullanın."
+  },
+  "estop": {
+    "label": "Acil durdurma",
+    "short": "Acil Dur",
+    "long": "Acil Durdurma",
+    "tooltip": "ACİL DURDURMA - her karttaki TÜM röleleri KAPATIR (tüm fanlar ve iklim dahil), bekleyen tüm zamanlayıcıları iptal eder ve otomasyonları askıya alır; böylece hiçbir şey yeniden tetiklenmez. Yalnızca sulamayı durdurmak için gösterge panelindeki Sulamayı Durdur'u kullanın.",
+    "tooltipDisarmed": "Otomasyonlar ASKIDA. Bir süre seçmek her şeyi yeniden durdurur ve askıda kalma süresini uzatır.",
+    "aria": "Acil durdurma: tüm röleleri kapatır ve otomasyonları askıya alır",
+    "menuAria": "Acil durdurma - otomasyonların askıda kalma süresi",
+    "menuHelp": "Her karttaki her röleyi kapatır — <b>TÜM fanlar ve iklim röleleri dahil</b> — bekleyen tüm zamanlayıcıları iptal eder ve hiçbir şeyin yeniden tetiklenmemesi için <alarm>otomasyonları askıya alır</alarm>. Otomasyonlar askıdayken iklim kontrolü ve sulama çalışmaz. Yalnızca sulamayı durdurmak için gösterge panelindeki Sulama kartında <b>Sulamayı Durdur</b>'u kullanın.",
+    "keepDisarmedFor": "Askıda kalma süresi",
+    "untilReArm": "Ben yeniden devreye alana kadar",
+    "resultSuffixTimed": "Otomasyonlar {{duration}} boyunca askıda.",
+    "resultSuffixUntilReArm": "Otomasyonlar siz yeniden devreye alana kadar askıda kalır.",
+    "unreachable": "Denetleyiciye ulaşılamadı ({{error}}). Hiçbir şeyin durduğu doğrulanmadı ve otomasyonlar hâlâ devrede olabilir - fiziksel panoyu kullanın."
+  },
+  "rearm": {
+    "forbidden": "Hesabınızın otomasyonları yeniden devreye alma yetkisi yok. Otomasyonlar hâlâ askıda.",
+    "failed": "{{message}}. Otomasyonlar hâlâ askıda.",
+    "failedTitle": "Yeniden devreye alma BAŞARISIZ",
+    "success": "Otomasyonlar yeniden devrede ve programa göre çalışacak.",
+    "successTitle": "Yeniden devrede",
+    "unreachable": "Denetleyiciye ulaşılamadı ({{error}}). Otomasyonlar hâlâ askıda."
+  },
+  "disarmedBanner": {
+    "title": "Otomasyonlar askıya alındı.",
+    "body": "Hiçbir şey yeniden tetiklenmeyecek — yeniden devreye alınana kadar iklim kontrolü, sulama veya fertigasyon çalışmaz.",
+    "by": "askıya alan: {{name}}",
+    "autoReArm": "{{time}} sonra otomatik olarak yeniden devreye girer",
+    "untilManual": "Elle yeniden devreye alınana kadar askıda",
+    "reArming": "Yeniden devreye alınıyor…",
+    "reArmNow": "Şimdi devreye al"
+  },
+  "pollingBanner": {
+    "title": "Sensör sorgulama duraklatıldı.",
+    "body": "Sensör okumaları kaydedilmiyor. Röle kartları 15 sn'lik yaşam sinyali sorgusunu sürdürür; böylece kart yazılımındaki arıza emniyeti tetiklenmez.",
+    "by": "duraklatan: {{name}}",
+    "autoResume": "{{time}} sonra otomatik olarak devam eder",
+    "untilManual": "Elle devam ettirilene kadar duraklatıldı",
+    "resumeNow": "Şimdi devam ettir"
+  },
+  "cloud": {
+    "notConfigured": "Yapılandırılmadı",
+    "titleNotConfigured": "Bulut: Yapılandırılmadı",
+    "connected": "Bağlı",
+    "connectedPending": "Bağlı ({{count}} bekliyor)",
+    "titleConnected": "Bulut: Bağlı",
+    "titleConnectedSync": "Bulut: Bağlı - Son eşitleme: {{time}}",
+    "offline": "Çevrim dışı mod",
+    "titleDisconnected": "Bulut: Bağlantı yok"
+  },
+  "footer": {
+    "product": "A20Core - SenseHub v{{version}}",
+    "backendChecking": "Sunucu bağlantısı kontrol ediliyor...",
+    "backendReachable": "Sunucuya ulaşılabiliyor",
+    "backendUnreachable": "Sunucuya ulaşılamıyor",
+    "checking": "Kontrol ediliyor…",
+    "systemOk": "Sistem normal",
+    "systemUnreachable": "Sisteme ulaşılamıyor",
+    "dbUnknownTitle": "Veritabanı durumu bilinmiyor",
+    "dbRespondingTitle": "Veritabanı yanıt veriyor",
+    "dbNoResponseTitle": "Veritabanından yanıt yok",
+    "dbUnknown": "VT bilinmiyor",
+    "dbConnected": "VT bağlı",
+    "dbUnreachable": "VT'ye ulaşılamıyor"
+  },
+  "clock": {
+    "local": "Yerel",
+    "title": "Cihaz saati - {{zone}}",
+    "aria": "Cihaz saati {{time}} {{zone}}"
+  }
+}

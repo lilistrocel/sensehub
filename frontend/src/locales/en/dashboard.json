@@ -1,0 +1,146 @@
+{
+  "now": {
+    "title": "Now",
+    "boardRead": "board read {{time}}",
+    "liveDisconnected": "live updates disconnected",
+    "loadingBoard": "Loading status board…",
+    "notReportedSince": "not reported since {{time}}"
+  },
+  "climate": {
+    "temp_shielded": "Air temp, shielded",
+    "rh": "Relative humidity",
+    "vpd_leaf": "VPD leaf",
+    "temp_exposed": "Air temp, exposed",
+    "substrate_temp": "Substrate temp",
+    "substrate_moisture_far": "Substrate moisture, far",
+    "substrate_moisture_near": "Substrate moisture, near",
+    "pore_ec_far": "Pore EC, far",
+    "pore_ec_near": "Pore EC, near",
+    "water_ph": "Water pH",
+    "water_ec": "Water EC",
+    "water_temp": "Water temp"
+  },
+  "range": {
+    "6": "6 h",
+    "24": "24 h",
+    "168": "7 d"
+  },
+  "attention": {
+    "title": "Attention",
+    "critical_one": "{{count}} critical",
+    "critical_other": "{{count}} critical",
+    "warning_one": "{{count}} warning",
+    "warning_other": "{{count}} warnings",
+    "info_one": "{{count}} info",
+    "info_other": "{{count}} info",
+    "disarmed": "Automations disarmed",
+    "pollingPaused": "Polling paused",
+    "devicesOffline_one": "{{count}} of {{total}} devices offline",
+    "devicesOffline_other": "{{count}} of {{total}} devices offline",
+    "devicesDisabled_one": "{{count}} disabled device",
+    "devicesDisabled_other": "{{count}} disabled devices",
+    "camera": "Camera {{name}}: {{status}}",
+    "cameraStatus": {
+      "online": "online",
+      "offline": "offline",
+      "unreachable": "unreachable",
+      "error": "error"
+    },
+    "noAlerts": "No open alerts",
+    "allOnline_one": "{{count}} device online",
+    "allOnline_other": "all {{count}} devices online",
+    "armed": "armed",
+    "cameraOk": "camera {{status}}"
+  },
+  "running": {
+    "title": "What's running",
+    "aria": "What is running",
+    "subtitle": "{{online}}/{{total}} devices online · {{boards}} on heartbeat",
+    "heartbeatBoards_one": "{{count}} relay board",
+    "heartbeatBoards_other": "{{count}} relay boards",
+    "pollingPaused": "Polling paused",
+    "viewerTitle": "Viewer role: read-only. Ask an operator to switch this.",
+    "unknownTitle": "State unknown: the board has not reported. Control it from the Equipment page once it is back.",
+    "commandedTitle": "Commanded {{state}}, awaiting confirmation from the board",
+    "readbackFailed": "Last write failed its read-back check",
+    "tapToTurn": "tap to turn {{state}}",
+    "changedAt": "changed {{time}}",
+    "bulkInterlocked": "Bulk control is disabled: this group has interlocked channels",
+    "bulkUnknown": "Bulk control is disabled while a channel state is unknown",
+    "unknownCount_one": "{{count}} unknown",
+    "unknownCount_other": "{{count}} unknown",
+    "noChannels": "No channels in this group.",
+    "allOn": "All on",
+    "allOff": "All off",
+    "noBoards": "No relay boards reported.",
+    "bulkFailed_one": "{{count}} of {{total}} commands failed.",
+    "bulkFailed_other": "{{count}} of {{total}} commands failed.",
+    "bulkDone_one": "{{group}}: {{count}} channel commanded {{state}}, awaiting confirmation",
+    "bulkDone_other": "{{group}}: all {{count}} commanded {{state}}, awaiting confirmation",
+    "confirmTitleOn": "{{group}}: all ON",
+    "confirmTitleOff": "{{group}}: all OFF",
+    "confirmBodyOn": "This commands every channel below ON. Each stays amber until the board confirms.",
+    "confirmBodyOff": "This commands every channel below OFF. Each stays amber until the board confirms.",
+    "confirmOn": "Turn all ON",
+    "confirmOff": "Turn all OFF"
+  },
+  "automations": {
+    "title": "Automations",
+    "climateRules": "Climate rules",
+    "noRules": "No climate rules defined. <link>Create one</link>.",
+    "ruleOn": "on",
+    "ruleOff": "off",
+    "neverRun": "never run",
+    "runCount": "run count",
+    "recent": "Recent executions",
+    "nothingRun": "Nothing has run yet.",
+    "trigger": {
+      "scheduler": "scheduler",
+      "schedule": "schedule",
+      "threshold": "threshold",
+      "manual": "manual",
+      "watchdog": "watchdog",
+      "watchdog_rearm": "watchdog",
+      "sensor": "sensor",
+      "event": "event"
+    },
+    "enabledCount_one": "{{count}} automation enabled",
+    "enabledCount_other": "{{count}} automations enabled",
+    "all": "All automations"
+  },
+  "trends": {
+    "title": "Trends",
+    "subtitle": "last {{range}}",
+    "rangeLabel": "Trend range",
+    "rangeAria": "Trend time range",
+    "energy": "Energy:",
+    "seeReports": "see Reports",
+    "unavailable": "Trend data unavailable: {{error}}",
+    "charts": {
+      "air": "Air temperature and humidity",
+      "moisture": "Substrate moisture",
+      "pore_ec": "Pore EC"
+    },
+    "series": {
+      "temp_shielded": "Shielded",
+      "temp_exposed": "Exposed",
+      "rh": "RH shielded",
+      "moisture_far": "Far",
+      "moisture_near": "Near",
+      "pore_ec_far": "Far",
+      "pore_ec_near": "Near"
+    }
+  },
+  "crop": {
+    "title": "Cloud crop record",
+    "noneSynced": "none synced",
+    "unnamed": "Unnamed crop",
+    "planted": "planted {{date}}",
+    "notVerified": "synced from cloud, not verified locally",
+    "unavailable": "Cloud crop record unavailable: {{error}}"
+  },
+  "errors": {
+    "boardUnavailable": "Status board unavailable: {{error}}",
+    "equipmentUnavailable": "Equipment list unavailable: {{error}}"
+  }
+}

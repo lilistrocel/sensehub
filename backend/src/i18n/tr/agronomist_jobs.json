@@ -1,0 +1,13 @@
+{
+  "label": {
+    "billing": "Anthropic kredi bakiyesi tükendi",
+    "auth": "Anthropic API anahtarı reddedildi",
+    "rate_limit": "Anthropic istek sınırına ulaşıldı",
+    "other": "Anthropic API hatası",
+    "truncated_output": "Rapor çıktısı kesildi veya geçersiz",
+    "max_tokens": "Rapor çıktı token sınırına ulaştı",
+    "refusal": "Rapor model tarafından reddedildi"
+  },
+  "provider_alert": "[Agronom] {label} — art arda {count} başarısız rapor. Son hata: {error}",
+  "provider_alert_paused": "[Agronom] {label} — art arda {count} başarısız rapor; ayarlar kaydedilene veya Şimdi Yeniden Dene başarılı olana kadar planlı çalışmalar duraklatıldı. Son hata: {error}"
+}

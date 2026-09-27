@@ -1,0 +1,4 @@
+{
+  "calibration_triggered": "[AMIC] بدأت المعايرة المجدولة في {time}{label}",
+  "calibration_failed": "[AMIC] فشل بدء المعايرة المجدولة في {time}: {error}"
+}

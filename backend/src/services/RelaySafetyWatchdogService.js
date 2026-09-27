@@ -25,6 +25,7 @@
 
 const { db } = require('../utils/database');
 const { createAlert } = require('../utils/alertBroadcast');
+const { M } = require('../i18n');
 const { modbusTcpClient } = require('./ModbusTcpClient');
 const { logRelayEvent } = require('./RelayEventLogger');
 const interlock = require('./RelayInterlockService');
@@ -299,12 +300,15 @@ class RelaySafetyWatchdogService {
     logRelayEvent(equipment_id, channel, false, 'watchdog_force_off', null);
 
     // Insert an alert for visibility
-    const basisLabel = basis === 'action_duration' && expectedDuration != null
-      ? `expected ${expectedDuration}s + grace`
-      : basis === 'per_equipment' ? 'per-equipment override'
-      : 'global default';
-    const detail = `Channel was ON for ${elapsedSec}s (threshold ${thresholdSec}s, ${basisLabel}). Originally turned ON at ${on_time}` +
-      (auto_name ? ` by automation #${on_auto_id} "${auto_name}"` : '') + '. Watchdog force-OFF complete.';
+    const basisSpec = basis === 'action_duration' && expectedDuration != null
+      ? M('relay.safety_basis_action', { s: `${expectedDuration}` })
+      : basis === 'per_equipment' ? M('relay.safety_basis_equipment')
+      : M('relay.safety_basis_global');
+    const forceOffParams = {
+      equipment: `${equipment_name}`, channel: `${channel}`, elapsed: `${elapsedSec}`, threshold: `${thresholdSec}`,
+      basis: basisSpec, on_time: `${on_time}`,
+    };
+    // English (stored) renders the former "[Safety] Force-OFF <eq> ch <n>: Channel was ON for …" text.
     // Fingerprint on equipment+channel: the detail embeds elapsed seconds / timestamps,
     // so repeated force-OFFs of the same channel collapse into one open alert.
     createAlert({
@@ -313,7 +317,9 @@ class RelaySafetyWatchdogService {
       equipment_id,
       automation_id: on_auto_id ?? null,
       fingerprint: `relay_force_off:${equipment_id}:${channel}`,
-      message: `[Safety] Force-OFF ${equipment_name} ch ${channel}: ${detail}`,
+      ...(auto_name
+        ? { messageKey: 'relay.safety_force_off_by_automation', messageParams: { ...forceOffParams, automation_id: `${on_auto_id}`, automation: `${auto_name}` } }
+        : { messageKey: 'relay.safety_force_off', messageParams: forceOffParams }),
     });
 
     // Broadcast for live UI

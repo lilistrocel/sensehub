@@ -1,0 +1,22 @@
+{
+  "type": {
+    "automated": "Scheduled",
+    "manual_app": "Manual — app",
+    "manual_panel": "Manual — panel",
+    "automation": "Automation"
+  },
+  "stop_irrigation": "Stop irrigation",
+  "zone_unknown": "Zone unknown",
+  "note": {
+    "stopped_by_operator": "Stopped by the operator ({source}{user}) at {at}",
+    "user_suffix": ", {user}",
+    "manual_open_still_on": "{zone} was open manually during this run: opened {opened} by {by}, still ON",
+    "manual_open_closed": "{zone} was open manually during this run: opened {opened} by {by}, closed {closed} by {closed_by}",
+    "no_automation_id": "SenseHub sequence without an automation id (test / run-now).",
+    "panel_run": "No SenseHub pump or zone relay drove this water — run from the fertigation panel.",
+    "app_switches": "App relay switches during the run (not what drove it): {switches}",
+    "app_switch": "{zone} {at} by {by}",
+    "uncontrolled_dosing": "Dosing outside SenseHub control: {tanks}",
+    "tank_litres": "{tank} {litres} L"
+  }
+}

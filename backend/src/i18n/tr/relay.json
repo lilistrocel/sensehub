@@ -1,0 +1,13 @@
+{
+  "state_on": "AÇIK",
+  "state_off": "KAPALI",
+  "safety_force_off": "[Güvenlik] Zorla KAPATMA {equipment} kanal {channel}: Kanal {elapsed} sn AÇIK kaldı (eşik {threshold} sn, {basis}). İlk açılma: {on_time}. İzleme servisi zorla kapatmayı tamamladı.",
+  "safety_force_off_by_automation": "[Güvenlik] Zorla KAPATMA {equipment} kanal {channel}: Kanal {elapsed} sn AÇIK kaldı (eşik {threshold} sn, {basis}). İlk açılma: {on_time}, otomasyon #{automation_id} \"{automation}\" tarafından. İzleme servisi zorla kapatmayı tamamladı.",
+  "safety_basis_action": "beklenen {s} sn + tolerans",
+  "safety_basis_equipment": "ekipmana özel ayar",
+  "safety_basis_global": "genel varsayılan",
+  "unconfirmed": "{name} kanal {channel}: röle yazması doğrulanmadı — istenen {requested}, donanımdan okunan {readback}",
+  "interlock_violation": "[Kilitleme] {name} kanal {channel}{src}: {error}",
+  "interlock_conflict_verified": "[Kilitleme] DONANIM ÇAKIŞMASI: {name}: \"{label_a}\" (kanal {a}) ve \"{label_b}\" (kanal {b}) aynı anda AÇIKTI. İkisi de zorla KAPATILDI ve doğrulandı.",
+  "interlock_conflict_unverified": "[Kilitleme] DONANIM ÇAKIŞMASI: {name}: \"{label_a}\" (kanal {a}) ve \"{label_b}\" (kanal {b}) aynı anda AÇIKTI. Zorla KAPATILDI; doğrulanan: {verified} — DONANIMI KONTROL EDİN."
+}

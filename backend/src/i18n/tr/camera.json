@@ -1,0 +1,4 @@
+{
+  "recovered": "\"{name}\" kamerasına ({ip}) yeniden erişilebiliyor ({since} tarihinden beri erişilemiyordu)",
+  "unreachable": "\"{name}\" kamerasına ({ip}) {since} tarihinden beri erişilemiyor — gücü/ağı kontrol edin; DHCP kullanıyorsa IP adresi değişmiş olabilir (DHCP rezervasyonu ayarlayın)"
+}

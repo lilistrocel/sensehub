@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Trans, useTranslation } from 'react-i18next';
 import Sidebar from './Sidebar';
 import Breadcrumb from './Breadcrumb';
 import DeviceClock from './DeviceClock';
@@ -13,35 +14,25 @@ import { usePoll } from '../hooks/usePoll';
 import { isTransientNow, isNetworkError } from '../utils/connectivity';
 import ConnectivityIndicator from './ConnectivityIndicator';
 import ErrorBoundary from './ErrorBoundary';
+import LanguageSwitcher from './LanguageSwitcher';
 
 const API_BASE = '/api';
 
-// Durations offered by the "pause polling" popover. 0 = no auto-resume.
-const PAUSE_DURATIONS = [
-  { label: '15 minutes', minutes: 15 },
-  { label: '30 minutes', minutes: 30 },
-  { label: '1 hour', minutes: 60 },
-  { label: '2 hours', minutes: 120 },
-  { label: 'Until I resume', minutes: 0 }
-];
+// Durations offered by the "pause polling" popover (minutes). 0 = no auto-resume.
+const PAUSE_DURATIONS = [15, 30, 60, 120, 0];
 
-// How long an EMERGENCY STOP keeps automations disarmed. 0 = until manually
-// re-armed. This is not a confirmation step: it is the one piece of information
-// the action needs, so the popover is the fastest way to ask for it.
-const EMERGENCY_RE_ARM_DURATIONS = [
-  { label: '15 minutes', minutes: 15 },
-  { label: '30 minutes', minutes: 30 },
-  { label: '1 hour', minutes: 60 },
-  { label: '2 hours', minutes: 120 },
-  { label: 'Until I re-arm', minutes: 0 }
-];
+// How long an EMERGENCY STOP keeps automations disarmed (minutes). 0 = until
+// manually re-armed. This is not a confirmation step: it is the one piece of
+// information the action needs, so the popover is the fastest way to ask for it.
+const EMERGENCY_RE_ARM_DURATIONS = [15, 30, 60, 120, 0];
 
-// Human labels for the timer kinds returned by GET /api/automations/timers.
-const TIMER_TYPE_LABELS = {
-  delay: 'Delayed start',
-  off: 'Auto-off',
-  raw: 'Transition revert'
-};
+// Timer kinds returned by GET /api/automations/timers -> shell:timers.type.<kind>.
+const TIMER_TYPES = ['delay', 'off', 'raw'];
+
+// "15 minutes" / "1 hour" / "2 hours", localized with plural rules.
+const durationLabel = (t, minutes) => (minutes % 60 === 0
+  ? t('shell:durations.hours', { count: minutes / 60 })
+  : t('shell:durations.minutes', { count: minutes }));
 
 // How often the header re-reads pending relay timers. Matches the alert-badge
 // cadence rather than the 30s cloud-status one: an armed timer can energise a
@@ -62,8 +53,6 @@ const stopProgressOf = (data) => ({
   boardsDone: Number(data?.boardsDone) || 0,
   boardsTotal: Number(data?.boardsTotal) || 0
 });
-
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 // Identity of a timer list, so a poll that changed nothing keeps the previous
 // array reference (no re-render, no re-run of the equipment-name lookup).
@@ -102,19 +91,18 @@ const describeActor = (by) => {
 
 // Shared wording for a stop request the controller refused or never received.
 // Never reassuring: an unconfirmed stop means relays may still be energised.
-const stopErrorMessage = (status, data) => {
-  if (status === 403) {
-    return 'Your account is not permitted to run this action. Nothing was switched off.';
-  }
-  if (status === 404) {
-    return 'This controller build does not support that action yet. Nothing was switched off.';
-  }
-  return `${data.message || data.error || `Request failed (HTTP ${status})`}. `
-    + 'Relays may still be energised - stop them at the panel.';
+// (`data.message` comes from the server, already localized via Accept-Language.)
+const stopErrorMessage = (t, status, data) => {
+  if (status === 403) return t('shell:stop.error.forbidden');
+  if (status === 404) return t('shell:stop.error.notSupported');
+  return t('shell:stop.error.failed', {
+    message: data.message || data.error || t('shell:stop.error.httpStatus', { status }),
+  });
 };
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const { t } = useTranslation(['shell', 'common']);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // NOTE on the header: the two stop buttons must survive a 390 px phone with
   // the body's overflow hidden, so the control group wraps under the breadcrumb
@@ -225,28 +213,29 @@ export default function Layout({ children }) {
       await polling.pause(minutes, null);
       showSuccess(
         minutes === 0
-          ? 'Sensor polling paused until you resume it.'
-          : `Sensor polling paused. Auto-resumes in ${minutes} minute${minutes === 1 ? '' : 's'}.`
+          ? t('shell:polling.pausedUntilResumed')
+          : t('shell:polling.pausedAutoResume', { duration: durationLabel(t, minutes) }),
+        t('common:toast.success')
       );
     } catch (err) {
-      showError(err.message || 'Failed to pause sensor polling');
+      showError(err.message || t('shell:polling.pauseFailed'), t('common:toast.error'));
     } finally {
       setPollingBusy(false);
     }
-  }, [polling, showSuccess, showError]);
+  }, [polling, showSuccess, showError, t]);
 
   const handleResumePolling = useCallback(async () => {
     setPauseMenuOpen(false);
     setPollingBusy(true);
     try {
       await polling.resume();
-      showSuccess('Sensor polling resumed.');
+      showSuccess(t('shell:polling.resumed'), t('common:toast.success'));
     } catch (err) {
-      showError(err.message || 'Failed to resume sensor polling');
+      showError(err.message || t('shell:polling.resumeFailed'), t('common:toast.error'));
     } finally {
       setPollingBusy(false);
     }
-  }, [polling, showSuccess, showError]);
+  }, [polling, showSuccess, showError, t]);
 
   // --- Stop all / emergency stop --------------------------------------------
   // Same temporal-dead-zone rule as above: these callbacks are declared BEFORE
@@ -305,7 +294,7 @@ export default function Layout({ children }) {
   const reportStopResult = useCallback((data, label, suffix = '') => {
     const timersCancelled = Number(data.timersCancelled) || 0;
     const channelsTurnedOff = Number(data.channelsTurnedOff ?? data.succeeded) || 0;
-    const doseNote = data.doseCycleAborted ? ' Fertigation dose cycle aborted.' : '';
+    const doseNote = data.doseCycleAborted ? ` ${t('shell:stop.result.doseAborted')}` : '';
 
     // Per-board failures (`failed`) name the board; fall back to the legacy
     // per-channel list (`failures`) for an older backend.
@@ -316,44 +305,55 @@ export default function Layout({ children }) {
     if (failedBoards.length > 0) {
       detail = failedBoards
         .map((f) => {
-          const name = f.name || `equipment #${f.equipment_id}`;
-          const channels = Array.isArray(f.channels) && f.channels.length > 0 ? ` ch ${f.channels.join(', ')}` : '';
+          const name = f.name || t('shell:stop.result.equipmentFallback', { id: f.equipment_id });
+          const channels = Array.isArray(f.channels) && f.channels.length > 0
+            ? ` ${t('shell:stop.result.channelList', { list: f.channels.join(', ') })}` : '';
           return `${name}${channels}${f.error ? ` (${f.error})` : ''}`;
         })
         .join('; ');
-      failedSummary = plural(failedBoards.length, 'board');
+      failedSummary = t('shell:count.board', { count: failedBoards.length });
     } else if (legacyFailures.length > 0) {
       detail = legacyFailures
-        .map(f => `${f.equipment || `equipment #${f.equipment_id}`} channel ${f.channel ?? '?'}`)
+        .map(f => t('shell:stop.result.legacyFailure', {
+          equipment: f.equipment || t('shell:stop.result.equipmentFallback', { id: f.equipment_id }),
+          channel: f.channel ?? '?',
+        }))
         .join('; ');
-      failedSummary = plural(legacyFailures.length, 'channel');
+      failedSummary = t('shell:count.channel', { count: legacyFailures.length });
     }
 
-    const counts = `${plural(channelsTurnedOff, 'channel')} switched off, ${plural(timersCancelled, 'timer')} cancelled.${doseNote}`;
+    const counts = t('shell:stop.result.counts', {
+      channels: t('shell:count.channel', { count: channelsTurnedOff }),
+      timers: t('shell:count.timer', { count: timersCancelled }),
+    }) + doseNote;
 
     if (detail) {
       addToast({
         type: 'error',
-        title: `${label} INCOMPLETE`,
+        title: t('shell:stop.result.incompleteTitle', { label }),
         duration: 0,
-        message: `${counts} ${failedSummary} did NOT confirm all channels off and may still be energised: ${detail}. Check them physically.${suffix}`
+        message: `${counts} ${t('shell:stop.result.boardsNotConfirmed', { failed: failedSummary, detail })}${suffix}`
       });
     } else if (data.ok === false || data.partial || data.error) {
       // The sweep aborted or never finished without naming a board.
       addToast({
         type: 'error',
-        title: `${label} INCOMPLETE`,
+        title: t('shell:stop.result.incompleteTitle', { label }),
         duration: 0,
-        message: `${counts} The relay sweep did not complete${data.error ? ` (${data.error})` : ''}. `
-          + `Relays may still be energised - stop them at the panel.${suffix}`
+        message: `${counts} ${data.error
+          ? t('shell:stop.result.sweepIncompleteError', { error: data.error })
+          : t('shell:stop.result.sweepIncomplete')}${suffix}`
       });
     } else {
       showSuccess(
-        `${plural(channelsTurnedOff, 'channel')} switched off, ${plural(timersCancelled, 'pending timer')} cancelled.${doseNote}${suffix}`,
-        `${label} complete`
+        t('shell:stop.result.counts', {
+          channels: t('shell:count.channel', { count: channelsTurnedOff }),
+          timers: t('shell:count.pendingTimer', { count: timersCancelled }),
+        }) + doseNote + suffix,
+        t('shell:stop.result.completeTitle', { label })
       );
     }
-  }, [showSuccess, addToast]);
+  }, [showSuccess, addToast, t]);
 
   // Settle a 202-pending stop. `data` is the final stop_all_progress summary,
   // or null when the safety timeout fired first - in which case the stop is
@@ -375,17 +375,15 @@ export default function Layout({ children }) {
       const { boardsDone, boardsTotal } = pending.progress;
       addToast({
         type: 'error',
-        title: `${pending.label} UNCONFIRMED`,
+        title: t('shell:stop.result.unconfirmedTitle', { label: pending.label }),
         duration: 0,
-        message: `The controller accepted the stop but never reported the result `
-          + `(${boardsDone}/${boardsTotal} boards confirmed before it went quiet). `
-          + `Relays may still be energised - check them at the panel.${pending.suffix}`
+        message: t('shell:stop.result.unconfirmed', { done: boardsDone, total: boardsTotal }) + pending.suffix
       });
     }
 
     fetchPendingTimers();
     if (pending.kind === 'emergency') fetchArmedState();
-  }, [applyArmedState, reportStopResult, addToast, fetchPendingTimers, fetchArmedState]);
+  }, [applyArmedState, reportStopResult, addToast, fetchPendingTimers, fetchArmedState, t]);
 
   // Park a stop that came back 202 until its summary arrives (or the safety
   // timeout gives up). Returns true if the summary had already overtaken the
@@ -432,7 +430,8 @@ export default function Layout({ children }) {
   // the fan boards off at ~35 °C; every Stop All text now says it stops ALL fans and
   // climate relays too and points to "Stop irrigation" (irrigation only).
   const handleStopAll = useCallback(async () => {
-    const suffix = ' ALL fans and climate relays are OFF too — switch them back on if they should run. (To stop only irrigation, use Stop irrigation on the dashboard Irrigation card.) Automations stay armed and may re-fire.';
+    const suffix = ` ${t('shell:stopAll.resultSuffix')}`;
+    const label = t('shell:stopAll.label');
     setStopMenuOpen(false);
     setStopBusy('stop-all');
     stopInFlightRef.current = true;
@@ -451,20 +450,20 @@ export default function Layout({ children }) {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        showError(stopErrorMessage(response.status, data), 'Stop all FAILED');
+        showError(stopErrorMessage(t, response.status, data), t('shell:stop.failedTitle', { label }));
         return;
       }
 
       if (response.status === 202 || data.inProgress) {
-        pending = !beginPendingStop('stop-all', 'Stop all', suffix, data);
+        pending = !beginPendingStop('stop-all', label, suffix, data);
         return;
       }
 
-      reportStopResult(data, 'Stop all', suffix);
+      reportStopResult(data, label, suffix);
     } catch (err) {
       showError(
-        `Could not reach the controller (${err.message || 'network error'}). Nothing is confirmed stopped - use the physical panel.`,
-        'Stop all FAILED'
+        t('shell:stopAll.unreachable', { error: err.message || t('shell:stop.error.network') }),
+        t('shell:stop.failedTitle', { label })
       );
     } finally {
       if (!pending) {
@@ -474,16 +473,17 @@ export default function Layout({ children }) {
         fetchPendingTimers();
       }
     }
-  }, [token, showError, reportStopResult, beginPendingStop, fetchPendingTimers]);
+  }, [token, showError, reportStopResult, beginPendingStop, fetchPendingTimers, t]);
 
   // Emergency stop: everything "stop all" does, plus disarming automations so
   // nothing re-fires until re-armed. `duration` is one entry of
-  // EMERGENCY_RE_ARM_DURATIONS; minutes 0 means "until manually re-armed".
-  const handleEmergencyStop = useCallback(async (duration) => {
-    const autoReArmMinutes = Number(duration?.minutes) || 0;
-    const suffix = autoReArmMinutes > 0
-      ? ` Automations are disarmed for ${duration?.label?.toLowerCase() || `${autoReArmMinutes} minutes`}.`
-      : ' Automations stay disarmed until you re-arm them.';
+  // EMERGENCY_RE_ARM_DURATIONS (minutes); 0 means "until manually re-armed".
+  const handleEmergencyStop = useCallback(async (minutes) => {
+    const autoReArmMinutes = Number(minutes) || 0;
+    const suffix = ` ${autoReArmMinutes > 0
+      ? t('shell:estop.resultSuffixTimed', { duration: durationLabel(t, autoReArmMinutes) })
+      : t('shell:estop.resultSuffixUntilReArm')}`;
+    const label = t('shell:estop.label');
     setStopMenuOpen(false);
     setStopBusy('emergency');
     stopInFlightRef.current = true;
@@ -504,7 +504,7 @@ export default function Layout({ children }) {
         // A 500 here can still carry armedState: the disarm stands even when
         // the sweep failed, and the banner must say so.
         if (data.armedState) applyArmedState(data.armedState);
-        showError(stopErrorMessage(response.status, data), 'Emergency stop FAILED');
+        showError(stopErrorMessage(t, response.status, data), t('shell:stop.failedTitle', { label }));
         return;
       }
 
@@ -513,15 +513,15 @@ export default function Layout({ children }) {
       if (data.armedState) applyArmedState(data.armedState);
 
       if (response.status === 202 || data.inProgress) {
-        pending = !beginPendingStop('emergency', 'Emergency stop', suffix, data);
+        pending = !beginPendingStop('emergency', label, suffix, data);
         return;
       }
 
-      reportStopResult(data, 'Emergency stop', suffix);
+      reportStopResult(data, label, suffix);
     } catch (err) {
       showError(
-        `Could not reach the controller (${err.message || 'network error'}). Nothing is confirmed stopped and automations may still be armed - use the physical panel.`,
-        'Emergency stop FAILED'
+        t('shell:estop.unreachable', { error: err.message || t('shell:stop.error.network') }),
+        t('shell:stop.failedTitle', { label })
       );
     } finally {
       if (!pending) {
@@ -532,7 +532,7 @@ export default function Layout({ children }) {
         fetchArmedState();
       }
     }
-  }, [token, showError, reportStopResult, applyArmedState, beginPendingStop, fetchPendingTimers, fetchArmedState]);
+  }, [token, showError, reportStopResult, applyArmedState, beginPendingStop, fetchPendingTimers, fetchArmedState, t]);
 
   const handleReArm = useCallback(async () => {
     setReArmBusy(true);
@@ -549,25 +549,25 @@ export default function Layout({ children }) {
       if (!response.ok) {
         showError(
           response.status === 403
-            ? 'Your account is not permitted to re-arm automations. They are still disarmed.'
-            : `${data.message || data.error || `Request failed (HTTP ${response.status})`}. Automations are still disarmed.`,
-          'Re-arm FAILED'
+            ? t('shell:rearm.forbidden')
+            : t('shell:rearm.failed', { message: data.message || data.error || t('shell:stop.error.httpStatus', { status: response.status }) }),
+          t('shell:rearm.failedTitle')
         );
         return;
       }
 
       applyArmedState(data.armedState || data);
-      showSuccess('Automations are armed again and will run on schedule.', 'Re-armed');
+      showSuccess(t('shell:rearm.success'), t('shell:rearm.successTitle'));
     } catch (err) {
       showError(
-        `Could not reach the controller (${err.message || 'network error'}). Automations are still disarmed.`,
-        'Re-arm FAILED'
+        t('shell:rearm.unreachable', { error: err.message || t('shell:stop.error.network') }),
+        t('shell:rearm.failedTitle')
       );
     } finally {
       setReArmBusy(false);
       fetchArmedState();
     }
-  }, [token, showSuccess, showError, applyArmedState, fetchArmedState]);
+  }, [token, showSuccess, showError, applyArmedState, fetchArmedState, t]);
 
   // Final (or interim) summaries for a stop that came back 202. Subscribed for
   // the component's whole life so a summary can never slip past between the
@@ -745,40 +745,46 @@ export default function Layout({ children }) {
     if (!cloudStatus.configured) {
       return {
         color: 'bg-state-idle',
-        text: 'Not Configured',
-        title: 'Cloud: Not Configured'
+        text: t('shell:cloud.notConfigured'),
+        title: t('shell:cloud.titleNotConfigured')
       };
     }
     if (cloudStatus.connected) {
       return {
         color: 'bg-state-ok',
         text: cloudStatus.pendingItems > 0
-          ? `Connected (${cloudStatus.pendingItems} pending)`
-          : 'Connected',
-        title: `Cloud: Connected${cloudStatus.lastSync ? ` - Last sync: ${formatDateTime(cloudStatus.lastSync)}` : ''}`
+          ? t('shell:cloud.connectedPending', { count: cloudStatus.pendingItems })
+          : t('shell:cloud.connected'),
+        title: cloudStatus.lastSync
+          ? t('shell:cloud.titleConnectedSync', { time: formatDateTime(cloudStatus.lastSync) })
+          : t('shell:cloud.titleConnected')
       };
     }
     return {
       color: 'bg-state-caution',
-      text: 'Offline Mode',
-      title: 'Cloud: Disconnected'
+      text: t('shell:cloud.offline'),
+      title: t('shell:cloud.titleDisconnected')
     };
   };
 
   const cloudDisplay = getCloudStatusDisplay();
 
+  const timerTypeLabel = (timer) => (TIMER_TYPES.includes(timer.type)
+    ? t(`shell:timers.type.${timer.type}`)
+    : (timer.type || t('shell:timers.type.generic')));
+  const timerEquipment = (timer) => equipmentNames[timer.equipmentId]
+    || t('shell:timers.equipmentFallback', { id: timer.equipmentId });
+
   // One-line description of a pending relay timer (type, equipment, channel, when).
-  const describeTimer = (timer) => {
-    const label = TIMER_TYPE_LABELS[timer.type] || timer.type || 'Timer';
-    const name = equipmentNames[timer.equipmentId] || `Equipment #${timer.equipmentId}`;
-    const channel = timer.channel !== null && timer.channel !== undefined ? ` ch ${timer.channel}` : '';
-    return `${label}: ${name}${channel} - fires ${formatDateTime(timer.firesAt)}`;
-  };
+  const describeTimer = (timer) => t(
+    timer.channel !== null && timer.channel !== undefined ? 'shell:timers.describeChannel' : 'shell:timers.describe',
+    { label: timerTypeLabel(timer), name: timerEquipment(timer), channel: timer.channel, time: formatDateTime(timer.firesAt) }
+  );
 
   // Native-title fallback so the list is also readable on plain hover.
   const timersTooltip = pendingTimers.length === 0
     ? ''
-    : [`${plural(pendingTimers.length, 'relay timer')} armed:`]
+    : [t('shell:timers.tooltipHead', { count: pendingTimers.length })]
       .concat(pendingTimers.map(describeTimer))
       .join('\n');
 
@@ -805,7 +811,7 @@ export default function Layout({ children }) {
             <div className="w-10 shrink-0 md:hidden" />
 
             {/* Breadcrumb navigation */}
-            <div className="grow shrink basis-40 min-w-0 ml-4 md:ml-0">
+            <div className="grow shrink basis-40 min-w-0 ms-4 md:ms-0">
               <Breadcrumb />
             </div>
 
@@ -813,13 +819,16 @@ export default function Layout({ children }) {
                 lower-priority items hide below lg: so the two stops fit a
                 390 px phone, and a tablet beside the 256 px sidebar, on one
                 line with room to tap. */}
-            <div className="flex flex-wrap items-center justify-end gap-2 md:gap-4 min-w-0 ml-auto">
+            <div className="flex flex-wrap items-center justify-end gap-2 md:gap-4 min-w-0 ms-auto">
+              {/* Language (every size: compact globe + code on a phone) */}
+              <LanguageSwitcher variant="menu" />
+
               {/* Dark mode toggle (desktop only - theme is also in Settings) */}
               <button
                 onClick={toggleTheme}
                 className="hidden lg:block p-2 rounded-md text-muted hover:text-ink hover:bg-field border border-transparent transition-colors"
-                title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-                aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                title={isDarkMode ? t('common:theme.toLight') : t('common:theme.toDark')}
+                aria-label={isDarkMode ? t('common:theme.toLight') : t('common:theme.toDark')}
               >
                 {isDarkMode ? (
                   <svg className="w-5 h-5 text-caution-400" fill="currentColor" viewBox="0 0 20 20">
@@ -837,13 +846,14 @@ export default function Layout({ children }) {
                 <Link
                   to="/alerts"
                   className="flex items-center text-sm hover:opacity-80"
-                  title={`${unacknowledgedCount} unacknowledged alert${unacknowledgedCount !== 1 ? 's' : ''}`}
+                  title={t('shell:alerts.unacknowledged', { count: unacknowledgedCount })}
+                  aria-label={t('shell:alerts.unacknowledged', { count: unacknowledgedCount })}
                 >
                   <span className="relative">
                     <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
-                    <span className="absolute -top-2 -right-2 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold font-mono tabular leading-none text-white bg-alarm-600 rounded-full min-w-[18px]">
+                    <span className="absolute -top-2 -end-2 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold font-mono tabular leading-none text-white bg-alarm-600 rounded-full min-w-[18px]">
                       {unacknowledgedCount > 99 ? '99+' : unacknowledgedCount}
                     </span>
                   </span>
@@ -858,15 +868,17 @@ export default function Layout({ children }) {
                       onClick={handleResumePolling}
                       disabled={pollingBusy}
                       className="flex items-center min-h-touch px-3 py-2 text-sm font-medium bg-caution-50 dark:bg-caution-900/40 text-caution-700 dark:text-caution-300 border border-caution-400 dark:border-caution-600 rounded-md hover:bg-caution-100 dark:hover:bg-caution-900/60 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                      title={`Sensor polling is paused${polling.pauseReason ? ` (${polling.pauseReason})` : ''} - click to resume`}
-                      aria-label="Resume sensor polling"
+                      title={polling.pauseReason
+                        ? t('shell:polling.pausedClickReason', { reason: polling.pauseReason })
+                        : t('shell:polling.pausedClick')}
+                      aria-label={t('shell:polling.resumeAria')}
                     >
                       {/* Play glyph */}
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                       </svg>
-                      <span className="ml-2 tabular-nums">
-                        {polling.autoResumeAt ? (polling.countdownLabel || 'Paused') : 'Paused'}
+                      <span className="ms-2 tabular-nums">
+                        {polling.autoResumeAt ? (polling.countdownLabel || t('shell:polling.paused')) : t('shell:polling.paused')}
                       </span>
                     </button>
                   ) : (
@@ -874,8 +886,8 @@ export default function Layout({ children }) {
                       onClick={() => setPauseMenuOpen(open => !open)}
                       disabled={pollingBusy}
                       className="p-2 rounded-md text-muted hover:text-ink hover:bg-field border border-transparent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                      title="Pause sensor polling"
-                      aria-label="Pause sensor polling"
+                      title={t('shell:polling.pause')}
+                      aria-label={t('shell:polling.pause')}
                       aria-haspopup="menu"
                       aria-expanded={pauseMenuOpen}
                     >
@@ -889,24 +901,24 @@ export default function Layout({ children }) {
                   {pauseMenuOpen && !polling.isPaused && (
                     <div
                       role="menu"
-                      aria-label="Pause sensor polling for"
-                      className="absolute right-0 mt-2 w-64 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
+                      aria-label={t('shell:polling.menuAria')}
+                      className="absolute end-0 mt-2 w-64 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
                     >
                       <p className="px-3 pb-2 text-xs text-muted border-b border-line">
-                        Pauses sensor polling. Relay boards keep their 15 s heartbeat poll so the firmware fail-safe cannot trip.
+                        {t('shell:polling.menuHelp')}
                       </p>
                       <p className="px-3 pt-2 pb-1 text-label uppercase text-muted">
-                        Pause for
+                        {t('shell:polling.pauseFor')}
                       </p>
-                      {PAUSE_DURATIONS.map(({ label, minutes }) => (
+                      {PAUSE_DURATIONS.map((minutes) => (
                         <button
                           key={minutes}
                           role="menuitem"
                           onClick={() => handlePauseSelect(minutes)}
                           disabled={pollingBusy}
-                          className="w-full text-left px-3 py-2 min-h-[40px] text-sm text-ink hover:bg-field transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="w-full text-start px-3 py-2 min-h-[40px] text-sm text-ink hover:bg-field transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          {label}
+                          {minutes === 0 ? t('shell:polling.untilResume') : durationLabel(t, minutes)}
                         </button>
                       ))}
                     </div>
@@ -924,7 +936,7 @@ export default function Layout({ children }) {
                         onClick={() => setTimersMenuOpen(open => !open)}
                         className="flex items-center px-2 py-1.5 text-xs font-semibold bg-caution-50 dark:bg-caution-900/40 text-caution-700 dark:text-caution-300 border border-caution-400 dark:border-caution-600 rounded-full hover:bg-caution-100 dark:hover:bg-caution-900/60 transition-colors"
                         title={timersTooltip}
-                        aria-label={`${plural(pendingTimers.length, 'relay timer')} armed - show details`}
+                        aria-label={t('shell:timers.buttonAria', { count: pendingTimers.length })}
                         aria-haspopup="menu"
                         aria-expanded={timersMenuOpen}
                       >
@@ -932,18 +944,18 @@ export default function Layout({ children }) {
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                         </svg>
-                        <span className="ml-1 font-mono tabular">{pendingTimers.length}</span>
-                        <span className="ml-1 hidden md:inline font-medium">armed</span>
+                        <span className="ms-1 font-mono tabular">{pendingTimers.length}</span>
+                        <span className="ms-1 hidden md:inline font-medium">{t('shell:timers.armed')}</span>
                       </button>
 
                       {timersMenuOpen && (
                         <div
                           role="menu"
-                          aria-label="Pending relay timers"
-                          className="absolute right-0 mt-2 w-72 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
+                          aria-label={t('shell:timers.menuAria')}
+                          className="absolute end-0 mt-2 w-72 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
                         >
                           <p className="px-3 pb-2 text-xs text-muted border-b border-line">
-                            These relays are scheduled to switch by themselves. Either stop button cancels all of them.
+                            {t('shell:timers.menuHelp')}
                           </p>
                           <ul className="max-h-64 overflow-auto">
                             {pendingTimers.map((timer) => (
@@ -953,15 +965,16 @@ export default function Layout({ children }) {
                               >
                                 <div className="flex items-baseline justify-between gap-2">
                                   <span className="font-medium text-ink">
-                                    {TIMER_TYPE_LABELS[timer.type] || timer.type || 'Timer'}
+                                    {timerTypeLabel(timer)}
                                   </span>
                                   <span className="font-mono tabular text-xs text-muted whitespace-nowrap">
                                     {formatDateTime(timer.firesAt)}
                                   </span>
                                 </div>
                                 <div className="text-muted">
-                                  {equipmentNames[timer.equipmentId] || `Equipment #${timer.equipmentId}`}
-                                  {timer.channel !== null && timer.channel !== undefined && ` - channel ${timer.channel}`}
+                                  {timer.channel !== null && timer.channel !== undefined
+                                    ? t('shell:timers.equipmentChannel', { name: timerEquipment(timer), channel: timer.channel })
+                                    : timerEquipment(timer)}
                                 </div>
                               </li>
                             ))}
@@ -980,17 +993,24 @@ export default function Layout({ children }) {
                       onClick={handleStopAll}
                       disabled={Boolean(stopBusy)}
                       className="flex items-center min-h-[44px] px-3 py-2 text-sm font-semibold bg-transparent text-caution-700 dark:text-caution-300 border-2 border-caution-400 rounded-md hover:bg-caution-50 dark:hover:bg-caution-900/40 focus:outline-none focus:ring-2 focus:ring-caution-400 focus:ring-offset-1 focus:ring-offset-panel transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                      title="Stop All - switches EVERY relay OFF on every board, including ALL fans and climate relays, and cancels all pending timers. Automations stay armed and may re-fire. To stop only irrigation (fans keep running), use Stop irrigation on the dashboard Irrigation card."
-                      aria-label="Stop all: switch every relay off on every board, including all fans and climate relays, and cancel pending timers, leaving automations armed. Use Stop irrigation to stop only irrigation."
+                      title={t('shell:stopAll.tooltip')}
+                      aria-label={t('shell:stopAll.aria')}
                     >
                       {/* Hollow stop-square glyph - lighter than the E-stop's filled one */}
                       <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
                         <rect x="6" y="6" width="12" height="12" rx="2" />
                       </svg>
-                      <span className="ml-2 whitespace-nowrap">
+                      <span className="ms-2 whitespace-nowrap">
                         {stopBusy === 'stop-all'
-                          ? (stopProgress ? `Stopping… (${stopProgress.boardsDone}/${stopProgress.boardsTotal})` : 'Stopping…')
-                          : <>Stop<span className="hidden sm:inline"> All</span></>}
+                          ? (stopProgress
+                            ? t('shell:stop.stoppingProgress', { done: stopProgress.boardsDone, total: stopProgress.boardsTotal })
+                            : t('shell:stop.stopping'))
+                          : (
+                            <>
+                              <span className="sm:hidden">{t('shell:stopAll.short')}</span>
+                              <span className="hidden sm:inline">{t('shell:stopAll.long')}</span>
+                            </>
+                          )}
                       </span>
                     </button>
                   )}
@@ -1005,10 +1025,8 @@ export default function Layout({ children }) {
                         className={`flex items-center min-h-[44px] px-3 py-2 text-sm font-bold uppercase tracking-wide text-white bg-alarm-600 border-2 border-alarm-700 rounded-md shadow-sm hover:bg-alarm-700 focus:outline-none focus:ring-2 focus:ring-alarm-500 focus:ring-offset-1 focus:ring-offset-panel transition-colors disabled:opacity-60 disabled:cursor-not-allowed${
                           armedState.disarmed ? ' ring-2 ring-alarm-400 ring-offset-1 ring-offset-panel' : ''
                         }`}
-                        title={armedState.disarmed
-                          ? 'Automations are DISARMED. Choosing a duration stops everything again and extends the disarm.'
-                          : 'EMERGENCY STOP - switches ALL relays OFF on every board (including all fans and climate), cancels every pending timer, and disarms automations so nothing re-fires. To stop only irrigation use Stop irrigation on the dashboard.'}
-                        aria-label="Emergency stop: switch all relays off and disarm automations"
+                        title={armedState.disarmed ? t('shell:estop.tooltipDisarmed') : t('shell:estop.tooltip')}
+                        aria-label={t('shell:estop.aria')}
                         aria-haspopup="menu"
                         aria-expanded={stopMenuOpen}
                       >
@@ -1016,15 +1034,22 @@ export default function Layout({ children }) {
                         <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 7a1 1 0 011-1h4a1 1 0 011 1v6a1 1 0 01-1 1H8a1 1 0 01-1-1V7z" clipRule="evenodd" />
                         </svg>
-                        <span className="ml-2 whitespace-nowrap">
+                        <span className="ms-2 whitespace-nowrap">
                           {stopBusy === 'emergency'
-                            ? (stopProgress ? `Stopping… (${stopProgress.boardsDone}/${stopProgress.boardsTotal})` : 'Stopping…')
-                            : <><span className="hidden sm:inline">Emergency </span><span className="sm:hidden">E-</span>Stop</>}
+                            ? (stopProgress
+                              ? t('shell:stop.stoppingProgress', { done: stopProgress.boardsDone, total: stopProgress.boardsTotal })
+                              : t('shell:stop.stopping'))
+                            : (
+                              <>
+                                <span className="sm:hidden">{t('shell:estop.short')}</span>
+                                <span className="hidden sm:inline">{t('shell:estop.long')}</span>
+                              </>
+                            )}
                         </span>
                         {armedState.disarmed && (
-                          <span className="ml-2 flex items-center flex-shrink-0" aria-hidden="true">
+                          <span className="ms-2 flex items-center flex-shrink-0" aria-hidden="true">
                             <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                            <span className="ml-1 hidden lg:inline text-[10px] tracking-wider">Disarmed</span>
+                            <span className="ms-1 hidden lg:inline text-[10px] tracking-wider">{t('common:status.disarmed')}</span>
                           </span>
                         )}
                       </button>
@@ -1032,27 +1057,30 @@ export default function Layout({ children }) {
                       {stopMenuOpen && (
                         <div
                           role="menu"
-                          aria-label="Emergency stop - keep automations disarmed for"
-                          className="absolute right-0 mt-2 w-72 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
+                          aria-label={t('shell:estop.menuAria')}
+                          className="absolute end-0 mt-2 w-72 z-50 bg-panel border border-line rounded-card shadow-lg py-2"
                         >
                           <p className="px-3 pb-2 text-xs text-muted border-b border-line">
-                            Switches every relay off on every board — <span className="font-semibold text-ink">including ALL fans and climate relays</span> — cancels all pending timers, and{' '}
-                            <span className="font-semibold text-alarm-600 dark:text-alarm-300">disarms automations</span>{' '}
-                            so nothing re-fires. No climate control or irrigation runs while disarmed.
-                            To stop only irrigation, use <span className="font-semibold text-ink">Stop irrigation</span> on the dashboard Irrigation card.
+                            <Trans
+                              i18nKey="shell:estop.menuHelp"
+                              components={{
+                                b: <span className="font-semibold text-ink" />,
+                                alarm: <span className="font-semibold text-alarm-600 dark:text-alarm-300" />,
+                              }}
+                            />
                           </p>
                           <p className="px-3 pt-2 pb-1 text-label uppercase text-muted">
-                            Keep disarmed for
+                            {t('shell:estop.keepDisarmedFor')}
                           </p>
-                          {EMERGENCY_RE_ARM_DURATIONS.map((duration) => (
+                          {EMERGENCY_RE_ARM_DURATIONS.map((minutes) => (
                             <button
-                              key={duration.minutes}
+                              key={minutes}
                               role="menuitem"
-                              onClick={() => handleEmergencyStop(duration)}
+                              onClick={() => handleEmergencyStop(minutes)}
                               disabled={Boolean(stopBusy)}
-                              className="w-full text-left px-3 py-2 min-h-[40px] text-sm text-ink hover:bg-alarm-50 dark:hover:bg-alarm-900/30 hover:text-alarm-700 dark:hover:text-alarm-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                              className="w-full text-start px-3 py-2 min-h-[40px] text-sm text-ink hover:bg-alarm-50 dark:hover:bg-alarm-900/30 hover:text-alarm-700 dark:hover:text-alarm-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                              {duration.label}
+                              {minutes === 0 ? t('shell:estop.untilReArm') : durationLabel(t, minutes)}
                             </button>
                           ))}
                         </div>
@@ -1064,18 +1092,18 @@ export default function Layout({ children }) {
 
               {/* Cloud status indicator */}
               <div className="flex items-center text-sm shrink-0" title={cloudDisplay.title} aria-label={cloudDisplay.title}>
-                <span className={`w-2 h-2 rounded-full ${cloudDisplay.color} lg:mr-2`}></span>
+                <span className={`w-2 h-2 rounded-full ${cloudDisplay.color} lg:me-2`}></span>
                 <span className="hidden lg:inline text-muted">{cloudDisplay.text}</span>
               </div>
 
               {/* Device clock: HH:MM:SS in the configured timezone (md: and up) */}
-              <DeviceClock className="md:pl-4 md:border-l md:border-line" />
+              <DeviceClock className="md:ps-4 md:border-s md:border-line" />
 
               {/* User badge (role pill from lg:, name from xl:) */}
               <div className="hidden lg:flex items-center">
-                <span className="hidden xl:inline text-sm text-muted mr-2">{user?.name}</span>
+                <span className="hidden xl:inline text-sm text-muted me-2">{user?.name}</span>
                 <span className="px-2 py-1 text-label uppercase rounded-full border border-line bg-field text-muted">
-                  {user?.role}
+                  {user?.role ? t(`common:role.${user.role}`, { defaultValue: user.role }) : ''}
                 </span>
               </div>
             </div>
@@ -1098,11 +1126,11 @@ export default function Layout({ children }) {
                 <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
               <span>
-                <span className="font-bold uppercase tracking-wide">Automations are disarmed.</span>{' '}
-                Nothing will re-fire — no climate control, irrigation or fertigation is running until they are re-armed.
+                <span className="font-bold uppercase tracking-wide">{t('shell:disarmedBanner.title')}</span>{' '}
+                {t('shell:disarmedBanner.body')}
               </span>
               {disarmedBy && (
-                <span className="text-red-700 dark:text-red-300/90">— disarmed by {disarmedBy}</span>
+                <span className="text-red-700 dark:text-red-300/90">— {t('shell:disarmedBanner.by', { name: disarmedBy })}</span>
               )}
               {armedState.at && (
                 <span className="text-red-700 dark:text-red-300/90 tabular-nums">— {formatDateTime(armedState.at)}</span>
@@ -1112,16 +1140,16 @@ export default function Layout({ children }) {
               )}
               <span className="font-semibold tabular-nums">
                 — {armedState.autoReArmAt
-                  ? `Auto re-arms in ${reArmCountdownLabel || '--:--'}`
-                  : 'Disarmed until manually re-armed'}
+                  ? t('shell:disarmedBanner.autoReArm', { time: reArmCountdownLabel || '--:--' })
+                  : t('shell:disarmedBanner.untilManual')}
               </span>
               {canEmergencyStop && (
                 <button
                   onClick={handleReArm}
                   disabled={reArmBusy}
-                  className="ml-auto px-3 py-1 text-sm font-semibold bg-white dark:bg-gray-800 text-red-700 dark:text-red-200 border border-red-400 dark:border-red-600 rounded-lg hover:bg-red-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 dark:focus:ring-offset-gray-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="ms-auto px-3 py-1 text-sm font-semibold bg-white dark:bg-gray-800 text-red-700 dark:text-red-200 border border-red-400 dark:border-red-600 rounded-lg hover:bg-red-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 dark:focus:ring-offset-gray-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {reArmBusy ? 'Re-arming…' : 'Re-arm now'}
+                  {reArmBusy ? t('shell:disarmedBanner.reArming') : t('shell:disarmedBanner.reArmNow')}
                 </button>
               )}
             </div>
@@ -1139,27 +1167,27 @@ export default function Layout({ children }) {
                 <path fillRule="evenodd" d="M18 10A8 8 0 112 10a8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
               <span>
-                <span className="font-semibold">Sensor polling is paused.</span>{' '}
-                Sensor readings are not being recorded. Relay boards keep their 15 s heartbeat poll so the firmware fail-safe cannot trip.
+                <span className="font-semibold">{t('shell:pollingBanner.title')}</span>{' '}
+                {t('shell:pollingBanner.body')}
               </span>
               {polling.pausedBy && (
-                <span className="text-amber-700 dark:text-amber-300/80">— paused by {polling.pausedBy}</span>
+                <span className="text-amber-700 dark:text-amber-300/80">— {t('shell:pollingBanner.by', { name: polling.pausedBy })}</span>
               )}
               {polling.pauseReason && (
                 <span className="text-amber-700 dark:text-amber-300/80">— {polling.pauseReason}</span>
               )}
               <span className="italic text-amber-700 dark:text-amber-300/80 tabular-nums">
                 — {polling.autoResumeAt
-                  ? `Auto-resumes in ${polling.countdownLabel || '--:--'}`
-                  : 'Paused until manually resumed'}
+                  ? t('shell:pollingBanner.autoResume', { time: polling.countdownLabel || '--:--' })
+                  : t('shell:pollingBanner.untilManual')}
               </span>
               {isAdmin && (
                 <button
                   onClick={handleResumePolling}
                   disabled={pollingBusy}
-                  className="ml-auto px-3 py-1 text-sm font-medium bg-white dark:bg-gray-800 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="ms-auto px-3 py-1 text-sm font-medium bg-white dark:bg-gray-800 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Resume now
+                  {t('shell:pollingBanner.resumeNow')}
                 </button>
               )}
             </div>
@@ -1169,40 +1197,43 @@ export default function Layout({ children }) {
         {/* Main content */}
         <main className="flex-1 p-4 md:p-6 overflow-auto">
           <ErrorBoundary resetKey={location.pathname}>
-            {children}
+            {/* A page's namespace loads on first visit: the header stays live. */}
+            <Suspense fallback={<p className="text-sm text-muted" role="status">{t('common:status.loading')}</p>}>
+              {children}
+            </Suspense>
           </ErrorBoundary>
         </main>
 
         {/* Footer with system status */}
         <footer className="bg-panel border-t border-line px-4 py-2 text-xs text-muted">
           <div className="flex items-center justify-between">
-            <span>A20Core - SenseHub v1.0.0</span>
-            <div className="flex items-center space-x-4">
+            <span>{t('shell:footer.product', { version: '1.0.0' })}</span>
+            <div className="flex items-center gap-4">
               <span className="flex items-center" title={
                 backendReachable === null
-                  ? 'Checking backend connectivity...'
+                  ? t('shell:footer.backendChecking')
                   : backendReachable
-                    ? 'Backend reachable'
-                    : 'Backend unreachable'
+                    ? t('shell:footer.backendReachable')
+                    : t('shell:footer.backendUnreachable')
               }>
-                <span className={`w-2 h-2 rounded-full mr-1 ${
+                <span className={`w-2 h-2 rounded-full me-1 ${
                   backendReachable === null ? 'bg-state-idle'
                     : backendReachable ? 'bg-state-ok' : 'bg-state-alarm'
                 }`}></span>
-                {backendReachable === null ? 'Checking…' : backendReachable ? 'System OK' : 'System Unreachable'}
+                {backendReachable === null ? t('shell:footer.checking') : backendReachable ? t('shell:footer.systemOk') : t('shell:footer.systemUnreachable')}
               </span>
               <span className="flex items-center" title={
                 backendReachable === null
-                  ? 'Database status unknown'
+                  ? t('shell:footer.dbUnknownTitle')
                   : backendReachable
-                    ? 'Database responding'
-                    : 'No response from database'
+                    ? t('shell:footer.dbRespondingTitle')
+                    : t('shell:footer.dbNoResponseTitle')
               }>
-                <span className={`w-2 h-2 rounded-full mr-1 ${
+                <span className={`w-2 h-2 rounded-full me-1 ${
                   backendReachable === null ? 'bg-state-idle'
                     : backendReachable ? 'bg-state-ok' : 'bg-state-alarm'
                 }`}></span>
-                {backendReachable === null ? 'DB Unknown' : backendReachable ? 'DB Connected' : 'DB Unreachable'}
+                {backendReachable === null ? t('shell:footer.dbUnknown') : backendReachable ? t('shell:footer.dbConnected') : t('shell:footer.dbUnreachable')}
               </span>
             </div>
           </div>

@@ -1,4 +1,7 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
+import { formatDuration, formatWater } from '../../i18n/format';
 
 /**
  * Irrigation run type tag (GET /api/irrigation/runs). Not a state: neutral ink,
@@ -7,6 +10,7 @@ import React from 'react';
  *                 "Automation" (clock)      — SenseHub sequence without an id (test / run-now)
  *   manual_app    "Manual — app" (hand) + operator
  *   manual_panel  "Manual — panel" (panel)  — dashed border: SenseHub drove nothing
+ * Texts: irrigation:runType.* (English reference kept in RUN_TYPE_TEXT).
  */
 
 export const RUN_TYPE_TEXT = { automated: 'Scheduled', manual_app: 'Manual — app', manual_panel: 'Manual — panel' };
@@ -27,26 +31,34 @@ function Glyph({ type }) {
 /** Short operator label: "lilistrocel@gmail.com" -> "lilistrocel". */
 export const shortUser = (email) => String(email || '').split('@')[0] || null;
 
-export function runTypeText(run, { withOperator = true } = {}) {
+/** Run type text in the active language (plain function: usable outside React). */
+export function runTypeText(run, { withOperator = true, t = i18n.t.bind(i18n) } = {}) {
   if (!run) return '';
-  if (run.type === 'automated') return run.automation_id ? 'Scheduled' : 'Automation';
+  if (run.type === 'automated') return run.automation_id ? t('irrigation:runType.scheduled') : t('irrigation:runType.automation');
   if (run.type === 'manual_app') {
     const ops = (run.operators || []).map(shortUser).filter(Boolean);
-    return withOperator && ops.length ? `Manual — app (${ops.join(', ')})` : 'Manual — app';
+    return withOperator && ops.length
+      ? t('irrigation:runType.manualAppBy', { operators: ops.join(', ') })
+      : t('irrigation:runType.manualApp');
   }
-  if (run.type === 'manual_panel') return 'Manual — panel';
+  if (run.type === 'manual_panel') return t('irrigation:runType.manualPanel');
   return run.type_label || run.type || '';
 }
 
 export function RunTypeTag({ run, short = false, className = '' }) {
+  const { t } = useTranslation('irrigation');
   if (!run || !run.type) return null;
+  const operators = run.type === 'manual_app' ? (run.operators || []).map(shortUser).filter(Boolean) : [];
   const text = short
-    ? (run.type === 'automated' ? (run.automation_id ? 'Sched' : 'Auto') : run.type === 'manual_app' ? 'App' : 'Panel')
-    : runTypeText(run);
+    ? (run.type === 'automated'
+      ? (run.automation_id ? t('runType.scheduledShort') : t('runType.automationShort'))
+      : run.type === 'manual_app' ? t('runType.manualAppShort') : t('runType.manualPanelShort'))
+    : runTypeText(run, { t, withOperator: false });
   const title = run.type === 'manual_panel'
-    ? 'Run from the fertigation panel: no SenseHub pump or zone relay was ON'
-    : run.type === 'manual_app' ? `Pump/zone relays switched in the app${(run.operators || []).length ? ` by ${run.operators.join(', ')}` : ''}`
-      : run.automation_name || 'Run by a SenseHub automation';
+    ? t('runType.panelTitle')
+    : run.type === 'manual_app'
+      ? ((run.operators || []).length ? t('runType.appTitleBy', { operators: run.operators.join(', ') }) : t('runType.appTitle'))
+      : run.automation_name || t('runType.automationTitle');
   return (
     <span
       className={`inline-flex items-center gap-1 rounded border px-1.5 py-px text-[10px] font-bold uppercase tracking-label leading-4 whitespace-nowrap text-ink ${
@@ -56,25 +68,33 @@ export function RunTypeTag({ run, short = false, className = '' }) {
       title={title}
     >
       <Glyph type={run.type} />
-      <span className="truncate max-w-[14rem]">{text}</span>
+      <span className="truncate max-w-[14rem]">
+        {text}
+        {/* user names are data: no Turkish/Arabic casing rules on them (lilistrocel, not LİLİSTROCEL) */}
+        {!short && operators.length > 0 && <> (<span lang="en" dir="ltr">{operators.join(', ')}</span>)</>}
+      </span>
     </span>
   );
 }
 
+// Text: irrigation:runStatus.<status>
 const STATUS = {
-  ok: { mark: 'ok', text: 'ok', cls: 'text-ok-700 dark:text-ok-300' },
-  cut_short: { mark: 'caution', text: 'cut short', cls: 'text-caution-700 dark:text-caution-300' },
+  ok: { mark: 'ok', cls: 'text-ok-700 dark:text-ok-300' },
+  cut_short: { mark: 'caution', cls: 'text-caution-700 dark:text-caution-300' },
   // ended by the operator's Stop irrigation button
-  stopped: { mark: 'caution', text: 'stopped by operator', cls: 'text-caution-700 dark:text-caution-300' },
-  no_water: { mark: 'alarm', text: 'no water', cls: 'text-alarm-600 dark:text-alarm-300' },
-  shutdown: { mark: 'alarm', text: 'shut down', cls: 'text-alarm-600 dark:text-alarm-300' },
-  manual: { mark: 'manual', text: 'manual', cls: 'text-ink' },
-  running: { mark: 'running', text: 'in progress', cls: 'text-ink' },
+  stopped: { mark: 'caution', cls: 'text-caution-700 dark:text-caution-300' },
+  no_water: { mark: 'alarm', cls: 'text-alarm-600 dark:text-alarm-300' },
+  shutdown: { mark: 'alarm', cls: 'text-alarm-600 dark:text-alarm-300' },
+  manual: { mark: 'manual', cls: 'text-ink' },
+  running: { mark: 'running', cls: 'text-ink' },
 };
 
 /** Run-level status: shape + colour + text. manual = hollow diamond, running = hollow circle. */
 export function RunStatus({ status, compact = false }) {
-  const s = STATUS[status] || { mark: 'unknown', text: status || 'unknown', cls: 'text-muted' };
+  const { t } = useTranslation('irrigation');
+  const known = STATUS[status];
+  const s = known || { mark: 'unknown', cls: 'text-muted' };
+  const text = known ? t(`runStatus.${status}`) : (status || t('relay.unknown'));
   return (
     <span className={`inline-flex items-center gap-1 text-xs ${s.cls}`} data-run-status={status || 'unknown'}>
       <svg aria-hidden="true" viewBox="0 0 12 12" className="w-3 h-3 shrink-0">
@@ -85,22 +105,13 @@ export function RunStatus({ status, compact = false }) {
         {s.mark === 'running' && <circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" strokeWidth="1.6" />}
         {s.mark === 'unknown' && <circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeDasharray="2.2 1.6" />}
       </svg>
-      {compact ? <span className="sr-only">{s.text}</span> : <span>{s.text}</span>}
+      {compact ? <span className="sr-only">{text}</span> : <span>{text}</span>}
     </span>
   );
 }
 
-export const fmtWater = (l) => {
-  if (l === null || l === undefined || !Number.isFinite(Number(l))) return '—';
-  const v = Number(l);
-  return v >= 1000 ? `${(v / 1000).toFixed(2)} m³` : `${v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US')} L`;
-};
+/** Water volume in the active language: "1.23 m³" / "850 L" / "4.5 L" (src/i18n/format.js). */
+export const fmtWater = (l) => formatWater(l);
 
-export const fmtDurShort = (s) => {
-  if (s === null || s === undefined || !Number.isFinite(Number(s))) return '—';
-  const r = Math.round(Number(s));
-  if (r < 90) return `${r} s`;
-  const m = Math.floor(r / 60);
-  const sec = r % 60;
-  return sec ? `${m} min ${sec} s` : `${m} min`;
-};
+/** Compact duration in the active language: "75 s" / "6 min 12 s" / "6 min". */
+export const fmtDurShort = (s) => formatDuration(s, { compact: true });

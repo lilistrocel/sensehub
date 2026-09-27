@@ -603,7 +603,8 @@ class MqttIngestService {
         source: 'mqtt_ingest',
         equipment_id: m.equipmentId,
         fingerprint: `mqtt_error_flags:${m.equipmentId}:${flags}`,
-        message: `${m.name}: flow meter reports error_flags=${flags} (0x${flags.toString(16).toUpperCase()}). Flow readings may be unreliable until it clears.`,
+        messageKey: 'mqtt.error_flags',
+        messageParams: { name: `${m.name}`, flags: `${flags}`, hex: flags.toString(16).toUpperCase() },
       });
     } else if (flags === 0 && m.lastAlertedErrorFlags !== 0) {
       this.log.log(`[MQTT] farm/${m.farmId} flow meter error_flags cleared (was ${m.lastAlertedErrorFlags})`);

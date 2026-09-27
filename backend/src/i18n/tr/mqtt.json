@@ -1,0 +1,3 @@
+{
+  "error_flags": "{name}: debimetre error_flags={flags} (0x{hex}) bildiriyor. Bu durum düzelene kadar debi okumaları güvenilir olmayabilir."
+}

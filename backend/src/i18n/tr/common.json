@@ -1,0 +1,12 @@
+{
+  "titled": "{title}: {message}",
+  "none": "yok",
+  "unknown": "bilinmiyor",
+  "an_operator": "bir operatör",
+  "relay": "röle {channel}",
+  "relays": "röleler {channels}",
+  "equipment_relay": "{equipment} röle {channel}",
+  "tank": "Tank {id}",
+  "automation": "otomasyon {id}",
+  "translation_failed_note": "Çeviri şu anda kullanılamıyor — orijinal İngilizce metin gösteriliyor."
+}

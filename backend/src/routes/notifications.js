@@ -2,6 +2,7 @@ const express = require('express');
 const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
 const { telegramService } = require('../services/TelegramService');
+const { SUPPORTED_LANGS, normalizeLang } = require('../i18n');
 
 const router = express.Router();
 
@@ -9,7 +10,7 @@ const router = express.Router();
 router.get('/telegram', requireRole('admin'), (req, res) => {
   try {
     const rows = db.prepare(
-      "SELECT key, value FROM system_settings WHERE key IN ('telegram_bot_token', 'telegram_chat_id', 'telegram_enabled')"
+      "SELECT key, value FROM system_settings WHERE key IN ('telegram_bot_token', 'telegram_chat_id', 'telegram_enabled', 'telegram_language')"
     ).all();
 
     const config = {};
@@ -25,7 +26,8 @@ router.get('/telegram', requireRole('admin'), (req, res) => {
       bot_token: config.telegram_bot_token ? '***configured***' : '',
       chat_id: config.telegram_chat_id || '',
       enabled: config.telegram_enabled === true || config.telegram_enabled === 'true',
-      has_token: !!config.telegram_bot_token
+      has_token: !!config.telegram_bot_token,
+      language: normalizeLang(config.telegram_language) || 'en'
     });
   } catch (err) {
     console.error('Error fetching Telegram config:', err);
@@ -36,7 +38,10 @@ router.get('/telegram', requireRole('admin'), (req, res) => {
 // PUT /api/notifications/telegram - Update Telegram configuration
 router.put('/telegram', requireRole('admin'), (req, res) => {
   try {
-    const { bot_token, chat_id, enabled } = req.body;
+    const { bot_token, chat_id, enabled, language } = req.body;
+    if (language !== undefined && !(typeof language === 'string' && SUPPORTED_LANGS.includes(language))) {
+      return res.status(400).json({ error: 'Bad Request', message: `language must be one of: ${SUPPORTED_LANGS.join(', ')}` });
+    }
 
     const upsert = db.prepare(`
       INSERT INTO system_settings (key, value, updated_at)
@@ -53,6 +58,9 @@ router.put('/telegram', requireRole('admin'), (req, res) => {
     if (enabled !== undefined) {
       upsert.run('telegram_enabled', JSON.stringify(enabled), JSON.stringify(enabled));
     }
+    if (language !== undefined) {
+      upsert.run('telegram_language', JSON.stringify(language), JSON.stringify(language));
+    }
 
     // Clear cached config
     telegramService.clearCache();
@@ -67,7 +75,7 @@ router.put('/telegram', requireRole('admin'), (req, res) => {
 // POST /api/notifications/telegram/test - Send a test message
 router.post('/telegram/test', requireRole('admin'), async (req, res) => {
   try {
-    const { bot_token, chat_id } = req.body;
+    const { bot_token, chat_id, language } = req.body;
 
     // Use provided values or fall back to stored config
     let token = bot_token;
@@ -86,7 +94,7 @@ router.post('/telegram/test', requireRole('admin'), async (req, res) => {
       return res.status(400).json({ error: 'Bot token and chat ID are required' });
     }
 
-    const result = await telegramService.testConnection(token, chatId);
+    const result = await telegramService.testConnection(token, chatId, language);
     res.json({ success: true, message: 'Test message sent successfully', result });
   } catch (err) {
     console.error('Telegram test failed:', err.message);
@@ -105,7 +113,7 @@ router.get('/watchdog', requireRole('admin'), (req, res) => {
     // Get recent watchdog alerts
     const recentAlerts = db.prepare(
       "SELECT * FROM alerts WHERE message LIKE 'Watchdog:%' ORDER BY created_at DESC LIMIT 20"
-    ).all();
+    ).all().map(a => require('../utils/alertBroadcast').localizeAlert(a, req.lang));
 
     // Get equipment health summary
     const offlineCount = db.prepare("SELECT COUNT(*) as count FROM equipment WHERE status = 'offline'").get();

@@ -287,7 +287,9 @@ function reportViolation(row, channel, err, context = {}) {
       equipment_id: eqId ?? null,
       automation_id: context.automationId ?? null,
       fingerprint: `interlock:${eqId}:${channel}`,
-      message: `[Interlock] ${name} ch ${channel}${src}: ${err.message}`,
+      // src = ' [<source>]' or ''; the guard's error text is passed through as-is (English)
+      messageKey: 'relay.interlock_violation',
+      messageParams: { name: `${name}`, channel: `${channel}`, src, error: `${err.message}` },
     });
   } catch (e) {
     console.error('[Interlock] failed to create alert:', e.message);
@@ -345,13 +347,16 @@ async function resolveHardwareConflict(row, relayStates, modbusClient, context =
 
     try {
       const { createAlert } = require('../utils/alertBroadcast');
+      const { M } = require('../i18n');
+      const conflictParams = { name: `${name}`, label_a: `${conflict.labels[0]}`, a: `${a}`, label_b: `${conflict.labels[1]}`, b: `${b}` };
       createAlert({
         severity: 'critical',
         source: 'interlock',
         equipment_id: row.id,
         fingerprint: `interlock_conflict:${row.id}:${a}`,
-        message: `[Interlock] HARDWARE CONFLICT on ${name}: "${conflict.labels[0]}" (ch ${a}) and "${conflict.labels[1]}" (ch ${b}) were both ON. ` +
-          (verified.length === 2 ? 'Both forced OFF and verified.' : `Forced OFF; verified: ${verified.length ? verified.join(',') : 'none'} — CHECK HARDWARE.`),
+        ...(verified.length === 2
+          ? { messageKey: 'relay.interlock_conflict_verified', messageParams: conflictParams }
+          : { messageKey: 'relay.interlock_conflict_unverified', messageParams: { ...conflictParams, verified: verified.length ? verified.join(',') : M('common.none') } }),
       });
     } catch (e) {
       console.error('[Interlock] failed to create conflict alert:', e.message);

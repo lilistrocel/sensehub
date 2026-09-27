@@ -1,0 +1,5 @@
+{
+  "_comment": "CameraStreamService reachability probe.",
+  "recovered": "Camera \"{name}\" ({ip}) is reachable again (unreachable since {since})",
+  "unreachable": "Camera \"{name}\" ({ip}) unreachable since {since} — check power/network; if it uses DHCP its IP may have changed (set a DHCP reservation)"
+}

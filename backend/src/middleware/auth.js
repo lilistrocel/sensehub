@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { db } = require('../utils/database');
+const { applyUserLanguage } = require('./language');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sensehub-dev-secret-change-in-production';
 
@@ -17,7 +18,7 @@ const authMiddleware = (req, res, next) => {
 
     // Check if session exists and is not expired
     const session = db.prepare(
-      "SELECT s.*, u.id as user_id, u.email, u.name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now')"
+      "SELECT s.*, u.id as user_id, u.email, u.name, u.role, p.language AS language FROM sessions s JOIN users u ON s.user_id = u.id LEFT JOIN user_preferences p ON p.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now')"
     ).get(token);
 
     if (!session) {
@@ -28,8 +29,11 @@ const authMiddleware = (req, res, next) => {
       id: session.user_id,
       email: session.email,
       name: session.name,
-      role: session.role
+      role: session.role,
+      language: session.language || 'en'
     };
+    // Request language: explicit Accept-Language / ?lang → the user's saved language → 'en'.
+    applyUserLanguage(req, session.language);
 
     next();
   } catch (error) {

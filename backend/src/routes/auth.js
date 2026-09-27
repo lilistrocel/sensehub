@@ -357,13 +357,16 @@ router.post('/login', (req, res) => {
   // Update last login
   db.prepare("UPDATE users SET last_login = datetime('now') WHERE id = ?").run(user.id);
 
+  const pref = db.prepare('SELECT language FROM user_preferences WHERE user_id = ?').get(user.id);
+
   res.json({
     token,
     user: {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role
+      role: user.role,
+      language: (pref && pref.language) || 'en'
     },
     expiresAt
   });
@@ -395,7 +398,7 @@ router.get('/session', (req, res) => {
     jwt.verify(token, JWT_SECRET);
 
     const session = db.prepare(
-      "SELECT s.*, u.id as user_id, u.email, u.name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now')"
+      "SELECT s.*, u.id as user_id, u.email, u.name, u.role, p.language AS language FROM sessions s JOIN users u ON s.user_id = u.id LEFT JOIN user_preferences p ON p.user_id = u.id WHERE s.token = ? AND s.expires_at > datetime('now')"
     ).get(token);
 
     if (!session) {
@@ -407,7 +410,8 @@ router.get('/session', (req, res) => {
         id: session.user_id,
         email: session.email,
         name: session.name,
-        role: session.role
+        role: session.role,
+        language: session.language || 'en'
       },
       expiresAt: session.expires_at
     });

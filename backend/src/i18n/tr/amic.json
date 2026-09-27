@@ -1,0 +1,4 @@
+{
+  "calibration_triggered": "[AMIC] Planlı kalibrasyon {time}{label} saatinde başlatıldı",
+  "calibration_failed": "[AMIC] Planlı kalibrasyon {time} saatinde BAŞLATILAMADI: {error}"
+}

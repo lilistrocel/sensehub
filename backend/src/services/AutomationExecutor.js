@@ -301,7 +301,8 @@ async function executeAutomation(automation, source = 'manual') {
         severity: action.severity || 'info',
         source: 'automation',
         automation_id: automation.id,
-        message: action.message || 'Automation triggered',
+        // A user-written alert text is stored as typed (not translated); only the default is a catalog key.
+        ...(action.message ? { message: action.message } : { messageKey: 'automation.default_alert' }),
       });
       executedActions.push({ type: 'alert', status: 'executed', message: action.message });
 

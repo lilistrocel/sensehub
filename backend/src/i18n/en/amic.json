@@ -1,0 +1,5 @@
+{
+  "_comment": "AmicSchedulerService. {label} is ' (<slot label>)' or empty.",
+  "calibration_triggered": "[AMIC] Scheduled Calibration triggered at {time}{label}",
+  "calibration_failed": "[AMIC] Scheduled Calibration FAILED to trigger at {time}: {error}"
+}

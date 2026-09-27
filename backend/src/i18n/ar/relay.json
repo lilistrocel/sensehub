@@ -1,0 +1,13 @@
+{
+  "state_on": "تشغيل",
+  "state_off": "إيقاف",
+  "safety_force_off": "[السلامة] إيقاف قسري {equipment} القناة {channel}: بقيت القناة في وضع التشغيل {elapsed} ث (الحد {threshold} ث، {basis}). شُغّلت أصلًا في {on_time}. اكتمل الإيقاف القسري من خدمة المراقبة.",
+  "safety_force_off_by_automation": "[السلامة] إيقاف قسري {equipment} القناة {channel}: بقيت القناة في وضع التشغيل {elapsed} ث (الحد {threshold} ث، {basis}). شُغّلت أصلًا في {on_time} بواسطة الأتمتة #{automation_id} \"{automation}\". اكتمل الإيقاف القسري من خدمة المراقبة.",
+  "safety_basis_action": "المتوقع {s} ث + مهلة",
+  "safety_basis_equipment": "إعداد خاص بالمعدّة",
+  "safety_basis_global": "الإعداد الافتراضي العام",
+  "unconfirmed": "{name} القناة {channel}: لم يتم تأكيد أمر المرحّل — المطلوب {requested}، والقراءة من الجهاز {readback}",
+  "interlock_violation": "[التعشيق] {name} القناة {channel}{src}: {error}",
+  "interlock_conflict_verified": "[التعشيق] تعارض في الأجهزة على {name}: \"{label_a}\" (القناة {a}) و\"{label_b}\" (القناة {b}) كانا في وضع التشغيل معًا. أُوقف كلاهما قسريًا وتم التحقق.",
+  "interlock_conflict_unverified": "[التعشيق] تعارض في الأجهزة على {name}: \"{label_a}\" (القناة {a}) و\"{label_b}\" (القناة {b}) كانا في وضع التشغيل معًا. أُوقفا قسريًا؛ تم التحقق من: {verified} — افحص الأجهزة."
+}

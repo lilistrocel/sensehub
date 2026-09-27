@@ -1,0 +1,162 @@
+{
+  "durations": {
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
+    "hours_one": "{{count}} hour",
+    "hours_other": "{{count}} hours"
+  },
+  "count": {
+    "board_one": "{{count}} board",
+    "board_other": "{{count}} boards",
+    "channel_one": "{{count}} channel",
+    "channel_other": "{{count}} channels",
+    "timer_one": "{{count}} timer",
+    "timer_other": "{{count}} timers",
+    "pendingTimer_one": "{{count}} pending timer",
+    "pendingTimer_other": "{{count}} pending timers"
+  },
+  "alerts": {
+    "unacknowledged_one": "{{count}} unacknowledged alert",
+    "unacknowledged_other": "{{count}} unacknowledged alerts"
+  },
+  "polling": {
+    "pause": "Pause sensor polling",
+    "paused": "Paused",
+    "pausedClick": "Sensor polling is paused - click to resume",
+    "pausedClickReason": "Sensor polling is paused ({{reason}}) - click to resume",
+    "resumeAria": "Resume sensor polling",
+    "menuAria": "Pause sensor polling for",
+    "menuHelp": "Pauses sensor polling. Relay boards keep their 15 s heartbeat poll so the firmware fail-safe cannot trip.",
+    "pauseFor": "Pause for",
+    "untilResume": "Until I resume",
+    "pausedUntilResumed": "Sensor polling paused until you resume it.",
+    "pausedAutoResume": "Sensor polling paused. Auto-resumes in {{duration}}.",
+    "pauseFailed": "Failed to pause sensor polling",
+    "resumed": "Sensor polling resumed.",
+    "resumeFailed": "Failed to resume sensor polling"
+  },
+  "timers": {
+    "type": {
+      "delay": "Delayed start",
+      "off": "Auto-off",
+      "raw": "Transition revert",
+      "generic": "Timer"
+    },
+    "equipmentFallback": "Equipment #{{id}}",
+    "equipmentChannel": "{{name}} - channel {{channel}}",
+    "describe": "{{label}}: {{name}} - fires {{time}}",
+    "describeChannel": "{{label}}: {{name}} ch {{channel}} - fires {{time}}",
+    "tooltipHead_one": "{{count}} relay timer armed:",
+    "tooltipHead_other": "{{count}} relay timers armed:",
+    "buttonAria_one": "{{count}} relay timer armed - show details",
+    "buttonAria_other": "{{count}} relay timers armed - show details",
+    "armed": "armed",
+    "menuAria": "Pending relay timers",
+    "menuHelp": "These relays are scheduled to switch by themselves. Either stop button cancels all of them."
+  },
+  "stop": {
+    "stopping": "Stopping…",
+    "stoppingProgress": "Stopping… ({{done}}/{{total}})",
+    "failedTitle": "{{label}} FAILED",
+    "error": {
+      "forbidden": "Your account is not permitted to run this action. Nothing was switched off.",
+      "notSupported": "This controller build does not support that action yet. Nothing was switched off.",
+      "failed": "{{message}}. Relays may still be energised - stop them at the panel.",
+      "httpStatus": "Request failed (HTTP {{status}})",
+      "network": "network error"
+    },
+    "result": {
+      "counts": "{{channels}} switched off, {{timers}} cancelled.",
+      "doseAborted": "Fertigation dose cycle aborted.",
+      "equipmentFallback": "equipment #{{id}}",
+      "channelList": "ch {{list}}",
+      "legacyFailure": "{{equipment}} channel {{channel}}",
+      "incompleteTitle": "{{label}} INCOMPLETE",
+      "boardsNotConfirmed": "{{failed}} did NOT confirm all channels off and may still be energised: {{detail}}. Check them physically.",
+      "sweepIncomplete": "The relay sweep did not complete. Relays may still be energised - stop them at the panel.",
+      "sweepIncompleteError": "The relay sweep did not complete ({{error}}). Relays may still be energised - stop them at the panel.",
+      "completeTitle": "{{label}} complete",
+      "unconfirmedTitle": "{{label}} UNCONFIRMED",
+      "unconfirmed": "The controller accepted the stop but never reported the result ({{done}}/{{total}} boards confirmed before it went quiet). Relays may still be energised - check them at the panel."
+    }
+  },
+  "stopAll": {
+    "label": "Stop all",
+    "short": "Stop",
+    "long": "Stop All",
+    "tooltip": "Stop All - switches EVERY relay OFF on every board, including ALL fans and climate relays, and cancels all pending timers. Automations stay armed and may re-fire. To stop only irrigation (fans keep running), use Stop irrigation on the dashboard Irrigation card.",
+    "aria": "Stop all: switch every relay off on every board, including all fans and climate relays, and cancel pending timers, leaving automations armed. Use Stop irrigation to stop only irrigation.",
+    "resultSuffix": "ALL fans and climate relays are OFF too — switch them back on if they should run. (To stop only irrigation, use Stop irrigation on the dashboard Irrigation card.) Automations stay armed and may re-fire.",
+    "unreachable": "Could not reach the controller ({{error}}). Nothing is confirmed stopped - use the physical panel."
+  },
+  "estop": {
+    "label": "Emergency stop",
+    "short": "E-Stop",
+    "long": "Emergency Stop",
+    "tooltip": "EMERGENCY STOP - switches ALL relays OFF on every board (including all fans and climate), cancels every pending timer, and disarms automations so nothing re-fires. To stop only irrigation use Stop irrigation on the dashboard.",
+    "tooltipDisarmed": "Automations are DISARMED. Choosing a duration stops everything again and extends the disarm.",
+    "aria": "Emergency stop: switch all relays off and disarm automations",
+    "menuAria": "Emergency stop - keep automations disarmed for",
+    "menuHelp": "Switches every relay off on every board — <b>including ALL fans and climate relays</b> — cancels all pending timers, and <alarm>disarms automations</alarm> so nothing re-fires. No climate control or irrigation runs while disarmed. To stop only irrigation, use <b>Stop irrigation</b> on the dashboard Irrigation card.",
+    "keepDisarmedFor": "Keep disarmed for",
+    "untilReArm": "Until I re-arm",
+    "resultSuffixTimed": "Automations are disarmed for {{duration}}.",
+    "resultSuffixUntilReArm": "Automations stay disarmed until you re-arm them.",
+    "unreachable": "Could not reach the controller ({{error}}). Nothing is confirmed stopped and automations may still be armed - use the physical panel."
+  },
+  "rearm": {
+    "forbidden": "Your account is not permitted to re-arm automations. They are still disarmed.",
+    "failed": "{{message}}. Automations are still disarmed.",
+    "failedTitle": "Re-arm FAILED",
+    "success": "Automations are armed again and will run on schedule.",
+    "successTitle": "Re-armed",
+    "unreachable": "Could not reach the controller ({{error}}). Automations are still disarmed."
+  },
+  "disarmedBanner": {
+    "title": "Automations are disarmed.",
+    "body": "Nothing will re-fire — no climate control, irrigation or fertigation is running until they are re-armed.",
+    "by": "disarmed by {{name}}",
+    "autoReArm": "Auto re-arms in {{time}}",
+    "untilManual": "Disarmed until manually re-armed",
+    "reArming": "Re-arming…",
+    "reArmNow": "Re-arm now"
+  },
+  "pollingBanner": {
+    "title": "Sensor polling is paused.",
+    "body": "Sensor readings are not being recorded. Relay boards keep their 15 s heartbeat poll so the firmware fail-safe cannot trip.",
+    "by": "paused by {{name}}",
+    "autoResume": "Auto-resumes in {{time}}",
+    "untilManual": "Paused until manually resumed",
+    "resumeNow": "Resume now"
+  },
+  "cloud": {
+    "notConfigured": "Not Configured",
+    "titleNotConfigured": "Cloud: Not Configured",
+    "connected": "Connected",
+    "connectedPending": "Connected ({{count}} pending)",
+    "titleConnected": "Cloud: Connected",
+    "titleConnectedSync": "Cloud: Connected - Last sync: {{time}}",
+    "offline": "Offline Mode",
+    "titleDisconnected": "Cloud: Disconnected"
+  },
+  "footer": {
+    "product": "A20Core - SenseHub v{{version}}",
+    "backendChecking": "Checking backend connectivity...",
+    "backendReachable": "Backend reachable",
+    "backendUnreachable": "Backend unreachable",
+    "checking": "Checking…",
+    "systemOk": "System OK",
+    "systemUnreachable": "System Unreachable",
+    "dbUnknownTitle": "Database status unknown",
+    "dbRespondingTitle": "Database responding",
+    "dbNoResponseTitle": "No response from database",
+    "dbUnknown": "DB Unknown",
+    "dbConnected": "DB Connected",
+    "dbUnreachable": "DB Unreachable"
+  },
+  "clock": {
+    "local": "Local",
+    "title": "Device time - {{zone}}",
+    "aria": "Device time {{time}} {{zone}}"
+  }
+}

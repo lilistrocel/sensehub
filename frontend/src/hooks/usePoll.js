@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { onResume, isHidden } from '../utils/connectivity';
+import { onLanguage } from '../i18n/current';
 
 /**
  * Resume-safe replacement for `setInterval(fn, intervalMs)`.
@@ -8,7 +9,8 @@ import { onResume, isHidden } from '../utils/connectivity';
  *  - on resume (visible again / back online) `fn` runs ONCE, debounced across
  *    visibilitychange + online, and the interval restarts from there,
  *  - a setTimeout chain instead of setInterval, so a frozen page produces one
- *    overdue tick on unfreeze, not a backlog.
+ *    overdue tick on unfreeze, not a backlog,
+ *  - a UI language switch also runs `fn` once (server texts are localized).
  * Returns a stop function (use it where you would call clearInterval).
  *
  * @param {() => any} fn
@@ -51,10 +53,20 @@ export function startPolling(fn, intervalMs, { immediate = false, pauseWhenHidde
     schedule();
   });
 
+  // The UI language changed: server-generated texts (alerts, status-board
+  // labels, flow-watch messages) come localized per Accept-Language, so every
+  // poller refreshes once instead of showing the old language until its next tick.
+  const offLanguage = onLanguage(() => {
+    if (stopped || (pauseWhenHidden && isHidden())) return;
+    run();
+    schedule();
+  });
+
   return () => {
     stopped = true;
     clearTimeout(timer);
     offResume();
+    offLanguage();
   };
 }
 

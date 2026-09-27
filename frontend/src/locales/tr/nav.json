@@ -1,0 +1,46 @@
+{
+  "sections": {
+    "operate": "İşletim",
+    "automate": "Otomasyon",
+    "analyse": "Analiz",
+    "system": "Sistem"
+  },
+  "items": {
+    "dashboard": "Gösterge paneli",
+    "equipment": "Ekipman",
+    "zones": "Bölgeler",
+    "cameras": "Kameralar",
+    "alerts": "Alarmlar",
+    "automations": "Otomasyonlar",
+    "templates": "Şablonlar",
+    "planner": "Planlayıcı",
+    "tasks": "Görevler",
+    "fertigation": "Fertigasyon",
+    "amic": "AMIC Analizörü",
+    "reports": "Raporlar",
+    "dataExport": "Veri dışa aktarma",
+    "labAnalysis": "Laboratuvar analizi",
+    "calibration": "Kalibrasyon",
+    "agronomist": "Agronomist",
+    "relayEvents": "Röle olayları",
+    "logs": "Kayıtlar",
+    "settings": "Ayarlar",
+    "debug": "Hata ayıklama"
+  },
+  "settingsTabs": {
+    "profile": "Profil",
+    "users": "Kullanıcılar",
+    "system": "Sistem",
+    "cloud": "Bulut",
+    "backup": "Yedekleme"
+  },
+  "openMenu": "Menüyü aç",
+  "closeMenu": "Menüyü kapat",
+  "sidebarAria": "Kenar çubuğu gezinmesi",
+  "mobileAria": "Mobil gezinme",
+  "desktopAria": "Masaüstü gezinme",
+  "breadcrumbAria": "Konum",
+  "user": "Kullanıcı",
+  "role": "Rol",
+  "logout": "Çıkış yap"
+}

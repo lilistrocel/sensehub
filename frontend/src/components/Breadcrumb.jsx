@@ -1,37 +1,39 @@
 import React from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
-// Route configuration for breadcrumb display names
+// Route -> nav:items.<key> (same keys as the sidebar, so both always agree).
 const routeConfig = {
-  '/': { name: 'Dashboard', icon: 'home' },
-  '/equipment': { name: 'Equipment', icon: 'equipment' },
-  '/zones': { name: 'Zones', icon: 'zones' },
-  '/automations': { name: 'Automations', icon: 'automations' },
-  '/alerts': { name: 'Alerts', icon: 'alerts' },
-  '/settings': { name: 'Settings', icon: 'settings' },
-  '/cameras': { name: 'Cameras', icon: 'cameras' },
-  '/templates': { name: 'Templates', icon: 'templates' },
-  '/planner': { name: 'Planner', icon: 'planner' },
-  '/tasks': { name: 'Tasks', icon: 'tasks' },
-  '/fertigation': { name: 'Fertigation', icon: 'fertigation' },
-  '/amic': { name: 'AMIC Analyzer', icon: 'amic' },
-  '/reports': { name: 'Reports', icon: 'reports' },
+  '/': 'dashboard',
+  '/equipment': 'equipment',
+  '/zones': 'zones',
+  '/automations': 'automations',
+  '/alerts': 'alerts',
+  '/settings': 'settings',
+  '/cameras': 'cameras',
+  '/templates': 'templates',
+  '/planner': 'planner',
+  '/tasks': 'tasks',
+  '/fertigation': 'fertigation',
+  '/amic': 'amic',
+  '/reports': 'reports',
   // Route path unchanged; the page is presented as "Data Export" in navigation.
-  '/analytics': { name: 'Data Export', icon: 'analytics' },
-  '/lab-analysis': { name: 'Lab Analysis', icon: 'lab' },
-  '/calibration': { name: 'Calibration', icon: 'calibration' },
-  '/agronomist': { name: 'Agronomist', icon: 'agronomist' },
-  '/relay-events': { name: 'Relay Events', icon: 'relay-events' },
-  '/debug': { name: 'Debug', icon: 'debug' },
+  '/analytics': 'dataExport',
+  '/lab-analysis': 'labAnalysis',
+  '/calibration': 'calibration',
+  '/agronomist': 'agronomist',
+  '/relay-events': 'relayEvents',
+  '/logs': 'logs',
+  '/debug': 'debug',
 };
 
-// Settings sub-routes
+// Settings sub-routes -> nav:settingsTabs.<key>
 const settingsSubRoutes = {
-  '/settings/profile': { name: 'Profile' },
-  '/settings/users': { name: 'Users' },
-  '/settings/system': { name: 'System' },
-  '/settings/cloud': { name: 'Cloud' },
-  '/settings/backup': { name: 'Backup' },
+  '/settings/profile': 'profile',
+  '/settings/users': 'users',
+  '/settings/system': 'system',
+  '/settings/cloud': 'cloud',
+  '/settings/backup': 'backup',
 };
 
 // Icon component for breadcrumb home icon
@@ -43,10 +45,10 @@ function HomeIcon() {
   );
 }
 
-// Chevron separator icon
+// Chevron separator icon: points along the reading direction (mirrored in RTL).
 function ChevronIcon() {
   return (
-    <svg className="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+    <svg className="h-5 w-5 text-gray-400 rtl:-scale-x-100" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
       <path
         fillRule="evenodd"
         d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
@@ -90,6 +92,7 @@ export default function Breadcrumb() {
   const location = useLocation();
   const params = useParams();
   const { customSegment } = useBreadcrumb();
+  const { t } = useTranslation('nav');
 
   // Build breadcrumb segments
   const buildBreadcrumbs = () => {
@@ -98,7 +101,7 @@ export default function Breadcrumb() {
 
     // Always start with Dashboard
     crumbs.push({
-      name: 'Dashboard',
+      name: t('items.dashboard'),
       path: '/',
       isHome: true,
       isCurrent: pathname === '/',
@@ -129,7 +132,7 @@ export default function Breadcrumb() {
       // Handle settings sub-routes
       if (segments[0] === 'settings' && i === 0) {
         crumbs.push({
-          name: 'Settings',
+          name: t('items.settings'),
           path: '/settings',
           isCurrent: pathname === '/settings',
         });
@@ -141,7 +144,7 @@ export default function Breadcrumb() {
         const subRoute = settingsSubRoutes[currentPath];
         if (subRoute) {
           crumbs.push({
-            name: subRoute.name,
+            name: t(`settingsTabs.${subRoute}`),
             path: currentPath,
             isCurrent: isLast,
           });
@@ -166,7 +169,7 @@ export default function Breadcrumb() {
       const routeInfo = routeConfig[currentPath];
       if (routeInfo) {
         crumbs.push({
-          name: routeInfo.name,
+          name: t(`items.${routeInfo}`),
           path: currentPath,
           isCurrent: isLast && !params.id,
         });
@@ -184,12 +187,12 @@ export default function Breadcrumb() {
   }
 
   return (
-    <nav className="flex" aria-label="Breadcrumb">
-      <ol className="flex items-center space-x-1">
+    <nav className="flex" aria-label={t('breadcrumbAria')}>
+      <ol className="flex items-center gap-1">
         {breadcrumbs.map((crumb, index) => (
           <li key={crumb.path} className="flex items-center">
             {index > 0 && <ChevronIcon />}
-            <div className={`flex items-center ${index > 0 ? 'ml-1' : ''}`}>
+            <div className={`flex items-center ${index > 0 ? 'ms-1' : ''}`}>
               {crumb.isCurrent ? (
                 <span
                   className="text-sm font-medium text-gray-500 truncate max-w-[200px]"

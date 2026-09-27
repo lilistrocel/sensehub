@@ -203,9 +203,18 @@ export function deriveIrrigationView({
   const noFlowS = noFlow ? (noFlowForS(flowBuffer, now) ?? 0) : 0;
 
   // ── meter fault ──────────────────────────────────────────────────────
+  // `faultReasons` (English) for logs/tests; `faults` (key + value) for the UI.
   const faultReasons = [];
-  if (flowFresh && errorFlags !== null && errorFlags !== 0) faultReasons.push(`error flags 0x${errorFlags.toString(16).toUpperCase()}`);
-  if (flowFresh && signal !== null && signal < C.signalMin) faultReasons.push(`signal ${Math.round(signal)} %`);
+  const faults = [];
+  if (flowFresh && errorFlags !== null && errorFlags !== 0) {
+    const hex = `0x${errorFlags.toString(16).toUpperCase()}`;
+    faultReasons.push(`error flags ${hex}`);
+    faults.push({ key: 'errorFlags', value: hex });
+  }
+  if (flowFresh && signal !== null && signal < C.signalMin) {
+    faultReasons.push(`signal ${Math.round(signal)} %`);
+    faults.push({ key: 'signal', value: Math.round(signal) });
+  }
   const meterFault = faultReasons.length > 0;
 
   // ── irrigation active ─────────────────────────────────────────────────
@@ -248,22 +257,37 @@ export function deriveIrrigationView({
   const sinceZonesClosedS = openZones.length === 0 && Number.isFinite(lastZoneChangeMs) ? (now - lastZoneChangeMs) / 1000 : Infinity;
 
   // ── visual mismatch hints (backend flow-watch alerts are separate) ────
+  // `text` is the English reference; the card renders
+  // irrigation:hint.<key> with `params` (zone labels are equipment data).
   const hints = [];
+  const zoneList = openZones.map((z) => z.label).join(', ');
   if (boardKnown && openZones.length > 1) {
-    hints.push({ key: 'multi-zone', level: 'caution', text: `${openZones.length} zones open at once (${openZones.map((z) => z.label).join(', ')}) — zones normally run one at a time` });
+    hints.push({
+      key: 'multi-zone', level: 'caution', params: { count: openZones.length, zones: zoneList },
+      text: `${openZones.length} zones open at once (${zoneList}) — zones normally run one at a time`,
+    });
   }
   if (openZones.length > 0 && noFlow) {
     const s = Math.min(noFlowS, zoneOpenS ?? noFlowS);
     if (s > C.zoneNoFlowGraceS) {
-      hints.push({ key: 'zone-no-flow', level: 'caution', text: `${openZones.map((z) => z.label).join(', ')} open but no flow for ${formatDuration(s)}` });
+      hints.push({
+        key: 'zone-no-flow', level: 'caution', params: { zones: zoneList, seconds: s },
+        text: `${zoneList} open but no flow for ${formatDuration(s)}`,
+      });
     }
   }
   if (flowLph !== null && flowLph > C.flowNoZoneLph && boardKnown && !zonesUnknown && openZones.length === 0 && sinceZonesClosedS > C.flowNoZoneGraceS) {
-    hints.push({ key: 'flow-no-zone', level: 'caution', text: `Flow ${formatInt(flowLph)} L/h with every zone valve shut` });
+    hints.push({
+      key: 'flow-no-zone', level: 'caution', params: { flowLph },
+      text: `Flow ${formatInt(flowLph)} L/h with every zone valve shut`,
+    });
   }
   if (flowLph !== null && openZones.length > 0 && deviationPct !== null && Math.abs(deviationPct) > threshold
       && (zoneOpenS ?? 0) > C.deviationGraceS && !noFlow) {
-    hints.push({ key: 'deviation', level: 'caution', text: `Flow ${deviationPct > 0 ? '+' : ''}${deviationPct.toFixed(0)} % vs expected for ${openZones.map((z) => z.label).join(', ')}` });
+    hints.push({
+      key: 'deviation', level: 'caution', params: { pct: Math.round(deviationPct), zones: zoneList },
+      text: `Flow ${deviationPct > 0 ? '+' : ''}${deviationPct.toFixed(0)} % vs expected for ${zoneList}`,
+    });
   }
 
   // ── dosing (equipment 2 relays, monitor tanks) ────────────────────────
@@ -305,13 +329,19 @@ export function deriveIrrigationView({
   });
   const dosingAlarm = tanks.some((t) => t.alarm);
   if (dosingAlarm) {
-    hints.unshift({ key: 'dosing-no-flow', level: 'alarm', text: `Dosing with no water flow: ${tanks.filter((t) => t.alarm).map((t) => `Tank ${t.letter}`).join(', ')}` });
+    const alarmTanks = tanks.filter((t) => t.alarm).map((t) => t.letter);
+    hints.unshift({
+      key: 'dosing-no-flow', level: 'alarm', params: { tanks: alarmTanks.join(', ') },
+      text: `Dosing with no water flow: ${alarmTanks.map((l) => `Tank ${l}`).join(', ')}`,
+    });
   }
 
   // ── today (measured) ──────────────────────────────────────────────────
   const today = {
     available: !!measured,
+    // `reason` is server text (localized by the backend); reasonKey marks our own states.
     reason: day?.measured && !day.measured.available ? (day.measured.reason || 'not available') : (report ? null : 'loading'),
+    reasonKey: day?.measured && !day.measured.available ? (day.measured.reason ? null : 'notAvailable') : (report ? null : 'loading'),
     waterM3: measured ? num(measured.water?.liters) / 1000 : null,
     cycles: measured ? (num(measured.water?.cycles_count) ?? (Array.isArray(measured.cycles) ? measured.cycles.length : null)) : null,
     fertL: measured ? num(measured.fertigation_liters) : null,
@@ -332,13 +362,14 @@ export function deriveIrrigationView({
   } : null;
 
   // ── header state ──────────────────────────────────────────────────────
+  // `key` -> irrigation:headline.<key>; `text` is the English reference.
   let headline;
-  if (monitorState === 'none') headline = { state: 'idle', filled: false, text: 'No monitor', unknown: true };
-  else if (monitorState === 'disabled') headline = { state: 'idle', filled: false, text: 'Monitor disabled', unknown: true };
-  else if (monitorState === 'offline') headline = { state: 'idle', filled: false, text: 'Monitor offline', unknown: true };
-  else if (monitorState === 'stale') headline = { state: 'idle', filled: false, text: 'Monitor stale', unknown: true };
-  else if (irrigating) headline = { state: 'water', filled: true, text: 'Irrigating', unknown: false };
-  else headline = { state: 'idle', filled: true, text: 'Idle', unknown: false };
+  if (monitorState === 'none') headline = { key: 'noMonitor', state: 'idle', filled: false, text: 'No monitor', unknown: true };
+  else if (monitorState === 'disabled') headline = { key: 'monitorDisabled', state: 'idle', filled: false, text: 'Monitor disabled', unknown: true };
+  else if (monitorState === 'offline') headline = { key: 'monitorOffline', state: 'idle', filled: false, text: 'Monitor offline', unknown: true };
+  else if (monitorState === 'stale') headline = { key: 'monitorStale', state: 'idle', filled: false, text: 'Monitor stale', unknown: true };
+  else if (irrigating) headline = { key: 'irrigating', state: 'water', filled: true, text: 'Irrigating', unknown: false };
+  else headline = { key: 'idle', state: 'idle', filled: true, text: 'Idle', unknown: false };
 
   let rail;
   if (!live) rail = 'stale';
@@ -356,6 +387,7 @@ export function deriveIrrigationView({
     rail,
     meterFault,
     faultReasons,
+    faults,
     irrigating,
     sinceMs,
     elapsedS,
@@ -389,6 +421,8 @@ export function deriveIrrigationView({
 }
 
 // ── formatting ──────────────────────────────────────────────────────────
+// English-only helpers kept for the pure derivation above and its tests. UI
+// code formats with src/i18n/format.js (useFormat), which is language-aware.
 
 export function formatInt(v) {
   if (v === null || v === undefined || !Number.isFinite(Number(v))) return '—';

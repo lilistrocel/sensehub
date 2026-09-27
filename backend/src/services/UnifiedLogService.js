@@ -40,6 +40,8 @@ const { getSystemTimezone } = require('../utils/systemTimezone');
 const { parseMaybeJson, fmtSeconds } = require('./AuditDiff');
 const { deviceFromUA } = require('./AuditLogService');
 const RouteMap = require('./AuditRouteMap');
+const i18n = require('../i18n');
+const { M } = i18n;
 
 const SOURCES = ['audit', 'relay', 'automation', 'alert', 'alert_ack', 'flow', 'irrigation_run', 'dose_run', 'dose_cycle', 'drift', 'request'];
 const CATEGORIES = ['irrigation', 'dosing', 'climate', 'automations', 'equipment', 'settings', 'users', 'auth', 'alerts', 'ai', 'cameras', 'lab', 'crops', 'tasks', 'system'];
@@ -178,7 +180,13 @@ function itemMatches(it, f) {
     if (!hit(it.target_type, it.target_id) && !(it.related || []).some(r => hit(r.type, r.id))) return false;
   }
   if (f.q) {
-    const hay = `${it.summary || ''} ${it.target_name || ''} ${it.actor_label || ''} ${it.actor_email || ''} ${it.action || ''} ${it.device || ''}`.toLowerCase();
+    let hay = `${it.summary || ''} ${it.target_name || ''} ${it.actor_label || ''} ${it.actor_email || ''} ${it.action || ''} ${it.device || ''}`.toLowerCase();
+    if (f.lang && f.lang !== 'en' && it._i18n) {
+      const loc = localizeItem(it, f.lang);
+      let low;
+      try { low = ` ${loc.summary || ''} ${loc.target_name || ''} ${loc.actor_label || ''}`.toLocaleLowerCase(f.lang); } catch (_) { low = ''; }
+      hay += low + ` ${loc.summary || ''} ${loc.target_name || ''} ${loc.actor_label || ''}`.toLowerCase();
+    }
     if (!hay.includes(f.q)) return false;
   }
   return true;
@@ -282,6 +290,102 @@ function groupRows(rowsDesc, keyFn, gapS, bucketS) {
 const cap = (s, n = 240) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const shortEmail = (e) => (e ? String(e) : null);
 
+// ─── i18n (read time) ───────────────────────────────────────────────────────
+// Each system item keeps its English `summary` / `actor_label` exactly as before
+// and carries `_i18n` catalog specs for them; localizeItem() renders the specs in
+// the request language (English originals in summary_en / actor_label_en).
+// Stored English texts inside (audit_log summaries, automation_logs messages,
+// dose-cycle notes, alerts without a message_key) stay English.
+const ACTOR_LABEL_SPECS = {
+  'Stop All': M('logs.actor.stop_all'),
+  'Stop Irrigation': M('logs.actor.stop_irrigation'),
+  'Relay safety watchdog': M('logs.actor.relay_safety'),
+  Interlock: M('logs.actor.interlock'),
+  'Dose controller': M('logs.actor.dose_controller'),
+  'pH controller': M('logs.actor.ph_controller'),
+  'Dose program': M('logs.actor.dose_program'),
+  'Flow watch': M('logs.actor.flow_watch'),
+  Watchdog: M('logs.actor.watchdog'),
+  'Camera monitor': M('logs.actor.camera'),
+  Agronomist: M('logs.actor.agronomist'),
+  Automation: M('logs.actor.automation'),
+  System: M('logs.actor.system'),
+  'Relay monitor': M('logs.actor.relay_monitor'),
+  'Unknown user': M('logs.unknown_user'),
+  'Someone at the panel': M('logs.actor.someone_at_panel'),
+  Irrigation: M('logs.actor.irrigation'),
+};
+const labelSpec = (label) => (label && ACTOR_LABEL_SPECS[label]) || label;
+const autoLabelSpec = (name) => M('logs.actor.automation_named', { name: String(name) });
+const SEVERITY_SPECS = { info: M('logs.severity.info'), warning: M('logs.severity.warning'), critical: M('logs.severity.critical') };
+const TRIGGER_SPECS = {
+  scheduler: M('logs.trigger.schedule'), manual: M('logs.trigger.manual'),
+  watchdog_rearm: M('logs.trigger.watchdog_rearm'), threshold: M('logs.trigger.threshold'),
+};
+const FLOW_KIND_SPECS = {
+  valve_no_flow: M('logs.flow.kind.valve_no_flow'),
+  run_shutdown: M('logs.flow.kind.run_shutdown'),
+  pump_no_flow: M('logs.flow.kind.pump_no_flow'),
+  low_flow: M('logs.flow.kind.low_flow'),
+  water_without_valve: M('logs.flow.kind.water_without_valve'),
+  dosing_without_water: M('logs.flow.kind.dosing_without_water'),
+  flow_above_expected: M('logs.flow.kind.flow_above_expected'),
+  flow_after_pump_off: M('logs.flow.kind.flow_after_pump_off'),
+  monitor_blind: M('logs.flow.kind.monitor_blind'),
+  manual_panel: M('logs.flow.kind.manual_panel'),
+  retry_recovered: M('logs.flow.kind.retry_recovered'),
+  retry_ended: M('logs.flow.kind.retry_ended'),
+  retry_abandoned: M('logs.flow.kind.retry_abandoned'),
+};
+const RETRY_OUTCOME_SPECS = {
+  recovered: M('logs.flow.retry_outcome.recovered'), ended: M('logs.flow.retry_outcome.ended'),
+  abandoned: M('logs.flow.retry_outcome.abandoned'), failed: M('logs.flow.retry_outcome.failed'), tried: M('logs.flow.retry_outcome.tried'),
+};
+const RUN_TYPE_SPECS = {
+  automated: M('logs.run.type.automated'), manual_app: M('logs.run.type.manual_app'), manual_panel: M('logs.run.type.manual_panel'),
+};
+const RUN_STATUS_SPECS = {
+  running: M('logs.run.status.running'), shutdown: M('logs.run.status.shutdown'), no_water: M('logs.run.status.no_water'),
+  stopped: M('logs.run.status.stopped'), cut_short: M('logs.run.status.cut_short'), aborted: M('logs.run.status.aborted'),
+  no_flow: M('logs.run.status.no_flow'),
+};
+const DOSE_STATUS_SPECS = {
+  running: M('logs.dose.state.running'), completed: M('logs.dose.state.completed'), aborted: M('logs.dose.state.aborted'),
+  failed: M('logs.dose.state.failed'), interrupted: M('logs.dose.state.interrupted'), unknown: M('common.unknown'),
+};
+const STATE_SPECS = { ON: M('logs.state.on'), OFF: M('logs.state.off'), unknown: M('common.unknown') };
+
+function listNamesSpec(names, max = 3) {
+  const uniq = [...new Set(names)];
+  if (uniq.length <= max) return i18n.list(uniq);
+  return M('logs.more', { list: i18n.list(uniq.slice(0, max)), count: uniq.length - max });
+}
+
+function doseEndReasonSpec(text, lang) {
+  try { return require('./DoseController').localizeReason(lang, text); } catch (_) { return text; }
+}
+
+/**
+ * Render an item's `_i18n` specs in `lang`; English items are returned unchanged
+ * (`force` renders the specs in English too — tests check they match the English).
+ */
+function localizeItem(it, lang, force = false) {
+  const L = i18n.normalizeLang(lang) || 'en';
+  if (!it || (L === 'en' && !force) || !it._i18n) return it;
+  const out = { ...it };
+  const clean = (str) => String(str).replace(/ ([;:,])/g, '$1');
+  for (const field of ['summary', 'actor_label', 'target_name']) {
+    const spec = it._i18n[field];
+    if (spec === undefined || spec === null) continue;
+    try {
+      let text = typeof spec === 'function' ? spec(L) : clean(i18n.render(L, spec));
+      if (field === 'summary') text = cap(text, 400);
+      if (text) { out[`${field}_en`] = it[field]; out[field] = text; }
+    } catch (_) { /* keep English */ }
+  }
+  return out;
+}
+
 function listNames(names, max = 3) {
   const uniq = [...new Set(names)];
   if (uniq.length <= max) return uniq.join(', ');
@@ -343,9 +447,36 @@ function relayGroupItem(g, refs, ctx) {
   if (unconfirmed) summary += ` — ${unconfirmed} not confirmed by read-back`;
   if (ctx && ctx.device) summary += ` (from ${ctx.device})`;
 
+  // i18n specs (same structure as the English above)
+  const whatSpec = onRows.length && offRows.length
+    ? M('logs.relay.switched_mixed', { on: onRows.length, off: offRows.length })
+    : (onRows.length ? M('logs.relay.switched_on') : M('logs.relay.switched_off'));
+  const whereSpec = n === 1 ? names[0]
+    : (eqIds.length > 1
+      ? M('logs.relay.channels_on_boards', { count: n, boards: eqIds.length, names: listNamesSpec(names) })
+      : M('logs.relay.channels_on_board', { count: n, board: refs.eqName(eqIds[0]), names: listNamesSpec(names) }));
+  const autoNameSpec = autoName || M('logs.automation_word');
+  let leadSpec;
+  if (src === 'automation') leadSpec = M('logs.relay.lead_automation', { name: autoNameSpec, what: whatSpec });
+  else if (src === 'automation_auto_off') leadSpec = M('logs.relay.lead_auto_off', { name: autoNameSpec, what: whatSpec });
+  else if (isUser) leadSpec = M('logs.relay.lead_actor', { who: first.user_email || M('logs.someone'), what: whatSpec });
+  else leadSpec = M('logs.relay.lead_actor', { who: labelSpec(meta.label) || src, what: whatSpec });
+  const extra = [];
+  if (!isUser && first.user_email) extra.push(src === 'interlock' ? M('logs.relay.after_write_by', { user: first.user_email }) : M('logs.relay.pressed_by', { user: first.user_email }));
+  if (unconfirmed) extra.push(M('logs.relay.unconfirmed', { count: unconfirmed }));
+  if (ctx && ctx.device) extra.push(M('logs.relay.from_device', { device: ctx.device }));
+  let actorSpec = labelSpec(meta.label);
+  if (src === 'automation' || src === 'automation_auto_off') actorSpec = autoName ? autoLabelSpec(autoName) : labelSpec('Automation');
+  if (isUser) actorSpec = first.user_email || labelSpec('Unknown user');
+
   const related = eqIds.map(id => ({ type: 'equipment', id: String(id) }));
   if (first.automation_id != null) related.push({ type: 'automation', id: String(first.automation_id) });
   return {
+    _i18n: {
+      summary: [M('logs.relay.summary', { lead: leadSpec, where: whereSpec }), ...extra],
+      actor_label: actorSpec,
+      target_name: eqIds.length > 1 ? M('logs.relay.boards', { count: eqIds.length }) : null,
+    },
     id: `relay:${g.minId}-${g.maxId}`,
     source: 'relay',
     source_id: `${g.minId}-${g.maxId}`,
@@ -385,7 +516,16 @@ function automationLogItem(r, refs) {
   else if (r.status === 'skipped') summary = `'${name}' skipped${trigLabel ? ` (${trigLabel})` : ''}: ${cap(msg, 200)}`;
   else summary = `'${name}' ran${trigLabel ? ` (${trigLabel})` : ''}${skipped ? ` — ${skipped} action(s) held back by dependencies` : ''}`;
   const dom = refs.autoDomain(r.automation_id);
+  const trigSpec = trig ? (TRIGGER_SPECS[trig] || trig) : null;
+  let summarySpec;
+  if (r.status === 'failure') summarySpec = trigSpec ? M('logs.automation.failed_trig', { name, trigger: trigSpec, message: cap(msg, 200) }) : M('logs.automation.failed', { name, message: cap(msg, 200) });
+  else if (r.status === 'skipped') summarySpec = trigSpec ? M('logs.automation.skipped_trig', { name, trigger: trigSpec, message: cap(msg, 200) }) : M('logs.automation.skipped', { name, message: cap(msg, 200) });
+  else {
+    summarySpec = [trigSpec ? M('logs.automation.ran_trig', { name, trigger: trigSpec }) : M('logs.automation.ran', { name })];
+    if (skipped) summarySpec.push(M('logs.automation.held_back', { count: Number(skipped) }));
+  }
   return {
+    _i18n: { summary: summarySpec, actor_label: autoLabelSpec(name) },
     id: `automation:${r.id}`, source: 'automation', source_id: String(r.id), _sort: r.id,
     time: r._iso, end_time: null,
     actor_type: 'system', actor_email: null, actor_role: null, actor_label: `Automation '${name}'`,
@@ -425,7 +565,21 @@ function alertItem(r, refs) {
   if (r.equipment_id != null) related.push({ type: 'equipment', id: String(r.equipment_id) });
   if (r.automation_id != null) related.push({ type: 'automation', id: String(r.automation_id) });
   const occ = r.occurrence_count > 1 ? ` (×${r.occurrence_count})` : '';
+  // the alert text in the request language (message_key + params), capped like the English
+  const alertText = (cap2) => (L) => {
+    let msg = r.message;
+    try { msg = require('../utils/alertBroadcast').localizeAlert(r, L).message; } catch (_) { msg = r.message; }
+    return cap(msg, cap2);
+  };
+  const summaryFn = (L) => {
+    const msg = alertText(300)(L);
+    const body = resolved ? msg : i18n.t(L, 'logs.alert.raised', { severity: SEVERITY_SPECS[r.severity] || String(r.severity || 'info').toUpperCase(), message: msg });
+    return r.occurrence_count > 1 ? `${body} ${i18n.t(L, 'logs.occurrences', { count: r.occurrence_count })}` : body;
+  };
+  const actorSpec = ALERT_SOURCE_LABEL[r.source] ? labelSpec(ALERT_SOURCE_LABEL[r.source])
+    : (r.automation_id != null ? autoLabelSpec(refs.autoName(r.automation_id)) : labelSpec('System'));
   return {
+    _i18n: { summary: summaryFn, actor_label: actorSpec, target_name: alertText(140) },
     id: `alert:${r.id}`, source: 'alert', source_id: String(r.id), _sort: r.id,
     time: r._iso, end_time: r.last_seen_at ? toIso(r.last_seen_at) : null,
     actor_type: 'system', actor_email: null, actor_role: null, actor_label: label,
@@ -443,7 +597,12 @@ function alertItem(r, refs) {
 function alertAckItem(r, refs) {
   const u = r.acknowledged_by != null ? refs.users.get(r.acknowledged_by) : null;
   const n = r.n || 1;
+  const ackActor = u ? u.email : (r.acknowledged_by == null ? labelSpec('Unknown user') : M('logs.user_id', { id: String(r.acknowledged_by) }));
   return {
+    _i18n: {
+      summary: n > 1 ? M('logs.alert.acknowledged_many', { count: n }) : M('logs.alert.acknowledged_one', { message: cap(r.message, 200) }),
+      actor_label: ackActor,
+    },
     id: `alert_ack:${r.min_id}`, source: 'alert_ack', source_id: String(r.min_id), _sort: r.min_id,
     time: r._iso, end_time: null,
     actor_type: 'user', actor_email: u ? u.email : null, actor_role: u ? u.role : null,
@@ -477,11 +636,27 @@ function flowItem(r, refs) {
     if (r.dosing_aborted) summary += '; dosing aborted';
   } else if (r.dosing_aborted) summary += '; dosing aborted';
   if (!r.ended_at) summary += ' (ongoing)';
+  const fs = [FLOW_KIND_SPECS[r.kind] || r.kind.replace(/_/g, ' ')];
+  if (r.zone_name) fs.push(M('logs.flow.zone', { zone: r.zone_name }));
+  if (r.duration_s != null) fs.push(M('logs.flow.for', { duration: fmtSeconds(r.duration_s) }));
+  if (r.recovered === 1) fs.push(M('logs.flow.recovered'));
+  if (r.kind === 'run_shutdown') {
+    if (det.retry) {
+      const oc = det.retry.result || det.retry.outcome || 'tried';
+      fs.push(det.retry.attempt
+        ? M('logs.flow.retry_n', { attempt: String(det.retry.attempt), outcome: RETRY_OUTCOME_SPECS[oc] || oc })
+        : M('logs.flow.retry', { outcome: RETRY_OUTCOME_SPECS[oc] || oc }));
+    }
+    if (Array.isArray(det.zones_not_irrigated) && det.zones_not_irrigated.length) fs.push(M('logs.flow.not_irrigated', { zones: i18n.list(det.zones_not_irrigated) }));
+  }
+  if (r.dosing_aborted) fs.push(M('logs.flow.dosing_aborted'));
+  if (!r.ended_at) fs.push(M('logs.flow.ongoing'));
   const related = [];
   if (r.equipment_id != null) related.push({ type: 'equipment', id: String(r.equipment_id) });
   if (det.automation_id != null) related.push({ type: 'automation', id: String(det.automation_id) });
   const sev = r.severity && SEVERITIES.includes(r.severity) ? r.severity : (r.alarmed ? 'warning' : 'info');
   return {
+    _i18n: { summary: fs, actor_label: labelSpec('Flow watch') },
     id: `flow:${r.id}`, source: 'flow', source_id: String(r.id), _sort: r.id,
     time: r._iso, end_time: r.ended_at ? toIso(r.ended_at) : null,
     actor_type: 'system', actor_email: null, actor_role: null, actor_label: 'Flow watch',
@@ -508,7 +683,24 @@ function irrigationRunItem(r, refs) {
   const warn = ['shutdown', 'cut_short', 'aborted', 'no_flow'].includes(r.status) || r.uncontrolled_dosing;
   const isUser = r.type === 'manual_app' || r.type === 'manual_panel';
   const related = r.automation_id != null ? [{ type: 'automation', id: String(r.automation_id) }] : [];
+  const rs = [M('logs.run.head', { type: RUN_TYPE_SPECS[r.type] || String(r.type) })];
+  if (autoName) rs.push(M('logs.run.automation', { name: autoName }));
+  if (ops.length) rs.push(M('logs.run.by', { operators: i18n.list(ops) }));
+  if (r.water_l != null || r.duration_s != null) {
+    const water = r.water_l != null ? `${Math.round(r.water_l * 10) / 10}` : null;
+    const dur = r.duration_s != null ? fmtSeconds(r.duration_s) : null;
+    rs.push(water !== null && dur !== null ? M('logs.run.water_in', { litres: water, duration: dur })
+      : (water !== null ? M('logs.run.water', { litres: water }) : M('logs.run.in', { duration: dur })));
+  }
+  if (r.status && r.status !== 'ok' && r.status !== 'manual') rs.push(M('logs.run.status_suffix', { status: RUN_STATUS_SPECS[r.status] || String(r.status).replace(/_/g, ' ') }));
+  if (r.uncontrolled_dosing) rs.push(M('logs.run.uncontrolled'));
+  if (r.provisional) rs.push(M('logs.run.in_progress'));
   return {
+    _i18n: {
+      summary: rs,
+      actor_label: r.type === 'manual_panel' ? labelSpec('Someone at the panel') : (ops.length ? ops.join(', ') : (autoName ? autoLabelSpec(autoName) : labelSpec('Irrigation'))),
+      target_name: autoName ? null : M('logs.run.run_id', { id: String(r.id) }),
+    },
     id: `irrigation_run:${r.id}`, source: 'irrigation_run', source_id: String(r.id), _sort: r.id,
     time: r._iso, end_time: r.ended_at ? toIso(r.ended_at) : null,
     actor_type: isUser ? 'user' : 'system',
@@ -537,7 +729,21 @@ function doseRunItem(r, refs) {
   const related = [];
   if (r.automation_id != null) related.push({ type: 'automation', id: String(r.automation_id) });
   if (r.program_id != null) related.push({ type: 'dose_program', id: String(r.program_id) });
+  const doseRunSummary = (L) => {
+    const head = prog && autoName ? i18n.t(L, 'logs.dose.run_prog_auto', { program: prog, automation: autoName })
+      : prog ? i18n.t(L, 'logs.dose.run_prog', { program: prog })
+        : autoName ? i18n.t(L, 'logs.dose.run_auto', { automation: autoName }) : i18n.t(L, 'logs.dose.run');
+    const b = [];
+    if (r.water_l != null) b.push(i18n.t(L, 'logs.dose.water', { litres: `${Math.round(r.water_l * 10) / 10}` }));
+    if (r.ph_avg != null) b.push(i18n.t(L, 'logs.dose.ph_avg', { ph: `${Math.round(r.ph_avg * 100) / 100}` }));
+    if (r.ec_avg != null) b.push(i18n.t(L, 'logs.dose.ec_avg', { ec: `${Math.round(r.ec_avg)}` }));
+    const status = i18n.render(L, DOSE_STATUS_SPECS[r.status] || String(r.status));
+    const reason = r.end_reason ? cap(doseEndReasonSpec(r.end_reason, L), 120) : null;
+    const tail = reason ? i18n.t(L, 'logs.dose.status_reason', { status, reason }) : i18n.t(L, 'logs.dose.status', { status });
+    return `${head}${b.length ? `: ${i18n.render(L, [i18n.list(b)])}` : ''} ${tail}`;
+  };
   return {
+    _i18n: { summary: doseRunSummary, actor_label: labelSpec('Dose controller') },
     id: `dose_run:${r.id}`, source: 'dose_run', source_id: String(r.id), _sort: r.id,
     time: r._iso, end_time: r.ended_at ? toIso(r.ended_at) : null,
     actor_type: 'system', actor_email: null, actor_role: null, actor_label: 'Dose controller',
@@ -558,7 +764,14 @@ function doseCycleItem(r, refs) {
   summary += ` — ${r.status || 'unknown'}${r.notes ? `: ${cap(r.notes, 120)}` : ''}`;
   const related = [];
   if (r.automation_id != null) related.push({ type: 'automation', id: String(r.automation_id) });
+  const cs = [prog && autoName ? M('logs.dose.cycle_prog_auto', { program: prog, automation: autoName })
+    : prog ? M('logs.dose.cycle_prog', { program: prog })
+      : autoName ? M('logs.dose.cycle_auto', { automation: autoName }) : M('logs.dose.cycle')];
+  if (r.duration_seconds != null) cs.push(M('logs.paren', { text: fmtSeconds(r.duration_seconds) }));
+  const cstatus = DOSE_STATUS_SPECS[r.status || 'unknown'] || String(r.status);
+  cs.push(r.notes ? M('logs.dose.status_notes', { status: cstatus, notes: cap(r.notes, 120) }) : M('logs.dose.status', { status: cstatus }));
   return {
+    _i18n: { summary: cs, actor_label: labelSpec('Dose program') },
     id: `dose_cycle:${r.id}`, source: 'dose_cycle', source_id: String(r.id), _sort: r.id,
     time: r._iso, end_time: r.cycle_ended_at ? toIso(r.cycle_ended_at) : null,
     actor_type: 'system', actor_email: null, actor_role: null, actor_label: 'Dose program',
@@ -577,7 +790,15 @@ function driftItem(r, refs) {
   let summary = `Relay drift on ${refs.chName(r.equipment_id, r.channel)}: expected ${st(r.expected_state)}, polled ${st(r.actual_state)}`;
   if (det.last_event && det.last_event.source) summary += ` (last write: ${det.last_event.source}${det.seconds_since_last_event != null ? `, ${fmtSeconds(det.seconds_since_last_event)} earlier` : ''})`;
   const dom = refs.chDomain(r.equipment_id, r.channel);
+  const stSpec = (v) => (v == null ? STATE_SPECS.unknown : (v ? STATE_SPECS.ON : STATE_SPECS.OFF));
+  const ds = [M('logs.drift.summary', { channel: refs.chName(r.equipment_id, r.channel), expected: stSpec(r.expected_state), actual: stSpec(r.actual_state) })];
+  if (det.last_event && det.last_event.source) {
+    ds.push(det.seconds_since_last_event != null
+      ? M('logs.drift.last_write_ago', { source: String(det.last_event.source), ago: fmtSeconds(det.seconds_since_last_event) })
+      : M('logs.drift.last_write', { source: String(det.last_event.source) }));
+  }
   return {
+    _i18n: { summary: ds, actor_label: labelSpec('Relay monitor') },
     id: `drift:${r.id}`, source: 'drift', source_id: String(r.id), _sort: r.id,
     time: r._iso, end_time: null,
     actor_type: 'system', actor_email: null, actor_role: null, actor_label: 'Relay monitor',
@@ -667,6 +888,7 @@ function legacyRequestItem(g, refs) {
 function auditItem(r) {
   const tags = r.tags ? r.tags.split(',').filter(Boolean) : [];
   return {
+    _i18n: r.actor_email ? null : { actor_label: r.actor_type === 'system' ? labelSpec(r.actor_role || 'System') : labelSpec('Unknown user') },
     id: `audit:${r.id}`, source: 'audit', source_id: String(r.id), _sort: r.id,
     time: toIso(r.created_at), end_time: r.last_at ? toIso(r.last_at) : null,
     actor_type: r.actor_type, actor_email: r.actor_email, actor_role: r.actor_role,
@@ -895,7 +1117,7 @@ function buildFetchers(eraStart) {
 
     alert: simpleSource({
       name: 'alert',
-      sql: 'SELECT id, equipment_id, zone_id, severity, message, acknowledged, acknowledged_by, created_at, acknowledged_at, fingerprint, occurrence_count, last_seen_at, source, automation_id FROM alerts',
+      sql: 'SELECT id, equipment_id, zone_id, severity, message, message_key, message_params, acknowledged, acknowledged_by, created_at, acknowledged_at, fingerprint, occurrence_count, last_seen_at, source, automation_id FROM alerts',
       timeCol: 'created_at', fmt: 'space',
       pushdown: (f) => {
         const where = []; const params = [];
@@ -985,13 +1207,20 @@ function buildFetchers(eraStart) {
 // ---------------------------------------------------------------------------
 
 function stripInternal(it) {
-  const { _sort, ...rest } = it;
+  const { _sort, _i18n, ...rest } = it;
   return rest;
+}
+
+/** Localize (request language) then strip internal fields. */
+function finalizeItem(it, lang, force = false) {
+  return stripInternal(localizeItem(it, lang, force));
 }
 
 /** One page of merged log items. */
 function queryLogs(query = {}, opts = {}) {
   const f = opts.filters || parseFilters(query);
+  const lang = i18n.normalizeLang(opts.lang || f.lang || '') || 'en';
+  f.lang = lang;
   const refs = opts.refs || loadRefs();
   const eraStart = auditEraStart();
   const fetchers = buildFetchers(eraStart);
@@ -1022,7 +1251,7 @@ function queryLogs(query = {}, opts = {}) {
     else if (frontier) nextCursor = encodeCursor(frontier);
   }
   return {
-    items: page.map(stripInternal),
+    items: page.map(it => finalizeItem(it, lang, !!opts.renderSpecs)),
     next_cursor: nextCursor,
     has_more: hasMore,
     audit_started_at: eraStart.startsWith('9999') ? null : eraStart,
@@ -1033,8 +1262,9 @@ function queryLogs(query = {}, opts = {}) {
 }
 
 /** Iterate pages until `max` items (CSV export). */
-function collectLogs(query = {}, max = 5000) {
+function collectLogs(query = {}, max = 5000, opts = {}) {
   const f = parseFilters({ ...query, limit: MAX_LIMIT });
+  f.lang = i18n.normalizeLang(opts.lang || '') || 'en';
   const refs = loadRefs();
   const out = [];
   let guard = 0;
@@ -1065,12 +1295,13 @@ const RELAY_EFFECT_ACTIONS = {
 };
 
 /** Full detail for one item. Returns null when not found. */
-function getLogDetail(source, id) {
+function getLogDetail(source, id, opts = {}) {
+  const lang = i18n.normalizeLang(opts.lang || '') || 'en';
   const refs = loadRefs();
   if (source === 'audit') {
     const r = db.prepare('SELECT * FROM audit_log WHERE id = ?').get(parseInt(id, 10));
     if (!r) return null;
-    const item = stripInternal(auditItem(r));
+    const item = finalizeItem(auditItem(r), lang);
     const details = r.details ? parseMaybeJson(r.details) : null;
     let effects = [];
     const kind = RELAY_EFFECT_ACTIONS[r.action];
@@ -1099,7 +1330,7 @@ function getLogDetail(source, id) {
         .all(lo, hi, first.source, first.automation_id, first.user_email);
       for (const r of rows) r._iso = toIso(r.created_at);
       const g = { key: '', rows, start: rows[0]._iso, end: rows[rows.length - 1]._iso, minId: lo, maxId: hi };
-      return { item: stripInternal(relayGroupItem(g, refs, null)), details: { writes: relayRowsDetail(rows, refs) } };
+      return { item: finalizeItem(relayGroupItem(g, refs, null), lang), details: { writes: relayRowsDetail(rows, refs) } };
     }
     const first = db.prepare('SELECT * FROM request_log WHERE id = ?').get(lo);
     if (!first) return null;
@@ -1107,7 +1338,7 @@ function getLogDetail(source, id) {
       .all(lo, hi, first.method, first.path, first.status, first.user_agent);
     for (const r of rows) r._iso = toIso(r.created_at);
     const g = { key: '', rows, start: rows[0]._iso, end: rows[rows.length - 1]._iso, minId: lo, maxId: hi };
-    const item = stripInternal(legacyRequestItem(g, refs));
+    const item = finalizeItem(legacyRequestItem(g, refs), lang);
     return {
       item,
       details: {
@@ -1126,7 +1357,7 @@ function getLogDetail(source, id) {
     const start = toSpace(addSeconds(r._iso, -1));
     const end = toSpace(addSeconds(r._iso, 15));
     const writes = db.prepare('SELECT * FROM relay_events WHERE automation_id = ? AND created_at BETWEEN ? AND ? ORDER BY id LIMIT 200').all(r.automation_id, start, end);
-    return { item: stripInternal(automationLogItem(r, refs)), details: { message: r.message, status: r.status, triggered_at: r.triggered_at, completed_at: r.completed_at, relay_writes_first_15s: relayRowsDetail(writes, refs) } };
+    return { item: finalizeItem(automationLogItem(r, refs), lang), details: { message: r.message, status: r.status, triggered_at: r.triggered_at, completed_at: r.completed_at, relay_writes_first_15s: relayRowsDetail(writes, refs) } };
   }
   if (source === 'alert' || source === 'alert_ack') {
     const r = db.prepare('SELECT * FROM alerts WHERE id = ?').get(nId);
@@ -1136,10 +1367,11 @@ function getLogDetail(source, id) {
       const rows = db.prepare('SELECT id, severity, message FROM alerts WHERE acknowledged_at IS ? AND acknowledged_by IS ? ORDER BY id LIMIT 200').all(r.acknowledged_at, r.acknowledged_by);
       const n = db.prepare('SELECT COUNT(*) AS n FROM alerts WHERE acknowledged_at IS ? AND acknowledged_by IS ?').get(r.acknowledged_at, r.acknowledged_by).n;
       r._iso = toIso(r.acknowledged_at);
-      return { item: stripInternal(alertAckItem({ ...r, min_id: r.id, n }, refs)), details: { acknowledged_alerts: rows, total: n } };
+      return { item: finalizeItem(alertAckItem({ ...r, min_id: r.id, n }, refs), lang), details: { acknowledged_alerts: rows, total: n } };
     }
     r._iso = toIso(r.created_at);
-    return { item: stripInternal(alertItem(r, refs)), details: { ...r, acknowledged_by_email: ackUser ? ackUser.email : null } };
+    const { localizeAlert } = require('../utils/alertBroadcast');
+    return { item: finalizeItem(alertItem(r, refs), lang), details: { ...localizeAlert(r, lang), acknowledged_by_email: ackUser ? ackUser.email : null } };
   }
   const table = { flow: 'irrigation_flow_episodes', irrigation_run: 'irrigation_runs', dose_run: 'dose_controller_runs', dose_cycle: 'fertigation_dose_cycle_log', drift: 'relay_drift_log' }[source];
   if (!table) return null;
@@ -1150,7 +1382,7 @@ function getLogDetail(source, id) {
   const mapper = { flow: flowItem, irrigation_run: irrigationRunItem, dose_run: doseRunItem, dose_cycle: doseCycleItem, drift: driftItem }[source];
   const details = {};
   for (const [k, v] of Object.entries(r)) if (k !== '_iso') details[k] = typeof v === 'string' && /_json$|^detail$|^effective_duty_pcts$/.test(k) ? parseMaybeJson(v) : v;
-  return { item: stripInternal(mapper(r, refs)), details };
+  return { item: finalizeItem(mapper(r, refs), lang), details };
 }
 
 /** Filter dropdown values. */
@@ -1188,6 +1420,7 @@ module.exports = {
   decodeCursor,
   keyCompare,
   groupRows,
+  localizeItem,
   toIso,
   startOfLocalDay,
   SOURCES,

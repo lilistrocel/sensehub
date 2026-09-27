@@ -111,10 +111,13 @@ export default {
         warning: caution[400],
         error: alarm[600],
       },
+      // Archivo covers Latin + Latin Extended (Turkish ş ğ ı İ ç ö ü). Arabic
+      // letters fall through to IBM Plex Sans Arabic (src/i18n/fonts.css), so
+      // digits, units and Latin names keep the house face in Arabic UI too.
       fontFamily: {
-        sans: ['Archivo', 'system-ui', 'sans-serif'],
-        display: ['Archivo', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono Variable"', '"JetBrains Mono"', 'ui-monospace', 'Consolas', 'monospace'],
+        sans: ['Archivo', '"IBM Plex Sans Arabic"', 'system-ui', 'sans-serif'],
+        display: ['Archivo', '"IBM Plex Sans Arabic"', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono Variable"', '"JetBrains Mono"', '"IBM Plex Sans Arabic"', 'ui-monospace', 'Consolas', 'monospace'],
       },
       borderRadius: {
         card: '8px',

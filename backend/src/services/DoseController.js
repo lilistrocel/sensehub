@@ -415,6 +415,175 @@ function median(arr) {
 
 const MODES = ['closed_loop', 'fallback', 'hold', 'waiting'];
 
+// ─── i18n: alert texts + status reasons (en / tr / ar) ───────────────────────
+// The controller keeps its English reason / why / gate strings internally (some
+// are compared: ZONE_TARGET, closedBy). Alerts are built from catalog specs whose
+// English render is byte-identical to the historical text; status reasons are
+// mapped from the English strings to catalog keys at read time (localizeStatus).
+const i18n = require('../i18n');
+const { M } = i18n;
+const S = (x) => `${x}`; // numbers exactly as template literals printed them
+
+/** Exact English reason / why / gate strings → catalog descriptors. */
+const REASON_TEXTS = {
+  'controller switched off — fixed schedule': M('dose_controller.reason.switched_off_fixed'),
+  'automations disarmed — dosing valves held closed': M('dose_controller.reason.disarmed_hold'),
+  'no flowmeter data': M('dose_controller.reason.no_flowmeter'),
+  'no dosing data': M('dose_controller.reason.no_dosing_data'),
+  'no flow value': M('dose_controller.reason.no_flow_value'),
+  'water stopped — nutrient valves closed': M('dose_controller.reason.water_stopped'),
+  'waiting for water flow': M('dose_controller.reason.waiting_water_flow'),
+  'cycle ended': M('dose_controller.reason.cycle_ended'),
+  'backend restarted during the cycle': M('dose_controller.reason.backend_restarted'),
+  'flow watch cold restart': M('dose_controller.reason.flow_watch_cold_restart'),
+  'floor touched — one window skipped': M('dose_controller.reason.floor_skip'),
+  'manual stop': M('dose_controller.reason.manual_stop'),
+  'stop-all requested': M('dose_controller.reason.stop_all_requested'),
+  'flow_watch: dosing without water flow': M('dose_controller.reason.flow_watch_dosing_no_water'),
+  paused: M('dose_controller.why.paused'),
+  disarmed: M('dose_controller.why.disarmed'),
+  'waiting for monitor': M('dose_controller.why.waiting_monitor'),
+  'no water': M('dose_controller.why.no_water'),
+  'no water (monitor idle)': M('dose_controller.why.no_water_idle'),
+  'waiting for water': M('dose_controller.why.waiting_water'),
+  'low flow': M('dose_controller.why.low_flow'),
+  'fixed schedule': M('dose_controller.why.fixed_schedule'),
+  'fixed schedule (no ratio set)': M('dose_controller.why.fixed_schedule_no_ratio'),
+  'cycle start': M('dose_controller.why.cycle_start'),
+  'behind target': M('dose_controller.why.behind_target'),
+  'target reached': M('dose_controller.why.target_reached'),
+  'ahead of target': M('dose_controller.why.ahead_of_target'),
+  'end of cycle': M('dose_controller.why.end_of_cycle'),
+  'overdose cap': M('dose_controller.why.overdose_cap'),
+  'waiting for a zone': M('dose_controller.why.waiting_zone'),
+  [ZONE_TARGET]: M('dose_controller.why.zone_target_reached'),
+  'filling zone target': M('dose_controller.why.filling_zone_target'),
+  'zone target grew': M('dose_controller.why.zone_target_grew'),
+  'zone start': M('dose_controller.why.zone_start'),
+  'no pH Down tank bound to the dosing board': M('dose_controller.gate.no_ph_tank'),
+  'controller switched off': M('dose_controller.gate.controller_off'),
+  'pH control switched off': M('dose_controller.gate.ph_off'),
+  'automations disarmed': M('dose_controller.gate.disarmed'),
+  'flow not verifiable': M('dose_controller.gate.flow_not_verifiable'),
+  'no water flow': M('dose_controller.gate.no_water_flow'),
+  'start delay': M('dose_controller.gate.start_delay'),
+  'start delay (cup flush)': M('dose_controller.gate.start_delay_flush'),
+  'planned pump stop ahead': M('dose_controller.gate.pump_stop_ahead'),
+  'pH sample stale': M('dose_controller.gate.sample_stale'),
+  'waiting for a pH sample': M('dose_controller.gate.waiting_sample'),
+  'pH below floor': M('dose_controller.gate.below_floor'),
+};
+const SENSOR_KIND = {
+  frozen: M('dose_controller.sensor_kind.frozen'),
+  implausible: M('dose_controller.sensor_kind.implausible'),
+};
+const sensorKind = (k) => SENSOR_KIND[k] || S(k);
+/** English reasons with values → descriptors (first match wins; nested reasons recurse). */
+const REASON_PATTERNS = [
+  [/^dosing paused — (.+)$/s, (m) => M('dose_controller.reason.paused', { detail: reasonSpec(m[1]) })],
+  [/^waiting for monitor data \((.+)\)$/s, (m) => M('dose_controller.reason.waiting_monitor', { why: reasonSpec(m[1]) })],
+  [/^monitor blind: (.+) — fixed schedule$/s, (m) => M('dose_controller.reason.monitor_blind', { why: reasonSpec(m[1]) })],
+  [/^no flowmeter data for (-?\d+) s$/, (m) => M('dose_controller.reason.no_flowmeter_for', { secs: m[1] })],
+  [/^flowmeter unhealthy \(signal (.*), flags (.*)\)$/, (m) => M('dose_controller.reason.flowmeter_unhealthy', { signal: m[1], flags: m[2] })],
+  [/^no dosing data for (-?\d+) s$/, (m) => M('dose_controller.reason.no_dosing_data_for', { secs: m[1] })],
+  [/^closed loop resumed \((.+)\)$/, (m) => M('dose_controller.reason.closed_loop_resumed', { mode: m[1] })],
+  [/^no pH sample since the start delay ended (-?\d+) s ago$/, (m) => M('dose_controller.reason.stale_since_delay', { secs: m[1] })],
+  [/^last pH sample (-?\d+) s old$/, (m) => M('dose_controller.reason.stale_last_sample', { secs: m[1] })],
+  [/^pH (.+) outside (.+)-(.+)$/, (m) => M('dose_controller.reason.implausible', { ph: m[1], min: m[2], max: m[3] })],
+  [/^pH stuck at (.+) for (-?\d+) s while water flows$/, (m) => M('dose_controller.reason.frozen', { ph: m[1], secs: m[2] })],
+  [/^flow watch cold-restart retry: (.+) no water$/s, (m) => M('dose_controller.reason.flow_watch_retry', { zone: m[1] })],
+  [/^pH window (.+) s is shorter than the plant lag \(tau (.+) s \+ dead time (.+) s\)$/, (m) => M('dose_controller.reason.window_short', { window: m[1], tau: m[2], dead: m[3] })],
+  [/^flow_watch_shutdown: (.+) no water flow$/s, (m) => M('dose_controller.reason.flow_watch_shutdown', { zone: m[1] })],
+  [/^stop_irrigation: Stop irrigation pressed by (.+)$/s, (m) => M('dose_controller.reason.stop_irrigation_pressed', { who: m[1] })],
+  [/^coil write failed: (.*)$/s, (m) => M('dose_controller.reason.coil_write_failed', { error: m[1] })],
+  [/^pH fell below (.+) — locked out this cycle$/, (m) => M('dose_controller.gate.locked_out', { floor: m[1] })],
+  [/^pH sensor (\w+)$/, (m) => M('dose_controller.gate.sensor_fault', { kind: sensorKind(m[1]) })],
+  [/^acid cap reached \((.+) s this cycle\)$/, (m) => M('dose_controller.gate.cap_cycle', { cap: m[1] })],
+  [/^daily acid cap reached \((.+) s\)$/, (m) => M('dose_controller.gate.cap_day', { cap: m[1] })],
+];
+
+/**
+ * English reason text → i18n descriptor (whose English render equals the text),
+ * or the text itself when unknown (free text from other services stays English).
+ */
+function reasonSpec(text) {
+  if (text === null || text === undefined) return text;
+  const str = String(text);
+  if (Object.prototype.hasOwnProperty.call(REASON_TEXTS, str)) return REASON_TEXTS[str];
+  for (const [re, build] of REASON_PATTERNS) {
+    const m = str.match(re);
+    if (m) {
+      const spec = build(m);
+      // only use the mapping when it reproduces the text exactly
+      if (i18n.render('en', spec) === str) return spec;
+    }
+  }
+  return str;
+}
+
+/** A controller reason / why / gate string in `lang` (English and unknown texts unchanged). */
+function localizeReason(lang, text) {
+  if (text === null || text === undefined || typeof text !== 'string') return text;
+  const L = i18n.normalizeLang(lang) || 'en';
+  if (L === 'en') return text;
+  return i18n.render(L, reasonSpec(text));
+}
+
+/** Alert descriptors (English render = the historical English alert text). */
+const ALERT_SPECS = {
+  fallback: (reason) => M('dose_controller.alert.fallback', { reason: reasonSpec(reason) }),
+  fallbackEnded: (secs, why, cause) => M('dose_controller.alert.fallback_ended', { secs: S(secs), why: reasonSpec(why), cause: reasonSpec(cause) }),
+  overdose: (tank, dosed, target, factor, water) => M('dose_controller.alert.overdose', { tank: S(tank), dosed: S(dosed), target: S(target), factor: S(factor), water: S(water) }),
+  valveLeak: (tank, litres, channel) => M('dose_controller.alert.valve_leak', { tank: S(tank), litres: S(litres), channel: S(channel) }),
+  phFloor: (ph, floor, acidS) => M('dose_controller.alert.ph_floor', { ph: S(ph), floor: S(floor), acid_s: S(acidS) }),
+  phNotVerifiable: (detail) => M('dose_controller.alert.ph_not_verifiable', { detail: reasonSpec(detail) }),
+  phSensorFault: (kind, detail) => M('dose_controller.alert.ph_sensor_fault', { kind: sensorKind(kind), detail: reasonSpec(detail) }),
+  acidCap: (which, cap, ph, setpoint) => (which === 'cycle'
+    ? M('dose_controller.alert.acid_cap_cycle', { cap: S(cap), ph: S(ph), setpoint: S(setpoint) })
+    : M('dose_controller.alert.acid_cap_day', { cap: S(cap), ph: S(ph), setpoint: S(setpoint) })),
+  valveMismatch: (valve, channel) => M('dose_controller.alert.valve_mismatch', { valve: S(valve), channel: S(channel) }),
+  underdose: (tank, ratio, openPct, achieved, dosed, water) => M('dose_controller.alert.underdose', {
+    tank: S(tank), ratio: S(ratio), open_pct: S(openPct), achieved: S(achieved), dosed: S(dosed), water: S(water),
+  }),
+};
+
+/**
+ * getStatus() in `lang`: mode_reason, reason, paused.reason, warnings[],
+ * tanks[].why, ph.gate and ph.acid.last_decision.skipped are rendered in `lang`;
+ * each localized field keeps its English original in a sibling `*_en` field.
+ * English (or a missing status) is returned unchanged.
+ */
+function localizeStatus(status, lang) {
+  const L = i18n.normalizeLang(lang) || 'en';
+  if (!status || typeof status !== 'object' || L === 'en') return status;
+  const out = { ...status };
+  const loc = (obj, field) => {
+    if (obj && typeof obj[field] === 'string') { obj[`${field}_en`] = obj[field]; obj[field] = localizeReason(L, obj[field]); }
+  };
+  loc(out, 'mode_reason');
+  loc(out, 'reason');
+  if (Array.isArray(out.warnings)) { out.warnings_en = out.warnings; out.warnings = out.warnings.map(w => localizeReason(L, w)); }
+  if (out.paused) { out.paused = { ...out.paused }; loc(out.paused, 'reason'); }
+  if (Array.isArray(out.tanks)) out.tanks = out.tanks.map(t => { const x = { ...t }; loc(x, 'why'); return x; });
+  if (out.ph) {
+    out.ph = { ...out.ph };
+    loc(out.ph, 'gate');
+    if (out.ph.acid && out.ph.acid.last_decision && typeof out.ph.acid.last_decision.skipped === 'string') {
+      out.ph.acid = { ...out.ph.acid, last_decision: { ...out.ph.acid.last_decision } };
+      loc(out.ph.acid.last_decision, 'skipped');
+    }
+  }
+  if (out.last_run) out.last_run = localizeRun(out.last_run, L);
+  return out;
+}
+
+/** A run record in `lang`: end_reason localized (end_reason_en keeps the stored text). */
+function localizeRun(run, lang) {
+  const L = i18n.normalizeLang(lang) || 'en';
+  if (!run || typeof run !== 'object' || L === 'en' || typeof run.end_reason !== 'string') return run;
+  return { ...run, end_reason_en: run.end_reason, end_reason: localizeReason(L, run.end_reason) };
+}
+
 class DoseController {
   /**
    * @param {object} deps
@@ -1083,7 +1252,7 @@ class DoseController {
       c.fallbackPeriods.push({ from: iso(now), to: null, reason });
       this._trip(c, 'fallback', now, reason);
       this.log.warn(`[DoseController] FALLBACK to the fixed schedule: ${reason}`);
-      this._alert(c, 'fallback', 'warning', `Dose controller fell back to the fixed dosing schedule: ${reason}. Ratio control resumes when the irrigation monitor data returns.`,
+      this._alert(c, 'fallback', 'warning', ALERT_SPECS.fallback(reason),
         { equipment_id: this._dosingEq(c) });
       c.fallbackAlerted = true;
     } else if (prev) {
@@ -1097,8 +1266,9 @@ class DoseController {
       p.to = iso(now);
       const secs = Math.round((now - Date.parse(p.from)) / 1000);
       if (c.fallbackAlerted) {
+        const spec = ALERT_SPECS.fallbackEnded(secs, why, p.reason);
         this._updateOpenAlert('dose_controller:fallback', {
-          message: `Dose controller: fixed-schedule fallback ended after ${secs} s (${why}). Cause was: ${p.reason}.`,
+          message: i18n.render('en', spec), messageKey: spec.$k, messageParams: spec.$p,
           severity: 'info',
         });
       }
@@ -1179,7 +1349,7 @@ class DoseController {
           t.overdoseTrips++;
           const detail = `${t.name}: ${r2(t.V)} L dosed vs ${r2(c.W / t.ratio)} L target (> ${n.max_overdose_factor}x)`;
           this._trip(c, 'overdose', now, detail);
-          this._alert(c, `overdose:${t.tank_id}`, 'warning', `Dose controller closed ${t.name}: ${detail} for ${r1(c.W)} L of water. Check the valve and the venturi.`,
+          this._alert(c, `overdose:${t.tank_id}`, 'warning', ALERT_SPECS.overdose(t.name, r2(t.V), r2(c.W / t.ratio), n.max_overdose_factor, r1(c.W)),
             { equipment_id: t.equipment_id });
         }
         want = false; force = true; why = 'overdose cap';
@@ -1192,7 +1362,7 @@ class DoseController {
         t.leakFlagged = true;
         const detail = `${t.name} drew ${r2(t.vLeak)} L while commanded closed`;
         this._trip(c, 'valve_not_closing', now, detail);
-        this._alert(c, `valve_leak:${t.tank_id}`, 'warning', `Dose controller: ${detail} (ch ${t.channel}) — the valve may be stuck open; re-sent OFF.`,
+        this._alert(c, `valve_leak:${t.tank_id}`, 'warning', ALERT_SPECS.valveLeak(t.name, r2(t.vLeak), t.channel),
           { equipment_id: t.equipment_id });
         this._command(c, t, false, 'dose_controller');
       }
@@ -1607,7 +1777,7 @@ class DoseController {
         a.tripped = true;
         const detail = `pH ${s.value} < floor ${p.floor_ph}${a.floorLow > 1 ? ` (${a.floorLow} consecutive samples)` : ''}`;
         this._trip(c, 'ph_floor', now, detail);
-        this._alert(c, 'ph_floor', 'critical', `Fertigation pH ${s.value} fell below the ${p.floor_ph} floor — pH Down valve closed and locked out for the rest of this cycle (${r1(this._acidUsedS(c, now))} s acid used). Check the acid dosing and the probe.`,
+        this._alert(c, 'ph_floor', 'critical', ALERT_SPECS.phFloor(s.value, p.floor_ph, r1(this._acidUsedS(c, now))),
           { equipment_id: c.phTank ? c.phTank.equipment_id : null });
       } else {
         this._trip(c, 'ph_floor_touch', now, `pH ${s.value} < floor ${p.floor_ph} (one sample): acid closed, integral trimmed 20 %`);
@@ -1633,7 +1803,7 @@ class DoseController {
     if (!a.staleAlerted) {
       a.staleAlerted = true;
       this._trip(c, 'ph_stale', now, detail);
-      this._alert(c, 'ph_sensor', 'warning', `Dose controller: feed pH not verifiable (${detail}) — pH Down valve held closed.`,
+      this._alert(c, 'ph_sensor', 'warning', ALERT_SPECS.phNotVerifiable(detail),
         { equipment_id: c.cfgAtStart.ph.sensor_equipment_id });
     }
   }
@@ -1645,7 +1815,7 @@ class DoseController {
     a.sampleState = kind;
     if (a.open) this._acidClose(c, now, `pH sensor ${kind}`);
     this._trip(c, `ph_${kind}`, now, detail);
-    this._alert(c, 'ph_sensor', 'warning', `Dose controller: feed pH sensor ${kind} (${detail}) — pH Down valve closed for the rest of this cycle.`,
+    this._alert(c, 'ph_sensor', 'warning', ALERT_SPECS.phSensorFault(kind, detail),
       { equipment_id: c.cfgAtStart.ph.sensor_equipment_id });
   }
 
@@ -1713,7 +1883,7 @@ class DoseController {
     const detail = which === 'cycle' ? `${p.max_acid_s_per_cycle} s per cycle` : `${p.max_acid_s_per_day} s per day`;
     this._trip(c, which === 'cycle' ? 'acid_cap_cycle' : 'acid_cap_day', now, detail);
     if (aboveBand) {
-      this._alert(c, `acid_cap:${which}`, 'warning', `Dose controller: acid cap reached (${detail}) with feed pH ${a.valid.value} still above ${p.setpoint} — no more pH Down this ${which === 'cycle' ? 'cycle' : 'day'}.`,
+      this._alert(c, `acid_cap:${which}`, 'warning', ALERT_SPECS.acidCap(which, which === 'cycle' ? p.max_acid_s_per_cycle : p.max_acid_s_per_day, a.valid.value, p.setpoint),
         { equipment_id: c.phTank ? c.phTank.equipment_id : null });
     }
   }
@@ -1882,7 +2052,7 @@ class DoseController {
         v.offRewritten = true;
         const detail = `${v.name} (ch ${v.channel}) reads ON while commanded OFF`;
         this._trip(c, 'valve_mismatch', now, detail);
-        this._alert(c, `valve_mismatch:${v.equipment_id}:${v.channel}`, 'warning', `Dose controller: ${detail} — OFF re-sent.`, { equipment_id: v.equipment_id });
+        this._alert(c, `valve_mismatch:${v.equipment_id}:${v.channel}`, 'warning', ALERT_SPECS.valveMismatch(v.name, v.channel), { equipment_id: v.equipment_id });
         this._command(c, v, false, v.kind === 'acid' ? 'ph_controller' : 'dose_controller');
       }
     }
@@ -1895,13 +2065,15 @@ class DoseController {
     c.trips.push({ kind, at: iso(now), detail: detail || null });
   }
 
-  _alert(c, key, severity, message, { equipment_id = null } = {}) {
+  /** `spec` = i18n descriptor (ALERT_SPECS); the stored English message is its English render. */
+  _alert(c, key, severity, spec, { equipment_id = null } = {}) {
     try {
+      const message = i18n.render('en', spec);
       this._createAlert({
         severity, source: 'dose_controller', equipment_id,
         automation_id: c && c.ctx ? c.ctx.automationId ?? null : null,
         fingerprint: `dose_controller:${key}`,
-        message,
+        message, messageKey: spec.$k, messageParams: spec.$p,
       });
       if (c) c.alerts.add(key);
     } catch (e) {
@@ -1982,7 +2154,7 @@ class DoseController {
     for (const t of s.tanks) {
       if (t.physics_limited) {
         this._alert(c, `underdose:${t.tank_id}`, 'warning',
-          `Dose controller: ${t.name} could not reach 1:${t.ratio_target} — valve open ${t.open_pct} % of the run, achieved 1:${t.achieved_ratio ?? '—'} (${t.dosed_l} L for ${s.water_l} L water). Venturi draw is below what the ratio needs.`,
+          ALERT_SPECS.underdose(t.name, t.ratio_target, t.open_pct, t.achieved_ratio ?? '—', t.dosed_l, s.water_l),
           { equipment_id: this._dosingEq(c) });
       }
     }
@@ -2232,6 +2404,11 @@ function getDoseController() {
 
 module.exports = {
   DoseController,
+  localizeStatus,
+  localizeRun,
+  localizeReason,
+  reasonSpec,
+  ALERT_SPECS,
   computeEcTrim,
   getDoseController,
   validateConfigUpdate,

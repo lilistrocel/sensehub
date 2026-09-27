@@ -1,0 +1,46 @@
+{
+  "sections": {
+    "operate": "Operate",
+    "automate": "Automate",
+    "analyse": "Analyse",
+    "system": "System"
+  },
+  "items": {
+    "dashboard": "Dashboard",
+    "equipment": "Equipment",
+    "zones": "Zones",
+    "cameras": "Cameras",
+    "alerts": "Alerts",
+    "automations": "Automations",
+    "templates": "Templates",
+    "planner": "Planner",
+    "tasks": "Tasks",
+    "fertigation": "Fertigation",
+    "amic": "AMIC Analyzer",
+    "reports": "Reports",
+    "dataExport": "Data Export",
+    "labAnalysis": "Lab Analysis",
+    "calibration": "Calibration",
+    "agronomist": "Agronomist",
+    "relayEvents": "Relay Events",
+    "logs": "Logs",
+    "settings": "Settings",
+    "debug": "Debug"
+  },
+  "settingsTabs": {
+    "profile": "Profile",
+    "users": "Users",
+    "system": "System",
+    "cloud": "Cloud",
+    "backup": "Backup"
+  },
+  "openMenu": "Open menu",
+  "closeMenu": "Close menu",
+  "sidebarAria": "Sidebar navigation",
+  "mobileAria": "Mobile navigation",
+  "desktopAria": "Desktop navigation",
+  "breadcrumbAria": "Breadcrumb",
+  "user": "User",
+  "role": "Role",
+  "logout": "Logout"
+}

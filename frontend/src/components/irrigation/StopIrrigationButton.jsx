@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { useSettings } from '../../context/SettingsContext';
 import ConfirmDialog from '../ConfirmDialog';
 import { startPolling } from '../../hooks/usePoll';
+import { formatClock } from '../../i18n/format';
 
 const API_BASE = '/api';
 // A 202 (a board slow to answer) waits this long for the stop_irrigation_result broadcast.
@@ -12,6 +14,11 @@ const RESULT_TIMEOUT_MS = 60000;
 
 // What POST /api/irrigation/stop switches OFF (backend: flow-watch config irrigation board
 // relays 1-6 + dosing board relays 1-5). Listed in the confirmation (FARM-APP-STANDARDS 4.3).
+// English reference; the dialog shows irrigation:stop.channels.* (same order).
+export const STOP_IRRIGATION_CHANNEL_KEYS = [
+  'irrigationPump', 'mixingPump', 'zone1', 'zone2', 'zone3', 'zone4',
+  'phDown', 'tankA', 'tankB', 'tankC', 'tankD',
+];
 export const STOP_IRRIGATION_CHANNELS = [
   'Irrigation Pump — irrigation board relay 1',
   'Mixing Pump — irrigation board relay 2',
@@ -36,18 +43,19 @@ function StopGlyph({ className = 'w-4 h-4' }) {
 
 /** Confirmed OFF = filled ok dot; not confirmed = alarm square (shape + colour + text). */
 function ChannelRow({ c }) {
+  const { t } = useTranslation('irrigation');
   return (
     <li className="flex items-center justify-between gap-2 py-1 text-sm" data-testid="stop-irrigation-channel" data-confirmed={c.confirmed ? 'true' : 'false'}>
-      <span className="min-w-0 truncate text-ink" title={`${c.equipment} relay ${c.channel}`}>{c.name}</span>
+      <span className="min-w-0 truncate text-ink" title={t('stop.relayTitle', { equipment: c.equipment, channel: c.channel })}>{c.name}</span>
       {c.confirmed ? (
         <span className="inline-flex items-center gap-1 font-mono tabular text-xs text-ok-700 dark:text-ok-300 shrink-0">
           <svg aria-hidden="true" viewBox="0 0 10 10" className="w-2.5 h-2.5"><circle cx="5" cy="5" r="4" className="fill-state-ok" /></svg>
-          OFF confirmed
+          {t('stop.offConfirmed')}
         </span>
       ) : (
         <span className="inline-flex items-center gap-1 font-mono tabular text-xs font-semibold text-alarm-700 dark:text-alarm-300 shrink-0">
           <svg aria-hidden="true" viewBox="0 0 10 10" className="w-2.5 h-2.5"><rect x="1" y="1" width="8" height="8" className="fill-state-alarm" /></svg>
-          NOT confirmed{c.readback === true ? ' (reads ON)' : ''}
+          {c.readback === true ? t('stop.notConfirmedReadsOn') : t('stop.notConfirmed')}
         </span>
       )}
     </li>
@@ -55,11 +63,12 @@ function ChannelRow({ c }) {
 }
 
 function ResultPanel({ result, onDismiss, formatTime }) {
+  const { t } = useTranslation('irrigation');
   if (!result) return null;
   if (result.pending) {
     return (
-      <div role="status" className="mt-2 rounded-md border border-line border-l-[3px] border-l-state-caution px-3 py-2 text-sm text-ink" data-testid="stop-irrigation-result" data-state="pending">
-        Still switching off — a board is slow to answer. Waiting for the result…
+      <div role="status" className="mt-2 rounded-md border border-line border-s-[3px] border-s-state-caution px-3 py-2 text-sm text-ink" data-testid="stop-irrigation-result" data-state="pending">
+        {t('stop.pending')}
       </div>
     );
   }
@@ -68,41 +77,41 @@ function ResultPanel({ result, onDismiss, formatTime }) {
   const ok = result.ok === true;
   const irr = channels.filter((c) => c.equipment_id === channels[0]?.equipment_id);
   const dos = channels.filter((c) => c.equipment_id !== channels[0]?.equipment_id);
-  const when = result.stopped_at ? (formatTime ? formatTime(result.stopped_at) : new Date(result.stopped_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) : null;
+  const when = result.stopped_at ? (formatTime ? formatTime(result.stopped_at) : formatClock(result.stopped_at)) : null;
   return (
     <div
       role={ok ? 'status' : 'alert'}
-      className={`mt-2 rounded-md border border-l-[3px] px-3 py-2 ${ok ? 'border-line border-l-state-ok' : 'border-alarm-300 border-l-state-alarm bg-alarm-50 dark:border-alarm-700 dark:bg-alarm-900/30'}`}
+      className={`mt-2 rounded-md border border-s-[3px] px-3 py-2 ${ok ? 'border-line border-s-state-ok' : 'border-alarm-300 border-s-state-alarm bg-alarm-50 dark:border-alarm-700 dark:bg-alarm-900/30'}`}
       data-testid="stop-irrigation-result"
       data-state={ok ? 'ok' : 'error'}
     >
       <div className="flex items-start justify-between gap-2">
         <p className={`text-sm font-semibold ${ok ? 'text-ink' : 'text-alarm-700 dark:text-alarm-300'}`}>
           {ok
-            ? `Irrigation stopped${when ? ` at ${when}` : ''}: ${channels.length}/${channels.length} channels confirmed OFF. Fans and climate unaffected.`
+            ? t(when ? 'stop.resultOkAt' : 'stop.resultOk', { time: when, done: channels.length, total: channels.length })
             : (channels.length
-              ? `${bad.length} channel${bad.length === 1 ? '' : 's'} NOT confirmed OFF — switch off at the panel NOW.`
-              : `${result.error || 'Stop irrigation failed'}`)}
+              ? t('stop.resultNotConfirmed', { count: bad.length })
+              : `${result.error || t('stop.failed')}`)}
         </p>
-        <button type="button" onClick={onDismiss} className="shrink-0 min-h-[32px] px-2 text-xs text-muted underline" aria-label="Dismiss the stop result">Dismiss</button>
+        <button type="button" onClick={onDismiss} className="shrink-0 min-h-[32px] px-2 text-xs text-muted underline" aria-label={t('stop.dismissAria')}>{t('common:actions.dismiss')}</button>
       </div>
       {!ok && channels.length > 0 && result.error && <p className="mt-0.5 text-xs text-alarm-700 dark:text-alarm-300">{result.error}</p>}
       {(result.zones_interrupted?.length > 0 || result.zones_not_started?.length > 0 || result.dose?.outcome === 'aborted' || result.runs_cancelled?.length > 0) && (
         <p className="mt-1 text-xs text-muted">
           {[
-            result.runs_cancelled?.length ? `run: ${result.runs_cancelled.map((r) => r.name || `automation #${r.automation_id}`).join(', ')}` : null,
-            result.zones_interrupted?.length ? `interrupted: ${result.zones_interrupted.join(', ')}` : null,
-            result.zones_not_started?.length ? `cancelled: ${result.zones_not_started.join(', ')}` : null,
-            result.dose?.outcome === 'aborted' ? 'dose cycle aborted' : null,
+            result.runs_cancelled?.length ? t('stop.detailRun', { list: result.runs_cancelled.map((r) => r.name || t('stop.automationN', { id: r.automation_id })).join(', ') }) : null,
+            result.zones_interrupted?.length ? t('stop.detailInterrupted', { list: result.zones_interrupted.join(', ') }) : null,
+            result.zones_not_started?.length ? t('stop.detailCancelled', { list: result.zones_not_started.join(', ') }) : null,
+            result.dose?.outcome === 'aborted' ? t('stop.detailDoseAborted') : null,
           ].filter(Boolean).join(' · ')}
         </p>
       )}
       {channels.length > 0 && (
         <details className="mt-1" open={!ok}>
-          <summary className="cursor-pointer text-xs text-muted min-h-[32px] inline-flex items-center">Per channel</summary>
+          <summary className="cursor-pointer text-xs text-muted min-h-[32px] inline-flex items-center">{t('stop.perChannel')}</summary>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-            <ul className="divide-y divide-line" aria-label={irr[0]?.equipment || 'Irrigation board'}>{irr.map((c) => <ChannelRow key={`${c.equipment_id}:${c.channel}`} c={c} />)}</ul>
-            <ul className="divide-y divide-line" aria-label={dos[0]?.equipment || 'Dosing board'}>{dos.map((c) => <ChannelRow key={`${c.equipment_id}:${c.channel}`} c={c} />)}</ul>
+            <ul className="divide-y divide-line" aria-label={irr[0]?.equipment || t('stop.irrigationBoard')}>{irr.map((c) => <ChannelRow key={`${c.equipment_id}:${c.channel}`} c={c} />)}</ul>
+            <ul className="divide-y divide-line" aria-label={dos[0]?.equipment || t('stop.dosingBoard')}>{dos.map((c) => <ChannelRow key={`${c.equipment_id}:${c.channel}`} c={c} />)}</ul>
           </div>
         </details>
       )}
@@ -127,11 +136,12 @@ function ResultPanel({ result, onDismiss, formatTime }) {
  *   formatTime (iso) => string
  */
 export default function StopIrrigationButton({ active, formatTime, className = '' }) {
+  const { t } = useTranslation('irrigation');
   const { token, user } = useAuth();
   const { showSuccess, addToast } = useToast();
   const { subscribe } = useWebSocket();
   const settings = useSettings();
-  const fmtTime = formatTime || ((iso) => (settings?.formatTime ? settings.formatTime(new Date(iso)) : new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })));
+  const fmtTime = formatTime || ((iso) => (settings?.formatClock ? settings.formatClock(iso) : formatClock(iso)));
   const canStop = user?.role === 'admin' || user?.role === 'operator';
 
   const [open, setOpen] = useState(false);
@@ -168,16 +178,20 @@ export default function StopIrrigationButton({ active, formatTime, className = '
     setResult(data);
     const channels = Array.isArray(data?.channels) ? data.channels : [];
     if (data?.ok) {
-      showSuccess(`${channels.length}/${channels.length} channels confirmed OFF: pumps, zones and dosing. Fans and climate keep running.`, 'Irrigation stopped');
+      showSuccess(t('stop.toastOk', { done: channels.length, total: channels.length }), t('stop.toastOkTitle'));
     } else {
+      // Our own errors already end with the panel instruction (`panelAdvised`);
+      // a server error gets it appended.
       addToast({
         type: 'error',
-        title: 'Stop irrigation NOT confirmed',
+        title: t('stop.toastFailTitle'),
         duration: 0,
-        message: /switch off at the panel/i.test(data?.error || '') ? data.error : `${data?.error || 'The controller did not confirm the irrigation relays OFF.'} Switch off at the panel.`,
+        message: (data?.panelAdvised || /switch off at the panel/i.test(data?.error || ''))
+          ? data.error
+          : `${data?.error || t('stop.notConfirmedDefault')} ${t('stop.switchOffAtPanel')}`,
       });
     }
-  }, [showSuccess, addToast]);
+  }, [showSuccess, addToast, t]);
 
   // 202: the backend broadcasts the final result when its writes finish.
   useEffect(() => {
@@ -208,23 +222,25 @@ export default function StopIrrigationButton({ active, formatTime, className = '
           timer: setTimeout(() => {
             waitRef.current = null;
             setBusy(false);
-            report({ ok: false, error: 'The controller never reported the result of Stop irrigation — the relays are NOT confirmed OFF.' });
+            report({ ok: false, error: `${t('stop.neverReported')} ${t('stop.switchOffAtPanel')}`, panelAdvised: true });
           }, RESULT_TIMEOUT_MS),
         };
         return;
       }
       if (!res.ok) {
-        report({ ok: false, error: res.status === 403 ? 'Your account may not stop irrigation — nothing was switched.' : (data.error || data.message || `Stop irrigation failed (HTTP ${res.status}) — nothing is confirmed OFF.`) });
+        report(res.status === 403
+          ? { ok: false, error: t('stop.forbidden') }
+          : { ok: false, error: data.error || data.message || t('stop.httpFailed', { status: res.status }) });
         return;
       }
       report(data);
     } catch (err) {
       setOpen(false);
-      report({ ok: false, error: `Could not reach the controller (${err.message || 'network error'}) — nothing is confirmed OFF.` });
+      report({ ok: false, error: t('stop.unreachable', { error: err.message || t('shell:stop.error.network') }) });
     } finally {
       if (!pending && mounted.current) setBusy(false);
     }
-  }, [token, report]);
+  }, [token, report, t]);
 
   if (!canStop) return null;
   const irrigating = active !== undefined ? !!active : !!polledActive;
@@ -237,37 +253,35 @@ export default function StopIrrigationButton({ active, formatTime, className = '
     <div className={className} data-testid="stop-irrigation" data-active={irrigating ? 'true' : 'false'}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <p className="text-xs text-muted min-w-0">
-          {irrigating
-            ? 'Irrigation is running. Stop irrigation switches off pumps, zones and dosing only — fans and climate keep running.'
-            : 'Stops pumps, zones and dosing only — fans and climate keep running.'}
+          {irrigating ? t('stop.helpRunning') : t('stop.helpIdle')}
         </p>
         <button
           type="button"
           onClick={() => setOpen(true)}
           disabled={busy}
           className={`inline-flex items-center justify-center gap-2 rounded-md bg-transparent hover:bg-alarm-50 dark:hover:bg-alarm-900/30 min-h-touch px-4 py-2 text-sm whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-alarm-500 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:opacity-60 disabled:cursor-not-allowed ${irrigating ? 'w-full sm:w-auto' : ''} ${btn}`}
-          title="Stop irrigation: pumps, zones and dosing OFF. Fans and climate keep running."
+          title={t('stop.buttonTitle')}
           data-testid="stop-irrigation-button"
         >
           <StopGlyph />
-          {busy ? 'Stopping irrigation…' : 'Stop irrigation'}
+          {busy ? t('stop.stopping') : t('stop.button')}
         </button>
       </div>
       <ResultPanel result={result} onDismiss={() => setResult(null)} formatTime={fmtTime} />
       <ConfirmDialog
         open={open}
-        title="Stop irrigation?"
+        title={t('stop.confirmTitle')}
         variant="destructive"
         busy={busy}
-        confirmLabel="Stop irrigation"
-        cancelLabel="Keep running"
+        confirmLabel={t('stop.button')}
+        cancelLabel={t('stop.keepRunning')}
         body={(
           <>
-            <p>Switches OFF the Irrigation Pump, Mixing Pump, Zones 1–4, dosing valves A–D and pH Down, cancels the rest of any irrigation run and aborts dosing. <strong className="font-semibold">Fans and climate keep running.</strong></p>
-            <p className="mt-1">Works while automations are disarmed. It does not disarm anything: the next scheduled run starts as planned.</p>
+            <p><Trans i18nKey="irrigation:stop.confirmBody" components={{ strong: <strong className="font-semibold" /> }} /></p>
+            <p className="mt-1">{t('stop.confirmNote')}</p>
           </>
         )}
-        items={STOP_IRRIGATION_CHANNELS}
+        items={STOP_IRRIGATION_CHANNEL_KEYS.map((k) => t(`stop.channels.${k}`))}
         onConfirm={handleConfirm}
         onCancel={() => { if (!busy) setOpen(false); }}
       />

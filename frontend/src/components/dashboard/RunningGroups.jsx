@@ -1,12 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button, Card } from '../../ui';
 import ConfirmDialog from '../ConfirmDialog';
 import InterlockBadge from '../InterlockBadge';
 import { getInterlockPartnerLabel } from '../../utils/channelUtils';
 import { API_BASE } from './constants';
-
-const VIEWER_TITLE = 'Viewer role: read-only. Ask an operator to switch this.';
-const UNKNOWN_TITLE = 'State unknown: the board has not reported. Control it from the Equipment page once it is back.';
 
 const chipKey = (c) => `${c.equipment_id}:${c.channel}`;
 
@@ -19,19 +17,24 @@ function segmentClass(c, pending) {
 }
 
 function Chip({ channel, pending, commandedState, canControl, interlockLabel, onToggle, formatTime }) {
+  const { t } = useTranslation('dashboard');
   const unknown = channel.state === null || channel.state === undefined;
   const on = channel.state === true;
   const disabled = !canControl || unknown;
+  const onOff = (s) => (s ? t('common:status.on') : t('common:status.off'));
   let title;
-  if (!canControl) title = VIEWER_TITLE;
-  else if (unknown) title = UNKNOWN_TITLE;
-  else if (pending) title = `Commanded ${commandedState ? 'ON' : 'OFF'}, awaiting confirmation from the board`;
-  else if (channel.confirmed === false) title = 'Last write failed its read-back check';
-  else title = `${channel.equipment_name} · tap to turn ${on ? 'OFF' : 'ON'}${channel.lastChangeTs && formatTime ? ` · changed ${formatTime(channel.lastChangeTs)}` : ''}`;
+  if (!canControl) title = t('running.viewerTitle');
+  else if (unknown) title = t('running.unknownTitle');
+  else if (pending) title = t('running.commandedTitle', { state: onOff(commandedState) });
+  else if (channel.confirmed === false) title = t('running.readbackFailed');
+  else {
+    title = `${channel.equipment_name} · ${t('running.tapToTurn', { state: onOff(!on) })}`
+      + (channel.lastChangeTs && formatTime ? ` · ${t('running.changedAt', { time: formatTime(channel.lastChangeTs) })}` : '');
+  }
 
   const rail = unknown
-    ? 'border-l-[3px] border-l-state-idle border-dashed'
-    : on ? 'border-l-[3px] border-l-state-ok' : 'border-l-[3px] border-l-state-idle';
+    ? 'border-s-[3px] border-s-state-idle border-dashed'
+    : on ? 'border-s-[3px] border-s-state-ok' : 'border-s-[3px] border-s-state-idle';
 
   return (
     <span title={title} className="block min-w-0">
@@ -44,16 +47,18 @@ function Chip({ channel, pending, commandedState, canControl, interlockLabel, on
       data-testid="relay-chip"
       data-state={unknown ? 'unknown' : on ? 'on' : 'off'}
       data-pending={pending ? 'true' : undefined}
-      className={`flex items-center justify-between gap-2 min-h-touch w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-left text-sm transition-colors ${rail} ${
+      className={`flex items-center justify-between gap-2 min-h-touch w-full rounded-md border border-line bg-panel px-2.5 py-1.5 text-start text-sm transition-colors ${rail} ${
         pending ? 'ring-2 ring-state-caution ring-offset-1 ring-offset-panel' : ''
       } ${disabled ? 'cursor-not-allowed opacity-70' : 'hover:bg-field'}`}
     >
       <span className="min-w-0 flex items-center gap-1.5">
-        <span className="truncate text-ink">{channel.label}</span>
+        <span className="truncate text-ink" dir="auto">{channel.label}</span>
         {interlockLabel && <InterlockBadge partnerLabel={interlockLabel} />}
       </span>
       <span className={`shrink-0 font-mono tabular text-xs ${pending ? 'text-caution-700 dark:text-caution-300' : on ? 'text-ok-700 dark:text-ok-300' : 'text-muted'}`}>
-        {pending ? `→ ${commandedState ? 'ON' : 'OFF'}` : unknown ? '' : channel.confirmed === false ? `${on ? 'ON' : 'OFF'}?` : on ? 'ON' : 'OFF'}
+        {pending
+          ? <><span className="inline-block rtl:-scale-x-100" aria-hidden="true">→</span> {onOff(commandedState)}</>
+          : unknown ? '' : channel.confirmed === false ? `${onOff(on)}?` : onOff(on)}
       </span>
     </button>
     </span>
@@ -61,12 +66,13 @@ function Chip({ channel, pending, commandedState, canControl, interlockLabel, on
 }
 
 function GroupRow({ group, expanded, onToggleExpand, canControl, isPending, commandedFor, interlockFor, onChipToggle, onBulk, formatTime }) {
+  const { t } = useTranslation('dashboard');
   const hasInterlock = group.channels.some((c) => !!interlockFor(c));
   const bulkAllowed = canControl && !hasInterlock && group.unknown === 0 && group.total > 0;
   let bulkTitle;
-  if (!canControl) bulkTitle = VIEWER_TITLE;
-  else if (hasInterlock) bulkTitle = 'Bulk control is disabled: this group has interlocked channels';
-  else if (group.unknown > 0) bulkTitle = 'Bulk control is disabled while a channel state is unknown';
+  if (!canControl) bulkTitle = t('running.viewerTitle');
+  else if (hasInterlock) bulkTitle = t('running.bulkInterlocked');
+  else if (group.unknown > 0) bulkTitle = t('running.bulkUnknown');
 
   return (
     <li className="py-2" data-testid={`relay-group-${group.key}`}>
@@ -74,10 +80,10 @@ function GroupRow({ group, expanded, onToggleExpand, canControl, isPending, comm
         type="button"
         onClick={onToggleExpand}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3 min-h-touch rounded-md px-1 text-left hover:bg-field"
+        className="flex w-full items-center gap-3 min-h-touch rounded-md px-1 text-start hover:bg-field"
       >
-        <span className="w-28 sm:w-32 shrink-0 truncate text-sm font-semibold text-ink">{group.label}</span>
-        <span className="shrink-0 font-mono tabular text-sm text-ink" data-testid="group-count">
+        <span className="w-28 sm:w-32 shrink-0 truncate text-sm font-semibold text-ink" dir="auto">{group.label}</span>
+        <span className="shrink-0 font-mono tabular text-sm text-ink" dir="ltr" data-testid="group-count">
           {group.on}/{group.total}
         </span>
         <span className="flex flex-1 gap-0.5 h-2.5 min-w-0" aria-hidden="true">
@@ -85,16 +91,16 @@ function GroupRow({ group, expanded, onToggleExpand, canControl, isPending, comm
             <span key={chipKey(c)} className={`flex-1 rounded-sm ${segmentClass(c, isPending(c))}`} />
           ))}
         </span>
-        {group.unknown > 0 && <span className="shrink-0 font-mono tabular text-xs text-muted">{group.unknown} unknown</span>}
+        {group.unknown > 0 && <span className="shrink-0 font-mono tabular text-xs text-muted">{t('running.unknownCount', { count: group.unknown })}</span>}
         <svg className={`h-4 w-4 shrink-0 text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
         </svg>
       </button>
 
       {expanded && (
-        <div className="mt-2 space-y-2 pl-1">
+        <div className="mt-2 space-y-2 ps-1">
           {group.total === 0 ? (
-            <p className="text-sm text-muted">No channels in this group.</p>
+            <p className="text-sm text-muted">{t('running.noChannels')}</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-2 gap-2" data-testid="chip-grid">
               {group.channels.map((c) => (
@@ -113,8 +119,8 @@ function GroupRow({ group, expanded, onToggleExpand, canControl, isPending, comm
           )}
           {group.total > 0 && (
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="secondary" disabled={!bulkAllowed} title={bulkTitle} onClick={() => onBulk(group, true)}>All on</Button>
-              <Button size="sm" variant="danger-ghost" disabled={!bulkAllowed} title={bulkTitle} onClick={() => onBulk(group, false)}>All off</Button>
+              <Button size="sm" variant="secondary" disabled={!bulkAllowed} title={bulkTitle} onClick={() => onBulk(group, true)}>{t('running.allOn')}</Button>
+              <Button size="sm" variant="danger-ghost" disabled={!bulkAllowed} title={bulkTitle} onClick={() => onBulk(group, false)}>{t('running.allOff')}</Button>
               {bulkTitle && <span className="text-xs text-muted">{bulkTitle}</span>}
             </div>
           )}
@@ -140,6 +146,7 @@ export default function RunningGroups({
   showSuccess,
   formatTime,
 }) {
+  const { t } = useTranslation('dashboard');
   const [expanded, setExpanded] = useState(() => new Set());
   const [commanded, setCommanded] = useState({}); // key -> target state
   const [confirm, setConfirm] = useState(null);   // { group, state }
@@ -189,9 +196,9 @@ export default function RunningGroups({
     }
     setBusy(false);
     setConfirm(null);
-    if (failed.length) showError?.(`${failed.length} of ${group.channels.length} commands failed. ${failed[0]}`);
-    else showSuccess?.(`${group.label}: all ${group.channels.length} commanded ${state ? 'ON' : 'OFF'}, awaiting confirmation`);
-  }, [confirm, sendCommand, showError, showSuccess]);
+    if (failed.length) showError?.(`${t('running.bulkFailed', { count: failed.length, total: group.channels.length })} ${failed[0]}`);
+    else showSuccess?.(t('running.bulkDone', { group: group.label, count: group.channels.length, state: state ? t('common:status.on') : t('common:status.off') }));
+  }, [confirm, sendCommand, showError, showSuccess, t]);
 
   const toggleExpand = (key) => setExpanded((prev) => {
     const next = new Set(prev);
@@ -217,16 +224,16 @@ export default function RunningGroups({
             formatTime={formatTime}
           />
         ))}
-        {visible.length === 0 && <li className="py-3 text-sm text-muted">No relay boards reported.</li>}
+        {visible.length === 0 && <li className="py-3 text-sm text-muted">{t('running.noBoards')}</li>}
       </ul>
 
       <ConfirmDialog
         open={!!confirm}
-        title={confirm ? `${confirm.group.label}: all ${confirm.state ? 'ON' : 'OFF'}` : ''}
-        body={confirm ? `This commands every channel below ${confirm.state ? 'ON' : 'OFF'}. Each stays amber until the board confirms.` : null}
+        title={confirm ? t(confirm.state ? 'running.confirmTitleOn' : 'running.confirmTitleOff', { group: confirm.group.label }) : ''}
+        body={confirm ? t(confirm.state ? 'running.confirmBodyOn' : 'running.confirmBodyOff') : null}
         items={confirm ? confirm.group.channels.map((c) => `${c.label} — ${c.equipment_name}`) : []}
         variant={confirm && !confirm.state ? 'danger' : 'primary'}
-        confirmLabel={confirm ? `Turn all ${confirm.state ? 'ON' : 'OFF'}` : 'Confirm'}
+        confirmLabel={confirm ? t(confirm.state ? 'running.confirmOn' : 'running.confirmOff') : undefined}
         busy={busy}
         onConfirm={runBulk}
         onCancel={() => { if (!busy) setConfirm(null); }}

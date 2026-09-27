@@ -109,13 +109,19 @@ function reportUnconfirmed(equipment, channel, requested, readback, context = {}
   console.warn(msg);
   try {
     const { createAlert } = require('../utils/alertBroadcast');
+    const { M } = require('../i18n');
     createAlert({
       severity: 'warning',
       source: 'relay',
       equipment_id: eqId ?? null,
       automation_id: context.automationId ?? null,
       fingerprint: `relay_unconfirmed:${eqId}:${channel}`,
-      message: `${name} ch ${channel}: relay write not confirmed — requested ${requested ? 'ON' : 'OFF'}, hardware reads ${readback === null ? 'unknown' : (readback ? 'ON' : 'OFF')}`,
+      messageKey: 'relay.unconfirmed',
+      messageParams: {
+        name: `${name}`, channel: `${channel}`,
+        requested: M(requested ? 'relay.state_on' : 'relay.state_off'),
+        readback: readback === null ? M('common.unknown') : M(readback ? 'relay.state_on' : 'relay.state_off'),
+      },
     });
   } catch (err) {
     console.error('[Relay] failed to raise unconfirmed-write alert:', err.message);

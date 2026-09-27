@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../context/ToastContext';
 
 // Individual toast notification
 function ToastNotification({ toast, onClose }) {
+  const { t } = useTranslation('common');
   const [isVisible, setIsVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
 
@@ -72,7 +74,7 @@ function ToastNotification({ toast, onClose }) {
         pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg shadow-lg border
         ${style.bg} ${style.border}
         transform transition-all duration-300 ease-in-out
-        ${isVisible && !isLeaving ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
+        ${isVisible && !isLeaving ? 'translate-x-0 opacity-100' : 'translate-x-full rtl:-translate-x-full opacity-0'}
       `}
     >
       <div className="p-4">
@@ -85,7 +87,7 @@ function ToastNotification({ toast, onClose }) {
           </div>
 
           {/* Content */}
-          <div className="ml-3 w-0 flex-1">
+          <div className="ms-3 w-0 flex-1">
             {toast.title && (
               <p className={`text-sm font-medium ${style.title}`}>
                 {toast.title}
@@ -97,13 +99,13 @@ function ToastNotification({ toast, onClose }) {
           </div>
 
           {/* Close button */}
-          <div className="ml-4 flex flex-shrink-0">
+          <div className="ms-4 flex flex-shrink-0">
             <button
               type="button"
               onClick={handleClose}
               className={`inline-flex rounded-md ${style.bg} ${style.icon} hover:opacity-75 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500`}
             >
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{t('actions.close')}</span>
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>

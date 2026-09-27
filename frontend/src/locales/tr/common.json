@@ -1,0 +1,114 @@
+{
+  "actions": {
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "close": "Kapat",
+    "retry": "Yeniden dene",
+    "tryAgain": "Tekrar dene",
+    "confirm": "Onayla",
+    "dismiss": "Kapat",
+    "refresh": "Yenile",
+    "refreshing": "Yenileniyor…",
+    "open": "Aç",
+    "edit": "Düzenle",
+    "delete": "Sil",
+    "add": "Ekle",
+    "back": "Geri",
+    "next": "İleri",
+    "previous": "Önceki",
+    "apply": "Uygula",
+    "reset": "Sıfırla",
+    "search": "Ara",
+    "showMore": "Daha fazla göster",
+    "showLess": "Daha az göster",
+    "yes": "Evet",
+    "no": "Hayır",
+    "ok": "Tamam",
+    "working": "İşleniyor…",
+    "saving": "Kaydediliyor…"
+  },
+  "status": {
+    "loading": "Yükleniyor…",
+    "loadingShort": "yükleniyor…",
+    "noData": "Veri yok",
+    "unknown": "bilinmiyor",
+    "on": "AÇIK",
+    "off": "KAPALI",
+    "enabled": "Etkin",
+    "disabled": "Devre dışı",
+    "online": "çevrim içi",
+    "offline": "çevrim dışı",
+    "never": "hiç",
+    "success": "başarılı",
+    "failed": "başarısız",
+    "armed": "Devrede",
+    "disarmed": "Askıda"
+  },
+  "severity": {
+    "critical": "kritik",
+    "warning": "uyarı",
+    "info": "bilgi"
+  },
+  "state": {
+    "ok": "Normal",
+    "caution": "Dikkat",
+    "alarm": "Alarm",
+    "stale": "eski",
+    "unknown": "bilinmiyor"
+  },
+  "role": {
+    "admin": "yönetici",
+    "operator": "operatör",
+    "viewer": "izleyici"
+  },
+  "toast": {
+    "success": "Başarılı",
+    "error": "Hata",
+    "warning": "Uyarı",
+    "info": "Bilgi"
+  },
+  "reading": {
+    "noReading": "Okuma yok",
+    "notReportedSince": "{{time}} saatinden beri veri yok",
+    "unknownTime": "bilinmiyor"
+  },
+  "connectivity": {
+    "reconnecting": {
+      "text": "Yeniden bağlanıyor…",
+      "title": "SenseHub'a yeniden bağlanılıyor. Son alınan veriler gösteriliyor."
+    },
+    "offline": {
+      "text": "Çevrim dışı",
+      "title": "Bu cihazın ağ bağlantısı yok. Son alınan veriler gösteriliyor."
+    },
+    "down": {
+      "text": "Sunucuya ulaşılamıyor",
+      "title": "SenseHub yanıt vermiyor. Ekrandaki veriler eski."
+    },
+    "updated": "güncelleme: {{age}}"
+  },
+  "errorBoundary": {
+    "title": "Bu sayfa görüntülenemedi.",
+    "body": "Üst çubuktaki kontroller çalışmaya devam ediyor. Tekrar deneyin veya menüden başka bir sayfa açın."
+  },
+  "language": {
+    "title": "Dil",
+    "choose": "Dil seçin",
+    "current": "Dil: {{name}}",
+    "settingHelp": "Diliniz hesabınıza kaydedilir ve oturum açtığınız her cihazda kullanılır. Ölçüm değerleri, ekipman panellerinde olduğu gibi her zaman Batı rakamları ve ondalık nokta ile gösterilir.",
+    "savedOnDeviceOnly": "Dil bu cihazda değişti ancak hesabınıza kaydedilemedi. Diğer cihazlar önceki dili kullanmaya devam eder."
+  },
+  "theme": {
+    "toLight": "Açık temaya geç",
+    "toDark": "Koyu temaya geç"
+  },
+  "chart": {
+    "noReadings": "Bu aralıkta ölçüm yok",
+    "series": "Seriler",
+    "value": "değer"
+  },
+  "interlock": {
+    "withPartner": "{{partner}} ile kilitleme: bunu açmak eş kanalı kapatır",
+    "generic": "Kilitlemeli kanal"
+  }
+}
