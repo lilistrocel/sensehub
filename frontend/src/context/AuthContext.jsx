@@ -1,8 +1,26 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { isNetworkError, markSessionExpired } from '../utils/connectivity';
 
 const AuthContext = createContext(null);
 
 const API_BASE = '/api';
+
+// Startup auth checks: a network error is not a verdict on the session. A phone
+// that reloads a discarded tab often does so while its radio / the tunnel is
+// still reconnecting, so retry briefly before giving up.
+async function fetchStartup(url, options, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      lastErr = err;
+      if (!isNetworkError(err) || i === attempts - 1) break;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** i));
+    }
+  }
+  throw lastErr;
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -30,6 +48,8 @@ export function AuthProvider({ children }) {
   // dependency — a const in a deps array is evaluated during render, so a later
   // declaration throws a temporal-dead-zone ReferenceError and blanks the app.
   const handleSessionExpired = useCallback(() => {
+    // Lets the toast layer drop (and clear) the 401 fallout from every poller.
+    markSessionExpired();
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);
@@ -90,7 +110,7 @@ export function AuthProvider({ children }) {
   const checkSetupAndSession = async () => {
     try {
       // First check if setup is needed
-      const setupResponse = await fetch(`${API_BASE}/auth/setup-status`);
+      const setupResponse = await fetchStartup(`${API_BASE}/auth/setup-status`);
       if (setupResponse.ok) {
         const setupData = await setupResponse.json();
         setNeedsSetup(setupData.needsSetup);
@@ -117,7 +137,7 @@ export function AuthProvider({ children }) {
 
   const checkSession = async () => {
     try {
-      const response = await fetch(`${API_BASE}/auth/session`, {
+      const response = await fetchStartup(`${API_BASE}/auth/session`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -126,14 +146,18 @@ export function AuthProvider({ children }) {
         const data = await response.json();
         setUser(data.user);
       } else {
-        // Session invalid, clear token
-        localStorage.removeItem('token');
+        // 401/403: session invalid, clear the token. Anything else (502 while the
+        // backend restarts, 5xx) says nothing about the session - keep it stored.
+        if (response.status === 401 || response.status === 403) localStorage.removeItem('token');
         setToken(null);
         setUser(null);
       }
     } catch (error) {
       console.error('Session check failed:', error);
-      localStorage.removeItem('token');
+      // Unreachable is not "invalid": keep the stored token so the next load
+      // (or a manual refresh once the network is back) restores the session.
+      // Only an actual 401/403 answer above clears it.
+      if (!isNetworkError(error)) localStorage.removeItem('token');
       setToken(null);
       setUser(null);
     } finally {

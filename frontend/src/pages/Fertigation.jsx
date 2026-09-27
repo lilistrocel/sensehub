@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
 import { useThrottledError } from '../hooks/useThrottledError';
+import { startPolling } from '../hooks/usePoll';
 import { MeasuredDosingCard } from '../components/reports/MeasuredWater';
 import FlowWatchStatus from '../components/FlowWatchStatus';
 import DoseControllerStatus from '../components/DoseControllerStatus';
@@ -991,8 +992,8 @@ function LiveDoseCycleBanner({ headers, canEdit }) {
       }
     };
     poll();
-    const id = setInterval(poll, 2000);
-    return () => { mounted = false; clearInterval(id); };
+    const stopPoll = startPolling(poll, 2000); // paused while hidden, one refresh on resume
+    return () => { mounted = false; stopPoll(); };
   }, [headers]);
 
   if (!status?.running) return null;

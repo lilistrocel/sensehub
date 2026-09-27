@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Card, Label, Reading } from '../ui';
 import { StatusMark } from './agronomist/SectionStatus';
 import { useAuth } from '../context/AuthContext';
+import { startPolling } from '../hooks/usePoll';
+import { isNetworkError, isTransientNow } from '../utils/connectivity';
 import LastCycleZones from './LastCycleZones';
 
 /**
@@ -172,13 +174,15 @@ export default function DoseControllerStatus({ formatDateTime }) {
         const r = await fetch('/api/dose-controller/status', { headers: { Authorization: `Bearer ${token}` } });
         if (!mounted) return;
         if (r.ok) { setStatus(await r.json()); setError(false); } else setError(true);
-      } catch (_) {
+      } catch (e) {
+        // Tab resume / radio waking up: keep showing the last status, not "unknown".
+        if (isNetworkError(e) && isTransientNow()) return;
         if (mounted) setError(true);
       }
     };
     poll();
-    const id = setInterval(poll, 4000);
-    return () => { mounted = false; clearInterval(id); };
+    const stopPoll = startPolling(poll, 4000); // paused while hidden, one refresh on resume
+    return () => { mounted = false; stopPoll(); };
   }, [token]);
 
   if (!status && !error) return null;

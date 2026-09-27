@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { shouldSuppressErrorText, subscribe as subscribeConnectivity, getSessionExpiredAt } from '../utils/connectivity';
 
 const ToastContext = createContext(null);
 
@@ -16,6 +17,14 @@ export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback(({ type = 'info', title, message, duration = null }) => {
+    // Network errors while the tab is hidden / offline / just resumed are resume
+    // noise, not faults (the fetch layer retries them), and errors in the seconds
+    // after a session expiry are fallout of the redirect to login. Drop them;
+    // a failure that persists once the page is visible and online still toasts.
+    if ((type === 'error' || type === 'warning') && shouldSuppressErrorText(`${title || ''} ${message || ''}`)) {
+      console.info('[toast suppressed: transient]', title, message);
+      return null;
+    }
     const id = ++toastIdCounter;
     const autoDismiss = duration ?? TOAST_DURATIONS[type] ?? 4000;
 
@@ -33,6 +42,19 @@ export function ToastProvider({ children }) {
 
   const removeToast = useCallback((id) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
+  }, []);
+
+  // Session expired: the user is on their way to the login page. Clear the
+  // error/warning toasts the expiring requests raised on the way out.
+  useEffect(() => {
+    let seen = getSessionExpiredAt();
+    return subscribeConnectivity(() => {
+      const at = getSessionExpiredAt();
+      if (at && at !== seen) {
+        seen = at;
+        setToasts(prev => prev.filter(t => t.type !== 'error' && t.type !== 'warning'));
+      }
+    });
   }, []);
 
   // Convenience methods

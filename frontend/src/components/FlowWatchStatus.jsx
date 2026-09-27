@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Card, Label, Reading } from '../ui';
 import { StatusMark } from './agronomist/SectionStatus';
 import { useAuth } from '../context/AuthContext';
+import { startPolling } from '../hooks/usePoll';
+import { isNetworkError, isTransientNow } from '../utils/connectivity';
 
 /**
  * Compact irrigation flow-watch status (GET /api/flow-watch/status, polled 5 s).
@@ -75,13 +77,15 @@ export default function FlowWatchStatus({ formatDateTime }) {
         const r = await fetch('/api/flow-watch/status', { headers: { Authorization: `Bearer ${token}` } });
         if (!mounted) return;
         if (r.ok) { setStatus(await r.json()); setError(false); } else setError(true);
-      } catch (_) {
+      } catch (e) {
+        // Tab resume / radio waking up: keep showing the last status, not "unknown".
+        if (isNetworkError(e) && isTransientNow()) return;
         if (mounted) setError(true);
       }
     };
     poll();
-    const id = setInterval(poll, 5000);
-    return () => { mounted = false; clearInterval(id); };
+    const stopPoll = startPolling(poll, 5000); // paused while hidden, one refresh on resume
+    return () => { mounted = false; stopPoll(); };
   }, [token]);
 
   if (!status && !error) return null;

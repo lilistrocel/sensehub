@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Breadcrumb from './Breadcrumb';
 import DeviceClock from './DeviceClock';
@@ -9,6 +9,10 @@ import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { usePollingState, formatCountdown } from '../hooks/usePollingState';
+import { usePoll } from '../hooks/usePoll';
+import { isTransientNow, isNetworkError } from '../utils/connectivity';
+import ConnectivityIndicator from './ConnectivityIndicator';
+import ErrorBoundary from './ErrorBoundary';
 
 const API_BASE = '/api';
 
@@ -110,6 +114,7 @@ const stopErrorMessage = (status, data) => {
 };
 
 export default function Layout({ children }) {
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // NOTE on the header: the two stop buttons must survive a 390 px phone with
   // the body's overflow hidden, so the control group wraps under the breadcrumb
@@ -169,53 +174,44 @@ export default function Layout({ children }) {
   const [equipmentNames, setEquipmentNames] = useState({});
   const equipmentNamesFetchedAt = useRef(0);
 
-  // Fetch cloud status on mount and periodically
-  useEffect(() => {
-    const fetchCloudStatus = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/cloud/status`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setCloudStatus(data);
-          setBackendReachable(true);
-        } else {
-          setBackendReachable(false);
-        }
-      } catch (err) {
-        console.error('Failed to fetch cloud status:', err);
+  // Cloud status on mount, every 30 s while visible, and once on resume.
+  const fetchCloudStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/cloud/status`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCloudStatus(data);
+        setBackendReachable(true);
+      } else {
         setBackendReachable(false);
       }
-    };
-
-    fetchCloudStatus();
-    // Refresh cloud status every 30 seconds
-    const interval = setInterval(fetchCloudStatus, 30000);
-    return () => clearInterval(interval);
+    } catch (err) {
+      // Hidden / offline / just resumed: keep the last known state (the fetch
+      // layer already retried; ConnectivityIndicator shows "Reconnecting…").
+      if (isNetworkError(err) && isTransientNow()) return;
+      console.error('Failed to fetch cloud status:', err);
+      setBackendReachable(false);
+    }
   }, [token]);
+  usePoll(fetchCloudStatus, 30000);
 
-  // Fetch unacknowledged alert count
-  useEffect(() => {
-    const fetchUnacknowledgedCount = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/alerts/unacknowledged/count`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setUnacknowledgedCount(data.count);
-        }
-      } catch (err) {
-        console.error('Failed to fetch unacknowledged count:', err);
+  // Unacknowledged alert count: every 10 s while visible, once on resume.
+  const fetchUnacknowledgedCount = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/alerts/unacknowledged/count`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUnacknowledgedCount(data.count);
       }
-    };
-
-    fetchUnacknowledgedCount();
-    // Refresh every 10 seconds for real-time updates
-    const interval = setInterval(fetchUnacknowledgedCount, 10000);
-    return () => clearInterval(interval);
+    } catch (err) {
+      if (!(isNetworkError(err) && isTransientNow())) console.error('Failed to fetch unacknowledged count:', err);
+    }
   }, [token]);
+  usePoll(fetchUnacknowledgedCount, 10000);
 
   // --- Global sensor-polling pause/resume -----------------------------------
   // NOTE: these useCallbacks are declared BEFORE every useEffect below that
@@ -273,7 +269,7 @@ export default function Layout({ children }) {
     } catch (err) {
       // Keep the last known list on a network blip: silently dropping the badge
       // for a timer that is still armed is the dangerous way to fail.
-      console.error('Failed to fetch pending relay timers:', err);
+      if (!(isNetworkError(err) && isTransientNow())) console.error('Failed to fetch pending relay timers:', err);
     }
   }, [token]);
 
@@ -299,7 +295,7 @@ export default function Layout({ children }) {
       // recognise a disarm is the dangerous direction to get this wrong.
       applyArmedState(data?.armedState || data);
     } catch (err) {
-      console.error('Failed to fetch automation armed state:', err);
+      if (!(isNetworkError(err) && isTransientNow())) console.error('Failed to fetch automation armed state:', err);
     }
   }, [token, applyArmedState]);
 
@@ -619,15 +615,11 @@ export default function Layout({ children }) {
   // Poll the pending relay timers that feed the header badge, and the armed
   // state behind the disarmed banner. One interval, one cadence: both answer
   // the same question ("can something energise a relay without me?").
-  useEffect(() => {
-    const refresh = () => {
-      fetchPendingTimers();
-      fetchArmedState();
-    };
-    refresh();
-    const interval = setInterval(refresh, TIMERS_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+  const refreshTimersAndArmed = useCallback(() => {
+    fetchPendingTimers();
+    fetchArmedState();
   }, [fetchPendingTimers, fetchArmedState]);
+  usePoll(refreshTimersAndArmed, TIMERS_POLL_INTERVAL_MS);
 
   // Single 1s ticker for the banner countdown, alive only while disarmed with an
   // auto re-arm set. The backend timer is authoritative: on reaching zero we
@@ -793,6 +785,12 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen bg-canvas flex">
       <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+
+      {/* Reconnecting / offline / server unreachable. Floating and non-interactive
+          so it never shifts the layout or covers the Stop / E-STOP buttons. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-4">
+        <ConnectivityIndicator />
+      </div>
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -1170,7 +1168,9 @@ export default function Layout({ children }) {
 
         {/* Main content */}
         <main className="flex-1 p-4 md:p-6 overflow-auto">
-          {children}
+          <ErrorBoundary resetKey={location.pathname}>
+            {children}
+          </ErrorBoundary>
         </main>
 
         {/* Footer with system status */}

@@ -8,6 +8,7 @@ import { Card, Label, Button } from '../ui';
 import LogRow from '../components/activity/LogRow';
 import LogDetailDrawer from '../components/activity/LogDetailDrawer';
 import { CATEGORY_LABELS, categoryLabel, groupByDay, StatusMark } from '../components/activity/logFormat';
+import { startPolling } from '../hooks/usePoll';
 
 /**
  * Logs — who did what, and what the system did, on one timeline.
@@ -191,7 +192,8 @@ export default function Logs() {
   const liveView = filters.range !== 'custom' || !filters.to;
   useEffect(() => {
     if (!canView || !liveView) return undefined;
-    const t = setInterval(refreshTop, POLL_MS);
+    // Paused while hidden; ONE refresh on resume (visible + online, debounced).
+    const stopPoll = startPolling(refreshTop, POLL_MS);
     let unsub = null;
     let debounce = null;
     if (typeof subscribe === 'function') {
@@ -200,9 +202,7 @@ export default function Logs() {
         debounce = setTimeout(refreshTop, 800);
       });
     }
-    const onVis = () => { if (document.visibilityState === 'visible') refreshTop(); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => { clearInterval(t); clearTimeout(debounce); if (unsub) unsub(); document.removeEventListener('visibilitychange', onVis); };
+    return () => { stopPoll(); clearTimeout(debounce); if (unsub) unsub(); };
   }, [canView, liveView, refreshTop, subscribe]);
 
   // Debounced text search

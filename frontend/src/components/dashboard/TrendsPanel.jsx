@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, Chart, Label } from '../../ui';
 import { toEpochMs } from '../../utils/freshness';
 import { API_BASE, TREND_CHARTS, TRENDS_POLL_MS } from './constants';
+import { usePoll } from '../../hooks/usePoll';
 
 /**
  * Chart series from /api/dashboard/overview chartReadings, refetched on range
@@ -28,12 +29,8 @@ export function useTrendSeries({ token, hours, notifyError }) {
     }
   }, [token, hours, notifyError]);
 
-  useEffect(() => {
-    setLoading(true);
-    fetchRows();
-    const id = setInterval(fetchRows, TRENDS_POLL_MS);
-    return () => clearInterval(id);
-  }, [fetchRows]);
+  useEffect(() => { setLoading(true); }, [fetchRows]);
+  usePoll(fetchRows, TRENDS_POLL_MS);
 
   return { rows, loading, refresh: fetchRows };
 }

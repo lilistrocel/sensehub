@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE } from './constants';
+import { usePoll } from '../../hooks/usePoll';
+import { onResume } from '../../utils/connectivity';
 import {
   IRRIGATION,
   flowPointOf,
@@ -164,17 +166,12 @@ export function useIrrigationLive({ token, subscribe }) {
     }
   }, [token, auth, ingestSnapshot, seedFlow]);
 
-  // Initial loads + periodic refreshes of the slow sources.
-  useEffect(() => {
-    fetchMonitors();
-    fetchConfig();
-    fetchReport();
-    fetchLastRun();
-    fetchTodayRuns();
-    const cfg = setInterval(() => { if (!document.hidden) fetchConfig(); }, IRRIGATION.configPollMs);
-    const rep = setInterval(() => { if (!document.hidden) { fetchReport(); fetchLastRun(); fetchTodayRuns(); } }, IRRIGATION.reportPollMs);
-    return () => { clearInterval(cfg); clearInterval(rep); };
-  }, [fetchMonitors, fetchConfig, fetchReport, fetchLastRun, fetchTodayRuns]);
+  // Initial loads + periodic refreshes of the slow sources (paused while hidden,
+  // refreshed once on resume).
+  useEffect(() => { fetchMonitors(); }, [fetchMonitors]);
+  usePoll(fetchConfig, IRRIGATION.configPollMs);
+  const fetchReports = useCallback(() => { fetchReport(); fetchLastRun(); fetchTodayRuns(); }, [fetchReport, fetchLastRun, fetchTodayRuns]);
+  usePoll(fetchReports, IRRIGATION.reportPollMs);
 
   // Runs regrouped by the backend (new cycle report / run closed): refresh both.
   useEffect(() => {
@@ -195,9 +192,10 @@ export function useIrrigationLive({ token, subscribe }) {
       const wsLive = now - lastWsAt.current < IRRIGATION.wsQuietMs;
       if (!wsLive || now - lastFetchAt.current >= IRRIGATION.slowPollMs) fetchMonitors();
     }, IRRIGATION.pollMs);
-    const onVisible = () => { if (!document.hidden) fetchMonitors(); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+    // Back from the background: one refresh once visible AND online (debounced),
+    // not a request into a network that is still waking up.
+    const offResume = onResume(() => fetchMonitors());
+    return () => { clearInterval(id); offResume(); };
   }, [fetchMonitors]);
 
   // Live WebSocket patch.

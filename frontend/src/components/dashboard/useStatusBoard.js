@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE, STATUS_BOARD_POLL_MS } from './constants';
+import { usePoll } from '../../hooks/usePoll';
 
 /** Recount on/total/unknown for a group after its channels changed. */
 function recount(group) {
@@ -114,12 +115,9 @@ export function useStatusBoard({ token, subscribe, notifyError }) {
     }
   }, [token, notifyError]);
 
-  useEffect(() => {
-    fetchBoard();
-    fetchEquipment();
-    const id = setInterval(fetchBoard, STATUS_BOARD_POLL_MS);
-    return () => clearInterval(id);
-  }, [fetchBoard, fetchEquipment]);
+  // Board: now, every 15 s while visible, once on resume. Equipment list: once.
+  usePoll(fetchBoard, STATUS_BOARD_POLL_MS);
+  useEffect(() => { fetchEquipment(); }, [fetchEquipment]);
 
   useEffect(() => {
     if (typeof subscribe !== 'function') return undefined;

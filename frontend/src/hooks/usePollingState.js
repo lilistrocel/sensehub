@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { isNetworkError, isTransientNow, onResume } from '../utils/connectivity';
 
 const API_BASE = '/api';
 
@@ -101,6 +102,9 @@ export function usePollingState() {
       mergeStatus(data);
       setSupported(true);
     } catch (err) {
+      // A network blip (tab resume, radio waking up) is not "unsupported":
+      // keep the control and the last known state instead of hiding them.
+      if (isNetworkError(err) && isTransientNow()) return;
       console.error('Failed to fetch polling status:', err);
       setSupported(false);
     } finally {
@@ -162,6 +166,9 @@ export function usePollingState() {
     });
     return () => unsubscribe();
   }, [subscribe, mergeStatus]);
+
+  // Resync once when the tab comes back (pause/resume events may have been missed).
+  useEffect(() => onResume(() => { fetchStatus(); }), [fetchStatus]);
 
   // Resync after a WebSocket reconnect (events during the outage were missed).
   useEffect(() => {

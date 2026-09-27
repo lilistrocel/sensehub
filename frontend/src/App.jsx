@@ -8,6 +8,7 @@ import { SettingsProvider } from './context/SettingsContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import { ToastContainer } from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
 import { BreadcrumbProvider } from './components/Breadcrumb';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
@@ -355,7 +356,9 @@ function App() {
               <WebSocketProvider>
                 <AlertSoundProvider>
                   <ToastProvider>
-                    <AppRoutes />
+                    <ErrorBoundary>
+                      <AppRoutes />
+                    </ErrorBoundary>
                     <ToastContainer />
                   </ToastProvider>
                 </AlertSoundProvider>

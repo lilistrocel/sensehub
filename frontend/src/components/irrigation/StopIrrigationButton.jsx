@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { useSettings } from '../../context/SettingsContext';
 import ConfirmDialog from '../ConfirmDialog';
+import { startPolling } from '../../hooks/usePoll';
 
 const API_BASE = '/api';
 // A 202 (a board slow to answer) waits this long for the stop_irrigation_result broadcast.
@@ -158,8 +159,8 @@ export default function StopIrrigationButton({ active, formatTime, className = '
       } catch { /* the button works without it */ }
     };
     poll();
-    const id = setInterval(() => { if (!document.hidden) poll(); }, 10000);
-    return () => { stop = true; clearInterval(id); };
+    const stopPoll = startPolling(poll, 10000); // paused while hidden, one refresh on resume
+    return () => { stop = true; stopPoll(); };
   }, [canStop, active, token]);
 
   const report = useCallback((data) => {
