@@ -1,1 +1,60 @@
-{}
+{
+  "title": "Lab Analysis",
+  "subtitle": "Manual nutrient measurements and lab results",
+  "noZone": "No zone",
+  "confirmDelete": "Delete this lab reading?",
+  "fields": {
+    "date": "Date",
+    "nutrient": "Nutrient",
+    "value": "Value",
+    "unit": "Unit",
+    "zone": "Zone",
+    "zoneOptional": "Zone (optional)",
+    "notes": "Notes"
+  },
+  "add": {
+    "button": "Add Lab Reading",
+    "title": "New Lab Analysis Entry",
+    "sampleDate": "Sample Date",
+    "selectNutrient": "Select nutrient…",
+    "notesPlaceholder": "Optional notes",
+    "removeRow": "Remove row",
+    "addAnother": "+ Add another nutrient",
+    "save_one": "Save {{count}} Reading",
+    "save_other": "Save {{count}} Readings",
+    "saved_one": "{{count}} reading saved successfully",
+    "saved_other": "{{count}} readings saved successfully"
+  },
+  "stats": {
+    "readings_one": "{{count}} reading",
+    "readings_other": "{{count}} readings"
+  },
+  "filters": {
+    "allNutrients": "All Nutrients",
+    "allZones": "All Zones",
+    "from": "From",
+    "to": "To",
+    "clear": "Clear filters"
+  },
+  "history": {
+    "title": "History",
+    "total": "({{total}} total)",
+    "empty": "No lab readings found. Click \"{{button}}\" to enter your first analysis."
+  },
+  "table": {
+    "actions": "Actions"
+  },
+  "pagination": {
+    "showing": "Showing {{range}} of {{total}}"
+  },
+  "toast": {
+    "deleted": "Lab reading deleted",
+    "updated": "Lab reading updated"
+  },
+  "errors": {
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete reading",
+    "update": "Failed to update",
+    "updateFailed": "Failed to update reading"
+  }
+}

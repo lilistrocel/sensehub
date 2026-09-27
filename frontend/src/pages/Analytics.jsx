@@ -1,24 +1,22 @@
 import React, { useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 const API_BASE = '/api';
 
+// Labels: t(`domain.${key}.label|hint`) and t('window', { count }).
 const DOMAIN_OPTIONS = [
-  { key: 'sensors',     label: 'Sensor readings',     hint: 'substrate moisture, EC, temp, humidity, pH (aggregated by hour/day)' },
-  { key: 'fertigation', label: 'Fertigation events',  hint: 'water + nutrient volumes per zone, computed from relay events' },
-  { key: 'automations', label: 'Automation history',  hint: 'success / failure / skipped per automation (with reasons in raw view)' },
-  { key: 'reference',   label: 'Reference data',      hint: 'lab readings, AMIC cycles, agronomist reports, operational plans' },
+  { key: 'sensors' },
+  { key: 'fertigation' },
+  { key: 'automations' },
+  { key: 'reference' },
 ];
 
-const RECENT_WINDOWS = [
-  { value: 7,   label: '7 days' },
-  { value: 30,  label: '30 days' },
-  { value: 90,  label: '90 days' },
-  { value: 180, label: '180 days' },
-];
+const RECENT_WINDOWS = [7, 30, 90, 180];
 
 export default function Analytics() {
+  const { t } = useTranslation('analytics');
   const { token } = useAuth();
   const { showError, showSuccess } = useToast();
 
@@ -33,7 +31,7 @@ export default function Analytics() {
   const startDownload = async () => {
     const picked = Object.entries(domains).filter(([_, v]) => v).map(([k]) => k);
     if (picked.length === 0) {
-      showError('Pick at least one data domain');
+      showError(t('toast.pickDomain'));
       return;
     }
     setDownloading(true);
@@ -61,9 +59,9 @@ export default function Analytics() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showSuccess('Export ready — check your downloads');
+      showSuccess(t('toast.ready'));
     } catch (err) {
-      showError('Export failed: ' + err.message);
+      showError(t('toast.failed', { error: err.message }));
     } finally {
       setDownloading(false);
     }
@@ -72,17 +70,16 @@ export default function Analytics() {
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics Export</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('title')}</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Download an Excel-friendly ZIP of historical data, pre-aggregated for analysis. Raw rows stay in the database;
-          only summaries are exported (typically a few MB).
+          {t('subtitle')}
         </p>
       </div>
 
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-5 space-y-5">
         {/* Domains */}
         <section>
-          <h2 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Data domains</h2>
+          <h2 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">{t('domainsTitle')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {DOMAIN_OPTIONS.map(d => (
               <label key={d.key} className={`flex items-start gap-2 border rounded p-2 cursor-pointer transition-colors ${
@@ -97,8 +94,8 @@ export default function Analytics() {
                   onChange={() => toggleDomain(d.key)}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{d.label}</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{d.hint}</div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{t(`domain.${d.key}.label`)}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{t(`domain.${d.key}.hint`)}</div>
                 </div>
               </label>
             ))}
@@ -107,33 +104,33 @@ export default function Analytics() {
 
         {/* Trend file */}
         <section>
-          <h2 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Long-horizon trend file</h2>
+          <h2 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">{t('trendTitle')}</h2>
           <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
             <input
               type="checkbox"
               checked={includeTrend}
               onChange={e => setIncludeTrend(e.target.checked)}
             />
-            <span>Include <span className="font-mono">trend/</span> folder with all-time daily aggregates</span>
+            <span><Trans t={t} i18nKey="trendInclude" components={{ code: <span className="font-mono" dir="ltr" /> }} /></span>
           </label>
         </section>
 
         {/* Recent window */}
         <section>
-          <h2 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Recent detail window</h2>
+          <h2 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">{t('recentTitle')}</h2>
           <div className="flex gap-3 flex-wrap items-center">
             <label className="text-sm text-gray-700 dark:text-gray-200">
-              Last
+              {t('last')}
               <select
                 value={recentDays}
                 onChange={e => setRecentDays(parseInt(e.target.value))}
-                className="ml-2 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
+                className="ms-2 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
               >
-                {RECENT_WINDOWS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+                {RECENT_WINDOWS.map(w => <option key={w} value={w}>{t('window', { count: w })}</option>)}
               </select>
             </label>
             <div className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200">
-              <span>granularity:</span>
+              <span>{t('granularity')}</span>
               <label className="flex items-center gap-1">
                 <input
                   type="radio"
@@ -141,7 +138,7 @@ export default function Analytics() {
                   checked={recentGranularity === 'hourly'}
                   onChange={() => setRecentGranularity('hourly')}
                 />
-                <span>hourly aggregates <span className="text-xs text-gray-500">(small files, smooth)</span></span>
+                <span>{t('hourly')} <span className="text-xs text-gray-500">{t('hourlyHint')}</span></span>
               </label>
               <label className="flex items-center gap-1">
                 <input
@@ -150,13 +147,13 @@ export default function Analytics() {
                   checked={recentGranularity === 'raw'}
                   onChange={() => setRecentGranularity('raw')}
                 />
-                <span>raw samples <span className="text-xs text-gray-500">(big files, every poll)</span></span>
+                <span>{t('raw')} <span className="text-xs text-gray-500">{t('rawHint')}</span></span>
               </label>
             </div>
           </div>
           {recentGranularity === 'raw' && recentDays > 30 && (
             <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-              ⚠ Raw samples for {recentDays} days may produce a multi-million-row file. Excel can only open files with up to ~1M rows per sheet.
+              ⚠ {t('rawWarning', { count: recentDays })}
             </div>
           )}
         </section>
@@ -168,19 +165,19 @@ export default function Analytics() {
             disabled={downloading}
             className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded disabled:opacity-50"
           >
-            {downloading ? 'Building ZIP…' : 'Download CSV pack'}
+            {downloading ? t('building') : t('download')}
           </button>
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            Each ZIP contains a <span className="font-mono">README.txt</span> with row counts and a column dictionary.
-            CSVs are UTF-8 with BOM and ISO timestamps for Excel compatibility.
+            <Trans t={t} i18nKey="zipNote" components={{ code: <span className="font-mono" dir="ltr" /> }} />
           </div>
         </div>
       </div>
 
       {/* What's inside reference */}
       <details className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-        <summary className="cursor-pointer text-gray-700 dark:text-gray-300 font-medium">What's inside the ZIP?</summary>
-        <pre className="mt-2 text-xs p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">{`analytics_export_YYYY-MM-DD.zip
+        <summary className="cursor-pointer text-gray-700 dark:text-gray-300 font-medium">{t('insideTitle')}</summary>
+        {/* file tree: technical listing, kept in English and left-to-right */}
+        <pre dir="ltr" lang="en" className="mt-2 text-xs p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">{`analytics_export_YYYY-MM-DD.zip
 ├── README.txt                              (row counts + column dictionary)
 ├── trend/
 │   ├── sensor_readings_daily.csv           (all-time, per equipment + metric)

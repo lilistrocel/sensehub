@@ -1,1 +1,105 @@
-{}
+{
+  "title": "Sensor Calibration",
+  "subtitle": "Map raw sensor readings to real-world values using manual lab measurements (linear regression).",
+  "select": {
+    "equipment": "Equipment",
+    "metric": "Sensor Metric",
+    "nutrient": "Lab Nutrient"
+  },
+  "nutrient": {
+    "EC": "EC",
+    "pH": "pH",
+    "nitrate_NO3": "Nitrate (NO3)",
+    "phosphate_PO4": "Phosphate (PO4)",
+    "potassium_K": "Potassium (K)"
+  },
+  "linear": {
+    "title": "Linear Calibration",
+    "noMetric": "(no metric)",
+    "help": "Applied to every reading of this metric: <code>{{formula}}</code>. Each metric on this device has its own scale/offset.",
+    "formula": "real = raw × scale + offset",
+    "scaleLabel": "Scale (multiplier)",
+    "offsetLabel": "Offset (added)",
+    "save": "Save Calibration",
+    "saved": "Saved: scale {{scale}}, offset {{offset}}",
+    "readOnly": "Scale <b>{{scale}}</b>, offset <b>{{offset}}</b>",
+    "col": {
+      "metric": "Metric",
+      "scale": "Scale",
+      "offset": "Offset"
+    }
+  },
+  "stats": {
+    "slope": "Slope",
+    "multiplier": "multiplier",
+    "intercept": "Intercept",
+    "offset": "offset",
+    "r2": "R² (fit quality)",
+    "goodFit": "good fit",
+    "fairFit": "fair fit",
+    "needsData": "needs more data",
+    "points": "Data Points",
+    "matchedPairs": "matched pairs"
+  },
+  "latest": {
+    "title": "Latest Reading",
+    "line": "Raw sensor: <raw>{{raw}}</raw> → Estimated real: <cal>{{cal}}</cal>",
+    "recompute": "Recompute Calibration",
+    "recomputing": "Recomputing…"
+  },
+  "add": {
+    "title": "Add Manual Measurement",
+    "help": "Measure with your conductivity pen and enter the value below. Calibration is recomputed automatically.",
+    "value": "Value",
+    "unit": "Unit",
+    "when": "When measured",
+    "now": "Now",
+    "zone": "Zone (optional)",
+    "noZone": "— None —",
+    "submit": "Add Measurement",
+    "adding": "Adding…"
+  },
+  "chart": {
+    "title": "Last 24 hours",
+    "noData": "No sensor data in the last 24 hours",
+    "raw": "Raw sensor",
+    "calibrated": "Calibrated estimate",
+    "lab": "Manual lab reading"
+  },
+  "pairs": {
+    "title": "Calibration Pairs",
+    "col": {
+      "labTime": "Lab Time",
+      "labValue": "Lab Value",
+      "sensorValue": "Sensor Value",
+      "ratio": "Ratio",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "matched": "matched",
+    "noSensorData": "no sensor data",
+    "edit": "Edit value"
+  },
+  "confirmDelete": "Delete this lab reading? Calibration will recompute automatically.",
+  "editPrompt": "Edit lab value for {{time}}\n\nCurrent: {{value}}",
+  "toast": {
+    "saved": "Saved calibration for {{metric}}",
+    "recomputed": "Calibration recomputed",
+    "deleted": "Lab reading deleted",
+    "updated": "Updated to {{value}}",
+    "added": "Added {{value}} - calibration recomputed"
+  },
+  "err": {
+    "loadEquipment": "Could not load equipment list: {{error}}",
+    "loadZones": "Could not load zones: {{error}}",
+    "readMappings": "Could not read register mappings for {{name}}",
+    "selectedEquipment": "the selected equipment",
+    "notNumbers": "Scale and offset must be numbers",
+    "saveFailed": "Save failed",
+    "recomputeFailed": "Recompute failed",
+    "deleteFailed": "Delete failed",
+    "invalidNumber": "Invalid number",
+    "updateFailed": "Update failed",
+    "addFailed": "Failed to add reading"
+  }
+}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../ui';
 import { parseRegisterMappings, OP_SYM } from './automationSummary';
 import { INPUT_SM, FIELD_LABEL, HELP, ICON_BUTTON } from './formStyles';
@@ -8,6 +9,7 @@ import { INPUT_SM, FIELD_LABEL, HELP, ICON_BUTTON } from './formStyles';
  * executor: calibrated sensor / raw sensor / latest lab reading).
  */
 export default function DependencyEditor({ action, equipmentList, onChange, onClose }) {
+  const { t } = useTranslation('automations');
   const deps = Array.isArray(action.dependencies) ? action.dependencies : [];
   const [newDep, setNewDep] = useState({
     type: 'calibrated_sensor',
@@ -43,11 +45,11 @@ export default function DependencyEditor({ action, equipmentList, onChange, onCl
     <div className="bg-field/60 border border-line rounded-md p-3 space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-ink">Dependencies (runtime gates)</p>
-          <p className={HELP}>The action only fires when ALL of these pass at run time. Use "calibrated sensor" for EC.</p>
+          <p className="text-sm font-semibold text-ink">{t('deps.title')}</p>
+          <p className={HELP}>{t('deps.help', { calibrated: t('deps.sourceType.calibrated_sensor') })}</p>
         </div>
         {onClose && (
-          <button type="button" onClick={onClose} className={ICON_BUTTON} aria-label="Close dependency editor">
+          <button type="button" onClick={onClose} className={ICON_BUTTON} aria-label={t('deps.close')}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         )}
@@ -57,13 +59,13 @@ export default function DependencyEditor({ action, equipmentList, onChange, onCl
         <ul className="space-y-1">
           {deps.map((d, i) => (
             <li key={i} className="flex items-center gap-2 bg-panel px-2 py-1 rounded-md text-xs border border-line">
-              <span className="px-1.5 py-0.5 rounded bg-field text-muted font-semibold">{String(d.type || '').replace('_', ' ')}</span>
-              <span className="text-ink truncate">
+              <span className="px-1.5 py-0.5 rounded bg-field text-muted font-semibold">{t(`deps.sourceType.${d.type}`, { defaultValue: String(d.type || '').replace('_', ' ') })}</span>
+              <span className="text-ink truncate" dir="auto">
                 {d.equipment_id ? `${sensors.find(s => s.id === d.equipment_id)?.name || `#${d.equipment_id}`} / ` : ''}{d.metric || d.nutrient}
               </span>
-              <span className="font-mono tabular text-muted">{OP_SYM[d.operator] || d.operator} {d.value}</span>
-              {d.max_age_minutes && <span className="text-muted">(≤{d.max_age_minutes} min old)</span>}
-              <button type="button" onClick={() => removeDep(i)} className={`${ICON_BUTTON} ml-auto`} aria-label="Remove dependency">
+              <span className="font-mono tabular text-muted" dir="ltr">{OP_SYM[d.operator] || d.operator} {d.value}</span>
+              {d.max_age_minutes && <span className="text-muted">{t('deps.maxAgeShort', { n: d.max_age_minutes })}</span>}
+              <button type="button" onClick={() => removeDep(i)} className={`${ICON_BUTTON} ms-auto`} aria-label={t('deps.remove')}>
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </li>
@@ -73,26 +75,26 @@ export default function DependencyEditor({ action, equipmentList, onChange, onCl
 
       <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 items-end">
         <div className="col-span-2 sm:col-span-2">
-          <label className={FIELD_LABEL}>Source</label>
+          <label className={FIELD_LABEL}>{t('deps.source')}</label>
           <select value={newDep.type} onChange={e => setNewDep({ ...newDep, type: e.target.value })} className={INPUT_SM}>
-            <option value="calibrated_sensor">Calibrated sensor</option>
-            <option value="sensor">Raw sensor</option>
-            <option value="lab_reading">Latest lab reading</option>
+            <option value="calibrated_sensor">{t('deps.sourceType.calibrated_sensor')}</option>
+            <option value="sensor">{t('deps.sourceType.sensor')}</option>
+            <option value="lab_reading">{t('deps.sourceType.lab_reading')}</option>
           </select>
         </div>
         {(newDep.type === 'sensor' || newDep.type === 'calibrated_sensor') && (
           <>
             <div className="col-span-2">
-              <label className={FIELD_LABEL}>Equipment</label>
+              <label className={FIELD_LABEL}>{t('deps.equipment')}</label>
               <select value={newDep.equipment_id} onChange={e => setNewDep({ ...newDep, equipment_id: e.target.value, metric: '' })} className={INPUT_SM}>
-                <option value="">Select...</option>
+                <option value="">{t('deps.select')}</option>
                 {sensors.map(eq => <option key={eq.id} value={eq.id}>{eq.name}</option>)}
               </select>
             </div>
             <div className="col-span-2">
-              <label className={FIELD_LABEL}>Metric</label>
+              <label className={FIELD_LABEL}>{t('deps.metric')}</label>
               <select value={newDep.metric} onChange={e => setNewDep({ ...newDep, metric: e.target.value })} className={INPUT_SM}>
-                <option value="">Select...</option>
+                <option value="">{t('deps.select')}</option>
                 {availableMetrics.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
@@ -100,18 +102,18 @@ export default function DependencyEditor({ action, equipmentList, onChange, onCl
         )}
         {newDep.type === 'lab_reading' && (
           <div className="col-span-2">
-            <label className={FIELD_LABEL}>Nutrient</label>
+            <label className={FIELD_LABEL}>{t('deps.nutrient')}</label>
             <select value={newDep.nutrient} onChange={e => setNewDep({ ...newDep, nutrient: e.target.value })} className={INPUT_SM}>
               <option value="EC">EC</option>
               <option value="pH">pH</option>
-              <option value="nitrate_NO3">Nitrate</option>
-              <option value="phosphate_PO4">Phosphate</option>
-              <option value="potassium_K">Potassium</option>
+              <option value="nitrate_NO3">{t('deps.nutrients.nitrate_NO3')}</option>
+              <option value="phosphate_PO4">{t('deps.nutrients.phosphate_PO4')}</option>
+              <option value="potassium_K">{t('deps.nutrients.potassium_K')}</option>
             </select>
           </div>
         )}
         <div>
-          <label className={FIELD_LABEL}>Op</label>
+          <label className={FIELD_LABEL}>{t('deps.op')}</label>
           <select value={newDep.operator} onChange={e => setNewDep({ ...newDep, operator: e.target.value })} className={INPUT_SM}>
             <option value="lt">&lt;</option>
             <option value="lte">≤</option>
@@ -122,15 +124,15 @@ export default function DependencyEditor({ action, equipmentList, onChange, onCl
           </select>
         </div>
         <div>
-          <label className={FIELD_LABEL}>Value</label>
-          <input type="number" step="any" inputMode="decimal" value={newDep.value} onChange={e => setNewDep({ ...newDep, value: e.target.value })} placeholder="2500" className={INPUT_SM} />
+          <label className={FIELD_LABEL}>{t('deps.value')}</label>
+          <input type="number" step="any" inputMode="decimal" dir="ltr" value={newDep.value} onChange={e => setNewDep({ ...newDep, value: e.target.value })} placeholder="2500" className={INPUT_SM} />
         </div>
         <div>
-          <label className={FIELD_LABEL}>Max age (min)</label>
-          <input type="number" min="1" inputMode="numeric" value={newDep.max_age_minutes} onChange={e => setNewDep({ ...newDep, max_age_minutes: e.target.value })} className={INPUT_SM} />
+          <label className={FIELD_LABEL}>{t('deps.maxAge')}</label>
+          <input type="number" min="1" inputMode="numeric" dir="ltr" value={newDep.max_age_minutes} onChange={e => setNewDep({ ...newDep, max_age_minutes: e.target.value })} className={INPUT_SM} />
         </div>
         <div>
-          <Button type="button" variant="secondary" size="sm" onClick={addDep} className="w-full min-h-[40px]">Add gate</Button>
+          <Button type="button" variant="secondary" size="sm" onClick={addDep} className="w-full min-h-[40px]">{t('deps.addGate')}</Button>
         </div>
       </div>
     </div>

@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useFormat } from '../../i18n/useFormat';
 import { Link } from 'react-router-dom';
 import { Button, Card, Label, Reading, StatusPill } from '../../ui';
 import { useSettings } from '../../context/SettingsContext';
@@ -43,7 +45,7 @@ function Switch({ checked, onChange, disabled, label, busy }) {
       disabled={disabled}
       className={`relative inline-flex items-center h-11 w-[68px] shrink-0 rounded-full p-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${checked ? 'bg-state-ok' : 'bg-gray-300 dark:bg-gray-600'}`}
     >
-      <span className={`inline-flex items-center justify-center h-9 w-9 rounded-full bg-white shadow transform transition-transform ${checked ? 'translate-x-[24px]' : 'translate-x-0'}`}>
+      <span className={`inline-flex items-center justify-center h-9 w-9 rounded-full bg-white shadow transform transition-transform ${checked ? 'translate-x-[24px] rtl:-translate-x-[24px]' : 'translate-x-0'}`}>
         {busy && <Spinner className="h-4 w-4 text-muted" />}
       </span>
     </button>
@@ -51,6 +53,8 @@ function Switch({ checked, onChange, disabled, label, busy }) {
 }
 
 export default function EquipmentDetailModal({ isOpen, onClose, equipment, token, onUpdate, user }) {
+  const { t } = useTranslation('equipment');
+  const fmt = useFormat();
   const { formatDateTime, formatTime } = useSettings();
   const now = useNow(30000);
   const [loading, setLoading] = useState(false);
@@ -133,8 +137,8 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
     try {
       const response = await fetch(`${API_BASE}/equipment/${equipment.id}`, { headers: authHeaders });
       if (!response.ok) {
-        if (response.status === 404) throw new Error('This equipment no longer exists. It may have been deleted.');
-        throw new Error('Failed to fetch equipment details');
+        if (response.status === 404) throw new Error(t('detail.err.gone'));
+        throw new Error(t('detail.err.fetchDetails'));
       }
       const data = await response.json();
       setDetails(data);
@@ -172,7 +176,7 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
         fetch(`${API_BASE}/equipment/${equipment.id}/history?from=${from.toISOString()}&limit=25&offset=0`, { headers: authHeaders }),
         fetch(`${API_BASE}/equipment/${equipment.id}/history/chart?from=${from.toISOString()}`, { headers: authHeaders })
       ]);
-      if (!historyRes.ok) throw new Error('Failed to fetch history');
+      if (!historyRes.ok) throw new Error(t('detail.err.fetchHistory'));
       const data = await historyRes.json();
       setHistoryData(data.readings || []);
       setHistoryTotal(data.total || 0);
@@ -192,7 +196,7 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
     const from = getFromDate();
     try {
       const response = await fetch(`${API_BASE}/equipment/${equipment.id}/history?from=${from.toISOString()}&limit=25&offset=${newOffset}`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch more history');
+      if (!response.ok) throw new Error(t('detail.err.fetchMoreHistory'));
       const data = await response.json();
       setHistoryData(prev => [...prev, ...(data.readings || [])]);
       setHistoryOffset(newOffset);
@@ -210,7 +214,7 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
     try {
       const resolvedParam = showResolved ? '' : '&resolved=false';
       const response = await fetch(`${API_BASE}/equipment/${equipment.id}/errors?limit=50${resolvedParam}`, { headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to fetch error logs');
+      if (!response.ok) throw new Error(t('detail.err.fetchErrors'));
       setErrorLogs(await response.json());
     } catch (err) {
       setErrorLogsError(err.message);
@@ -223,7 +227,7 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
     if (!equipment || !canControl) return;
     try {
       const response = await fetch(`${API_BASE}/equipment/${equipment.id}/errors/${errorId}/resolve`, { method: 'PUT', headers: authHeaders });
-      if (!response.ok) throw new Error('Failed to resolve error');
+      if (!response.ok) throw new Error(t('detail.err.resolve'));
       await fetchErrorLogs();
       await fetchDetails();
       onUpdate?.();
@@ -247,12 +251,12 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to assign zone');
+        throw new Error(data.message || t('detail.err.assignZone'));
       }
       setSelectedZone('');
       await fetchDetails();
       onUpdate?.();
-      flash(setZoneMessage, { type: 'success', text: 'Zone assigned.' });
+      flash(setZoneMessage, { type: 'success', text: t('detail.zoneAssigned') });
     } catch (err) {
       setZoneMessage({ type: 'error', text: err.message });
     } finally {
@@ -267,11 +271,11 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
       const response = await fetch(`${API_BASE}/zones/${zoneId}/equipment/${equipment.id}`, { method: 'DELETE', headers: authHeaders });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to remove zone');
+        throw new Error(data.message || t('detail.err.removeZone'));
       }
       await fetchDetails();
       onUpdate?.();
-      flash(setZoneMessage, { type: 'success', text: 'Zone removed.' });
+      flash(setZoneMessage, { type: 'success', text: t('detail.zoneRemoved') });
     } catch (err) {
       setZoneMessage({ type: 'error', text: err.message });
     }
@@ -287,11 +291,11 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to control equipment');
+        throw new Error(data.message || t('detail.err.control'));
       }
       await fetchDetails();
       onUpdate?.();
-      flash(setControlMessage, { type: 'success', text: `Turn ${action} command sent.` });
+      flash(setControlMessage, { type: 'success', text: action === 'on' ? t('detail.turnOnSent') : t('detail.turnOffSent') });
     } catch (err) {
       setControlMessage({ type: 'error', text: err.message });
     } finally {
@@ -310,11 +314,11 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to update equipment');
+        throw new Error(data.message || t('form.updateFailed'));
       }
       await fetchDetails();
       onUpdate?.();
-      flash(setEnableMessage, { type: 'success', text: `Equipment ${newEnabledState ? 'enabled' : 'disabled'}.` });
+      flash(setEnableMessage, { type: 'success', text: newEnabledState ? t('detail.enabledMsg') : t('detail.disabledMsg') });
     } catch (err) {
       setEnableMessage({ type: 'error', text: err.message });
     } finally {
@@ -333,14 +337,14 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to save calibration');
+        throw new Error(data.message || t('detail.err.saveCalibration'));
       }
       const result = await response.json();
       setCalibrationOffset(String(result.offset));
       setCalibrationScale(String(result.scale));
       await fetchDetails();
       onUpdate?.();
-      setCalibrationMessage({ type: 'success', text: 'Calibration saved.' });
+      setCalibrationMessage({ type: 'success', text: t('detail.calibrationSaved') });
       setTimeout(() => { setCalibrationMessage(null); setShowCalibration(false); }, 1500);
     } catch (err) {
       setCalibrationMessage({ type: 'error', text: err.message });
@@ -356,7 +360,7 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
     try {
       const response = await fetch(`${API_BASE}/equipment/${equipment.id}/test-connection`, { method: 'POST', headers: authHeaders });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.message || 'Connection test failed');
+      if (!response.ok) throw new Error(result.message || t('detail.err.testFailed'));
       setTestConnectionResult(result);
       await fetchDetails();
       onUpdate?.();
@@ -378,12 +382,12 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to save labels');
+        throw new Error(data.message || t('detail.err.saveLabels'));
       }
       const updated = await response.json();
       setDetails(prev => ({ ...prev, ...updated }));
       onUpdate?.();
-      flash(setLabelsMessage, { type: 'success', text: 'Channel labels saved.' }, 2000);
+      flash(setLabelsMessage, { type: 'success', text: t('detail.labelsSaved') }, 2000);
     } catch (err) {
       setLabelsMessage({ type: 'error', text: err.message });
     } finally {
@@ -442,7 +446,7 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
       open={isOpen}
       onClose={onClose}
       size="lg"
-      title={eq?.name || 'Equipment details'}
+      title={eq?.name || t('detail.title')}
       subtitle={eq?.description}
       icon={(
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -453,72 +457,72 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
         <>
           {eq?.id != null && (user?.role === 'admin' || user?.role === 'operator') && (
             <Button as={Link} variant="ghost" to={`/logs?target_type=equipment&target_id=${eq.id}&range=7d`} onClick={onClose} data-testid="equipment-activity-link">
-              View activity
+              {t('detail.viewActivity')}
             </Button>
           )}
-          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button variant="secondary" onClick={onClose}>{t('common:actions.close')}</Button>
         </>
       )}
     >
       <div className="border-b border-line mb-4" role="tablist">
         <nav className="-mb-px flex gap-4">
-          <Tab active={activeTab === 'details'} onClick={() => setActiveTab('details')}>Details</Tab>
-          <Tab active={activeTab === 'history'} onClick={() => setActiveTab('history')}>History</Tab>
-          <Tab active={activeTab === 'errors'} onClick={() => setActiveTab('errors')}>Error logs</Tab>
+          <Tab active={activeTab === 'details'} onClick={() => setActiveTab('details')}>{t('detail.tab.details')}</Tab>
+          <Tab active={activeTab === 'history'} onClick={() => setActiveTab('history')}>{t('detail.tab.history')}</Tab>
+          <Tab active={activeTab === 'errors'} onClick={() => setActiveTab('errors')}>{t('detail.tab.errors')}</Tab>
         </nav>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-8 text-muted"><Spinner className="h-6 w-6" /><span className="ml-3">Loading details…</span></div>
+        <div className="flex items-center justify-center py-8 text-muted"><Spinner className="h-6 w-6" /><span className="ms-3">{t('detail.loadingDetails')}</span></div>
       ) : error ? (
         <InlineNotice type="error">{error}</InlineNotice>
       ) : activeTab === 'details' ? (
         <div>
           <div className={ROW}>
-            <span className={ROW_LABEL}>Status</span>
+            <span className={ROW_LABEL}>{t('list.col.status')}</span>
             <StatusPill state={presentation.pill} filled={presentation.filled} text={presentation.text} />
           </div>
           <div className={ROW}>
-            <span className={ROW_LABEL}>Type</span>
-            <span className="text-sm text-ink">{eq?.type || '—'}</span>
+            <span className={ROW_LABEL}>{t('list.col.type')}</span>
+            <span dir="auto" className="text-sm text-ink">{eq?.type || '—'}</span>
           </div>
           <div className={ROW}>
-            <span className={ROW_LABEL}>Protocol</span>
+            <span className={ROW_LABEL}>{t('form.protocol')}</span>
             <span className="text-sm text-ink uppercase font-mono bg-field border border-line px-2 py-0.5 rounded">{eq?.protocol || '—'}</span>
           </div>
           <div className={ROW}>
-            <span className={ROW_LABEL}>Connection address</span>
-            <span className="text-sm text-ink font-mono">{eq?.address || '—'}</span>
+            <span className={ROW_LABEL}>{t('form.address')}</span>
+            <span dir="ltr" className="text-sm text-ink font-mono">{eq?.address || '—'}</span>
           </div>
           {eq?.protocol === 'modbus' && (
             <div className={ROW}>
-              <span className={ROW_LABEL}>Unit · poll</span>
-              <span className="text-sm text-ink font-mono tabular">{eq?.slave_id ?? '—'} · {eq?.polling_interval_ms ? `${eq.polling_interval_ms} ms` : '—'}</span>
+              <span className={ROW_LABEL}>{t('detail.unitPoll')}</span>
+              <span dir="ltr" className="text-sm text-ink font-mono tabular">{eq?.slave_id ?? '—'} · {eq?.polling_interval_ms ? fmt.withUnit(eq.polling_interval_ms, 'ms', { decimals: 0, grouping: false }) : '—'}</span>
             </div>
           )}
 
           <div className="py-3 border-b border-line">
             <div className="flex items-center justify-between gap-3">
-              <span className={ROW_LABEL}>Enabled</span>
+              <span className={ROW_LABEL}>{t('mapping.enabled')}</span>
               {canControl ? (
-                <Switch checked={!!eq?.enabled} onChange={handleToggleEnabled} disabled={enableLoading} busy={enableLoading} label="Enabled" />
+                <Switch checked={!!eq?.enabled} onChange={handleToggleEnabled} disabled={enableLoading} busy={enableLoading} label={t('mapping.enabled')} />
               ) : (
-                <span className="text-sm text-ink">{eq?.enabled ? 'Yes' : 'No'}</span>
+                <span className="text-sm text-ink">{eq?.enabled ? t('common:actions.yes') : t('common:actions.no')}</span>
               )}
             </div>
             <Notice msg={enableMessage} className="mt-2" />
           </div>
 
           <div className="py-3 border-b border-line">
-            <span className={`${ROW_LABEL} block mb-2`}>Zones</span>
+            <span className={`${ROW_LABEL} block mb-2`}>{t('detail.zones')}</span>
             <Notice msg={zoneMessage} className="mb-3" />
             {eq?.zones && eq.zones.length > 0 ? (
               <div className="flex flex-wrap gap-2 mb-3">
                 {eq.zones.map((zone, idx) => (
-                  <span key={zone.id || idx} className="inline-flex items-center gap-1 rounded border border-line bg-field pl-2 pr-1 py-0.5 text-xs text-ink">
+                  <span key={zone.id || idx} dir="auto" className="inline-flex items-center gap-1 rounded border border-line bg-field ps-2 pe-1 py-0.5 text-xs text-ink">
                     {zone.name}
                     {canControl && (
-                      <button type="button" onClick={() => handleRemoveZone(zone.id)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted hover:text-alarm-600" title="Remove from zone" aria-label={`Remove from ${zone.name}`}>
+                      <button type="button" onClick={() => handleRemoveZone(zone.id)} className="inline-flex items-center justify-center h-6 w-6 rounded text-muted hover:text-alarm-600" title={t('detail.removeFromZone')} aria-label={t('detail.removeFromNamed', { name: zone.name })}>
                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     )}
@@ -526,83 +530,83 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted mb-3">No zones assigned</p>
+              <p className="text-sm text-muted mb-3">{t('detail.noZones')}</p>
             )}
             {canControl && (availableZones.length > 0 ? (
               <div className="flex gap-2">
-                <select value={selectedZone} onChange={(e) => setSelectedZone(e.target.value)} className="flex-1 min-w-0" aria-label="Zone to assign">
-                  <option value="">Select a zone…</option>
+                <select value={selectedZone} onChange={(e) => setSelectedZone(e.target.value)} className="flex-1 min-w-0" aria-label={t('detail.zoneToAssign')}>
+                  <option value="">{t('detail.selectZone')}</option>
                   {availableZones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
                 </select>
                 <Button variant="secondary" onClick={handleAssignZone} disabled={!selectedZone || assigningZone}>
-                  {assigningZone ? <><Spinner /> Assigning…</> : 'Assign'}
+                  {assigningZone ? <><Spinner /> {t('detail.assigning')}</> : t('detail.assign')}
                 </Button>
               </div>
             ) : (
-              <p className="text-sm text-muted italic">{allZones.length === 0 ? 'No zones available. Create zones first.' : 'All zones already assigned.'}</p>
+              <p className="text-sm text-muted italic">{allZones.length === 0 ? t('detail.noZonesAvailable') : t('detail.allZonesAssigned')}</p>
             ))}
           </div>
 
           <div className={ROW}>
-            <span className={ROW_LABEL}>Last communication</span>
+            <span className={ROW_LABEL}>{t('detail.lastComm')}</span>
             <span className="text-sm text-ink font-mono tabular">{eq?.last_communication ? formatDateTime(eq.last_communication) : '—'}</span>
           </div>
           {eq?.last_reading && (
             <div className={`${ROW} items-start`}>
-              <span className={ROW_LABEL}>Last reading</span>
-              <span className="text-xs text-ink font-mono break-all text-right max-w-[60%]">{String(eq.last_reading)}</span>
+              <span className={ROW_LABEL}>{t('detail.lastReading')}</span>
+              <span dir="ltr" className="text-xs text-ink font-mono break-all text-end max-w-[60%]">{String(eq.last_reading)}</span>
             </div>
           )}
           <div className={ROW}>
-            <span className={ROW_LABEL}>Created</span>
+            <span className={ROW_LABEL}>{t('detail.created')}</span>
             <span className="text-sm text-ink font-mono tabular">{eq?.created_at ? formatDateTime(eq.created_at) : '—'}</span>
           </div>
 
           {/* Calibration */}
           <div className="py-3 border-b border-line">
             <div className="flex items-center justify-between mb-2">
-              <span className={ROW_LABEL}>Calibration</span>
+              <span className={ROW_LABEL}>{t('detail.calibration')}</span>
               {isAdmin && (
-                <button type="button" onClick={() => setShowCalibration(!showCalibration)} className={LINK_BTN}>{showCalibration ? 'Hide' : 'Calibrate'}</button>
+                <button type="button" onClick={() => setShowCalibration(!showCalibration)} className={LINK_BTN}>{showCalibration ? t('detail.hide') : t('detail.calibrate')}</button>
               )}
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Card padding="sm"><Label>Offset</Label><Reading size="sm" value={eq?.calibration_offset ?? 0} /></Card>
-              <Card padding="sm"><Label>Scale</Label><Reading size="sm" value={eq?.calibration_scale ?? 1} /></Card>
+              <Card padding="sm"><Label>{t('mapping.offset')}</Label><Reading size="sm" value={eq?.calibration_offset ?? 0} /></Card>
+              <Card padding="sm"><Label>{t('mapping.scale')}</Label><Reading size="sm" value={eq?.calibration_scale ?? 1} /></Card>
             </div>
             {showCalibration && isAdmin && (
               <Card padding="md" className="mt-3 bg-field">
-                <h4 className="font-display text-sm font-semibold text-ink mb-3">Calibration settings</h4>
+                <h4 className="font-display text-sm font-semibold text-ink mb-3">{t('detail.calibrationSettings')}</h4>
                 <Notice msg={calibrationMessage} className="mb-3" />
                 <div className="space-y-3">
                   <div>
-                    <label htmlFor="calibration-offset" className="block text-xs font-medium text-muted mb-1">Offset (added to raw value)</label>
-                    <input type="number" id="calibration-offset" value={calibrationOffset} onChange={(e) => setCalibrationOffset(e.target.value)} step="0.01" className="w-full font-mono" placeholder="0" />
+                    <label htmlFor="calibration-offset" className="block text-xs font-medium text-muted mb-1">{t('detail.offsetLabel')}</label>
+                    <input type="number" id="calibration-offset" value={calibrationOffset} onChange={(e) => setCalibrationOffset(e.target.value)} step="0.01" className="w-full font-mono" dir="ltr" placeholder="0" />
                   </div>
                   <div>
-                    <label htmlFor="calibration-scale" className="block text-xs font-medium text-muted mb-1">Scale (multiplied by raw value)</label>
-                    <input type="number" id="calibration-scale" value={calibrationScale} onChange={(e) => setCalibrationScale(e.target.value)} step="0.01" className="w-full font-mono" placeholder="1" />
+                    <label htmlFor="calibration-scale" className="block text-xs font-medium text-muted mb-1">{t('detail.scaleLabel')}</label>
+                    <input type="number" id="calibration-scale" value={calibrationScale} onChange={(e) => setCalibrationScale(e.target.value)} step="0.01" className="w-full font-mono" dir="ltr" placeholder="1" />
                   </div>
-                  <p className="text-xs text-muted">Formula: <span className="font-mono bg-panel border border-line px-1 py-0.5 rounded">calibrated = (raw × scale) + offset</span></p>
+                  <p className="text-xs text-muted">{t('detail.formula')} <span className="font-mono bg-panel border border-line px-1 py-0.5 rounded">{t('detail.formulaExpr')}</span></p>
                   <div className="flex gap-2 pt-1">
-                    <Button variant="ghost" className="flex-1" onClick={() => setShowCalibration(false)} disabled={calibrationLoading}>Cancel</Button>
+                    <Button variant="ghost" className="flex-1" onClick={() => setShowCalibration(false)} disabled={calibrationLoading}>{t('common:actions.cancel')}</Button>
                     <Button variant="primary" className="flex-1" onClick={handleCalibrateSave} disabled={calibrationLoading}>
-                      {calibrationLoading ? <><Spinner /> Saving…</> : 'Save calibration'}
+                      {calibrationLoading ? <><Spinner /> {t('common:actions.saving')}</> : t('detail.saveCalibration')}
                     </Button>
                   </div>
                 </div>
               </Card>
             )}
-            {!isAdmin && <p className="text-xs text-muted mt-1 italic">Calibration settings require admin permissions</p>}
+            {!isAdmin && <p className="text-xs text-muted mt-1 italic">{t('detail.calibrationAdminOnly')}</p>}
           </div>
 
           {/* Channels / register mappings */}
           {Array.isArray(eq?.register_mappings) && eq.register_mappings.length > 0 && (
             <div className="py-3 border-b border-line">
               <div className="flex items-center justify-between mb-2">
-                <span className={ROW_LABEL}>Channels</span>
+                <span className={ROW_LABEL}>{t('detail.channels')}</span>
                 {canControl && (
-                  <button type="button" onClick={() => setShowChannelLabels(!showChannelLabels)} className={LINK_BTN}>{showChannelLabels ? 'Hide' : 'Edit labels'}</button>
+                  <button type="button" onClick={() => setShowChannelLabels(!showChannelLabels)} className={LINK_BTN}>{showChannelLabels ? t('detail.hide') : t('detail.editLabels')}</button>
                 )}
               </div>
 
@@ -614,7 +618,7 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
                     return (
                       <li
                         key={addr}
-                        className={`flex items-center justify-between gap-2 px-2 py-1.5 bg-field rounded text-sm border-l-[3px] ${m.unverified ? 'border-l-state-caution' : 'border-l-transparent'} ${isDisabled ? 'opacity-50' : ''}`}
+                        className={`flex items-center justify-between gap-2 px-2 py-1.5 bg-field rounded text-sm border-s-[3px] ${m.unverified ? 'border-s-state-caution' : 'border-s-transparent'} ${isDisabled ? 'opacity-50' : ''}`}
                         data-unverified={m.unverified ? 'true' : undefined}
                       >
                         <div className="flex items-center gap-2 min-w-0">
@@ -624,18 +628,18 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
                               checked={!isDisabled}
                               onChange={() => handleToggleChannel(addr, isDisabled)}
                               className="h-4 w-4"
-                              title={isDisabled ? 'Enable this reading' : 'Disable this reading'}
-                              aria-label={`${m.name} enabled`}
+                              title={isDisabled ? t('detail.enableReading') : t('detail.disableReading')}
+                              aria-label={t('detail.readingEnabledAria', { name: m.name })}
                             />
                           )}
-                          <span className="text-muted truncate">{m.name}</span>
-                          <span className="text-xs font-mono text-muted shrink-0">reg {addr}</span>
+                          <span dir="auto" className="text-muted truncate">{m.name}</span>
+                          <span className="text-xs font-mono text-muted shrink-0">{t('relay.reg', { addr })}</span>
                           {m.unverified && <UnverifiedPill />}
                         </div>
                         {m.label ? (
-                          <span className="font-medium text-ink truncate">{m.label}</span>
+                          <span dir="auto" className="font-medium text-ink truncate">{m.label}</span>
                         ) : (
-                          <span className="text-muted italic">No label</span>
+                          <span className="text-muted italic">{t('detail.noLabel')}</span>
                         )}
                       </li>
                     );
@@ -651,22 +655,23 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
                       const addr = String(m.register ?? m.address);
                       return (
                         <div key={addr} className="flex items-center gap-2">
-                          <span className="text-xs text-muted w-28 shrink-0 truncate" title={m.name}>{m.name}</span>
+                          <span dir="auto" className="text-xs text-muted w-28 shrink-0 truncate" title={m.name}>{m.name}</span>
                           <input
                             type="text"
                             value={channelLabels[addr] || ''}
                             onChange={(e) => setChannelLabels(prev => ({ ...prev, [addr]: e.target.value }))}
-                            placeholder="e.g. Water Pump"
+                            placeholder={t('detail.labelPlaceholder')}
+                            dir="auto"
                             className="flex-1 min-w-0"
-                            aria-label={`Label for ${m.name}`}
+                            aria-label={t('detail.labelFor', { name: m.name })}
                           />
                         </div>
                       );
                     })}
                   </div>
                   <div className="flex gap-2 mt-3">
-                    <Button variant="ghost" className="flex-1" onClick={() => setShowChannelLabels(false)} disabled={labelsLoading}>Cancel</Button>
-                    <Button variant="primary" className="flex-1" onClick={handleSaveLabels} disabled={labelsLoading}>{labelsLoading ? 'Saving…' : 'Save labels'}</Button>
+                    <Button variant="ghost" className="flex-1" onClick={() => setShowChannelLabels(false)} disabled={labelsLoading}>{t('common:actions.cancel')}</Button>
+                    <Button variant="primary" className="flex-1" onClick={handleSaveLabels} disabled={labelsLoading}>{labelsLoading ? t('common:actions.saving') : t('detail.saveLabels')}</Button>
                   </div>
                 </Card>
               )}
@@ -675,64 +680,64 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
 
           {/* Equipment control */}
           <div className="py-3 border-b border-line">
-            <span className={`${ROW_LABEL} block mb-3`}>Equipment control</span>
+            <span className={`${ROW_LABEL} block mb-3`}>{t('detail.control')}</span>
             <Notice msg={controlMessage} className="mb-3" />
             <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1" onClick={() => handleControl('on')} disabled={!canControl || controlLoading} title={!canControl ? 'Requires operator or admin' : undefined}>
-                {controlLoading ? <Spinner /> : 'Turn on'}
+              <Button variant="secondary" className="flex-1" onClick={() => handleControl('on')} disabled={!canControl || controlLoading} title={!canControl ? t('relay.requiresOperator') : undefined}>
+                {controlLoading ? <Spinner /> : t('detail.turnOn')}
               </Button>
-              <Button variant="secondary" className="flex-1" onClick={() => handleControl('off')} disabled={!canControl || controlLoading} title={!canControl ? 'Requires operator or admin' : undefined}>
-                {controlLoading ? <Spinner /> : 'Turn off'}
+              <Button variant="secondary" className="flex-1" onClick={() => handleControl('off')} disabled={!canControl || controlLoading} title={!canControl ? t('relay.requiresOperator') : undefined}>
+                {controlLoading ? <Spinner /> : t('detail.turnOff')}
               </Button>
             </div>
-            {!canControl && <p className="text-xs text-muted mt-2">Equipment control requires operator or admin permissions.</p>}
+            {!canControl && <p className="text-xs text-muted mt-2">{t('detail.controlRequires')}</p>}
           </div>
 
           {/* Connection test */}
           <div className="py-3">
-            <span className={`${ROW_LABEL} block mb-3`}>Connection test</span>
+            <span className={`${ROW_LABEL} block mb-3`}>{t('detail.connectionTest')}</span>
             {testConnectionResult && (
               <InlineNotice type={testConnectionResult.success ? 'success' : 'error'} className="mb-3">
                 <div className="font-medium">{testConnectionResult.message}</div>
-                {testConnectionResult.success && testConnectionResult.latency_ms != null && <div className="text-xs font-mono">Latency: {testConnectionResult.latency_ms} ms</div>}
+                {testConnectionResult.success && testConnectionResult.latency_ms != null && <div className="text-xs font-mono">{t('detail.latency', { value: fmt.withUnit(testConnectionResult.latency_ms, 'ms', { decimals: 0 }) })}</div>}
                 {!testConnectionResult.success && testConnectionResult.error && <div className="text-xs font-mono">{testConnectionResult.error}</div>}
-                {testConnectionResult.last_communication && <div className="text-xs">Last communication: {formatDateTime(testConnectionResult.last_communication)}</div>}
+                {testConnectionResult.last_communication && <div className="text-xs">{t('detail.lastCommValue', { time: formatDateTime(testConnectionResult.last_communication) })}</div>}
               </InlineNotice>
             )}
-            <Button variant="secondary" className="w-full" onClick={handleTestConnection} disabled={!canControl || testConnectionLoading} title={!canControl ? 'Requires operator or admin' : undefined}>
-              {testConnectionLoading ? <><Spinner /> Testing connection…</> : 'Test connection'}
+            <Button variant="secondary" className="w-full" onClick={handleTestConnection} disabled={!canControl || testConnectionLoading} title={!canControl ? t('relay.requiresOperator') : undefined}>
+              {testConnectionLoading ? <><Spinner /> {t('detail.testing')}</> : t('detail.test')}
             </Button>
           </div>
         </div>
       ) : activeTab === 'history' ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
-            <label htmlFor="history-range" className="text-sm font-medium text-ink">Time range</label>
+            <label htmlFor="history-range" className="text-sm font-medium text-ink">{t('detail.timeRange')}</label>
             <select id="history-range" value={timeRange} onChange={(e) => setTimeRange(e.target.value)} className="!py-1.5 min-h-[36px]">
-              <option value="1h">Last hour</option>
-              <option value="24h">Last 24 hours</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
+              <option value="1h">{t('detail.range.1h')}</option>
+              <option value="24h">{t('detail.range.24h')}</option>
+              <option value="7d">{t('detail.range.7d')}</option>
+              <option value="30d">{t('detail.range.30d')}</option>
             </select>
           </div>
 
           {historyLoading ? (
-            <div className="flex items-center justify-center py-8 text-muted text-sm"><Spinner className="h-5 w-5" /><span className="ml-3">Loading history…</span></div>
+            <div className="flex items-center justify-center py-8 text-muted text-sm"><Spinner className="h-5 w-5" /><span className="ms-3">{t('detail.loadingHistory')}</span></div>
           ) : historyError ? (
             <InlineNotice type="error">
               {historyError}
-              <button type="button" onClick={fetchHistory} className="ml-2 underline">Try again</button>
+              <button type="button" onClick={fetchHistory} className="ms-2 underline">{t('common:actions.tryAgain')}</button>
             </InlineNotice>
           ) : historyData.length === 0 ? (
             <div className="text-center py-8">
-              <h4 className="text-sm font-medium text-ink">No readings</h4>
-              <p className="mt-1 text-sm text-muted">No historical data available for the selected time range.</p>
+              <h4 className="text-sm font-medium text-ink">{t('detail.noReadings')}</h4>
+              <p className="mt-1 text-sm text-muted">{t('detail.noHistory')}</p>
             </div>
           ) : (
             <>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-muted font-mono tabular">{historyTotal.toLocaleString()} readings in range</p>
-                <Button variant="ghost" size="sm" onClick={exportHistoryCSV} title="Export history data to CSV">Export CSV</Button>
+                <p className="text-xs text-muted font-mono tabular">{t('detail.readingsInRange', { count: historyTotal, n: fmt.int(historyTotal) })}</p>
+                <Button variant="ghost" size="sm" onClick={exportHistoryCSV} title={t('detail.exportCsvTitle')}>{t('detail.exportCsv')}</Button>
               </div>
 
               {/* Mini chart - one line per metric (chart owned by another agent this wave; left as is) */}
@@ -750,19 +755,19 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
 
                 return (
                   <div className="border border-line rounded-card p-3 bg-field">
-                    <Label className="mb-2">Trend</Label>
+                    <Label className="mb-2">{t('detail.trend')}</Label>
                     {metricNames.length > 1 && (
                       <div className="flex flex-wrap gap-3 mb-2">
                         {metricNames.map((name, i) => (
                           <span key={name} className="flex items-center text-xs text-muted">
-                            <span className="inline-block w-3 h-1 rounded mr-1.5" style={{ backgroundColor: metricColors[i % metricColors.length] }}></span>
-                            {name === '_default' ? 'Value' : name}
+                            <span className="inline-block w-3 h-1 rounded me-1.5" style={{ backgroundColor: metricColors[i % metricColors.length] }}></span>
+                            {name === '_default' ? t('detail.value') : name}
                             {grouped[name][0]?.unit ? ` (${grouped[name][0].unit})` : ''}
                           </span>
                         ))}
                       </div>
                     )}
-                    <svg viewBox={`0 0 600 ${chartHeight}`} className="w-full h-auto">
+                    <svg viewBox={`0 0 600 ${chartHeight}`} className="w-full h-auto" dir="ltr">
                       <defs>
                         {metricNames.map((_, i) => (
                           <linearGradient key={i} id={`chartGrad${i}`} x1="0" y1="0" x2="0" y2="1">
@@ -808,26 +813,26 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
                   <div className={`grid gap-3 ${metricKeys.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
                     {metricKeys.map(key => {
                       const s = historyStats[key] || {};
-                      const label = key === '_default' ? 'Value' : key;
+                      const label = key === '_default' ? t('detail.value') : key;
                       const has = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
                       return (
                         <Card key={key} padding="sm" rail="idle">
                           <Label className="truncate mb-2" title={label}>{label}</Label>
                           <div className="grid grid-cols-3 gap-2 items-end">
                             <div>
-                              <Label className="!text-[10px]">Avg</Label>
+                              <Label className="!text-[10px]">{t('detail.avg')}</Label>
                               <Reading size="sm" value={has(s.avg) ? Number(s.avg) : null} precision={2} unit={s.unit || undefined} unknown={!has(s.avg)} />
                             </div>
                             <div>
-                              <Label className="!text-[10px]">Range</Label>
-                              <span className="inline-flex items-baseline gap-1 flex-wrap">
+                              <Label className="!text-[10px]">{t('detail.range.label')}</Label>
+                              <span className="inline-flex items-baseline gap-1 flex-wrap" dir="ltr">
                                 <Reading size="sm" value={has(s.min) ? Number(s.min) : null} precision={1} unknown={!has(s.min)} />
                                 <span className="text-xs text-muted">–</span>
                                 <Reading size="sm" value={has(s.max) ? Number(s.max) : null} precision={1} unit={s.unit || undefined} unknown={!has(s.max)} />
                               </span>
                             </div>
                             <div>
-                              <Label className="!text-[10px]">Count</Label>
+                              <Label className="!text-[10px]">{t('detail.count')}</Label>
                               <Reading size="sm" value={has(s.count) ? Number(s.count) : null} precision={0} unknown={!has(s.count)} />
                             </div>
                           </div>
@@ -841,22 +846,22 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
               {(() => {
                 const hasNames = historyData.some(r => r.name);
                 return (
-                  <Card padding="none">
+                  <Card padding="none" dir="ltr">
                     <table className="w-full table-fixed">
                       <thead className="bg-field border-b border-line">
                         <tr>
-                          <th className="px-3 py-2 text-left">Timestamp</th>
-                          {hasNames && <th className="px-3 py-2 text-left">Metric</th>}
-                          <th className="px-3 py-2 text-right w-24">Value</th>
-                          <th className="px-3 py-2 text-left w-16">Unit</th>
+                          <th className="px-3 py-2 text-start">{t('detail.col.timestamp')}</th>
+                          {hasNames && <th className="px-3 py-2 text-start">{t('detail.col.metric')}</th>}
+                          <th className="px-3 py-2 text-end w-24">{t('detail.value')}</th>
+                          <th className="px-3 py-2 text-start w-16">{t('mapping.unit')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-line">
                         {historyData.map((reading, idx) => (
                           <tr key={reading.id || idx} className="hover:bg-field/70">
-                            <td className="px-3 py-1.5 text-xs font-mono tabular text-ink truncate">{formatDateTime(reading.timestamp)}</td>
-                            {hasNames && <td className="px-3 py-1.5 text-xs text-muted truncate">{reading.name || '—'}</td>}
-                            <td className="px-3 py-1.5 text-sm font-mono tabular text-ink text-right">{reading.value}</td>
+                            <td className="px-3 py-1.5 text-xs font-mono tabular text-ink truncate"><span dir="auto">{formatDateTime(reading.timestamp)}</span></td>
+                            {hasNames && <td dir="auto" className="px-3 py-1.5 text-xs text-muted truncate">{reading.name || '—'}</td>}
+                            <td className="px-3 py-1.5 text-sm font-mono tabular text-ink text-end">{reading.value}</td>
                             <td className="px-3 py-1.5 text-xs text-muted">{reading.unit || '—'}</td>
                           </tr>
                         ))}
@@ -865,12 +870,12 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
                     {historyData.length < historyTotal && (
                       <div className="bg-field px-3 py-2 text-center border-t border-line">
                         <Button variant="secondary" size="sm" onClick={loadMoreHistory} disabled={loadingMore}>
-                          {loadingMore ? <><Spinner /> Loading…</> : `Load more (showing ${historyData.length} of ${historyTotal})`}
+                          {loadingMore ? <><Spinner /> {t('common:status.loading')}</> : t('detail.loadMore', { shown: historyData.length, total: historyTotal })}
                         </Button>
                       </div>
                     )}
                     {historyData.length >= historyTotal && historyTotal > 0 && (
-                      <div className="bg-field px-3 py-2 text-xs text-muted text-center border-t border-line">All {historyTotal} readings loaded</div>
+                      <div className="bg-field px-3 py-2 text-xs text-muted text-center border-t border-line">{t('detail.allLoaded', { count: historyTotal })}</div>
                     )}
                   </Card>
                 );
@@ -881,34 +886,34 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
       ) : activeTab === 'errors' ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-ink">Error history</span>
+            <span className="text-sm font-medium text-ink">{t('detail.errorHistory')}</span>
             <label className="flex items-center gap-2 cursor-pointer min-h-[36px] text-sm text-muted">
               <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} className="h-4 w-4" />
-              Show resolved
+              {t('detail.showResolved')}
             </label>
           </div>
 
           {errorLogsLoading ? (
-            <div className="flex items-center justify-center py-8 text-muted text-sm"><Spinner className="h-5 w-5" /><span className="ml-3">Loading error logs…</span></div>
+            <div className="flex items-center justify-center py-8 text-muted text-sm"><Spinner className="h-5 w-5" /><span className="ms-3">{t('detail.loadingErrors')}</span></div>
           ) : errorLogsError ? (
             <InlineNotice type="error">
               {errorLogsError}
-              <button type="button" onClick={fetchErrorLogs} className="ml-2 underline">Try again</button>
+              <button type="button" onClick={fetchErrorLogs} className="ms-2 underline">{t('common:actions.tryAgain')}</button>
             </InlineNotice>
           ) : errorLogs.length === 0 ? (
             <div className="text-center py-8">
-              <h4 className="text-sm font-medium text-ink">No errors</h4>
-              <p className="mt-1 text-sm text-muted">{showResolved ? 'No error logs found for this equipment.' : 'No active errors for this equipment.'}</p>
+              <h4 className="text-sm font-medium text-ink">{t('detail.noErrors')}</h4>
+              <p className="mt-1 text-sm text-muted">{showResolved ? t('detail.noErrorLogs') : t('detail.noActiveErrors')}</p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <Card padding="sm" rail={errorLogs.some(e => !e.resolved) ? 'alarm' : 'idle'}>
-                  <Label>Active</Label>
+                  <Label>{t('detail.active')}</Label>
                   <Reading size="md" value={errorLogs.filter(e => !e.resolved).length} precision={0} />
                 </Card>
                 <Card padding="sm" rail="idle">
-                  <Label>Resolved</Label>
+                  <Label>{t('detail.resolved')}</Label>
                   <Reading size="md" value={errorLogs.filter(e => e.resolved).length} precision={0} />
                 </Card>
               </div>
@@ -919,24 +924,24 @@ export default function EquipmentDetailModal({ isOpen, onClose, equipment, token
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center rounded border border-line bg-field px-1.5 py-0.5 text-xs font-mono text-muted">{errorLog.error_type || 'other'}</span>
-                          {errorLog.resolved && <StatusPill state="ok" filled={false} text="Resolved" />}
+                          <span className="inline-flex items-center rounded border border-line bg-field px-1.5 py-0.5 text-xs font-mono text-muted">{errorLog.error_type || t('detail.errorTypeOther')}</span>
+                          {errorLog.resolved && <StatusPill state="ok" filled={false} text={t('detail.resolved')} />}
                         </div>
                         <p className={`mt-1 text-sm ${errorLog.resolved ? 'text-muted' : 'text-ink'}`}>{errorLog.message}</p>
                         {errorLog.details && <p className="mt-1 text-xs text-muted font-mono break-all">{errorLog.details}</p>}
                         <p className="mt-1 text-xs text-muted font-mono tabular">
                           {formatDateTime(errorLog.created_at)}
-                          {errorLog.resolved_at && <span className="ml-2">· resolved {formatDateTime(errorLog.resolved_at)}</span>}
+                          {errorLog.resolved_at && <span className="ms-2">· {t('detail.resolvedAt', { time: formatDateTime(errorLog.resolved_at) })}</span>}
                         </p>
                       </div>
                       {!errorLog.resolved && canControl && (
-                        <Button variant="secondary" size="sm" onClick={() => handleResolveError(errorLog.id)} title="Mark as resolved">Resolve</Button>
+                        <Button variant="secondary" size="sm" onClick={() => handleResolveError(errorLog.id)} title={t('detail.markResolved')}>{t('detail.resolve')}</Button>
                       )}
                     </div>
                   </Card>
                 ))}
               </ul>
-              {errorLogs.length >= 50 && <p className="text-center text-xs text-muted">Showing most recent 50 errors</p>}
+              {errorLogs.length >= 50 && <p className="text-center text-xs text-muted">{t('detail.showingRecent', { count: 50 })}</p>}
             </>
           )}
         </div>

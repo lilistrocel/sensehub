@@ -1,1 +1,45 @@
-{}
+{
+  "title": "Analytics Export",
+  "subtitle": "Download an Excel-friendly ZIP of historical data, pre-aggregated for analysis. Raw rows stay in the database; only summaries are exported (typically a few MB).",
+  "domainsTitle": "Data domains",
+  "domain": {
+    "sensors": {
+      "label": "Sensor readings",
+      "hint": "substrate moisture, EC, temp, humidity, pH (aggregated by hour/day)"
+    },
+    "fertigation": {
+      "label": "Fertigation events",
+      "hint": "water + nutrient volumes per zone, computed from relay events"
+    },
+    "automations": {
+      "label": "Automation history",
+      "hint": "success / failure / skipped per automation (with reasons in raw view)"
+    },
+    "reference": {
+      "label": "Reference data",
+      "hint": "lab readings, AMIC cycles, agronomist reports, operational plans"
+    }
+  },
+  "trendTitle": "Long-horizon trend file",
+  "trendInclude": "Include <code>trend/</code> folder with all-time daily aggregates",
+  "recentTitle": "Recent detail window",
+  "last": "Last",
+  "window_one": "{{count}} day",
+  "window_other": "{{count}} days",
+  "granularity": "granularity:",
+  "hourly": "hourly aggregates",
+  "hourlyHint": "(small files, smooth)",
+  "raw": "raw samples",
+  "rawHint": "(big files, every poll)",
+  "rawWarning_one": "Raw samples for {{count}} day may produce a multi-million-row file. Excel can only open files with up to ~1M rows per sheet.",
+  "rawWarning_other": "Raw samples for {{count}} days may produce a multi-million-row file. Excel can only open files with up to ~1M rows per sheet.",
+  "building": "Building ZIP…",
+  "download": "Download CSV pack",
+  "zipNote": "Each ZIP contains a <code>README.txt</code> with row counts and a column dictionary. CSVs are UTF-8 with BOM and ISO timestamps for Excel compatibility.",
+  "insideTitle": "What's inside the ZIP?",
+  "toast": {
+    "pickDomain": "Pick at least one data domain",
+    "ready": "Export ready — check your downloads",
+    "failed": "Export failed: {{error}}"
+  }
+}

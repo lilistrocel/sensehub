@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { Button, Card, StatusPill } from '../../ui';
 import ConfirmDialog from '../ConfirmDialog';
-import InterlockBadge, { ALL_ON_INTERLOCK_TITLE } from '../InterlockBadge';
+import InterlockBadge from '../InterlockBadge';
 import { useSettings } from '../../context/SettingsContext';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { useToast } from '../../context/ToastContext';
@@ -11,9 +12,6 @@ import ModalShell, { InlineNotice, Spinner } from './ModalShell';
 import {
   getCoilChannels, getEquipmentPresentation, parseCachedRelayStates, useNow, RelayLed, UnverifiedPill, isEquipmentDisabled
 } from './equipmentStatus';
-
-const UNCONFIRMED_TOAST = 'Written but not confirmed — check the board';
-const VIEWER_TITLE = 'Requires operator or admin';
 
 function parseModbusAddress(address) {
   if (!address) return null;
@@ -30,6 +28,10 @@ function parseModbusAddress(address) {
  * pending (amber ring) until a confirmed `relay_state_changed` arrives.
  */
 export default function RelayControlModal({ isOpen, onClose, equipment, token, user, onUpdate }) {
+  const { t } = useTranslation('equipment');
+  const UNCONFIRMED_TOAST = t('relay.unconfirmed');
+  const VIEWER_TITLE = t('relay.requiresOperator');
+  const ALL_ON_INTERLOCK_TITLE = t('relay.allOnInterlockedTitle');
   const { formatDateTime, formatTime } = useSettings();
   const { subscribe } = useWebSocket();
   const { showWarning, showError } = useToast();
@@ -57,9 +59,9 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
     formatSinceFn: (d, sameDay) => (sameDay ? formatTime(d) : formatDateTime(d)),
   });
   // Whole-board reasons the state cannot be trusted.
-  const boardUnknownReason = disabled ? 'Board is disabled'
-    : writeOnly ? 'Board is write-only (no read-back)'
-    : equipment?.status === 'offline' ? 'Board is offline'
+  const boardUnknownReason = disabled ? t('relay.boardDisabled')
+    : writeOnly ? t('relay.boardWriteOnly')
+    : equipment?.status === 'offline' ? t('relay.boardOffline')
     : presentation.stale ? presentation.text
     : null;
   const boardUnknown = boardUnknownReason !== null;
@@ -99,7 +101,7 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to read coil states');
+        throw new Error(data.error || t('relay.readFailedError'));
       }
       const result = await response.json();
       const m = {};
@@ -115,7 +117,7 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
     } finally {
       setLoading(false);
     }
-  }, [equipment, channels, canControl, writeOnly, disabled, modbusConfig?.host, modbusConfig?.port, token, applyStates, setAllUnknown]);
+  }, [equipment, channels, canControl, writeOnly, disabled, modbusConfig?.host, modbusConfig?.port, token, applyStates, setAllUnknown, t]);
 
   // Initialise from the poll's cached read-back, then refresh live.
   useEffect(() => {
@@ -176,18 +178,18 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
         body: JSON.stringify({ channel: channel.address, state: newState })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || data.message || 'Failed to write coil');
+      if (!response.ok) throw new Error(data.error || data.message || t('relay.writeFailed'));
 
       const label = getChannelDisplayName(channel);
       if (writeOnly) {
         markPending(equipment.id, channel.address, { writeOnly: true });
         setCommanded(prev => ({ ...prev, [channel.address]: newState }));
-        flash('caution', `${label}: ${newState ? 'ON' : 'OFF'} command sent (no read-back)`);
+        flash('caution', t('relay.sentNoReadback', { label, state: t(newState ? 'common:status.on' : 'common:status.off') }));
       } else if (data.confirmed === true) {
         const rb = typeof data.readback === 'boolean' ? data.readback : !!data.state;
         applyStates({ [channel.address]: rb });
         clearPending([relayKey(equipment.id, channel.address)]);
-        flash('success', `${label} ${rb ? 'ON' : 'OFF'} (confirmed by read-back)`);
+        flash('success', t('relay.confirmed', { label, state: t(rb ? 'common:status.on' : 'common:status.off') }));
       } else {
         markPending(equipment.id, channel.address, { writeOnly: false });
         applyStates({ [channel.address]: null });
@@ -214,13 +216,13 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
         body: JSON.stringify({ state })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || data.message || 'Failed to write coils');
+      if (!response.ok) throw new Error(data.error || data.message || t('relay.writeAllFailed'));
 
       const addrs = channels.map(c => c.address);
       if (writeOnly) {
         markPending(equipment.id, addrs, { writeOnly: true });
         setCommanded(prev => { const n = { ...prev }; addrs.forEach(a => { n[a] = state; }); return n; });
-        flash('caution', `All relays ${state ? 'ON' : 'OFF'} command sent (no read-back)`);
+        flash('caution', t('relay.allSentNoReadback', { state: t(state ? 'common:status.on' : 'common:status.off') }));
       } else {
         const perChannel = Array.isArray(data.channelStates) ? data.channelStates : [];
         const confirmedMap = {};
@@ -234,12 +236,12 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
         if (pendingAddrs.length) markPending(equipment.id, pendingAddrs, { writeOnly: false });
         applyStates({ ...unknownMap, ...confirmedMap });
         if (confirmedKeys.length) clearPending(confirmedKeys.map(k => relayKey(equipment.id, k)));
-        if (data.confirmed === true) flash('success', `All relays ${state ? 'ON' : 'OFF'} (confirmed by read-back)`);
-        else showWarning(UNCONFIRMED_TOAST, 'All relays');
+        if (data.confirmed === true) flash('success', t('relay.allConfirmed', { state: t(state ? 'common:status.on' : 'common:status.off') }));
+        else showWarning(UNCONFIRMED_TOAST, t('relay.allRelays'));
       }
       onUpdate?.();
     } catch (err) {
-      showError(err.message, `All relays ${state ? 'on' : 'off'}`);
+      showError(err.message, t(state ? 'relay.allRelaysOn' : 'relay.allRelaysOff'));
     } finally {
       setActionLoading(prev => ({ ...prev, [key]: false }));
     }
@@ -249,66 +251,70 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
 
   const busyAll = !!(actionLoading.allOn || actionLoading.allOff);
   const controlsDisabled = !canControl || disabled;
-  const controlTitle = !canControl ? VIEWER_TITLE : disabled ? 'Board is disabled' : undefined;
+  const controlTitle = !canControl ? VIEWER_TITLE : disabled ? t('relay.boardDisabled') : undefined;
 
   return (
     <ModalShell
       open={isOpen}
       onClose={onClose}
-      title="Relay control"
-      subtitle={equipment?.name || 'Modbus relay device'}
+      title={t('relay.title')}
+      subtitle={equipment?.name || t('relay.defaultSubtitle')}
       icon={(
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       )}
-      footer={<Button variant="secondary" onClick={onClose}>Close</Button>}
+      footer={<Button variant="secondary" onClick={onClose}>{t('common:actions.close')}</Button>}
     >
       {/* Board status */}
       <Card rail={presentation.rail} padding="sm" className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill state={presentation.pill} filled={presentation.filled} text={presentation.text} />
-          {writeOnly && <StatusPill state="caution" filled={false} text="Write-only · no read-back" />}
+          {writeOnly && <StatusPill state="caution" filled={false} text={t('relay.writeOnlyPill')} />}
           {!writeOnly && !disabled && canControl && (
             readError
-              ? <StatusPill state="alarm" filled={false} text="Read failed" />
+              ? <StatusPill state="alarm" filled={false} text={t('relay.readFailed')} />
               : readAt
-                ? <StatusPill state="ok" filled text={`Read ${formatTime(new Date(readAt))}`} />
-                : loading ? <StatusPill state="idle" filled={false} text="Reading…" /> : null
+                ? <StatusPill state="ok" filled text={t('relay.readAt', { time: formatTime(new Date(readAt)) })} />
+                : loading ? <StatusPill state="idle" filled={false} text={t('relay.reading')} /> : null
           )}
           {canControl && !writeOnly && !disabled && (
-            <Button variant="ghost" size="sm" onClick={fetchLive} disabled={loading} className="ml-auto" title="Read all coils now">
+            <Button variant="ghost" size="sm" onClick={fetchLive} disabled={loading} className="ms-auto" title={t('relay.readAllNow')}>
               {loading ? <Spinner /> : (
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               )}
-              Refresh
+              {t('common:actions.refresh')}
             </Button>
           )}
         </div>
         <p className="text-xs text-muted mt-2 font-mono">
-          {modbusConfig ? `${modbusConfig.host}:${modbusConfig.port} · unit ${equipment?.slave_id || 1}` : 'no address'}
-          {equipment?.last_communication && ` · last comm ${formatDateTime(equipment.last_communication)}`}
+          {modbusConfig ? `${modbusConfig.host}:${modbusConfig.port} · ${t('relay.unit', { id: equipment?.slave_id || 1 })}` : t('relay.noAddress')}
+          {equipment?.last_communication && ` · ${t('relay.lastComm', { time: formatDateTime(equipment.last_communication) })}`}
         </p>
         {readError && <p className="text-xs text-alarm-600 dark:text-alarm-300 mt-1">{readError}</p>}
       </Card>
 
       {boardUnknown && (
         <InlineNotice type="caution" className="mb-4">
-          {boardUnknownReason}. Relay states are <strong>unknown</strong>, not off
-          {writeOnly ? ' — the values below are what was last commanded, not what the board reports.' : '.'}
+          <Trans
+            t={t}
+            i18nKey={writeOnly ? 'relay.boardUnknownWriteOnly' : 'relay.boardUnknown'}
+            values={{ reason: boardUnknownReason }}
+            components={{ b: <strong /> }}
+          />
         </InlineNotice>
       )}
       {!canControl && (
-        <InlineNotice type="info" className="mb-4">View only — switching relays requires operator or admin.</InlineNotice>
+        <InlineNotice type="info" className="mb-4">{t('relay.viewOnly')}</InlineNotice>
       )}
       {message && <InlineNotice type={message.type} className="mb-4">{message.text}</InlineNotice>}
 
       {channels.length === 0 ? (
         <div className="text-center py-8">
-          <h4 className="text-sm font-medium text-ink">No relay channels configured</h4>
-          <p className="mt-1 text-sm text-muted">This device has no coil mappings with read/write access.</p>
+          <h4 className="text-sm font-medium text-ink">{t('relay.noChannels')}</h4>
+          <p className="mt-1 text-sm text-muted">{t('relay.noChannelsHelp')}</p>
         </div>
       ) : (
         <>
@@ -323,7 +329,7 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
                 title={interlockPairPresent ? ALL_ON_INTERLOCK_TITLE : controlTitle}
                 data-testid="relay-all-on"
               >
-                {actionLoading.allOn ? <Spinner /> : null} All on
+                {actionLoading.allOn ? <Spinner /> : null} {t('relay.allOn')}
               </Button>
               <Button
                 variant="secondary"
@@ -333,12 +339,12 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
                 title={controlTitle}
                 data-testid="relay-all-off"
               >
-                {actionLoading.allOff ? <Spinner /> : null} All off
+                {actionLoading.allOff ? <Spinner /> : null} {t('relay.allOff')}
               </Button>
             </div>
             {interlockPairPresent && (
               <p className="mt-1.5 text-xs text-muted flex items-center gap-1">
-                <InterlockBadge /> All on is disabled: this board has interlocked channels that can never be on together.
+                <InterlockBadge /> {t('relay.allOnInterlocked')}
               </p>
             )}
           </div>
@@ -356,7 +362,7 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
               const rail = (isPending && !pendingWriteOnly) ? 'caution'
                 : channel.unverified ? 'caution'
                 : state === true ? 'ok' : state === false ? 'idle' : 'stale';
-              const stateText = state === true ? 'ON' : state === false ? 'OFF' : '—';
+              const stateText = state === true ? t('common:status.on') : state === false ? t('common:status.off') : '—';
               return (
                 <Card
                   as="li"
@@ -371,46 +377,46 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
                     <RelayLed state={state} pending={isPending && !pendingWriteOnly} />
                     <div className="min-w-0">
                       <div className="font-medium text-ink flex items-center gap-1.5 flex-wrap">
-                        <span className="truncate">{getChannelDisplayName(channel)}</span>
+                        <span dir="auto" className="truncate">{getChannelDisplayName(channel)}</span>
                         {partnerLabel && <InterlockBadge partnerLabel={partnerLabel} />}
                         {channel.unverified && <UnverifiedPill />}
-                        {mappingDisabled && <StatusPill state="idle" text="disabled" />}
+                        {mappingDisabled && <StatusPill state="idle" text={t('relay.channelDisabled')} />}
                       </div>
                       <div className="text-xs text-muted font-mono">
-                        {channel.label && channel.name && channel.label !== channel.name ? `${channel.name} · ` : ''}reg {addr}
+                        {channel.label && channel.name && channel.label !== channel.name ? `${channel.name} · ` : ''}{t('relay.reg', { addr })}
                         {writeOnly && commanded[addr] !== undefined && (
-                          <span className="ml-2">commanded {commanded[addr] ? 'ON' : 'OFF'}</span>
+                          <span className="ms-2">{t('relay.commanded', { state: t(commanded[addr] ? 'common:status.on' : 'common:status.off') })}</span>
                         )}
                         {isPending && (
-                          <span className={`ml-2 font-sans ${pendingWriteOnly ? 'text-muted' : 'text-caution-600 dark:text-caution-300'}`}>
-                            {pendingWriteOnly ? '(command sent, no read-back)' : '(command sent, awaiting confirmation)'}
+                          <span className={`ms-2 font-sans ${pendingWriteOnly ? 'text-muted' : 'text-caution-600 dark:text-caution-300'}`}>
+                            {pendingWriteOnly ? t('relay.pendingNoReadback') : t('relay.pendingAwaiting')}
                           </span>
                         )}
-                        {!isPending && state === null && !writeOnly && <span className="ml-2 font-sans">state unknown</span>}
+                        {!isPending && state === null && !writeOnly && <span className="ms-2 font-sans">{t('led.unknown')}</span>}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-mono tabular text-sm text-ink w-8 text-right" aria-label={`state ${stateText}`}>{stateText}</span>
+                    <span className="font-mono tabular text-sm text-ink min-w-[2rem] whitespace-nowrap text-end" aria-label={t('relay.stateAria', { state: stateText })}>{stateText}</span>
                     {state === null ? (
                       // Unknown state: intent must be explicit, never a blind toggle.
                       <div className="flex gap-1">
-                        <Button variant="secondary" size="sm" onClick={() => controlChannel(channel, true)} disabled={rowDisabled} title={controlTitle} className="min-h-touch">On</Button>
-                        <Button variant="secondary" size="sm" onClick={() => controlChannel(channel, false)} disabled={rowDisabled} title={controlTitle} className="min-h-touch">Off</Button>
+                        <Button variant="secondary" size="sm" onClick={() => controlChannel(channel, true)} disabled={rowDisabled} title={controlTitle} className="min-h-touch">{t('relay.on')}</Button>
+                        <Button variant="secondary" size="sm" onClick={() => controlChannel(channel, false)} disabled={rowDisabled} title={controlTitle} className="min-h-touch">{t('relay.off')}</Button>
                       </div>
                     ) : (
                       <button
                         type="button"
                         role="switch"
                         aria-checked={state === true}
-                        aria-label={`${getChannelDisplayName(channel)} ${state ? 'on' : 'off'}`}
+                        aria-label={t('relay.switchAria', { name: getChannelDisplayName(channel), state: t(state ? 'led.on' : 'led.off') })}
                         onClick={() => controlChannel(channel, !state)}
                         disabled={rowDisabled}
                         title={controlTitle}
                         className={`relative inline-flex items-center h-11 w-[68px] shrink-0 rounded-full p-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${state ? 'bg-state-ok' : 'bg-gray-300 dark:bg-gray-600'}`}
                       >
-                        <span className={`inline-flex items-center justify-center h-9 w-9 rounded-full bg-white shadow transform transition-transform ${state ? 'translate-x-[24px]' : 'translate-x-0'}`}>
+                        <span className={`inline-flex items-center justify-center h-9 w-9 rounded-full bg-white shadow transform transition-transform ${state ? 'translate-x-[24px] rtl:-translate-x-[24px]' : 'translate-x-0'}`}>
                           {actionLoading[addr] && <Spinner className="h-4 w-4 text-muted" />}
                         </span>
                       </button>
@@ -425,13 +431,19 @@ export default function RelayControlModal({ isOpen, onClose, equipment, token, u
 
       <ConfirmDialog
         open={confirmAll !== null}
-        title={`Turn all relays ${confirmAll ? 'ON' : 'OFF'}?`}
+        title={confirmAll ? t('relay.confirmTitleOn') : t('relay.confirmTitleOff')}
         body={(
-          <>This will switch every relay on <strong>{equipment?.name || 'this device'}</strong> {confirmAll ? 'on' : 'off'} ({channels.length} channels):</>
+          <Trans
+            t={t}
+            i18nKey={confirmAll ? 'relay.confirmBodyOn' : 'relay.confirmBodyOff'}
+            count={channels.length}
+            values={{ name: equipment?.name || t('relay.thisDevice'), count: channels.length }}
+            components={{ b: <strong dir="auto" /> }}
+          />
         )}
         items={channels.map(c => getChannelDisplayName(c))}
         variant={confirmAll ? 'primary' : 'danger'}
-        confirmLabel={`Turn all ${confirmAll ? 'on' : 'off'}`}
+        confirmLabel={confirmAll ? t('relay.confirmOn') : t('relay.confirmOff')}
         busy={busyAll}
         onCancel={() => setConfirmAll(null)}
         onConfirm={() => {

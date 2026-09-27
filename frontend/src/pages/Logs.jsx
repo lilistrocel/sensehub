@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useFormat } from '../i18n/useFormat';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -22,19 +24,20 @@ const POLL_MS = 10000;
 
 const selectCls = 'w-full min-h-touch px-3 py-2 bg-field text-ink border border-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-500';
 
+// Labels come from t(`range.${id}`) / t(`preset.${id}`) at render.
 const RANGES = [
-  { id: 'today', label: 'Today' },
-  { id: '24h', label: '24 h' },
-  { id: '7d', label: '7 days' },
-  { id: '30d', label: '30 days' },
-  { id: 'custom', label: 'Custom' },
+  { id: 'today' },
+  { id: '24h' },
+  { id: '7d' },
+  { id: '30d' },
+  { id: 'custom' },
 ];
 
 const PRESETS = [
-  { id: 'irrigation-today', label: 'Who changed irrigation today', filters: { range: 'today', category: 'irrigation,dosing', actor_type: 'user' } },
-  { id: 'stops', label: 'Stop All / emergency presses', filters: { range: '30d', action: 'stop_all,emergency_stop,rearm,irrigation.stop' } },
-  { id: 'settings', label: 'Settings changes', filters: { range: '30d', category: 'settings' } },
-  { id: 'failed-logins', label: 'Failed sign-ins', filters: { range: '30d', action: 'auth.login_failed' } },
+  { id: 'irrigation-today', filters: { range: 'today', category: 'irrigation,dosing', actor_type: 'user' } },
+  { id: 'stops', filters: { range: '30d', action: 'stop_all,emergency_stop,rearm,irrigation.stop' } },
+  { id: 'settings', filters: { range: '30d', category: 'settings' } },
+  { id: 'failed-logins', filters: { range: '30d', action: 'auth.login_failed' } },
 ];
 
 const FILTER_KEYS = ['range', 'from', 'to', 'category', 'actor', 'actor_type', 'target_type', 'target_id', 'action', 'q', 'severity'];
@@ -75,6 +78,9 @@ function LegendItem({ shape, tone, label }) {
 }
 
 export default function Logs() {
+  const { t, i18n } = useTranslation('logs');
+  const fmt = useFormat();
+  const lng = i18n.language;
   const { token, user } = useAuth();
   const { timezone } = useSettings();
   const { subscribe } = useWebSocket() || {};
@@ -150,7 +156,7 @@ export default function Logs() {
       setCursor(d.next_cursor || null);
       setHasMore(!!d.has_more && !!d.next_cursor);
     } catch (e) {
-      showError(e.message, 'Could not load older entries');
+      showError(e.message, t('toast.loadOlderFailed'));
     } finally {
       setLoadingMore(false);
     }
@@ -208,8 +214,8 @@ export default function Logs() {
   // Debounced text search
   useEffect(() => {
     if ((filters.q || '') === qDraft) return undefined;
-    const t = setTimeout(() => setFilters({ q: qDraft.trim() }), 400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setFilters({ q: qDraft.trim() }), 400);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qDraft]);
 
@@ -226,14 +232,14 @@ export default function Logs() {
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) {
-      showError(e.message, 'CSV export failed');
+      showError(e.message, t('toast.exportFailed'));
     } finally {
       setExporting(false);
     }
   };
 
   // ----- derived --------------------------------------------------------
-  const groups = useMemo(() => groupByDay(items, tz), [items, tz]);
+  const groups = useMemo(() => groupByDay(items, tz, { t, lng }), [items, tz, t, lng]);
   const activePreset = PRESETS.find((p) => Object.entries(p.filters).every(([k, v]) => filters[k] === v)
     && FILTER_KEYS.every((k) => k in p.filters || !filters[k]));
   const targetValue = filters.target_type && filters.target_id ? `${filters.target_type}:${filters.target_id}` : '';
@@ -255,8 +261,8 @@ export default function Logs() {
   if (!canView || forbidden) {
     return (
       <div className="max-w-5xl mx-auto">
-        <h1 className="font-display text-2xl font-bold text-ink mb-4">Logs</h1>
-        <Card rail="idle"><p className="text-sm text-ink">The activity log is visible to operators and admins.</p></Card>
+        <h1 className="font-display text-2xl font-bold text-ink mb-4">{t('title')}</h1>
+        <Card rail="idle"><p className="text-sm text-ink">{t('forbidden')}</p></Card>
       </div>
     );
   }
@@ -265,17 +271,17 @@ export default function Logs() {
     <div className="max-w-6xl mx-auto" data-testid="logs-page">
       <div className="flex flex-wrap justify-between items-center gap-3 mb-3">
         <div className="min-w-0">
-          <h1 className="font-display text-2xl font-bold text-ink">Logs</h1>
-          <p className="text-sm text-muted">Who changed or pressed what, and what the system did — newest first.</p>
+          <h1 className="font-display text-2xl font-bold text-ink">{t('title')}</h1>
+          <p className="text-sm text-muted">{t('subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={exportCsv} disabled={exporting} data-testid="logs-export">{exporting ? 'Exporting…' : 'Export CSV'}</Button>
-          <Button variant="ghost" size="sm" onClick={loadFirst} disabled={loading}>Refresh</Button>
+          <Button variant="secondary" size="sm" onClick={exportCsv} disabled={exporting} data-testid="logs-export">{exporting ? t('exporting') : t('exportCsv')}</Button>
+          <Button variant="ghost" size="sm" onClick={loadFirst} disabled={loading}>{t('common:actions.refresh')}</Button>
         </div>
       </div>
 
       {/* Presets */}
-      <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Quick filters">
+      <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label={t('quickFilters')}>
         {PRESETS.map((p) => (
           <button
             key={p.id}
@@ -287,14 +293,14 @@ export default function Logs() {
             }`}
             data-testid={`preset-${p.id}`}
           >
-            {p.label}
+            {t(`preset.${p.id}`)}
           </button>
         ))}
       </div>
 
       {/* Filters */}
       <Card padding="sm" className="mb-3">
-        <div className="flex flex-wrap gap-1.5 mb-3" role="group" aria-label="Time range">
+        <div className="flex flex-wrap gap-1.5 mb-3" role="group" aria-label={t('timeRange')}>
           {RANGES.map((r) => (
             <button
               key={r.id}
@@ -308,16 +314,16 @@ export default function Logs() {
               }`}
               data-testid={`range-${r.id}`}
             >
-              {r.label}
+              {t(`range.${r.id}`)}
             </button>
           ))}
         </div>
         {filters.range === 'custom' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <label className="block"><Label className="mb-1">From</Label>
+            <label className="block"><Label className="mb-1">{t('filters.from')}</Label>
               <input type="datetime-local" className={selectCls} value={isoToLocalInput(filters.from)} onChange={(e) => setFilters({ from: localInputToIso(e.target.value) })} />
             </label>
-            <label className="block"><Label className="mb-1">To (empty = now)</Label>
+            <label className="block"><Label className="mb-1">{t('filters.to')}</Label>
               <input type="datetime-local" className={selectCls} value={isoToLocalInput(filters.to)} onChange={(e) => setFilters({ to: localInputToIso(e.target.value) })} />
             </label>
           </div>
@@ -325,58 +331,60 @@ export default function Logs() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)] gap-3">
           <div className="flex items-end gap-2">
             <label className="block flex-1 min-w-0">
-              <Label className="mb-1">Search</Label>
-              <input type="search" placeholder="Zone 4, Stop All, fan…" value={qDraft} onChange={(e) => setQDraft(e.target.value)} className={selectCls} data-testid="logs-search" />
+              <Label className="mb-1">{t('common:actions.search')}</Label>
+              <input type="search" placeholder={t('filters.searchPlaceholder')} value={qDraft} onChange={(e) => setQDraft(e.target.value)} className={selectCls} data-testid="logs-search" />
             </label>
             {/* Phone: the four selects fold away behind this button */}
             <Button variant="secondary" className="sm:hidden shrink-0" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters} data-testid="logs-filters-toggle">
-              Filters{filterCount - (filters.q ? 1 : 0) > 0 ? ` (${filterCount - (filters.q ? 1 : 0)})` : ''}
+              {filterCount - (filters.q ? 1 : 0) > 0
+                ? t('filters.toggleCount', { n: filterCount - (filters.q ? 1 : 0) })
+                : t('filters.toggle')}
             </Button>
           </div>
           <label className={`${showFilters ? 'block' : 'hidden'} sm:block`}>
-            <Label className="mb-1">Who</Label>
+            <Label className="mb-1">{t('filters.who')}</Label>
             <select className={selectCls} value={filters.actor_type || ''} onChange={(e) => setFilters({ actor_type: e.target.value })} data-testid="filter-actor-type">
-              <option value="">Everyone</option>
-              <option value="user">People</option>
-              <option value="system">System</option>
+              <option value="">{t('filters.everyone')}</option>
+              <option value="user">{t('filters.people')}</option>
+              <option value="system">{t('filters.system')}</option>
             </select>
           </label>
           <label className={`${showFilters ? 'block' : 'hidden'} sm:block`}>
-            <Label className="mb-1">User</Label>
+            <Label className="mb-1">{t('filters.user')}</Label>
             <select className={selectCls} value={filters.actor || ''} onChange={(e) => setFilters({ actor: e.target.value })} data-testid="filter-actor">
-              <option value="">Any user</option>
+              <option value="">{t('filters.anyUser')}</option>
               {filters.actor && !(facets?.users || []).some((u) => u.email.toLowerCase() === filters.actor.toLowerCase()) && <option value={filters.actor}>{filters.actor}</option>}
-              {(facets?.users || []).map((u) => <option key={u.email} value={u.email}>{u.email}{u.role ? ` (${u.role})` : ''}</option>)}
+              {(facets?.users || []).map((u) => <option key={u.email} value={u.email}>{u.email}{u.role ? ` (${t(`common:role.${u.role}`, { defaultValue: u.role })})` : ''}</option>)}
             </select>
           </label>
           <label className={`${showFilters ? 'block' : 'hidden'} sm:block`}>
-            <Label className="mb-1">Category</Label>
+            <Label className="mb-1">{t('filters.category')}</Label>
             <select className={selectCls} value={filters.category || ''} onChange={(e) => setFilters({ category: e.target.value })} data-testid="filter-category">
-              <option value="">All categories</option>
-              {!categoryKnown && <option value={filters.category}>{filters.category.split(',').map(categoryLabel).join(' + ')}</option>}
-              {Object.keys(CATEGORY_LABELS).map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+              <option value="">{t('filters.allCategories')}</option>
+              {!categoryKnown && <option value={filters.category}>{filters.category.split(',').map((c) => categoryLabel(c, t)).join(' + ')}</option>}
+              {Object.keys(CATEGORY_LABELS).map((c) => <option key={c} value={c}>{categoryLabel(c, t)}</option>)}
             </select>
           </label>
           <label className={`${showFilters ? 'block' : 'hidden'} sm:block`}>
-            <Label className="mb-1">Equipment / automation</Label>
+            <Label className="mb-1">{t('filters.target')}</Label>
             <select
               className={selectCls}
               value={targetValue}
               onChange={(e) => {
-                const [t, id] = e.target.value ? e.target.value.split(':') : ['', ''];
-                setFilters({ target_type: t, target_id: id });
+                const [type, id] = e.target.value ? e.target.value.split(':') : ['', ''];
+                setFilters({ target_type: type, target_id: id });
               }}
               data-testid="filter-target"
             >
-              <option value="">Anything</option>
+              <option value="">{t('filters.anything')}</option>
               {!targetKnown && <option value={targetValue}>{`${filters.target_type} #${filters.target_id}`}</option>}
               {facets?.equipment?.length > 0 && (
-                <optgroup label="Equipment">
+                <optgroup label={t('filters.equipmentGroup')}>
                   {facets.equipment.map((e) => <option key={`e${e.id}`} value={`equipment:${e.id}`}>{e.name}</option>)}
                 </optgroup>
               )}
               {facets?.automations?.length > 0 && (
-                <optgroup label="Automations">
+                <optgroup label={t('filters.automationsGroup')}>
                   {facets.automations.map((a) => <option key={`a${a.id}`} value={`automation:${a.id}`}>{a.name}</option>)}
                 </optgroup>
               )}
@@ -385,9 +393,9 @@ export default function Logs() {
         </div>
         {(filterCount > 0 || filters.action || filters.severity) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
-            {filters.action && <span className="rounded border border-line px-1.5 py-0.5 font-mono">action: {filters.action}</span>}
-            {filters.severity && <span className="rounded border border-line px-1.5 py-0.5 font-mono">severity: {filters.severity}</span>}
-            <Button variant="ghost" size="sm" onClick={() => setFilters({ range: filters.range === 'custom' ? '24h' : filters.range }, { replace: true })} data-testid="logs-clear">Clear filters</Button>
+            {filters.action && <span className="rounded border border-line px-1.5 py-0.5 font-mono">{t('filters.actionChip')} <span dir="ltr">{filters.action}</span></span>}
+            {filters.severity && <span className="rounded border border-line px-1.5 py-0.5 font-mono">{t('filters.severityChip')} {t(`common:severity.${filters.severity}`, { defaultValue: filters.severity })}</span>}
+            <Button variant="ghost" size="sm" onClick={() => setFilters({ range: filters.range === 'custom' ? '24h' : filters.range }, { replace: true })} data-testid="logs-clear">{t('filters.clear')}</Button>
           </div>
         )}
       </Card>
@@ -395,31 +403,31 @@ export default function Logs() {
       {/* Summary + legend */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-2">
         <Label as="p" className="font-mono tabular" data-testid="logs-summary">
-          {items.length.toLocaleString()} shown<span aria-hidden="true"> · </span>{counts.people} by people<span aria-hidden="true"> · </span>{counts.system} system<span aria-hidden="true"> · </span>{counts.problems} failed / refused / critical
-          {liveView && lastRefresh && <><span aria-hidden="true"> · </span>live</>}
+          {t('summary.shown', { n: fmt.int(items.length) })}<span aria-hidden="true"> · </span>{t('summary.people', { n: fmt.int(counts.people) })}<span aria-hidden="true"> · </span>{t('summary.system', { n: fmt.int(counts.system) })}<span aria-hidden="true"> · </span>{t('summary.problems', { n: fmt.int(counts.problems) })}
+          {liveView && lastRefresh && <><span aria-hidden="true"> · </span>{t('summary.live')}</>}
         </Label>
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted" aria-label="Legend">
-          <LegendItem shape="dot" tone="ok" label="Done" />
-          <LegendItem shape="dot" tone="idle" label="Info" />
-          <LegendItem shape="triangle" tone="caution" label="Notable / refused" />
-          <LegendItem shape="square" tone="alarm" label="Failed / critical" />
-          <LegendItem shape="ring" tone="caution" label="Unconfirmed" />
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted" aria-label={t('legend.title')}>
+          <LegendItem shape="dot" tone="ok" label={t('legend.done')} />
+          <LegendItem shape="dot" tone="idle" label={t('legend.info')} />
+          <LegendItem shape="triangle" tone="caution" label={t('legend.notable')} />
+          <LegendItem shape="square" tone="alarm" label={t('legend.failed')} />
+          <LegendItem shape="ring" tone="caution" label={t('legend.unconfirmed')} />
         </p>
       </div>
 
       {auditStart && (!filters.from || filters.from < auditStart) && (
         <p className="mb-2 text-xs text-muted">
-          People's actions are fully recorded from {new Date(auditStart).toLocaleString('en-GB', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Earlier entries marked “Unknown user” come from the request log (device and path only).
+          {t('auditStart.from', { time: fmt.dateTime(auditStart, { timeZone: tz, year: undefined, second: undefined }) })}
         </p>
       )}
       {!auditStart && !loading && (
-        <p className="mb-2 text-xs text-muted">People's actions are recorded from the next change on; earlier entries marked “Unknown user” come from the request log (device and path only).</p>
+        <p className="mb-2 text-xs text-muted">{t('auditStart.none')}</p>
       )}
 
       {error && (
         <Card rail="alarm" className="mb-3">
-          <p className="text-sm text-ink">Could not load the log: {error}</p>
-          <Button variant="secondary" size="sm" className="mt-2" onClick={loadFirst}>Try again</Button>
+          <p className="text-sm text-ink">{t('errors.loadFailed', { error })}</p>
+          <Button variant="secondary" size="sm" className="mt-2" onClick={loadFirst}>{t('common:actions.tryAgain')}</Button>
         </Card>
       )}
 
@@ -427,15 +435,15 @@ export default function Logs() {
         <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" /></div>
       ) : items.length === 0 && !error ? (
         <Card className="text-center text-sm text-muted py-10" data-testid="logs-empty">
-          Nothing matches these filters{filters.range === 'today' ? ' today' : ''}.
-          {hasMore && <div className="mt-3"><Button variant="secondary" size="sm" onClick={loadMore} disabled={loadingMore}>Look further back</Button></div>}
+          {filters.range === 'today' ? t('empty.today') : t('empty.any')}
+          {hasMore && <div className="mt-3"><Button variant="secondary" size="sm" onClick={loadMore} disabled={loadingMore}>{t('empty.lookBack')}</Button></div>}
         </Card>
       ) : (
         <div className="space-y-3" data-testid="logs-list">
           {groups.map((g) => (
             <section key={g.day} aria-labelledby={`day-${g.day}`}>
               <h2 id={`day-${g.day}`} className="sticky top-0 z-10 bg-canvas/95 backdrop-blur py-1 text-label uppercase text-muted">
-                {g.heading} <span className="font-mono normal-case tracking-normal">· {g.items.length}</span>
+                {g.heading} <span className="font-mono normal-case tracking-normal">· {fmt.int(g.items.length)}</span>
               </h2>
               <Card padding="none">
                 <ul>
@@ -451,10 +459,10 @@ export default function Logs() {
 
       {items.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted font-mono tabular">{items.length.toLocaleString()} entries loaded</p>
+          <p className="text-xs text-muted font-mono tabular">{t('footer.loaded', { count: items.length, n: fmt.int(items.length) })}</p>
           {hasMore && (
             <Button variant="secondary" size="sm" onClick={loadMore} disabled={loadingMore} data-testid="logs-more">
-              {loadingMore ? 'Loading…' : 'Load older'}
+              {loadingMore ? t('common:status.loading') : t('footer.loadOlder')}
             </Button>
           )}
         </div>

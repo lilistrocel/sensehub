@@ -1,0 +1,56 @@
+{
+  "title": "تشخيص النظام",
+  "adminOnly": "يتطلب صلاحية المسؤول",
+  "lastRefreshed": "آخر تحديث: {{time}}",
+  "autoRefresh": "تحديث تلقائي (10 ث)",
+  "status": {
+    "online": "متصل",
+    "offline": "غير متصل",
+    "error": "خطأ",
+    "unknown": "غير معروف"
+  },
+  "card": {
+    "services": "الخدمات",
+    "allHealthy": "كلها سليمة",
+    "someIssues": "توجد مشكلات",
+    "cores_zero": "لا أنوية",
+    "cores_one": "نواة واحدة",
+    "cores_two": "نواتان",
+    "cores_few": "{{count}} أنوية",
+    "cores_many": "{{count}} نواة",
+    "cores_other": "{{count}} نواة",
+    "load": "الحمل: {{load}}",
+    "memory": "الذاكرة",
+    "uptime": "مدة التشغيل"
+  },
+  "containers": {
+    "title": "حاويات Docker",
+    "service": "الخدمة",
+    "container": "الحاوية",
+    "status": "الحالة",
+    "port": "المنفذ",
+    "details": "التفاصيل",
+    "up": "يعمل منذ {{time}}"
+  },
+  "internal": {
+    "title": "الخدمات الداخلية",
+    "devices_zero": "لا أجهزة",
+    "devices_one": "جهاز واحد",
+    "devices_two": "جهازان",
+    "devices_few": "{{count}} أجهزة",
+    "devices_many": "{{count}} جهازًا",
+    "devices_other": "{{count}} جهاز"
+  },
+  "info": {
+    "title": "معلومات النظام",
+    "hostname": "اسم المضيف",
+    "platform": "المنصة",
+    "version": "إصدار SenseHub",
+    "cpuLoad": "حمل المعالج (1 د / 5 د / 15 د)",
+    "memoryUsed": "مستخدم {{used}} من {{total}} ({{pct}})",
+    "backendMemory": "ذاكرة الخادم الخلفي (RSS)",
+    "database": "قاعدة البيانات",
+    "connected": "متصلة",
+    "disconnected": "غير متصلة"
+  }
+}

@@ -1,1 +1,101 @@
-{}
+{
+  "title": "التنبيهات",
+  "ackAll": "تأكيد الاطلاع على الكل",
+  "ackAllHelp": "تأكيد الاطلاع على كل التنبيهات المفتوحة المطابقة لمرشّح الخطورة / المعدات الحالي",
+  "acknowledging": "جارٍ التأكيد…",
+  "viewerCannotAck": "لا يستطيع المشاهدون تأكيد الاطلاع على التنبيهات",
+  "loadMore": "تحميل المزيد ({{n}})",
+  "summary": {
+    "open_zero": "لا تنبيهات مفتوحة",
+    "open_one": "تنبيه مفتوح واحد",
+    "open_two": "تنبيهان مفتوحان",
+    "open_few": "{{count}} تنبيهات مفتوحة",
+    "open_many": "{{count}} تنبيهًا مفتوحًا",
+    "open_other": "{{count}} تنبيه مفتوح",
+    "critical_zero": "لا تنبيهات حرجة",
+    "critical_one": "تنبيه حرج واحد",
+    "critical_two": "تنبيهان حرجان",
+    "critical_few": "{{count}} تنبيهات حرجة",
+    "critical_many": "{{count}} تنبيهًا حرجًا",
+    "critical_other": "{{count}} تنبيه حرج",
+    "repeats_zero": "لا تكرارات مدمجة",
+    "repeats_one": "تكرار واحد مدمج",
+    "repeats_two": "تكراران مدمجان",
+    "repeats_few": "{{count}} تكرارات مدمجة",
+    "repeats_many": "{{count}} تكرارًا مدمجًا",
+    "repeats_other": "{{count}} تكرار مدمج",
+    "loaded": "تم تحميل {{loaded}} من {{total}}"
+  },
+  "filters": {
+    "searchPlaceholder": "ابحث في التنبيهات المحمّلة…",
+    "severity": "الخطورة",
+    "allSeverities": "كل درجات الخطورة",
+    "critical": "حرج",
+    "warning": "تحذير",
+    "info": "معلومة",
+    "status": "الحالة",
+    "unacknowledged": "غير مؤكَّدة",
+    "acknowledged": "مؤكَّدة",
+    "allAlerts": "كل التنبيهات",
+    "equipment": "المعدات",
+    "allEquipment": "كل المعدات",
+    "noEquipment": "بلا معدات"
+  },
+  "scope": {
+    "severity": "الخطورة: {{severity}}",
+    "equipment": "المعدات: {{name}}"
+  },
+  "empty": {
+    "noOpen": "لا توجد تنبيهات مفتوحة. تم تأكيد الاطلاع على الكل.",
+    "none": "لا توجد تنبيهات في النظام.",
+    "noMatch": "لا توجد تنبيهات تطابق بحثك."
+  },
+  "footer": {
+    "showing_zero": "عرض {{shown}} من {{total}} تنبيه",
+    "showing_one": "عرض {{shown}} من {{total}} تنبيه",
+    "showing_two": "عرض {{shown}} من {{total}} تنبيه",
+    "showing_few": "عرض {{shown}} من {{total}} تنبيهات",
+    "showing_many": "عرض {{shown}} من {{total}} تنبيهًا",
+    "showing_other": "عرض {{shown}} من {{total}} تنبيه",
+    "loaded": "(تم تحميل {{n}})"
+  },
+  "confirmAll": {
+    "title": "تأكيد الاطلاع على كل التنبيهات المفتوحة؟",
+    "body_zero": "لا توجد تنبيهات مفتوحة تطابق المرشّح الحالي.",
+    "body_one": "سيتم تأكيد الاطلاع على تنبيه مفتوح واحد يطابق المرشّح الحالي. لا يمكن التراجع عن ذلك.",
+    "body_two": "سيتم تأكيد الاطلاع على تنبيهين مفتوحين يطابقان المرشّح الحالي. لا يمكن التراجع عن ذلك.",
+    "body_few": "سيتم تأكيد الاطلاع على {{count}} تنبيهات مفتوحة تطابق المرشّح الحالي. لا يمكن التراجع عن ذلك.",
+    "body_many": "سيتم تأكيد الاطلاع على {{count}} تنبيهًا مفتوحًا يطابق المرشّح الحالي. لا يمكن التراجع عن ذلك.",
+    "body_other": "سيتم تأكيد الاطلاع على {{count}} تنبيه مفتوح يطابق المرشّح الحالي. لا يمكن التراجع عن ذلك.",
+    "confirm": "تأكيد {{n}}"
+  },
+  "toast": {
+    "acknowledged": "تم تأكيد الاطلاع على التنبيه",
+    "acknowledgedMany_zero": "لم يتم تأكيد أي تنبيه",
+    "acknowledgedMany_one": "تم تأكيد الاطلاع على تنبيه واحد",
+    "acknowledgedMany_two": "تم تأكيد الاطلاع على تنبيهين",
+    "acknowledgedMany_few": "تم تأكيد الاطلاع على {{count}} تنبيهات",
+    "acknowledgedMany_many": "تم تأكيد الاطلاع على {{count}} تنبيهًا",
+    "acknowledgedMany_other": "تم تأكيد الاطلاع على {{count}} تنبيه",
+    "ackFailed": "تعذّر تأكيد الاطلاع على التنبيه",
+    "ackAllFailed": "تعذّر تأكيد الاطلاع على التنبيهات"
+  },
+  "errors": {
+    "loadFailed": "تعذّر تحميل التنبيهات: {{error}}"
+  },
+  "card": {
+    "firstSeen": "أول ظهور",
+    "lastSeen": "آخر ظهور",
+    "repeatsTitle_zero": "لم تتكرر هذه الحالة منذ ظهورها أول مرة",
+    "repeatsTitle_one": "تكررت هذه الحالة مرة واحدة منذ ظهورها أول مرة",
+    "repeatsTitle_two": "تكررت هذه الحالة مرتين منذ ظهورها أول مرة",
+    "repeatsTitle_few": "تكررت هذه الحالة {{count}} مرات منذ ظهورها أول مرة",
+    "repeatsTitle_many": "تكررت هذه الحالة {{count}} مرة منذ ظهورها أول مرة",
+    "repeatsTitle_other": "تكررت هذه الحالة {{count}} مرة منذ ظهورها أول مرة",
+    "acknowledge": "تأكيد الاطلاع",
+    "acknowledged": "تم الاطلاع",
+    "acknowledgedBy": "اطّلع عليه {{name}}",
+    "showOriginal": "عرض الأصل (بالإنجليزية)",
+    "showTranslation": "عرض الترجمة"
+  }
+}

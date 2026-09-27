@@ -1,1 +1,105 @@
-{}
+{
+  "title": "Sensör kalibrasyonu",
+  "subtitle": "Ham sensör okumalarını elle yapılan laboratuvar ölçümleriyle gerçek değerlere eşleyin (doğrusal regresyon).",
+  "select": {
+    "equipment": "Ekipman",
+    "metric": "Sensör metriği",
+    "nutrient": "Laboratuvar besini"
+  },
+  "nutrient": {
+    "EC": "EC",
+    "pH": "pH",
+    "nitrate_NO3": "Nitrat (NO3)",
+    "phosphate_PO4": "Fosfat (PO4)",
+    "potassium_K": "Potasyum (K)"
+  },
+  "linear": {
+    "title": "Doğrusal kalibrasyon",
+    "noMetric": "(metrik yok)",
+    "help": "Bu metriğin her okumasına uygulanır: <code>{{formula}}</code>. Bu cihazdaki her metriğin kendi ölçeği/ofseti vardır.",
+    "formula": "gerçek = ham × ölçek + ofset",
+    "scaleLabel": "Ölçek (çarpan)",
+    "offsetLabel": "Ofset (eklenen)",
+    "save": "Kalibrasyonu kaydet",
+    "saved": "Kayıtlı: ölçek {{scale}}, ofset {{offset}}",
+    "readOnly": "Ölçek <b>{{scale}}</b>, ofset <b>{{offset}}</b>",
+    "col": {
+      "metric": "Metrik",
+      "scale": "Ölçek",
+      "offset": "Ofset"
+    }
+  },
+  "stats": {
+    "slope": "Eğim",
+    "multiplier": "çarpan",
+    "intercept": "Kesişim",
+    "offset": "ofset",
+    "r2": "R² (uyum kalitesi)",
+    "goodFit": "iyi uyum",
+    "fairFit": "orta uyum",
+    "needsData": "daha fazla veri gerekli",
+    "points": "Veri noktaları",
+    "matchedPairs": "eşleşen çift"
+  },
+  "latest": {
+    "title": "Son okuma",
+    "line": "Ham sensör: <raw>{{raw}}</raw> → Tahmini gerçek: <cal>{{cal}}</cal>",
+    "recompute": "Kalibrasyonu yeniden hesapla",
+    "recomputing": "Yeniden hesaplanıyor…"
+  },
+  "add": {
+    "title": "Elle ölçüm ekle",
+    "help": "İletkenlik kaleminizle ölçün ve değeri aşağıya girin. Kalibrasyon otomatik olarak yeniden hesaplanır.",
+    "value": "Değer",
+    "unit": "Birim",
+    "when": "Ölçüm zamanı",
+    "now": "Şimdi",
+    "zone": "Bölge (isteğe bağlı)",
+    "noZone": "— Yok —",
+    "submit": "Ölçüm ekle",
+    "adding": "Ekleniyor…"
+  },
+  "chart": {
+    "title": "Son 24 saat",
+    "noData": "Son 24 saatte sensör verisi yok",
+    "raw": "Ham sensör",
+    "calibrated": "Kalibre edilmiş tahmin",
+    "lab": "Elle laboratuvar okuması"
+  },
+  "pairs": {
+    "title": "Kalibrasyon çiftleri",
+    "col": {
+      "labTime": "Lab zamanı",
+      "labValue": "Lab değeri",
+      "sensorValue": "Sensör değeri",
+      "ratio": "Oran",
+      "status": "Durum",
+      "actions": "İşlemler"
+    },
+    "matched": "eşleşti",
+    "noSensorData": "sensör verisi yok",
+    "edit": "Değeri düzenle"
+  },
+  "confirmDelete": "Bu laboratuvar okuması silinsin mi? Kalibrasyon otomatik olarak yeniden hesaplanır.",
+  "editPrompt": "{{time}} laboratuvar değerini düzenle\n\nMevcut: {{value}}",
+  "toast": {
+    "saved": "{{metric}} için kalibrasyon kaydedildi",
+    "recomputed": "Kalibrasyon yeniden hesaplandı",
+    "deleted": "Laboratuvar okuması silindi",
+    "updated": "{{value}} olarak güncellendi",
+    "added": "{{value}} eklendi - kalibrasyon yeniden hesaplandı"
+  },
+  "err": {
+    "loadEquipment": "Ekipman listesi yüklenemedi: {{error}}",
+    "loadZones": "Bölgeler yüklenemedi: {{error}}",
+    "readMappings": "{{name}} için register eşlemeleri okunamadı",
+    "selectedEquipment": "seçili ekipman",
+    "notNumbers": "Ölçek ve ofset sayı olmalıdır",
+    "saveFailed": "Kaydetme başarısız",
+    "recomputeFailed": "Yeniden hesaplama başarısız",
+    "deleteFailed": "Silme başarısız",
+    "invalidNumber": "Geçersiz sayı",
+    "updateFailed": "Güncelleme başarısız",
+    "addFailed": "Okuma eklenemedi"
+  }
+}

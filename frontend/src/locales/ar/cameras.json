@@ -1,1 +1,171 @@
-{}
+{
+  "title": "الكاميرات",
+  "addCamera": "+ إضافة كاميرا",
+  "status": {
+    "online": "متصل",
+    "offline": "غير متصل",
+    "error": "خطأ"
+  },
+  "empty": {
+    "title": "لم تُضبط أي كاميرا بعد",
+    "addFirst": "أضف أول كاميرا"
+  },
+  "snapshot": {
+    "loading": "جارٍ تحميل اللقطة…",
+    "unavailable": "اللقطة غير متاحة",
+    "unavailableWithError": "اللقطة غير متاحة ({{error}})",
+    "loadFailed": "تعذّر تحميل الصورة"
+  },
+  "capture": {
+    "none": "لا توجد لقطة بعد",
+    "last": "آخر لقطة {{time}}",
+    "stale": "لقطة قديمة — آخر حفظ {{time}}"
+  },
+  "card": {
+    "openLive": "فتح البث المباشر",
+    "connectionError": "خطأ في الاتصال",
+    "offline": "غير متصل",
+    "dhcpTip": "تلميح: إذا كانت الكاميرا تستخدم DHCP فربما تغيّر عنوان IP — احجز لها عنوانًا في DHCP أو اضبط IP ثابتًا، ثم حدّث العنوان هنا.",
+    "livePtz": "مباشر / PTZ",
+    "live": "مباشر",
+    "capturing": "جارٍ الالتقاط…",
+    "captureNow": "التقاط الآن",
+    "history": "السجل",
+    "testing": "جارٍ الاختبار…",
+    "test": "اختبار"
+  },
+  "toast": {
+    "loadFailed": "تعذّر جلب الكاميرات (HTTP {{status}})",
+    "snapshotsFailed": "تعذّر تحميل اللقطات المحفوظة",
+    "snapshotsFailedWithError": "تعذّر تحميل اللقطات المحفوظة: {{error}}",
+    "historyFailed": "تعذّر تحميل سجل اللقطات",
+    "historyFailedWithError": "تعذّر تحميل سجل اللقطات: {{error}}",
+    "captureFailed": "فشل الالتقاط",
+    "captured": "تم التقاط لقطة لـ {{name}}",
+    "addFailed": "تعذّرت إضافة الكاميرا",
+    "added": "تمت إضافة الكاميرا",
+    "updateFailed": "تعذّر تحديث الكاميرا",
+    "updated": "تم تحديث الكاميرا",
+    "deleteFailed": "تعذّر حذف الكاميرا",
+    "deleted": "تم حذف الكاميرا",
+    "testFailed": "فشل اختبار الاتصال"
+  },
+  "form": {
+    "addTitle": "إضافة كاميرا",
+    "editTitle": "تعديل الكاميرا",
+    "adding": "جارٍ الإضافة…",
+    "addSubmit": "إضافة الكاميرا",
+    "saveChanges": "حفظ التغييرات",
+    "name": "الاسم",
+    "ip": "عنوان IP",
+    "description": "الوصف",
+    "rtspPort": "منفذ RTSP",
+    "httpPort": "منفذ HTTP",
+    "manufacturer": "الشركة المصنّعة",
+    "model": "الطراز",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "passwordUnchanged": "(بلا تغيير إذا تُركت فارغة)",
+    "passwordNotSaved": "غير محفوظة — أدخلها لتفعيل PTZ",
+    "noPasswordHelp": "لا توجد كلمة مرور محفوظة لهذه الكاميرا. يعتمد PTZ على كلمة مرور بث go2rtc؛ احفظها هنا ليبقى يعمل.",
+    "streamPath": "مسار بث RTSP",
+    "streamPathHelp": "افتراضي Hikvision: ‎/Streaming/Channels/101 (رئيسي) أو ‎/102 (فرعي)",
+    "enabled": "مفعّلة"
+  },
+  "delete": {
+    "title": "حذف هذه الكاميرا؟",
+    "body": "سيُحذف سجل الكاميرا وبثّها من go2rtc. تبقى اللقطات المحفوظة على القرص.",
+    "confirm": "حذف الكاميرا"
+  },
+  "history": {
+    "title": "{{name}} — سجل اللقطات",
+    "count_zero": "لا لقطات (التقاط كل 4 ساعات)",
+    "count_one": "لقطة واحدة (التقاط كل 4 ساعات)",
+    "count_two": "لقطتان (التقاط كل 4 ساعات)",
+    "count_few": "{{count}} لقطات (التقاط كل 4 ساعات)",
+    "count_many": "{{count}} لقطة (التقاط كل 4 ساعات)",
+    "count_other": "{{count}} لقطة (التقاط كل 4 ساعات)",
+    "empty": "لا توجد لقطات بعد. يجري أول التقاط بعد دقيقة من التشغيل، ثم كل 4 ساعات."
+  },
+  "live": {
+    "dialogLabel": "البث المباشر لـ {{name}}",
+    "close": "إغلاق البث المباشر",
+    "authRejected": "رفضت الكاميرا بيانات اعتماد البث — تحقّق من كلمة المرور المحفوظة",
+    "unreachableLastSeen": "تعذّر الوصول إلى الكاميرا — آخر ظهور {{time}}",
+    "unreachableNoSnapshot": "تعذّر الوصول إلى الكاميرا — لا توجد لقطة مسجّلة",
+    "connecting": "جارٍ الاتصال بـ {{name}}…",
+    "mjpegMode": "وضع MJPEG الاحتياطي",
+    "tryMse": "إعادة تجربة MSE",
+    "mseStream": "بث MSE مباشر",
+    "unavailable": "البث المباشر غير متاح",
+    "switchMjpeg": "التبديل إلى MJPEG",
+    "fail": {
+      "streamFailed": "فشل البث",
+      "noVideo": "لم يصل أي فيديو",
+      "wsFailed": "فشل اتصال WebSocket",
+      "streamError": "خطأ في البث",
+      "closedEarly": "أُغلق البث قبل وصول أي فيديو",
+      "mjpegFailed": "فشل بث MJPEG"
+    }
+  },
+  "ptz": {
+    "title": "PTZ",
+    "unreachable": "تعذّر الوصول إلى الكاميرا",
+    "checkingCamera": "جارٍ فحص الكاميرا…",
+    "authRejected": "رفضت الكاميرا كلمة المرور",
+    "authRejectedWith": "رفضت الكاميرا كلمة المرور — {{message}}",
+    "error": {
+      "generic": "خطأ PTZ",
+      "commandFailed": "فشل أمر PTZ {{path}} ({{status}})",
+      "saveFailed": "فشل الحفظ ({{status}})",
+      "deleteFailed": "فشل الحذف ({{status}})"
+    },
+    "toast": {
+      "moving": "جارٍ التحرك إلى الموضع المحفوظ “{{name}}”",
+      "saved": "حُفظ الموضع “{{name}}” برقم #{{id}}",
+      "deleted": "حُذف الموضع المحفوظ “{{name}}”"
+    },
+    "dir": {
+      "up": "إمالة لأعلى",
+      "down": "إمالة لأسفل",
+      "left": "تدوير لليسار",
+      "right": "تدوير لليمين",
+      "upleft": "تدوير لأعلى اليسار",
+      "upright": "تدوير لأعلى اليمين",
+      "downleft": "تدوير لأسفل اليسار",
+      "downright": "تدوير لأسفل اليمين"
+    },
+    "groupLabel": "أدوات PTZ لـ {{name}}",
+    "badge": {
+      "checking": "جارٍ الفحص…",
+      "online": "متصل",
+      "auth": "فشل المصادقة",
+      "error": "خطأ"
+    },
+    "padLabel": "لوحة التدوير/الإمالة. استخدم مفاتيح الأسهم للتدوير والإمالة، و+ و- للتكبير.",
+    "padHelp": "اضغط مطوّلًا على اتجاه للتحريك، واترك للإيقاف. تعمل مفاتيح الأسهم عند التركيز.",
+    "stopMove": "إيقاف الحركة",
+    "zoomIn": "تكبير",
+    "zoomOut": "تصغير",
+    "zoomInKey": "تكبير (+)",
+    "zoomOutKey": "تصغير (−)",
+    "speed": "السرعة {{speed}}",
+    "speedLabel": "سرعة PTZ",
+    "preset": "موضع محفوظ",
+    "presets": "المواضع المحفوظة",
+    "selectPreset": "اختر موضعًا محفوظًا…",
+    "noPresets": "لا مواضع محفوظة",
+    "go": "انتقال",
+    "goTitle": "الانتقال إلى الموضع المحفوظ",
+    "saveAs": "حفظ باسم",
+    "saveAsTitle": "حفظ الموضع الحالي كموضع محفوظ",
+    "deleteTitle": "حذف الموضع المحدد",
+    "overwritePlaceholder": "الكتابة فوق الموضع #{{id}} باسم…",
+    "newPresetPlaceholder": "اسم الموضع الجديد",
+    "presetName": "اسم الموضع",
+    "deleteConfirm": {
+      "title": "حذف الموضع المحفوظ",
+      "body": "حذف الموضع <b>{{name}}</b> من الكاميرا؟ لا يمكن التراجع عن ذلك."
+    }
+  }
+}

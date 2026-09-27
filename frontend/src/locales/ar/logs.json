@@ -1,1 +1,202 @@
-{}
+{
+  "title": "السجلات",
+  "subtitle": "من غيّر أو ضغط ماذا، وماذا فعل النظام — الأحدث أولًا.",
+  "forbidden": "سجل النشاط متاح للمشغّلين والمسؤولين.",
+  "exportCsv": "تصدير CSV",
+  "exporting": "جارٍ التصدير…",
+  "quickFilters": "مرشّحات سريعة",
+  "timeRange": "النطاق الزمني",
+  "preset": {
+    "irrigation-today": "من غيّر الري اليوم",
+    "stops": "ضغطات إيقاف الكل / الطوارئ",
+    "settings": "تغييرات الإعدادات",
+    "failed-logins": "محاولات دخول فاشلة"
+  },
+  "range": {
+    "today": "اليوم",
+    "24h": "24 س",
+    "7d": "7 أيام",
+    "30d": "30 يومًا",
+    "custom": "مخصّص"
+  },
+  "filters": {
+    "from": "من",
+    "to": "إلى (فارغ = الآن)",
+    "searchPlaceholder": "المنطقة 4، إيقاف الكل، مروحة…",
+    "toggle": "المرشّحات",
+    "toggleCount": "المرشّحات ({{n}})",
+    "who": "من",
+    "everyone": "الجميع",
+    "people": "الأشخاص",
+    "system": "النظام",
+    "user": "المستخدم",
+    "anyUser": "أي مستخدم",
+    "category": "الفئة",
+    "allCategories": "كل الفئات",
+    "target": "المعدات / الأتمتة",
+    "anything": "أي شيء",
+    "equipmentGroup": "المعدات",
+    "automationsGroup": "الأتمتة",
+    "actionChip": "الإجراء:",
+    "severityChip": "الخطورة:",
+    "clear": "مسح المرشّحات"
+  },
+  "summary": {
+    "shown": "المعروض {{n}}",
+    "people": "من الأشخاص {{n}}",
+    "system": "من النظام {{n}}",
+    "problems": "فاشل / مرفوض / حرج {{n}}",
+    "live": "مباشر"
+  },
+  "legend": {
+    "title": "المفتاح",
+    "done": "تم",
+    "info": "معلومة",
+    "notable": "لافت / مرفوض",
+    "failed": "فاشل / حرج",
+    "unconfirmed": "غير مؤكَّد"
+  },
+  "auditStart": {
+    "from": "تُسجَّل إجراءات الأشخاص بالكامل منذ {{time}}. الإدخالات الأقدم الموسومة بـ“مستخدم غير معروف” مصدرها سجل الطلبات (الجهاز والمسار فقط).",
+    "none": "تُسجَّل إجراءات الأشخاص بدءًا من التغيير التالي؛ الإدخالات الأقدم الموسومة بـ“مستخدم غير معروف” مصدرها سجل الطلبات (الجهاز والمسار فقط)."
+  },
+  "errors": {
+    "loadFailed": "تعذّر تحميل السجل: {{error}}"
+  },
+  "empty": {
+    "any": "لا شيء يطابق هذه المرشّحات.",
+    "today": "لا شيء يطابق هذه المرشّحات اليوم.",
+    "lookBack": "البحث في فترة أقدم"
+  },
+  "footer": {
+    "loaded_zero": "لا إدخالات محمّلة",
+    "loaded_one": "تم تحميل إدخال واحد",
+    "loaded_two": "تم تحميل إدخالين",
+    "loaded_few": "تم تحميل {{count}} إدخالات",
+    "loaded_many": "تم تحميل {{count}} إدخالًا",
+    "loaded_other": "تم تحميل {{count}} إدخال",
+    "loadOlder": "تحميل الأقدم"
+  },
+  "toast": {
+    "loadOlderFailed": "تعذّر تحميل الإدخالات الأقدم",
+    "exportFailed": "فشل تصدير CSV"
+  },
+  "category": {
+    "irrigation": "الري",
+    "dosing": "الحقن",
+    "climate": "المناخ",
+    "automations": "الأتمتة",
+    "equipment": "المعدات",
+    "settings": "الإعدادات",
+    "users": "المستخدمون",
+    "auth": "تسجيل الدخول",
+    "alerts": "التنبيهات",
+    "ai": "الذكاء الاصطناعي",
+    "cameras": "الكاميرات",
+    "lab": "المختبر",
+    "crops": "المحاصيل",
+    "tasks": "المهام",
+    "system": "النظام"
+  },
+  "mark": {
+    "unknown": "غير معروف",
+    "failed": "فشل",
+    "failedCode": "فشل {{code}}",
+    "critical": "حرج",
+    "refused": "مرفوض",
+    "refusedCode": "مرفوض {{code}}",
+    "unconfirmed": "غير مؤكَّد",
+    "notable": "لافت",
+    "done": "تم",
+    "info": "معلومة"
+  },
+  "actor": {
+    "unknownUser": "مستخدم غير معروف",
+    "system": "النظام"
+  },
+  "day": {
+    "today": "اليوم",
+    "yesterday": "أمس"
+  },
+  "row": {
+    "writes_zero": "لا عمليات كتابة",
+    "writes_one": "كتابة واحدة",
+    "writes_two": "كتابتان",
+    "writes_few": "{{count}} عمليات كتابة",
+    "writes_many": "{{count}} عملية كتابة",
+    "writes_other": "{{count}} عملية كتابة"
+  },
+  "drawer": {
+    "closeDetails": "إغلاق التفاصيل",
+    "when": "متى",
+    "lasted": "استمر {{duration}}",
+    "who": "من",
+    "device": "الجهاز",
+    "ip": "عنوان IP",
+    "target": "الهدف",
+    "result": "النتيجة",
+    "recordedIn": "مسجَّل في",
+    "repeated": "تكرّر",
+    "repeatedUntil_zero": "لم يتكرر حتى {{time}}",
+    "repeatedUntil_one": "مرة واحدة حتى {{time}}",
+    "repeatedUntil_two": "مرتان حتى {{time}}",
+    "repeatedUntil_few": "{{count}} مرات حتى {{time}}",
+    "repeatedUntil_many": "{{count}} مرة حتى {{time}}",
+    "repeatedUntil_other": "{{count}} مرة حتى {{time}}",
+    "allActivityFor": "كل النشاط لهذا العنصر ({{type}})",
+    "everythingBy": "كل ما فعله {{name}}",
+    "loading": "جارٍ تحميل التفاصيل…",
+    "loadFailed": "تعذّر تحميل التفاصيل: {{error}}",
+    "requestLogNote": "سُجّل قبل وجود سجل التدقيق: حُفظ الجهاز ومسار نسبي فقط — لا المستخدم ولا ما تم تغييره.",
+    "possibleRoutes": "المسارات المحتملة:",
+    "whatChanged": "ما الذي تغيّر",
+    "requests": "الطلبات ({{n}})",
+    "relayWrites": "عمليات كتابة المرحّلات ({{n}})",
+    "readBackConfirmed": "القراءة الراجعة أكّدت",
+    "readBackNotConfirmed": "القراءة الراجعة لم تؤكّد",
+    "noReadBack": "لا قراءة راجعة",
+    "fieldChanges": "تغييرات الحقول ({{n}})",
+    "added": "أُضيف",
+    "removed": "أُزيل",
+    "secret": "سرّي",
+    "before": "قبل",
+    "after": "بعد",
+    "json": {
+      "body": "محتوى الطلب (بعد إزالة الأسرار)",
+      "response": "الاستجابة",
+      "raw": "السجل الخام",
+      "request": "الطلب"
+    },
+    "open": {
+      "equipment": "فتح المعدات",
+      "automations": "فتح الأتمتة",
+      "fertigation": "فتح التسميد بالري",
+      "alerts": "فتح التنبيهات",
+      "cameras": "فتح الكاميرات"
+    },
+    "targetType": {
+      "equipment": "المعدات",
+      "automation": "الأتمتة",
+      "tank": "الخزان",
+      "dose_program": "برنامج الحقن",
+      "alert": "التنبيه",
+      "camera": "الكاميرا",
+      "zone": "المنطقة",
+      "user": "المستخدم",
+      "task": "المهمة"
+    },
+    "source": {
+      "audit": "سجل التدقيق (طلب API)",
+      "relay": "أحداث المرحّلات",
+      "automation": "سجل تشغيل الأتمتة",
+      "alert": "التنبيهات",
+      "alert_ack": "التنبيهات (تأكيد الاطلاع)",
+      "flow": "حالات مراقبة التدفق",
+      "irrigation_run": "عمليات تشغيل الري",
+      "dose_run": "عمليات تشغيل وحدة تحكم الحقن",
+      "dose_cycle": "سجل دورات الحقن",
+      "drift": "سجل انحراف المرحّلات",
+      "request": "سجل الطلبات (قبل وجود سجل التدقيق)"
+    }
+  }
+}

@@ -1,1 +1,190 @@
-{}
+{
+  "title": "Kayıtlar",
+  "subtitle": "Kim neyi değiştirdi veya neye bastı, sistem ne yaptı — en yeni en üstte.",
+  "forbidden": "Etkinlik kaydını operatörler ve yöneticiler görebilir.",
+  "exportCsv": "CSV dışa aktar",
+  "exporting": "Dışa aktarılıyor…",
+  "quickFilters": "Hızlı filtreler",
+  "timeRange": "Zaman aralığı",
+  "preset": {
+    "irrigation-today": "Bugün sulamayı kim değiştirdi",
+    "stops": "Tümünü Durdur / acil durdurma basışları",
+    "settings": "Ayar değişiklikleri",
+    "failed-logins": "Başarısız girişler"
+  },
+  "range": {
+    "today": "Bugün",
+    "24h": "24 sa",
+    "7d": "7 gün",
+    "30d": "30 gün",
+    "custom": "Özel"
+  },
+  "filters": {
+    "from": "Başlangıç",
+    "to": "Bitiş (boş = şimdi)",
+    "searchPlaceholder": "Bölge 4, Tümünü Durdur, fan…",
+    "toggle": "Filtreler",
+    "toggleCount": "Filtreler ({{n}})",
+    "who": "Kim",
+    "everyone": "Herkes",
+    "people": "Kişiler",
+    "system": "Sistem",
+    "user": "Kullanıcı",
+    "anyUser": "Tüm kullanıcılar",
+    "category": "Kategori",
+    "allCategories": "Tüm kategoriler",
+    "target": "Ekipman / otomasyon",
+    "anything": "Tümü",
+    "equipmentGroup": "Ekipman",
+    "automationsGroup": "Otomasyonlar",
+    "actionChip": "işlem:",
+    "severityChip": "önem:",
+    "clear": "Filtreleri temizle"
+  },
+  "summary": {
+    "shown": "{{n}} gösteriliyor",
+    "people": "{{n}} kişilerden",
+    "system": "{{n}} sistem",
+    "problems": "{{n}} başarısız / reddedildi / kritik",
+    "live": "canlı"
+  },
+  "legend": {
+    "title": "Açıklama",
+    "done": "Tamamlandı",
+    "info": "Bilgi",
+    "notable": "Dikkat çekici / reddedildi",
+    "failed": "Başarısız / kritik",
+    "unconfirmed": "Doğrulanmadı"
+  },
+  "auditStart": {
+    "from": "Kişilerin işlemleri {{time}} tarihinden itibaren eksiksiz kaydediliyor. “Bilinmeyen kullanıcı” olarak işaretli önceki kayıtlar istek günlüğünden gelir (yalnızca cihaz ve yol).",
+    "none": "Kişilerin işlemleri bir sonraki değişiklikten itibaren kaydedilir; “Bilinmeyen kullanıcı” olarak işaretli önceki kayıtlar istek günlüğünden gelir (yalnızca cihaz ve yol)."
+  },
+  "errors": {
+    "loadFailed": "Kayıt yüklenemedi: {{error}}"
+  },
+  "empty": {
+    "any": "Bu filtrelere uyan kayıt yok.",
+    "today": "Bugün bu filtrelere uyan kayıt yok.",
+    "lookBack": "Daha geriye bak"
+  },
+  "footer": {
+    "loaded_one": "{{count}} kayıt yüklendi",
+    "loaded_other": "{{count}} kayıt yüklendi",
+    "loadOlder": "Daha eskileri yükle"
+  },
+  "toast": {
+    "loadOlderFailed": "Eski kayıtlar yüklenemedi",
+    "exportFailed": "CSV dışa aktarılamadı"
+  },
+  "category": {
+    "irrigation": "Sulama",
+    "dosing": "Dozlama",
+    "climate": "İklim",
+    "automations": "Otomasyonlar",
+    "equipment": "Ekipman",
+    "settings": "Ayarlar",
+    "users": "Kullanıcılar",
+    "auth": "Giriş",
+    "alerts": "Alarmlar",
+    "ai": "Yapay zekâ",
+    "cameras": "Kameralar",
+    "lab": "Laboratuvar",
+    "crops": "Ürünler",
+    "tasks": "Görevler",
+    "system": "Sistem"
+  },
+  "mark": {
+    "unknown": "Bilinmiyor",
+    "failed": "Başarısız",
+    "failedCode": "Başarısız {{code}}",
+    "critical": "Kritik",
+    "refused": "Reddedildi",
+    "refusedCode": "Reddedildi {{code}}",
+    "unconfirmed": "Doğrulanmadı",
+    "notable": "Dikkat çekici",
+    "done": "Tamamlandı",
+    "info": "Bilgi"
+  },
+  "actor": {
+    "unknownUser": "Bilinmeyen kullanıcı",
+    "system": "Sistem"
+  },
+  "day": {
+    "today": "Bugün",
+    "yesterday": "Dün"
+  },
+  "row": {
+    "writes_one": "{{count}} yazma",
+    "writes_other": "{{count}} yazma"
+  },
+  "drawer": {
+    "closeDetails": "Ayrıntıları kapat",
+    "when": "Ne zaman",
+    "lasted": "{{duration}} sürdü",
+    "who": "Kim",
+    "device": "Cihaz",
+    "ip": "IP adresi",
+    "target": "Hedef",
+    "result": "Sonuç",
+    "recordedIn": "Kaydedildiği yer",
+    "repeated": "Tekrarlandı",
+    "repeatedUntil_one": "{{time}} saatine kadar {{count}} kez",
+    "repeatedUntil_other": "{{time}} saatine kadar {{count}} kez",
+    "allActivityFor": "Bu {{type}} için tüm etkinlik",
+    "everythingBy": "{{name}} tarafından yapılan her şey",
+    "loading": "Ayrıntılar yükleniyor…",
+    "loadFailed": "Ayrıntılar yüklenemedi: {{error}}",
+    "requestLogNote": "Denetim kaydından önce kaydedildi: yalnızca cihaz ve yönlendiriciye göre yol saklandı — kullanıcı veya neyin değiştiği saklanmadı.",
+    "possibleRoutes": "Olası yollar:",
+    "whatChanged": "Ne değişti",
+    "requests": "İstekler ({{n}})",
+    "relayWrites": "Röle yazmaları ({{n}})",
+    "readBackConfirmed": "geri okuma doğruladı",
+    "readBackNotConfirmed": "geri okuma DOĞRULAMADI",
+    "noReadBack": "geri okuma yok",
+    "fieldChanges": "Alan değişiklikleri ({{n}})",
+    "added": "eklendi",
+    "removed": "kaldırıldı",
+    "secret": "gizli",
+    "before": "Önce",
+    "after": "Sonra",
+    "json": {
+      "body": "İstek gövdesi (gizli bilgiler çıkarıldı)",
+      "response": "Yanıt",
+      "raw": "Ham kayıt",
+      "request": "İstek"
+    },
+    "open": {
+      "equipment": "Ekipmanı aç",
+      "automations": "Otomasyonları aç",
+      "fertigation": "Fertigasyonu aç",
+      "alerts": "Alarmları aç",
+      "cameras": "Kameraları aç"
+    },
+    "targetType": {
+      "equipment": "ekipman",
+      "automation": "otomasyon",
+      "tank": "tank",
+      "dose_program": "dozlama programı",
+      "alert": "alarm",
+      "camera": "kamera",
+      "zone": "bölge",
+      "user": "kullanıcı",
+      "task": "görev"
+    },
+    "source": {
+      "audit": "Denetim kaydı (API isteği)",
+      "relay": "Röle olayları",
+      "automation": "Otomasyon çalışma kaydı",
+      "alert": "Alarmlar",
+      "alert_ack": "Alarmlar (onay)",
+      "flow": "Debi izleme olayları",
+      "irrigation_run": "Sulama çalışmaları",
+      "dose_run": "Dozlama denetleyicisi çalışmaları",
+      "dose_cycle": "Dozlama döngüsü kaydı",
+      "drift": "Röle sapma kaydı",
+      "request": "İstek günlüğü (denetim kaydından önce)"
+    }
+  }
+}

@@ -1,10 +1,72 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation, Trans } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
+import { useFormat } from '../i18n/useFormat';
 
 const API_BASE = '/api';
 
+// Timezone choices: IANA ids are data (shown as-is); `hint` is a translated
+// region word from setup.json timezone.hint.*.
+const TIMEZONE_GROUPS = [
+  { id: 'americas', options: [
+    { value: 'America/New_York', hint: 'eastern' },
+    { value: 'America/Chicago', hint: 'central' },
+    { value: 'America/Denver', hint: 'mountain' },
+    { value: 'America/Los_Angeles', hint: 'pacific' },
+    { value: 'America/Anchorage', hint: 'alaska' },
+    { value: 'Pacific/Honolulu', hint: 'hawaii' },
+    { value: 'America/Toronto' },
+    { value: 'America/Vancouver' },
+    { value: 'America/Mexico_City' },
+    { value: 'America/Sao_Paulo' },
+    { value: 'America/Buenos_Aires' },
+  ]},
+  { id: 'europe', options: [
+    { value: 'Europe/London' },
+    { value: 'Europe/Paris' },
+    { value: 'Europe/Berlin' },
+    { value: 'Europe/Madrid' },
+    { value: 'Europe/Rome' },
+    { value: 'Europe/Amsterdam' },
+    { value: 'Europe/Brussels' },
+    { value: 'Europe/Zurich' },
+    { value: 'Europe/Moscow' },
+    { value: 'Europe/Istanbul' },
+  ]},
+  { id: 'asia', options: [
+    { value: 'Asia/Dubai' },
+    { value: 'Asia/Kolkata', hint: 'india' },
+    { value: 'Asia/Singapore' },
+    { value: 'Asia/Hong_Kong' },
+    { value: 'Asia/Shanghai', hint: 'china' },
+    { value: 'Asia/Tokyo' },
+    { value: 'Asia/Seoul' },
+    { value: 'Asia/Bangkok' },
+    { value: 'Asia/Jakarta' },
+  ]},
+  { id: 'pacificOceania', options: [
+    { value: 'Australia/Sydney' },
+    { value: 'Australia/Melbourne' },
+    { value: 'Australia/Perth' },
+    { value: 'Pacific/Auckland', hint: 'newZealand' },
+  ]},
+  { id: 'africaMiddleEast', options: [
+    { value: 'Africa/Johannesburg' },
+    { value: 'Africa/Cairo' },
+    { value: 'Africa/Lagos' },
+    { value: 'Asia/Jerusalem' },
+  ]},
+  { id: 'other', options: [
+    { value: 'UTC', hint: 'utc' },
+  ]},
+];
+
+const STEP_KEYS = ['welcome', 'network', 'timezone', 'admin', 'cloud', 'complete'];
+
 function Setup() {
+  const { t } = useTranslation('setup');
+  const fmt = useFormat();
   const navigate = useNavigate();
   const { setUserAfterSetup } = useAuth();
   const [step, setStep] = useState(1);
@@ -81,17 +143,17 @@ function Setup() {
     const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
     if (formData.ipAddress && !ipRegex.test(formData.ipAddress)) {
-      setError('Please enter a valid IP address');
+      setError(t('errors.invalidIp'));
       return false;
     }
 
     if (formData.gateway && !ipRegex.test(formData.gateway)) {
-      setError('Please enter a valid gateway address');
+      setError(t('errors.invalidGateway'));
       return false;
     }
 
     if (formData.dns && !ipRegex.test(formData.dns)) {
-      setError('Please enter a valid DNS address');
+      setError(t('errors.invalidDns'));
       return false;
     }
 
@@ -121,12 +183,12 @@ function Setup() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to save network configuration');
+        throw new Error(data.message || t('errors.networkSaveFailed'));
       }
 
       return true;
     } catch (err) {
-      setError(err.message || 'An error occurred saving network configuration');
+      setError(err.message || t('errors.networkSaveError'));
       return false;
     } finally {
       setLoading(false);
@@ -158,12 +220,12 @@ function Setup() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to save timezone configuration');
+        throw new Error(data.message || t('errors.timezoneSaveFailed'));
       }
 
       return true;
     } catch (err) {
-      setError(err.message || 'An error occurred saving timezone configuration');
+      setError(err.message || t('errors.timezoneSaveError'));
       return false;
     } finally {
       setLoading(false);
@@ -181,33 +243,33 @@ function Setup() {
     const { name, email, password, confirmPassword } = formData;
 
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t('errors.nameRequired'));
       return false;
     }
 
     if (!email.trim()) {
-      setError('Email is required');
+      setError(t('errors.emailRequired'));
       return false;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      setError('Please enter a valid email address');
+      setError(t('errors.invalidEmail'));
       return false;
     }
 
     if (!password) {
-      setError('Password is required');
+      setError(t('errors.passwordRequired'));
       return false;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError(t('errors.passwordTooShort'));
       return false;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('errors.passwordMismatch'));
       return false;
     }
 
@@ -238,7 +300,7 @@ function Setup() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Setup failed');
+        throw new Error(data.message || t('errors.setupFailed'));
       }
 
       // Store token and update auth context
@@ -248,7 +310,7 @@ function Setup() {
       // Move to Cloud connection step
       setStep(5);
     } catch (err) {
-      setError(err.message || 'An error occurred during setup');
+      setError(err.message || t('errors.setupError'));
     } finally {
       setLoading(false);
     }
@@ -280,13 +342,13 @@ function Setup() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to connect to cloud');
+        throw new Error(data.message || t('errors.cloudConnectFailed'));
       }
 
       // Move to completion step
       setStep(6);
     } catch (err) {
-      setError(err.message || 'An error occurred connecting to cloud');
+      setError(err.message || t('errors.cloudConnectError'));
     } finally {
       setLoading(false);
     }
@@ -319,7 +381,7 @@ function Setup() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Quick setup failed');
+        throw new Error(data.message || t('errors.quickSetupFailed'));
       }
 
       // Store token and update auth context
@@ -329,25 +391,37 @@ function Setup() {
       // Navigate directly to dashboard
       navigate('/');
     } catch (err) {
-      setError(err.message || 'An error occurred during quick setup');
+      setError(err.message || t('errors.quickSetupError'));
       setShowSkipWarning(false);
     } finally {
       setSkipLoading(false);
     }
   };
 
-  const stepLabels = ['Welcome', 'Network', 'Timezone', 'Admin Account', 'Cloud', 'Complete'];
+  const stepLabels = STEP_KEYS.map((k) => t(`steps.${k}`));
+
+  const localTimePreview = () => {
+    try {
+      return fmt.dateTime(Date.now(), {
+        timeZone: formData.timezone,
+        weekday: 'short',
+        timeZoneName: 'short',
+      });
+    } catch {
+      return '—';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
         {/* Progress indicator */}
-        <div className="bg-gray-100 px-8 py-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-gray-100 px-4 sm:px-8 py-4">
+          <div className="flex items-center">
             {[1, 2, 3, 4, 5, 6].map((num) => (
-              <div key={num} className="flex items-center">
+              <div key={num} className={`flex items-center ${num < 6 ? 'flex-1' : ''}`}>
                 <div
-                  className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-semibold text-sm ${
+                  className={`shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-semibold text-sm ${
                     step >= num
                       ? 'bg-primary-600 text-white'
                       : 'bg-gray-300 text-gray-600'
@@ -357,7 +431,7 @@ function Setup() {
                 </div>
                 {num < 6 && (
                   <div
-                    className={`w-8 sm:w-12 md:w-16 h-1 mx-0.5 sm:mx-1 ${
+                    className={`flex-1 min-w-2 h-1 mx-0.5 sm:mx-1 ${
                       step > num ? 'bg-primary-600' : 'bg-gray-300'
                     }`}
                   />
@@ -365,9 +439,12 @@ function Setup() {
               </div>
             ))}
           </div>
-          <div className="flex justify-between mt-2 text-xs sm:text-sm text-gray-600">
+          <p className="sm:hidden mt-2 text-xs text-center font-semibold text-primary-600">
+            {t('stepOf', { step, total: 6, label: stepLabels[step - 1] })}
+          </p>
+          <div className="hidden sm:grid grid-cols-6 gap-1 mt-2 text-sm leading-tight text-gray-600">
             {stepLabels.map((label, index) => (
-              <span key={label} className={step === index + 1 ? 'font-semibold text-primary-600' : ''}>
+              <span key={STEP_KEYS[index]} className={`break-words ${index === 0 ? 'text-start' : index === 5 ? 'text-end' : 'text-center'} ${step === index + 1 ? 'font-semibold text-primary-600' : ''}`}>
                 {label}
               </span>
             ))}
@@ -386,40 +463,38 @@ function Setup() {
                 </div>
               </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-4">
-                Welcome to SenseHub
+                {t('welcome.title')}
               </h1>
               <p className="text-gray-600 mb-8 max-w-md mx-auto">
-                Your edge computing platform for industrial IoT operations.
-                Manage sensors, relays, controllers, and automate your operations
-                with SenseHub's powerful local processing capabilities.
+                {t('welcome.intro')}
               </p>
 
-              <div className="bg-gray-50 rounded-xl p-6 mb-8 text-left">
-                <h3 className="font-semibold text-gray-900 mb-4">System Overview</h3>
+              <div className="bg-gray-50 rounded-xl p-6 mb-8 text-start">
+                <h3 className="font-semibold text-gray-900 mb-4">{t('welcome.overviewTitle')}</h3>
                 <ul className="space-y-3">
                   <li className="flex items-start">
-                    <svg className="w-5 h-5 text-green-500 mr-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-green-500 me-3 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span className="text-gray-600">Multi-protocol support (Modbus, MQTT, Zigbee, Z-Wave)</span>
+                    <span className="text-gray-600">{t('welcome.featureProtocols')}</span>
                   </li>
                   <li className="flex items-start">
-                    <svg className="w-5 h-5 text-green-500 mr-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-green-500 me-3 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span className="text-gray-600">Visual automation builder with triggers and conditions</span>
+                    <span className="text-gray-600">{t('welcome.featureAutomation')}</span>
                   </li>
                   <li className="flex items-start">
-                    <svg className="w-5 h-5 text-green-500 mr-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-green-500 me-3 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span className="text-gray-600">Offline-first operation with cloud sync when connected</span>
+                    <span className="text-gray-600">{t('welcome.featureOffline')}</span>
                   </li>
                   <li className="flex items-start">
-                    <svg className="w-5 h-5 text-green-500 mr-3 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-green-500 me-3 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span className="text-gray-600">Real-time monitoring and alerts</span>
+                    <span className="text-gray-600">{t('welcome.featureMonitoring')}</span>
                   </li>
                 </ul>
               </div>
@@ -429,13 +504,13 @@ function Setup() {
                   onClick={() => setStep(2)}
                   className="px-8 py-3 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
                 >
-                  Get Started
+                  {t('welcome.getStarted')}
                 </button>
                 <button
                   onClick={handleSkipSetup}
                   className="px-8 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
                 >
-                  Skip Setup
+                  {t('welcome.skipSetup')}
                 </button>
               </div>
             </div>
@@ -446,36 +521,34 @@ function Setup() {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
                 <div className="flex items-center mb-4">
-                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mr-4">
+                  <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center me-4 shrink-0">
                     <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900">Skip Setup?</h3>
+                  <h3 className="text-xl font-bold text-gray-900">{t('skip.title')}</h3>
                 </div>
 
                 <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6">
                   <p className="text-amber-800 text-sm font-medium mb-2">
-                    ⚠️ Minimal Configuration Warning
+                    ⚠️ {t('skip.warningTitle')}
                   </p>
                   <p className="text-amber-700 text-sm">
-                    Skipping setup will create a default administrator account with basic credentials. You will need to:
+                    {t('skip.warningBody')}
                   </p>
                   <ul className="text-amber-700 text-sm mt-2 list-disc list-inside space-y-1">
-                    <li>Change the default password immediately</li>
-                    <li>Configure network settings manually</li>
-                    <li>Set your timezone in Settings</li>
+                    <li>{t('skip.todoPassword')}</li>
+                    <li>{t('skip.todoNetwork')}</li>
+                    <li>{t('skip.todoTimezone')}</li>
                   </ul>
                 </div>
 
                 <div className="bg-gray-50 rounded-lg px-4 py-3 mb-6">
-                  <p className="text-gray-600 text-sm font-medium mb-2">Default Admin Account:</p>
+                  <p className="text-gray-600 text-sm font-medium mb-2">{t('skip.defaultAccount')}</p>
                   <div className="text-sm text-gray-800 space-y-1">
-                    <p><span className="font-medium">Email:</span> admin@sensehub.local</p>
+                    <p><span className="font-medium">{t('skip.email')}</span> <span dir="ltr">admin@sensehub.local</span></p>
                     <p className="text-gray-600">
-                      A temporary password is generated for this account. For security it is
-                      <span className="font-medium"> not shown here</span> — you will be required to set a
-                      new password the first time you sign in.
+                      <Trans t={t} i18nKey="skip.tempPassword" components={{ b: <span className="font-medium" /> }} />
                     </p>
                   </div>
                 </div>
@@ -492,7 +565,7 @@ function Setup() {
                     disabled={skipLoading}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
                   >
-                    Cancel
+                    {t('common:actions.cancel')}
                   </button>
                   <button
                     onClick={confirmSkipSetup}
@@ -500,12 +573,12 @@ function Setup() {
                     className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center"
                   >
                     {skipLoading && (
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     )}
-                    {skipLoading ? 'Setting Up...' : 'Confirm Skip'}
+                    {skipLoading ? t('skip.settingUp') : t('skip.confirm')}
                   </button>
                 </div>
               </div>
@@ -516,15 +589,15 @@ function Setup() {
           {step === 2 && (
             <div>
               <div className="flex items-center mb-2">
-                <svg className="w-8 h-8 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-primary-600 me-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                 </svg>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  Network Configuration
+                  {t('network.title')}
                 </h2>
               </div>
               <p className="text-gray-600 mb-6">
-                Configure network settings for your SenseHub device.
+                {t('network.subtitle')}
               </p>
 
               <div className="space-y-4">
@@ -537,15 +610,15 @@ function Setup() {
                     onChange={handleChange}
                     className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="dhcp" className="ml-2 block text-sm text-gray-900">
-                    Use DHCP (automatic IP configuration)
+                  <label htmlFor="dhcp" className="ms-2 block text-sm text-gray-900">
+                    {t('network.useDhcp')}
                   </label>
                 </div>
 
                 <div className={`space-y-4 ${formData.dhcp ? 'opacity-50' : ''}`}>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      IP Address
+                      {t('network.ipAddress')}
                     </label>
                     <input
                       type="text"
@@ -555,12 +628,13 @@ function Setup() {
                       disabled={formData.dhcp}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
                       placeholder="192.168.1.100"
+                      dir="ltr"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Gateway
+                      {t('network.gateway')}
                     </label>
                     <input
                       type="text"
@@ -570,12 +644,13 @@ function Setup() {
                       disabled={formData.dhcp}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
                       placeholder="192.168.1.1"
+                      dir="ltr"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      DNS Server
+                      {t('network.dnsServer')}
                     </label>
                     <input
                       type="text"
@@ -585,6 +660,7 @@ function Setup() {
                       disabled={formData.dhcp}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
                       placeholder="8.8.8.8"
+                      dir="ltr"
                     />
                   </div>
                 </div>
@@ -601,7 +677,7 @@ function Setup() {
                     onClick={() => setStep(1)}
                     className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    Back
+                    {t('common:actions.back')}
                   </button>
                   <button
                     type="button"
@@ -610,12 +686,12 @@ function Setup() {
                     className="px-6 py-2 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                   >
                     {loading && (
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     )}
-                    {loading ? 'Saving...' : 'Continue'}
+                    {loading ? t('common:actions.saving') : t('actions.continue')}
                   </button>
                 </div>
               </div>
@@ -626,101 +702,50 @@ function Setup() {
           {step === 3 && (
             <div>
               <div className="flex items-center mb-2">
-                <svg className="w-8 h-8 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-primary-600 me-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  Timezone Configuration
+                  {t('timezone.title')}
                 </h2>
               </div>
               <p className="text-gray-600 mb-6">
-                Select your timezone for accurate time display and scheduling.
+                {t('timezone.subtitle')}
               </p>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Timezone
+                    {t('timezone.label')}
                   </label>
                   <select
                     name="timezone"
+                    dir="ltr"
                     value={formData.timezone}
                     onChange={handleChange}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                   >
-                    <optgroup label="Americas">
-                      <option value="America/New_York">America/New_York (Eastern)</option>
-                      <option value="America/Chicago">America/Chicago (Central)</option>
-                      <option value="America/Denver">America/Denver (Mountain)</option>
-                      <option value="America/Los_Angeles">America/Los_Angeles (Pacific)</option>
-                      <option value="America/Anchorage">America/Anchorage (Alaska)</option>
-                      <option value="Pacific/Honolulu">Pacific/Honolulu (Hawaii)</option>
-                      <option value="America/Toronto">America/Toronto</option>
-                      <option value="America/Vancouver">America/Vancouver</option>
-                      <option value="America/Mexico_City">America/Mexico_City</option>
-                      <option value="America/Sao_Paulo">America/Sao_Paulo</option>
-                      <option value="America/Buenos_Aires">America/Buenos_Aires</option>
-                    </optgroup>
-                    <optgroup label="Europe">
-                      <option value="Europe/London">Europe/London</option>
-                      <option value="Europe/Paris">Europe/Paris</option>
-                      <option value="Europe/Berlin">Europe/Berlin</option>
-                      <option value="Europe/Madrid">Europe/Madrid</option>
-                      <option value="Europe/Rome">Europe/Rome</option>
-                      <option value="Europe/Amsterdam">Europe/Amsterdam</option>
-                      <option value="Europe/Brussels">Europe/Brussels</option>
-                      <option value="Europe/Zurich">Europe/Zurich</option>
-                      <option value="Europe/Moscow">Europe/Moscow</option>
-                      <option value="Europe/Istanbul">Europe/Istanbul</option>
-                    </optgroup>
-                    <optgroup label="Asia">
-                      <option value="Asia/Dubai">Asia/Dubai</option>
-                      <option value="Asia/Kolkata">Asia/Kolkata (India)</option>
-                      <option value="Asia/Singapore">Asia/Singapore</option>
-                      <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
-                      <option value="Asia/Shanghai">Asia/Shanghai (China)</option>
-                      <option value="Asia/Tokyo">Asia/Tokyo</option>
-                      <option value="Asia/Seoul">Asia/Seoul</option>
-                      <option value="Asia/Bangkok">Asia/Bangkok</option>
-                      <option value="Asia/Jakarta">Asia/Jakarta</option>
-                    </optgroup>
-                    <optgroup label="Pacific / Oceania">
-                      <option value="Australia/Sydney">Australia/Sydney</option>
-                      <option value="Australia/Melbourne">Australia/Melbourne</option>
-                      <option value="Australia/Perth">Australia/Perth</option>
-                      <option value="Pacific/Auckland">Pacific/Auckland (New Zealand)</option>
-                    </optgroup>
-                    <optgroup label="Africa / Middle East">
-                      <option value="Africa/Johannesburg">Africa/Johannesburg</option>
-                      <option value="Africa/Cairo">Africa/Cairo</option>
-                      <option value="Africa/Lagos">Africa/Lagos</option>
-                      <option value="Asia/Jerusalem">Asia/Jerusalem</option>
-                    </optgroup>
-                    <optgroup label="Other">
-                      <option value="UTC">UTC (Coordinated Universal Time)</option>
-                    </optgroup>
+                    {TIMEZONE_GROUPS.map((group) => (
+                      <optgroup key={group.id} label={t(`timezone.group.${group.id}`)}>
+                        {group.options.map((tz) => (
+                          <option key={tz.value} value={tz.value}>
+                            {tz.hint ? `${tz.value} (${t(`timezone.hint.${tz.hint}`)})` : tz.value}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
                   <div className="flex items-start">
-                    <svg className="w-5 h-5 text-blue-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-blue-500 me-2 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                     <div className="text-sm text-blue-700">
-                      <p className="font-medium">Current selection: {formData.timezone}</p>
+                      <p className="font-medium">{t('timezone.currentSelection')} <span dir="ltr">{formData.timezone}</span></p>
                       <p className="mt-1">
-                        Local time: {new Date().toLocaleString('en-US', {
-                          timeZone: formData.timezone,
-                          weekday: 'short',
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                          timeZoneName: 'short'
-                        })}
+                        {t('timezone.localTime', { time: localTimePreview() })}
                       </p>
                     </div>
                   </div>
@@ -738,7 +763,7 @@ function Setup() {
                     onClick={() => setStep(2)}
                     className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    Back
+                    {t('common:actions.back')}
                   </button>
                   <button
                     type="button"
@@ -747,12 +772,12 @@ function Setup() {
                     className="px-6 py-2 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                   >
                     {loading && (
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     )}
-                    {loading ? 'Saving...' : 'Continue'}
+                    {loading ? t('common:actions.saving') : t('actions.continue')}
                   </button>
                 </div>
               </div>
@@ -763,16 +788,16 @@ function Setup() {
           {step === 4 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Create Admin Account
+                {t('admin.title')}
               </h2>
               <p className="text-gray-600 mb-6">
-                Set up your administrator account to manage SenseHub.
+                {t('admin.subtitle')}
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Full Name
+                    {t('admin.fullName')}
                   </label>
                   <input
                     type="text"
@@ -780,14 +805,14 @@ function Setup() {
                     value={formData.name}
                     onChange={handleChange}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
-                    placeholder="Enter your name"
+                    placeholder={t('admin.namePlaceholder')}
                     autoComplete="name"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email Address
+                    {t('admin.email')}
                   </label>
                   <input
                     type="email"
@@ -796,13 +821,14 @@ function Setup() {
                     onChange={handleChange}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                     placeholder="admin@example.com"
+                    dir="ltr"
                     autoComplete="email"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Password
+                    {t('admin.password')}
                   </label>
                   <input
                     type="password"
@@ -810,14 +836,14 @@ function Setup() {
                     value={formData.password}
                     onChange={handleChange}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
-                    placeholder="Minimum 8 characters"
+                    placeholder={t('admin.passwordPlaceholder')}
                     autoComplete="new-password"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Confirm Password
+                    {t('admin.confirmPassword')}
                   </label>
                   <input
                     type="password"
@@ -825,7 +851,7 @@ function Setup() {
                     value={formData.confirmPassword}
                     onChange={handleChange}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
-                    placeholder="Re-enter your password"
+                    placeholder={t('admin.confirmPlaceholder')}
                     autoComplete="new-password"
                   />
                 </div>
@@ -842,7 +868,7 @@ function Setup() {
                     onClick={() => setStep(3)}
                     className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    Back
+                    {t('common:actions.back')}
                   </button>
                   <button
                     type="submit"
@@ -850,12 +876,12 @@ function Setup() {
                     className="px-6 py-2 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                   >
                     {loading && (
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     )}
-                    {loading ? 'Creating Account...' : 'Create Account'}
+                    {loading ? t('admin.creating') : t('admin.create')}
                   </button>
                 </div>
               </form>
@@ -866,22 +892,22 @@ function Setup() {
           {step === 5 && (
             <div>
               <div className="flex items-center mb-2">
-                <svg className="w-8 h-8 text-primary-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 text-primary-600 me-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
                 </svg>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  Cloud Connection
+                  {t('cloud.title')}
                 </h2>
               </div>
               <p className="text-gray-600 mb-6">
-                Connect to SenseHub Cloud for remote monitoring, data backup, and cross-site management.
-                <span className="block mt-1 text-sm text-gray-500">This is optional - you can configure it later in Settings.</span>
+                {t('cloud.subtitle')}
+                <span className="block mt-1 text-sm text-gray-500">{t('cloud.optionalNote')}</span>
               </p>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Cloud URL
+                    {t('cloud.url')}
                   </label>
                   <input
                     type="url"
@@ -890,12 +916,13 @@ function Setup() {
                     onChange={handleChange}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                     placeholder="https://cloud.sensehub.io"
+                    dir="ltr"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    API Key
+                    {t('cloud.apiKey')}
                   </label>
                   <input
                     type="password"
@@ -903,18 +930,18 @@ function Setup() {
                     value={formData.cloudApiKey}
                     onChange={handleChange}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
-                    placeholder="Enter your cloud API key"
+                    placeholder={t('cloud.apiKeyPlaceholder')}
                   />
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
                   <div className="flex items-start">
-                    <svg className="w-5 h-5 text-blue-500 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-blue-500 me-2 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                     <div className="text-sm text-blue-700">
-                      <p className="font-medium">SenseHub works fully offline</p>
-                      <p className="mt-1">Cloud connection is optional. Your system will operate completely independently without it.</p>
+                      <p className="font-medium">{t('cloud.offlineTitle')}</p>
+                      <p className="mt-1">{t('cloud.offlineBody')}</p>
                     </div>
                   </div>
                 </div>
@@ -931,7 +958,7 @@ function Setup() {
                     onClick={handleCloudSkip}
                     className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    Skip for Now
+                    {t('cloud.skip')}
                   </button>
                   <button
                     type="button"
@@ -940,12 +967,12 @@ function Setup() {
                     className="px-6 py-2 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                   >
                     {loading && (
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     )}
-                    {loading ? 'Connecting...' : 'Connect to Cloud'}
+                    {loading ? t('cloud.connecting') : t('cloud.connect')}
                   </button>
                 </div>
               </div>
@@ -963,66 +990,66 @@ function Setup() {
                 </div>
               </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Setup Complete!
+                {t('complete.title')}
               </h2>
               <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                Your SenseHub system is ready to use. You're now logged in as the administrator.
+                {t('complete.body')}
               </p>
 
               {/* Configuration Summary */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6 text-left">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6 text-start">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                  <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-blue-600 me-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Configuration Summary
+                  {t('complete.summaryTitle')}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-500">Network:</span>
-                    <span className="ml-2 text-gray-900 font-medium">
-                      {formData.dhcp ? 'DHCP (Automatic)' : formData.ipAddress || 'Static IP'}
+                    <span className="text-gray-500">{t('complete.network')}</span>
+                    <span className="ms-2 text-gray-900 font-medium">
+                      {formData.dhcp ? t('complete.dhcpAutomatic') : formData.ipAddress || t('complete.staticIp')}
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Timezone:</span>
-                    <span className="ml-2 text-gray-900 font-medium">{formData.timezone}</span>
+                    <span className="text-gray-500">{t('complete.timezone')}</span>
+                    <span className="ms-2 text-gray-900 font-medium" dir="ltr">{formData.timezone}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Admin:</span>
-                    <span className="ml-2 text-gray-900 font-medium">{formData.name}</span>
+                    <span className="text-gray-500">{t('complete.admin')}</span>
+                    <span className="ms-2 text-gray-900 font-medium" dir="auto">{formData.name}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Email:</span>
-                    <span className="ml-2 text-gray-900 font-medium">{formData.email}</span>
+                    <span className="text-gray-500">{t('complete.email')}</span>
+                    <span className="ms-2 text-gray-900 font-medium" dir="ltr">{formData.email}</span>
                   </div>
                   <div className="sm:col-span-2">
-                    <span className="text-gray-500">Cloud:</span>
-                    <span className="ml-2 text-gray-900 font-medium">
-                      {formData.cloudUrl ? 'Connected' : 'Not configured (offline mode)'}
+                    <span className="text-gray-500">{t('complete.cloud')}</span>
+                    <span className="ms-2 text-gray-900 font-medium">
+                      {formData.cloudUrl ? t('complete.cloudConnected') : t('complete.cloudNotConfigured')}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-gray-50 rounded-xl p-6 mb-8 text-left">
-                <h3 className="font-semibold text-gray-900 mb-4">Next Steps</h3>
+              <div className="bg-gray-50 rounded-xl p-6 mb-8 text-start">
+                <h3 className="font-semibold text-gray-900 mb-4">{t('complete.nextStepsTitle')}</h3>
                 <ul className="space-y-3">
                   <li className="flex items-start">
-                    <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-semibold mr-3 mt-0.5">1</span>
-                    <span className="text-gray-600">Scan for equipment on your network</span>
+                    <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-semibold me-3 mt-0.5 shrink-0">1</span>
+                    <span className="text-gray-600">{t('complete.nextScan')}</span>
                   </li>
                   <li className="flex items-start">
-                    <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-semibold mr-3 mt-0.5">2</span>
-                    <span className="text-gray-600">Organize equipment into zones</span>
+                    <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-semibold me-3 mt-0.5 shrink-0">2</span>
+                    <span className="text-gray-600">{t('complete.nextZones')}</span>
                   </li>
                   <li className="flex items-start">
-                    <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-semibold mr-3 mt-0.5">3</span>
-                    <span className="text-gray-600">Create automation programs</span>
+                    <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-semibold me-3 mt-0.5 shrink-0">3</span>
+                    <span className="text-gray-600">{t('complete.nextAutomations')}</span>
                   </li>
                   <li className="flex items-start">
-                    <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-semibold mr-3 mt-0.5">4</span>
-                    <span className="text-gray-600">Configure cloud sync (optional)</span>
+                    <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-semibold me-3 mt-0.5 shrink-0">4</span>
+                    <span className="text-gray-600">{t('complete.nextCloud')}</span>
                   </li>
                 </ul>
               </div>
@@ -1031,7 +1058,7 @@ function Setup() {
                 onClick={goToDashboard}
                 className="px-8 py-3 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
               >
-                Go to Dashboard
+                {t('complete.goToDashboard')}
               </button>
             </div>
           )}

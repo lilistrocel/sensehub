@@ -4,15 +4,19 @@ const { db } = require('../utils/database');
 const { requireRole } = require('../middleware/auth');
 const { SUPPORTED_LANGS, normalizeLang } = require('../i18n');
 
-/** Validate a `language` body field: undefined → undefined (not sent), else 'en'|'tr'|'ar' or an error. */
+/**
+ * Validate a `language` body field: undefined → undefined (not sent), null → null
+ * (reset to "never chosen": the device language applies), else 'en'|'tr'|'ar' or an error.
+ */
 function parseLanguage(value) {
   if (value === undefined) return { value: undefined };
+  if (value === null) return { value: null };
   const lang = typeof value === 'string' && SUPPORTED_LANGS.includes(value.trim().toLowerCase()) ? value.trim().toLowerCase() : null;
   if (!lang) return { error: `language must be one of: ${SUPPORTED_LANGS.join(', ')}` };
   return { value: lang };
 }
 
-/** Set a user's language (creating the preferences row when missing). */
+/** Set a user's language, null = never chosen (creating the preferences row when missing). */
 function setUserLanguage(userId, lang) {
   const info = db.prepare("UPDATE user_preferences SET language = ?, updated_at = datetime('now') WHERE user_id = ?").run(lang, userId);
   if (info.changes === 0) {
@@ -27,7 +31,8 @@ function formatPreferences(prefs) {
     alert_sound_critical: prefs.alert_sound_critical,
     alert_sound_warning: prefs.alert_sound_warning,
     alert_sound_info: prefs.alert_sound_info,
-    language: normalizeLang(prefs.language) || 'en'
+    // null = the user never chose a language: the frontend uses the device language.
+    language: normalizeLang(prefs.language || '') || null
   };
 }
 
@@ -36,7 +41,7 @@ const router = express.Router();
 // GET /api/users - List all users (admin only)
 router.get('/', requireRole('admin'), (req, res) => {
   const users = db.prepare(
-    `SELECT u.id, u.email, u.name, u.role, u.is_cloud_synced, u.last_login, u.created_at, COALESCE(p.language, 'en') AS language
+    `SELECT u.id, u.email, u.name, u.role, u.is_cloud_synced, u.last_login, u.created_at, p.language AS language
      FROM users u LEFT JOIN user_preferences p ON p.user_id = u.id ORDER BY u.created_at DESC`
   ).all();
 
@@ -74,7 +79,8 @@ router.post('/', requireRole('admin'), (req, res) => {
     const result = db.prepare(
       'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)'
     ).run(email, passwordHash, name, userRole);
-    const lang = language.value || 'en';
+    // No language given → NULL (never chosen): the user starts in their device language.
+    const lang = language.value || null;
     setUserLanguage(Number(result.lastInsertRowid), lang);
 
     res.status(201).json({
@@ -96,7 +102,7 @@ router.post('/', requireRole('admin'), (req, res) => {
 // GET /api/users/:id - Get user details (admin only)
 router.get('/:id', requireRole('admin'), (req, res) => {
   const user = db.prepare(
-    `SELECT u.id, u.email, u.name, u.role, u.is_cloud_synced, u.last_login, u.created_at, u.updated_at, COALESCE(p.language, 'en') AS language
+    `SELECT u.id, u.email, u.name, u.role, u.is_cloud_synced, u.last_login, u.created_at, u.updated_at, p.language AS language
      FROM users u LEFT JOIN user_preferences p ON p.user_id = u.id WHERE u.id = ?`
   ).get(req.params.id);
 
@@ -247,7 +253,7 @@ router.put('/me/preferences', (req, res) => {
       alert_sound_critical || 'alarm',
       alert_sound_warning || 'beep',
       alert_sound_info || 'chime',
-      language.value || 'en'
+      language.value || null
     );
   } else {
     // Update existing preferences

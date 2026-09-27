@@ -1,1 +1,319 @@
-{}
+{
+  "title": "المخطِّط التشغيلي",
+  "subtitle": "خطة أتمتة لليوم التالي يُعدّها الذكاء الاصطناعي، مع تقييم بحلقة مغلقة مقابل أهداف اليوم السابق. لا تُطبَّق الخطط إلا بعد تأكيد المشغّل.",
+  "header": {
+    "generate": "إنشاء خطة الغد",
+    "generating": "جارٍ الإنشاء…",
+    "generateNotAllowed": "يمكن للمشغّلين والمسؤولين إنشاء الخطط",
+    "settings": "الإعدادات"
+  },
+  "scheduler": {
+    "on": "المُجدوِل مفعّل · يعمل يوميًا عند <time>{{time}}</time>",
+    "off": "المُجدوِل متوقف · فعّله من الإعدادات لإنشاء الخطط تلقائيًا كل ليلة",
+    "apiKeyMissing": "ANTHROPIC_API_KEY غير مضبوط"
+  },
+  "statusLabel": {
+    "pending": "بانتظار القرار",
+    "confirmed": "مؤكَّدة ومطبَّقة",
+    "rejected": "مرفوضة",
+    "failure": "فشل الإنشاء",
+    "success": "أُنشئت (قديمة)"
+  },
+  "statusShort": {
+    "pending": "معلّقة",
+    "confirmed": "مؤكَّدة",
+    "rejected": "مرفوضة",
+    "failure": "فشلت",
+    "success": "أُنشئت"
+  },
+  "verdict": {
+    "pass": "ناجح",
+    "partial": "جزئي",
+    "fail": "فاشل",
+    "uncomputable": "تعذّر الحساب",
+    "no_prior_targets": "لا أهداف سابقة",
+    "pending": "معلّق"
+  },
+  "severity": {
+    "low": "منخفضة",
+    "medium": "متوسطة",
+    "high": "عالية"
+  },
+  "change": {
+    "add": "إضافة",
+    "remove": "إزالة",
+    "modify": "تعديل",
+    "keep": "إبقاء"
+  },
+  "window": {
+    "all_day": "طوال اليوم",
+    "day": "نهارًا",
+    "night": "ليلًا"
+  },
+  "card": {
+    "unknownTrigger": "غير معروف",
+    "dailyAt": "يوميًا @ {{time}}",
+    "viaTemplate": "عبر قالب",
+    "rawNoTemplate": "خام — بلا قالب",
+    "parameters": "المعاملات",
+    "actions": "الإجراءات",
+    "channel": "القناة {{n}}",
+    "channelNamed": "القناة {{n}} ({{name}})",
+    "allChannels": "(كل القنوات)",
+    "forMinutes": "لمدة {{minutes}} د",
+    "afterSeconds": "بعد {{seconds}} ث"
+  },
+  "stats": {
+    "inRange": "ضمن النطاق:",
+    "mean": "المتوسط:",
+    "p10p90": "p10/p90:",
+    "excursion": "الانحراف:",
+    "breaches_zero": "التجاوزات: {{count}} (الأطول {{minutes}} د)",
+    "breaches_one": "التجاوزات: {{count}} (الأطول {{minutes}} د)",
+    "breaches_two": "التجاوزات: {{count}} (الأطول {{minutes}} د)",
+    "breaches_few": "التجاوزات: {{count}} (الأطول {{minutes}} د)",
+    "breaches_many": "التجاوزات: {{count}} (الأطول {{minutes}} د)",
+    "breaches_other": "التجاوزات: {{count}} (الأطول {{minutes}} د)",
+    "samples_zero": "العينات: {{count}}",
+    "samples_one": "العينات: {{count}}",
+    "samples_two": "العينات: {{count}}",
+    "samples_few": "العينات: {{count}}",
+    "samples_many": "العينات: {{count}}",
+    "samples_other": "العينات: {{count}}"
+  },
+  "review": {
+    "title": "مراجعة الأمس",
+    "hypothesis": "الفرضية:",
+    "cause": "السبب:"
+  },
+  "targets": {
+    "title": "أهداف الغد ({{count}})",
+    "previewPartial": "معاينة بطاقة التقييم من بيانات اليوم الجزئية",
+    "previewFull": "معاينة بطاقة التقييم من يوم كامل"
+  },
+  "applied": {
+    "title": "مؤكَّدة ومطبَّقة",
+    "titleAt": "أُكّدت وطُبّقت في {{time}}",
+    "counts": "أُضيف: {{added}} · عُدّل: {{modified}} · عُطّل: {{disabled}} · أُبقي: {{kept}}",
+    "errors_zero": "الأخطاء: {{count}}",
+    "errors_one": "الأخطاء: {{count}}",
+    "errors_two": "الأخطاء: {{count}}",
+    "errors_few": "الأخطاء: {{count}}",
+    "errors_many": "الأخطاء: {{count}}",
+    "errors_other": "الأخطاء: {{count}}"
+  },
+  "consistency": {
+    "title_zero": "تحذيرات الاتساق ({{count}}) — نص الوكيل يخالف بياناته المنظمة",
+    "title_one": "تحذير اتساق ({{count}}) — نص الوكيل يخالف بياناته المنظمة",
+    "title_two": "تحذيرا اتساق ({{count}}) — نص الوكيل يخالف بياناته المنظمة",
+    "title_few": "تحذيرات الاتساق ({{count}}) — نص الوكيل يخالف بياناته المنظمة",
+    "title_many": "تحذيرات الاتساق ({{count}}) — نص الوكيل يخالف بياناته المنظمة",
+    "title_other": "تحذيرات الاتساق ({{count}}) — نص الوكيل يخالف بياناته المنظمة",
+    "countMismatch": "<mono>{{field}}</mono>: يقول النص <b>{{claims}}</b>، وتقول البيانات <b>{{data}}</b>",
+    "unknownAutomation": "يشير النص إلى <mono>{{context}}</mono> لكن لا توجد أتمتة فعلية بالمعرّف {{id}}.",
+    "untrackedAutomation": "يناقش النص <mono>{{context}}</mono> لكن لا يوجد بند في الفروقات يمس الأتمتة #{{id}}.",
+    "timeRange": "النطاق الزمني لـ <mono>{{subject}}</mono>: يقول النص <b>{{claimed}}</b>، والجدول الفعلي يمتد <b>{{actual}}</b>",
+    "footer": "البيانات المنظمة (proposed_automations + changes_from_today) هي المرجع عند التأكيد. النص للاطلاع فقط وقد يحيد عنها."
+  },
+  "rejection": {
+    "title": "مرفوضة — ملاحظات المشغّل",
+    "footer": "أُعيد إنشاء إصدار جديد من هذه الخطة يعالج هذه الملاحظات."
+  },
+  "discussion": {
+    "title": "النقاش",
+    "help": "اطلب من المخطِّط شرح قرار، أو نبّهه إلى أمر ربما فاته. هذا حوار فقط — لا يعدّل الخطة ما لم تحوّله إلى إعادة إنشاء.",
+    "loadFailed": "تعذّر تحميل نقاش الخطة",
+    "loadFailedWithError": "تعذّر تحميل نقاش الخطة: {{error}}",
+    "sendFailed": "تعذّر إرسال التوضيح",
+    "confirmRegenerate_zero": "تحويل {{count}} توضيح مفتوح إلى ملاحظات رفض وإعادة إنشاء الخطة؟",
+    "confirmRegenerate_one": "تحويل التوضيح المفتوح إلى ملاحظات رفض وإعادة إنشاء الخطة؟",
+    "confirmRegenerate_two": "تحويل التوضيحين المفتوحين إلى ملاحظات رفض وإعادة إنشاء الخطة؟",
+    "confirmRegenerate_few": "تحويل {{count}} توضيحات مفتوحة إلى ملاحظات رفض وإعادة إنشاء الخطة؟",
+    "confirmRegenerate_many": "تحويل {{count}} توضيحًا مفتوحًا إلى ملاحظات رفض وإعادة إنشاء الخطة؟",
+    "confirmRegenerate_other": "تحويل {{count}} توضيح مفتوح إلى ملاحظات رفض وإعادة إنشاء الخطة؟",
+    "regenerateFailed": "تعذّرت إعادة الإنشاء",
+    "toastRegenerated": "رُفضت الخطة وأُعيد إنشاؤها من التوضيحات",
+    "applyOpenTitle": "جمع كل التوضيحات المفتوحة كملاحظات رفض وإعادة إنشاء الخطة",
+    "regenerating": "جارٍ إعادة الإنشاء…",
+    "applyOpen_zero": "إعادة الإنشاء من {{count}} مفتوح",
+    "applyOpen_one": "إعادة الإنشاء من {{count}} مفتوح",
+    "applyOpen_two": "إعادة الإنشاء من {{count}} مفتوح",
+    "applyOpen_few": "إعادة الإنشاء من {{count}} مفتوحة",
+    "applyOpen_many": "إعادة الإنشاء من {{count}} مفتوحًا",
+    "applyOpen_other": "إعادة الإنشاء من {{count}} مفتوح",
+    "empty": "لا توجد توضيحات على هذه الخطة بعد.",
+    "role": {
+      "question": "سؤال",
+      "highlight": "تنبيه"
+    },
+    "operator": "مشغّل",
+    "addressed": "عولج",
+    "addressedByPlan": "عولج (→ الخطة #{{id}})",
+    "plannerBadge": "المخطِّط",
+    "verdict": {
+      "plan_correct": "الخطة صحيحة",
+      "concern_valid": "الملاحظة في محلها",
+      "need_more_data": "يلزم مزيد من البيانات"
+    },
+    "waiting": "بانتظار المخطِّط…",
+    "typeLabel": "النوع:",
+    "highlightHelp": "ترى أن الخطة أغفلت شيئًا — سيقرّ المخطِّط بذلك ويقترح تعديلات.",
+    "questionHelp": "تريد من المخطِّط شرح منطقه — دون تغيير الخطة.",
+    "highlightPlaceholder": "مثال: \"VWC يبلغ 60% على الحساس 1 في كل عمليات الري الثلاث — هل هذا مفرط؟\"",
+    "questionPlaceholder": "مثال: \"لماذا 3 دورات تسميد بالري بدل 2؟ وما مبرر توقيت 12:00؟\"",
+    "sending": "جارٍ الإرسال…",
+    "send": "إرسال إلى المخطِّط"
+  },
+  "toast": {
+    "loadPlansFailed": "تعذّر تحميل الخطط: {{error}}",
+    "loadPlanFailed": "تعذّر تحميل الخطة: {{error}}",
+    "configSaved": "تم حفظ إعدادات المخطِّط",
+    "configSaveFailed": "تعذّر حفظ الإعدادات",
+    "generated": "أُنشئت خطة الغد",
+    "generateFailed": "فشل الإنشاء",
+    "confirmedWithOverrides": "أُكّدت الخطة مع تجاوز قواعد الحماية — سُجّل ذلك للتدقيق.",
+    "confirmed": "أُكّدت الخطة — حُدّثت الأتمتة.",
+    "changesFailed_zero": "فشل {{count}} تغيير — راجع التفاصيل في الخطة.",
+    "changesFailed_one": "فشل تغيير واحد — راجع التفاصيل في الخطة.",
+    "changesFailed_two": "فشل تغييران — راجع التفاصيل في الخطة.",
+    "changesFailed_few": "فشلت {{count}} تغييرات — راجع التفاصيل في الخطة.",
+    "changesFailed_many": "فشل {{count}} تغييرًا — راجع التفاصيل في الخطة.",
+    "changesFailed_other": "فشل {{count}} تغيير — راجع التفاصيل في الخطة.",
+    "overrideForbidden": "التجاوز غير مسموح: {{error}}",
+    "confirmFailed": "فشل التأكيد",
+    "feedbackRequired": "اكتب ملاحظاتك ليتمكن المخطِّط من إعادة الإنشاء بما يعالج مخاوفك.",
+    "rejected": "رُفضت الخطة — جارٍ إعادة الإنشاء بناءً على الملاحظات.",
+    "rejectFailed": "فشل الرفض",
+    "deleted": "حُذفت الخطة"
+  },
+  "confirm": {
+    "replacePending": "توجد بالفعل خطة معلّقة للغد. إعادة الإنشاء (تستبدلها)؟",
+    "deletePlan": "حذف هذه الخطة؟ لا يجوز عادةً حذف الخطط المؤكَّدة؛ هذا يحذف السجل فقط، لا الأتمتة المطبَّقة."
+  },
+  "manifest": {
+    "insert": "إضافة",
+    "update": "تحديث",
+    "disable": "تعطيل",
+    "automation": "أتمتة",
+    "item": "{{verb}} · {{target}}",
+    "itemWithId": "{{verb}} · {{target}} [المعرّف {{id}}]"
+  },
+  "list": {
+    "title": "الخطط",
+    "empty": "لا توجد خطط بعد."
+  },
+  "detail": {
+    "selectPrompt": "اختر خطة أو أنشئ خطة للغد.",
+    "notGenerated": "لم تُنشأ خطة {{date}}",
+    "rawError": "الخطأ الخام",
+    "planFor": "خطة {{date}}",
+    "generated": "أُنشئت {{time}}",
+    "tokens": "الرموز: دخول {{input}} · خروج {{output}}",
+    "cacheHit": "إصابة الذاكرة المؤقتة {{n}}"
+  },
+  "guardrails": {
+    "wouldBlock_zero": "{{count}} قاعدة حماية ستمنع التأكيد",
+    "wouldBlock_one": "قاعدة حماية واحدة ستمنع التأكيد",
+    "wouldBlock_two": "قاعدتا حماية ستمنعان التأكيد",
+    "wouldBlock_few": "{{count}} قواعد حماية ستمنع التأكيد",
+    "wouldBlock_many": "{{count}} قاعدة حماية ستمنع التأكيد",
+    "wouldBlock_other": "{{count}} قاعدة حماية ستمنع التأكيد",
+    "latestLine": "آخر قيمة لـ {{element}}: {{value}} ({{comparison}}) — يلزم أن تكون نسبة تشغيل خزان {{element}} ≥ {{duty}}",
+    "noRecentSample": "لا عينة حديثة",
+    "triggeredBy": "بسبب: {{list}}",
+    "triggerItem": "\"{{name}}\" (البرنامج {{program}}، نسبة تشغيل الخزان {{duty}})",
+    "overrideRole": "الدور المطلوب للتجاوز:",
+    "informational_zero": "{{count}} تحذير للعلم (لا يمنع التأكيد)",
+    "informational_one": "تحذير واحد للعلم (لا يمنع التأكيد)",
+    "informational_two": "تحذيران للعلم (لا يمنعان التأكيد)",
+    "informational_few": "{{count}} تحذيرات للعلم (لا تمنع التأكيد)",
+    "informational_many": "{{count}} تحذيرًا للعلم (لا تمنع التأكيد)",
+    "informational_other": "{{count}} تحذير للعلم (لا تمنع التأكيد)",
+    "flush": "غسيل",
+    "fertigationOffset": "تسميد بالري، {{minutes}} د",
+    "program": "البرنامج {{name}}"
+  },
+  "actions": {
+    "applying": "جارٍ التطبيق…",
+    "confirmApply": "تأكيد وتطبيق",
+    "reject": "رفض…",
+    "changeCounts": "{{add}} إضافة · {{modify}} تحديث · {{remove}} تعطيل · {{keep}} إبقاء",
+    "deletePlan": "حذف سجل هذه الخطة"
+  },
+  "sections": {
+    "templateRequests": "طلبات قوالب من المخطِّط ({{count}})",
+    "templateParameters": "المعاملات:",
+    "example": "مثال:",
+    "risks": "مخاطر نبّه إليها المخطِّط",
+    "changes": "التغييرات عن تشغيل اليوم (قائمة التطبيق)",
+    "idTag": "[المعرّف {{id}}]",
+    "proposedTag": "[→ المقترحة #{{n}}]",
+    "proposed": "الأتمتة المقترحة ({{count}})",
+    "noneProposed": "لا توجد أتمتة مقترحة."
+  },
+  "raw": {
+    "show": "عرض لقطة المدخلات الخام وJSON الخطة",
+    "hide": "إخفاء لقطة المدخلات الخام وJSON الخطة",
+    "inputSnapshot": "لقطة المدخلات (المرسلة إلى المخطِّط)",
+    "planJson": "JSON الخطة الكامل"
+  },
+  "confirmDialog": {
+    "title": "تطبيق هذه الخطة على الأتمتة الفعلية؟",
+    "body_zero": "تأكيد خطة {{date}} سيُجري: إضافة {{add}}، وتحديث {{modify}}، وتعطيل {{remove}} من قواعد الأتمتة (مع إبقاء {{keep}} دون تغيير). تُقيَّم قواعد الحماية عند التطبيق.",
+    "body_one": "تأكيد خطة {{date}} سيُجري: إضافة {{add}}، وتحديث {{modify}}، وتعطيل {{remove}} من قواعد الأتمتة (مع إبقاء {{keep}} دون تغيير). تُقيَّم قواعد الحماية عند التطبيق.",
+    "body_two": "تأكيد خطة {{date}} سيُجري: إضافة {{add}}، وتحديث {{modify}}، وتعطيل {{remove}} من قواعد الأتمتة (مع إبقاء {{keep}} دون تغيير). تُقيَّم قواعد الحماية عند التطبيق.",
+    "body_few": "تأكيد خطة {{date}} سيُجري: إضافة {{add}}، وتحديث {{modify}}، وتعطيل {{remove}} من قواعد الأتمتة (مع إبقاء {{keep}} دون تغيير). تُقيَّم قواعد الحماية عند التطبيق.",
+    "body_many": "تأكيد خطة {{date}} سيُجري: إضافة {{add}}، وتحديث {{modify}}، وتعطيل {{remove}} من قواعد الأتمتة (مع إبقاء {{keep}} دون تغيير). تُقيَّم قواعد الحماية عند التطبيق.",
+    "body_other": "تأكيد خطة {{date}} سيُجري: إضافة {{add}}، وتحديث {{modify}}، وتعطيل {{remove}} من قواعد الأتمتة (مع إبقاء {{keep}} دون تغيير). تُقيَّم قواعد الحماية عند التطبيق."
+  },
+  "reject": {
+    "title": "رفض الخطة مع ملاحظات",
+    "help": "صف ما يجب تغييره. سيعيد المخطِّط الإنشاء بما يعالج ملاحظاتك. مثال: <i>\"قدّمت موعد الري كثيرًا — الجفاف الصباحي لا بأس به. ركّز بدلًا من ذلك على انخفاض ما بعد الظهر.\"</i>",
+    "placeholder": "ما الذي أغفلته الخطة أو أخطأت فيه؟",
+    "regenerating": "جارٍ إعادة الإنشاء…",
+    "submit": "رفض وإعادة إنشاء"
+  },
+  "override": {
+    "title": "يلزم تجاوز قاعدة حماية",
+    "help": "كانت هذه الخطة ستُمنع عادةً. اكتب سببًا لكل قاعدة حماية أدناه لتطبيقها رغم ذلك. تُسجَّل الأسباب في سجل تدقيق الخطة.",
+    "adminRequired": "قاعدة أو أكثر تتطلب تجاوزًا بدور المسؤول.",
+    "ruleLine": "{{element}}: {{value}} ({{comparison}}) · يلزم نسبة تشغيل ≥ {{duty}}",
+    "reason": "سبب التجاوز",
+    "reasonPlaceholder": "مثال: أكّد قياس AMIC الجديد أن Ca عند 195 mg/L — قائمة العينات قديمة؛ تُطبَّق خطة الغد كما صُممت.",
+    "missingReasons_zero": "اكتب سببًا لـ {{count}} قاعدة حماية قبل التطبيق",
+    "missingReasons_one": "اكتب سببًا لقاعدة الحماية قبل التطبيق",
+    "missingReasons_two": "اكتب سببًا لقاعدتي الحماية قبل التطبيق",
+    "missingReasons_few": "اكتب سببًا لـ {{count}} قواعد حماية قبل التطبيق",
+    "missingReasons_many": "اكتب سببًا لـ {{count}} قاعدة حماية قبل التطبيق",
+    "missingReasons_other": "اكتب سببًا لـ {{count}} قاعدة حماية قبل التطبيق",
+    "apply": "تطبيق مع التجاوز"
+  },
+  "settings": {
+    "title": "إعدادات المخطِّط",
+    "enabled": "المُجدوِل مفعّل (إنشاء خطة تلقائيًا كل مساء)",
+    "firesAt": "وقت التشغيل",
+    "hour": "الساعة",
+    "minute": "الدقيقة",
+    "localTime": "(التوقيت المحلي، 24 ساعة)",
+    "pendingNote": "تُحفظ الخطط المجدولة بحالة <mono>pending</mono> (معلّقة). يجب أن يؤكدها المشغّل أو يرفضها — لا يطبّق المُجدوِل أي تغيير على الأتمتة الفعلية تلقائيًا أبدًا."
+  },
+  "failure": {
+    "pill": "الإنشاء يفشل",
+    "headline_zero": "فشل إنشاء الخطة {{count}} يوم متتاليًا منذ {{since}}",
+    "headline_one": "فشل إنشاء الخطة يومًا واحدًا منذ {{since}}",
+    "headline_two": "فشل إنشاء الخطة يومين متتاليين منذ {{since}}",
+    "headline_few": "فشل إنشاء الخطة {{count}} أيام متتالية منذ {{since}}",
+    "headline_many": "فشل إنشاء الخطة {{count}} يومًا متتاليًا منذ {{since}}",
+    "headline_other": "فشل إنشاء الخطة {{count}} يوم متتاليًا منذ {{since}}",
+    "reason": {
+      "none": "لم تُسجَّل تفاصيل للخطأ",
+      "credits": "نفد رصيد Anthropic API — اشحن الرصيد من Plans & Billing",
+      "auth": "رُفض مفتاح API"
+    },
+    "showRaw": "عرض الخطأ الخام",
+    "hideRaw": "إخفاء الخطأ الخام",
+    "retryNotAllowed": "يمكن للمشغّلين والمسؤولين إعادة محاولة الإنشاء",
+    "retryTitle": "تشغيل إنشاء الخطة مجددًا الآن",
+    "retrying": "جارٍ إعادة المحاولة…"
+  }
+}

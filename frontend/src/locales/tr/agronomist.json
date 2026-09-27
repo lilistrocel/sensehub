@@ -1,1 +1,362 @@
-{}
+{
+  "title": "Agronomist",
+  "subtitle": "Uzun süreli belleğe sahip günlük yapay zekâ çiftlik analizi",
+  "views": {
+    "label": "Agronomist görünümü",
+    "reports": "Raporlar",
+    "settings": "Ayarlar"
+  },
+  "actions": {
+    "generateNow": "Şimdi Oluştur",
+    "generating": "Oluşturuluyor…",
+    "generateNowTitle": "Bugünün raporunu şimdi oluştur",
+    "apiKeyMissingTitle": "ANTHROPIC_API_KEY arka uç ortamında tanımlı değil",
+    "memory": "Bellek",
+    "retryNow": "Şimdi yeniden dene",
+    "retrying": "Yeniden deneniyor…",
+    "retryNowTitle": "Bugünün raporunu hemen çalıştır; başarılı olursa program kaldığı yerden devam eder",
+    "runNow": "Şimdi Çalıştır",
+    "discard": "Vazgeç",
+    "saveSettings": "Ayarları kaydet",
+    "noRecommendations": "Bu raporda yapılandırılmış öneri yok.",
+    "priorityGroup": "Öncelik: {{priority}}",
+    "tasksFromReport": "Bu rapordan gelen operatör görevleri",
+    "openTasks": "Görevleri aç",
+    "tasksLoadFailed": "Görevler yüklenemedi: {{error}}",
+    "notes": "Agronomistin notları"
+  },
+  "apiKeyWarning": "<b>ANTHROPIC_API_KEY arka uç kapsayıcısında tanımlı değil.</b> Tanımlanana kadar agronomist ajanı çalışamaz. <code>docker-compose.yml</code> ile aynı klasördeki <code>.env</code> dosyasına ekleyin, ardından arka ucu yeniden başlatın.",
+  "health": {
+    "paused": "duraklatıldı",
+    "failing": "başarısız",
+    "failuresLastAt": "{{failures}}, sonuncusu {{time}}",
+    "errorTitle": {
+      "billing": "Anthropic kredi bakiyesi tükendi",
+      "auth": "Anthropic API anahtarı reddedildi",
+      "rate_limit": "Anthropic istek sınırına ulaşıldı",
+      "truncated_output": "Son rapor çıktısı yarıda kesildi veya geçersiz",
+      "max_tokens": "Son rapor çıktı token sınırına ulaştı",
+      "refusal": "Son rapor model tarafından reddedildi",
+      "other": "Son agronomist raporu başarısız oldu"
+    }
+  },
+  "status": {
+    "setup": "Kurulum",
+    "captureOn": "öğle çekimi açık",
+    "captureOff": "öğle çekimi kapalı",
+    "allSourcesInUse": "tüm kaynaklar kullanımda",
+    "outOfServiceTitle": "Hizmet dışı: {{names}}",
+    "sourcesOut_one": "{{count}} kaynak hizmet dışı: {{names}}",
+    "sourcesOut_other": "{{count}} kaynak hizmet dışı: {{names}}",
+    "sourcesOutShort_one": "{{count}} hizmet dışı: {{names}}",
+    "sourcesOutShort_other": "{{count}} hizmet dışı: {{names}}"
+  },
+  "sourceShort": {
+    "amic": "AMIC",
+    "lab": "Laboratuvar",
+    "water_controller": "SEKO",
+    "canopy_capture": "Kamera",
+    "energy": "Enerji",
+    "fertigation": "Fertigasyon",
+    "substrate_sensors": "Substrat",
+    "climate_sensors": "İklim",
+    "alerts": "Alarmlar",
+    "operator_tasks": "Görevler",
+    "automations_state": "Otomasyonlar"
+  },
+  "summary": {
+    "daily": "Her gün {{time}}",
+    "scheduleOff": "Zamanlanmış çalışma kapalı",
+    "weekly": "haftalık özet {{day}} {{time}}",
+    "captureFrames_one": "{{count}} kare, saat {{time}}",
+    "captureFrames_other": "{{count}} kare, saat {{time}}",
+    "captureOff": "Öğle çekimi kapalı",
+    "none": "yok",
+    "reference": "Sıcaklık {{temp}} · RH {{rh}} · Toprak {{soil}}",
+    "lastSession": "son çekim {{time}} · {{frames}}",
+    "noSession": "son 7 günde çekim yok",
+    "sourcesSomeOut_one": "{{inUse}} kullanımda, {{count}} hizmet dışı: {{names}}",
+    "sourcesSomeOut_other": "{{inUse}} kullanımda, {{count}} hizmet dışı: {{names}}",
+    "sourcesAllIn_one": "{{count}} kullanımda, tüm kaynaklar hizmette",
+    "sourcesAllIn_other": "{{count}} kullanımda, tüm kaynaklar hizmette"
+  },
+  "count": {
+    "frame_one": "{{count}} kare",
+    "frame_other": "{{count}} kare",
+    "consecutiveFailure_one": "art arda {{count}} başarısızlık",
+    "consecutiveFailure_other": "art arda {{count}} başarısızlık",
+    "recommendation_one": "{{count}} öneri",
+    "recommendation_other": "{{count}} öneri",
+    "note_one": "{{count}} not",
+    "note_other": "{{count}} not"
+  },
+  "empty": {
+    "noReports": "Henüz rapor yok. Oluşturmak için \"Şimdi Oluştur\"a tıklayın.",
+    "pickReport": "Bir rapor tarihi seçin ya da yeni bir rapor için \"Şimdi Oluştur\"a tıklayın."
+  },
+  "confirm": {
+    "replaceToday": "Bugünün raporu zaten var. Değiştirilsin mi? Yeni rapor başarısız olursa mevcut rapor korunur.",
+    "weeklyRollup": "Haftalık özet şimdi çalıştırılsın mı? Geçen haftanın günlük raporları özetlenir ve uzun süreli bellek güncellenir."
+  },
+  "toast": {
+    "retryAlreadyExists": "Bugünün raporu zaten var — program devam ediyor",
+    "retryGenerated": "Rapor oluşturuldu — program devam ediyor",
+    "retryFailed": "Yeniden deneme başarısız: {{error}}",
+    "loadReportsFailed": "Raporlar yüklenemedi: {{error}}",
+    "loadReportFailed": "Rapor yüklenemedi: {{error}}",
+    "generated": "Rapor oluşturuldu",
+    "generateFailed": "Oluşturma başarısız: {{error}}",
+    "rollupSkipped": "Özet atlandı: {{reason}}",
+    "rollupWritten": "Haftalık özet yazıldı: {{start}} → {{end}}",
+    "rollupFailed": "Özet başarısız: {{error}}",
+    "settingsSaved": "Ayarlar kaydedildi",
+    "saveFailed": "Kaydetme başarısız: {{error}}",
+    "translationRequested": "Çeviri istendi — hazır olduğunda burada görünecek",
+    "translationRequestFailed": "Çeviri isteği başarısız: {{error}}"
+  },
+  "settings": {
+    "scheduleTitle": "Program ve model",
+    "sourcesTitle": "Veri kaynakları",
+    "captureTitle": "Kanopi çekimi",
+    "referenceTitle": "Referans sensörler",
+    "unsavedNextRun": "Kaydedilmemiş değişiklikler — sonraki çalışma hâlâ kayıtlı ayarları kullanır.",
+    "enableDaily": "Zamanlanmış günlük raporu etkinleştir",
+    "enableDailyHelp": "Kapalıyken yalnızca elle \"Şimdi Oluştur\" çalışır.",
+    "model": "Model",
+    "currentOption": "{{value}} (mevcut)",
+    "modelWithNote": "{{name}} ({{note}})",
+    "modelNote": {
+      "default": "varsayılan",
+      "mostCapable": "en yetenekli, daha pahalı",
+      "cheapest": "en ucuz"
+    },
+    "effortLabel": "Düşünme düzeyi",
+    "effort": {
+      "low": "Düşük (en hızlı, en ucuz)",
+      "medium": "Orta (varsayılan)",
+      "high": "Yüksek (daha çok düşünme, rapora daha az yer)",
+      "xhigh": "Çok yüksek"
+    },
+    "effortHelp": "Düşünme, çıktı bütçesini raporla paylaşır. Haiku için gönderilmez.",
+    "dailyTime": "Günlük rapor saati (yerel)",
+    "hour": "Saat",
+    "minute": "Dakika",
+    "weeklyRollup": "Haftalık özet",
+    "promptOverride": "Sistem istemini geçersiz kıl",
+    "promptOverrideHint": "(isteğe bağlı, ileri düzey)",
+    "promptOverridePlaceholder": "Varsayılan BAE agronomist kişiliğini kullanmak için boş bırakın."
+  },
+  "reference": {
+    "noneOption": "— Yok —",
+    "noZones": "Tanımlı bölge yok",
+    "help": "Her ortam ölçümü için esas sensörü seçin. Ajan bunları birincil okuma olarak kullanır, diğer sensörleri çapraz kontrol sayar.",
+    "temperature": "Sıcaklık",
+    "humidity": "Nem",
+    "soil": "Toprak / Substrat",
+    "zoneRoles": "Bölge rolleri (AMIC besin bağlamı için)",
+    "zoneRolesHelp": "Hangi bölgelerin sulama besleme suyunu, hangilerinin drenaj dönüşünü temsil ettiğini işaretleyin. İşaretlenmezse ajan, adında \"irrigation\" / \"drain\" geçen bölgeleri kullanır.",
+    "feed": "Sulama (besleme)",
+    "drain": "Drenaj (dönüş)"
+  },
+  "memory": {
+    "title": "Uzun Süreli Bellek",
+    "empty": "Henüz uzun süreli bellek yok — ilk haftalık özetten sonra oluşturulur.",
+    "meta": "Sürüm {{version}} · {{size}} bayt · güncellendi {{time}} · tetikleyici: {{trigger}}",
+    "olderVersions": "Eski sürümler ({{count}})",
+    "versionLine": "s{{version}} · {{time}}"
+  },
+  "errorClass": {
+    "billing": "faturalama",
+    "auth": "kimlik doğrulama",
+    "rate_limit": "istek sınırı",
+    "other": "hata",
+    "truncated_output": "kesik çıktı",
+    "max_tokens": "çıktı sınırı",
+    "refusal": "reddedildi"
+  },
+  "section": {
+    "crop": { "label": "Ürün", "title": "Ürünün Durumu" },
+    "irrigation": { "label": "Sulama", "title": "Sulama ve Fertigasyon" },
+    "nutrients": { "label": "Besinler", "title": "Besin Durumu (AMIC + Laboratuvar)" },
+    "climate": { "label": "İklim", "title": "İklim" },
+    "risks": { "label": "Riskler", "title": "Riskler ve Anormallikler" },
+    "numbered": "{{label}} {{n}}",
+    "noDetail": "Bu bölümde başka ayrıntı yok.",
+    "empty": "Raporda bu bölüm boş."
+  },
+  "sectionStatus": {
+    "srLabel": "durum: {{status}}"
+  },
+  "captureMode": {
+    "noon": "öğle çekimi",
+    "manual": "elle çekim",
+    "fallback_4h": "4 saatlik yedek",
+    "latest": "mevcut en son",
+    "manual_night": "elle çekim (gece)"
+  },
+  "header": {
+    "reportDate": "Rapor tarihi",
+    "olderAria": "Daha eski rapor, {{date}}",
+    "olderTitle": "Daha eski: {{date}}",
+    "noOlder": "Daha eski rapor yok",
+    "newerAria": "Daha yeni rapor, {{date}}",
+    "newerTitle": "Daha yeni: {{date}}",
+    "noNewer": "Daha yeni rapor yok",
+    "isLatest": "Bu en son rapor",
+    "optionFailed": "başarısız ({{reason}})",
+    "optionRegenFailed": "yeniden oluşturma başarısız",
+    "optionExcluded_one": "{{count}} hariç",
+    "optionExcluded_other": "{{count}} hariç",
+    "failedPill": "başarısız · {{reason}}",
+    "olderReport": "eski rapor",
+    "olderReportTitle": "Daha yeni bir rapor var — daha yeni rapor okunu kullanın",
+    "daysOld_one": "{{count}} günlük",
+    "daysOld_other": "{{count}} günlük",
+    "daysOldTitle": "Daha yeni bir rapor oluşturulmadı",
+    "regenFailedPill": "yeniden oluşturma başarısız · {{reason}} · önceki sürüm gösteriliyor",
+    "regenFailedTitle": "Yeniden oluşturma başarısız ({{failedAt}}); gösterilen sürüm: {{generatedAt}}. {{error}}",
+    "sourcesExcluded_one": "{{count}} kaynak hariç tutuldu",
+    "sourcesExcluded_other": "{{count}} kaynak hariç tutuldu",
+    "sourcesExcludedTitle": "Bu rapor hazırlanırken hizmet dışı: {{names}}",
+    "generatedAt": "oluşturuldu {{time}}"
+  },
+  "translation": {
+    "autoTranslated": "İngilizceden otomatik olarak çevrildi.",
+    "showOriginal": "Orijinali göster (İngilizce)",
+    "showingOriginal": "Orijinal İngilizce rapor gösteriliyor.",
+    "showTranslation": "Çeviriyi göster",
+    "inProgress": "Çeviri sürüyor",
+    "inProgressHelp": "Hazır olana kadar İngilizce gösteriliyor. Sayfa kendiliğinden yeniden kontrol eder.",
+    "failed": "Çeviri başarısız",
+    "failedHelp": "Çeviri başarısız — İngilizce gösteriliyor.",
+    "englishOnly": "Bu rapor yalnızca İngilizce olarak mevcut.",
+    "translate": "Çevir",
+    "retry": "Yeniden çevir",
+    "requesting": "İsteniyor…",
+    "confirmTranslate": "Bu rapor şu dile çevrilsin mi: {{language}}? Bu işlem yapay zekâ sağlayıcısına bir ücretli çağrı yapar.",
+    "languageName": {
+      "tr": "Türkçe",
+      "ar": "Arapça"
+    }
+  },
+  "failure": {
+    "title": "Oluşturma başarısız: {{date}}",
+    "body": "Bu gün için analiz üretilmedi. Aşağıdaki hata, sağlayıcının döndürdüğü hatadır."
+  },
+  "keyNumber": {
+    "notCurrent": "{{value}} · güncel değil"
+  },
+  "overview": {
+    "glance": "Bir bakışta durum",
+    "framesUsed": "Kullanılan kanopi kareleri",
+    "summary": "Özet",
+    "noSummary": "Bu raporda özet metni yok.",
+    "readReport": "Raporu oku",
+    "topActions": "Öncelikli eylemler",
+    "seeAllActions": "Tüm eylemleri gör",
+    "noHighPriority_one": "{{count}} öneri, hiçbiri yüksek öncelikli değil.",
+    "noHighPriority_other": "{{count}} öneri, hiçbiri yüksek öncelikli değil.",
+    "onlyTasks_one": "Yapılandırılmış öneri yok; bu çalışmadan {{count}} operatör görevi.",
+    "onlyTasks_other": "Yapılandırılmış öneri yok; bu çalışmadan {{count}} operatör görevi."
+  },
+  "details": {
+    "title": "Rapor ayrıntıları",
+    "model": "Model",
+    "generated": "Oluşturulma",
+    "tokens": "Token giriş / çıkış",
+    "cache": "Önbellek okuma / yazma",
+    "captureIds": "Çekim kimlikleri",
+    "excluded": "Hariç tutulan kaynaklar",
+    "translation": "Çeviri",
+    "inputSnapshot": "Girdi anlık görüntüsü (ajana gönderilen veri)"
+  },
+  "tabs": {
+    "label": "Rapor bölümleri",
+    "overview": "Genel bakış",
+    "actions": "Eylemler",
+    "discussion": "Tartışma"
+  },
+  "report": {
+    "table": "Tablo"
+  },
+  "priority": {
+    "critical": "kritik",
+    "high": "yüksek",
+    "medium": "orta",
+    "low": "düşük"
+  },
+  "discussion": {
+    "title": "Açıklamalar ve tartışma",
+    "typeFirst": "Göndermeden önce bir açıklama yazın",
+    "confirmRegenerate": "Rapor bu açıklamayla şimdi yeniden oluşturulsun mu? Claude çağrılır ve yeni rapor kontrollerden geçerse mevcut raporun yerini alır. Yeniden oluşturma başarısız olursa mevcut rapor korunur.",
+    "toastRegenerated": "Açıklama gönderildi ve rapor yeniden oluşturuldu",
+    "toastSavedRegenFailed": "Açıklama kaydedildi (yeniden oluşturma başarısız — hataya bakın)",
+    "toastPosted": "Açıklama gönderildi",
+    "help": "Ajanın bilmediği bağlamı ekleyin — arızalı sensörler, yakın zamanda yapılan bakım, \"prob kalibre edilmediği için bugünkü pH'ı yok say\" gibi. Notlar kalıcı olarak saklanır ve yeniden oluşturmada isteme eklenir; böylece yeni rapor (ve sonraki haftalık özetler) düzeltmenizi yansıtır.",
+    "anonymous": "Anonim",
+    "triggeredRegen": "yeniden oluşturmayı tetikledi",
+    "empty": "Henüz açıklama yok.",
+    "fieldLabel": "Açıklama",
+    "placeholder": "Bağlam ekleyin, bir varsayımı düzeltin veya bir sensör sorununu bildirin. Örnek: 'AMIC pH probu kalibre edilmedi — yeni bir bildirime kadar pH okumalarını yok sayın.'",
+    "chars_one": "{{count}} karakter",
+    "chars_other": "{{count}} karakter",
+    "addOnly": "Yalnızca not ekle",
+    "regenerating": "Yeniden oluşturuluyor…",
+    "addAndRegenerate": "Ekle ve raporu yeniden oluştur"
+  },
+  "capture": {
+    "title": "Kanopi çekimleri",
+    "openFrame": "Kare {{n}} — tam boyutta aç",
+    "frameAlt": "Kanopi karesi {{n}}",
+    "sharpnessTitle": "Netlik (Laplace varyansı, yüksek = daha net)",
+    "notAvailable": "yok",
+    "source": {
+      "noon": "öğle",
+      "manual": "elle",
+      "fallback_4h": "yedek"
+    },
+    "toastCaptured_one": "{{count}} kare çekildi",
+    "toastCaptured_other": "{{count}} kare çekildi",
+    "toastFailed": "Çekim başarısız: {{error}}",
+    "help": "Öğle çekimi: {{spacing}} sn arayla {{frames}}, netliğe göre puanlanır. Rapora {{sharpest}} gönderilir; öğle çekimi yoksa 10:00–14:00 arasındaki 4 saatlik anlık görüntüler kullanılır.",
+    "sharpestOne": "en net kare",
+    "sharpestN_one": "en net {{count}} kare",
+    "sharpestN_other": "en net {{count}} kare",
+    "captureNowTitle": "Şimdi {{frames}} çek (~{{minutes}} dk)",
+    "capturing": "{{frames}} çekiliyor (~{{minutes}} dk)…",
+    "captureNow": "Şimdi çek",
+    "manualJustTaken": "Az önce elle çekim yapıldı ({{frames}})",
+    "today": "Bugün ({{date}}) — {{frames}}",
+    "loading": "Çekimler yükleniyor…",
+    "noneToday": "Bugün henüz çekim yok."
+  },
+  "sources": {
+    "intro": "Yapay zekânın neye bakmasına izin verildiği. Arızalı ve henüz onarılamayan bir sistemi hizmet dışı bırakın.",
+    "appliesTo": "Günlük agronomist raporu ve gece çalışan planlayıcı için geçerlidir. Hizmet dışı bir sistem, yapay zekânın gördüğü verilerden çıkarılır; yapay zekâya bu sistem hakkında çıkarım yapmaması, numune istememesi ve görev oluşturmaması söylenir.",
+    "viewOnly": "Yalnızca görüntüleme — değiştirmek için bir operatöre veya yöneticiye başvurun.",
+    "loadFailed": "Veri kaynakları yüklenemedi: {{error}}",
+    "toastSavedSomeOut_one": "Veri kaynakları kaydedildi — {{count}} hizmet dışı",
+    "toastSavedSomeOut_other": "Veri kaynakları kaydedildi — {{count}} hizmet dışı",
+    "toastSavedAllIn": "Veri kaynakları kaydedildi — hepsi kullanımda",
+    "outOfServiceCount_one": "{{count}} hizmet dışı",
+    "outOfServiceCount_other": "{{count}} hizmet dışı",
+    "allInUse": "Hepsi kullanımda",
+    "reason": "Neden",
+    "reasonPlaceholder": "ör. Uzun süre çalışmayacak",
+    "backOn": "Geri dönüş tarihi (isteğe bağlı)",
+    "backOnPassed": "Geri dönüş tarihi geçti — bu kaynak yeniden kullanımda sayılıyor.",
+    "toggleAria": "{{name}}: {{state}}",
+    "inUseLower": "kullanımda",
+    "outOfServiceLower": "hizmet dışı",
+    "clickToTakeOut": "Hizmet dışı bırakmak için tıklayın",
+    "clickToPutBack": "Yeniden kullanıma almak için tıklayın",
+    "inUse": "Kullanımda",
+    "outOfService": "Hizmet dışı",
+    "excludedTitle": "Hariç tutulan ekipman",
+    "excludedHelp": "Tüm sistemini hizmet dışı bırakmadan tek bir cihazı yapay zekânın gördüğü her şeyden (okumalar, referans sensörler, tanılama, alarmlar, planlayıcının envanteri) çıkarın.",
+    "currentlyExcluded": "Şu anda hariç tutulanlar: <names>{{names}}</names>.",
+    "noEquipment": "Kayıtlı ekipman yok.",
+    "unsaved": "Kaydedilmemiş değişiklikler — sonraki yapay zekâ çalışması hâlâ kayıtlı ayarları kullanır.",
+    "save": "Veri kaynaklarını kaydet"
+  }
+}

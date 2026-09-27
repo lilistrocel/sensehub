@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button, Card, SectionHeader } from '../ui';
@@ -11,15 +12,23 @@ import { TemplateManagerModal, TemplatesModal } from '../components/automations/
 import { INPUT, API_BASE } from '../components/automations/formStyles';
 import {
   buildEquipmentIndex, summarizeAutomation, classifyAutomation, offlineTargets, findDuplicateNames, isEnabled,
-  parseAutomation, collectTargets, formatDuration, CATEGORY_ORDER, CATEGORY_LABELS, TRIGGER_ORDER, TRIGGER_LABELS,
+  parseAutomation, collectTargets, formatDuration, actionWord, CATEGORY_ORDER, CATEGORY_LABELS, TRIGGER_ORDER, TRIGGER_LABELS,
 } from '../components/automations/automationSummary';
+import { useSummaryLocale } from '../components/automations/useSummaryLocale';
 
 /**
  * Automations: every rule says WHAT it does and WHEN, grouped by purpose.
  * Actions are quiet (ghost/secondary); "New" is the only filled button.
  * Run and Delete confirm through ConfirmDialog with the channel list.
  */
+/** Rule names are data: isolate them so "1.STOP EVERYTHING" keeps its order inside Arabic text. */
+const nameIso = (name) => `\u2068${name}\u2069`;
+
 export default function Automations() {
+  // 'templates' (template modals) and 'irrigation' (Stop irrigation button)
+  // load with the page, so opening a modal never suspends the whole page.
+  const { t } = useTranslation(['automations', 'templates', 'irrigation']);
+  const loc = useSummaryLocale();
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
   const canEdit = user?.role === 'admin' || user?.role === 'operator';
@@ -52,7 +61,7 @@ export default function Automations() {
     try {
       setError(null);
       const response = await fetch(`${API_BASE}/automations`, { headers: authHeaders });
-      if (!response.ok) throw new Error(`Failed to fetch automations (HTTP ${response.status})`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setAutomations(await response.json());
     } catch (err) {
       setError(err.message);
@@ -68,7 +77,7 @@ export default function Automations() {
     fetch(`${API_BASE}/equipment`, { headers: authHeaders })
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then(list => setEquipment(Array.isArray(list) ? list : []))
-      .catch(err => showError(`Could not load equipment: ${err.message}`));
+      .catch(err => showError(t('errors.loadEquipment', { error: err.message })));
     fetch(`${API_BASE}/fertigation/dose-programs`, { headers: authHeaders })
       .then(r => (r.ok ? r.json() : []))
       .then(list => {
@@ -76,7 +85,7 @@ export default function Automations() {
         for (const p of Array.isArray(list) ? list : []) m[p.id] = p;
         setDoseProgramsById(m);
       })
-      .catch(err => showError(`Could not load dose programs: ${err.message}`));
+      .catch(err => showError(t('errors.loadDosePrograms', { error: err.message })));
   }, [token, authHeaders, fetchAutomations]);
 
   const equipIndex = useMemo(() => buildEquipmentIndex(equipment), [equipment]);
@@ -84,12 +93,12 @@ export default function Automations() {
 
   const enriched = useMemo(() => automations.map(auto => ({
     auto,
-    summary: summarizeAutomation(auto, equipIndex),
+    summary: summarizeAutomation(auto, equipIndex, loc),
     category: classifyAutomation(auto),
     enabled: isEnabled(auto),
     offline: offlineTargets(auto, equipIndex),
     duplicate: duplicateNames.has(String(auto.name || '').trim().toLowerCase()),
-  })), [automations, equipIndex, duplicateNames]);
+  })), [automations, equipIndex, duplicateNames, loc]);
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -106,6 +115,7 @@ export default function Automations() {
   const groups = useMemo(() => {
     const order = groupBy === 'trigger' ? TRIGGER_ORDER : CATEGORY_ORDER;
     const labels = groupBy === 'trigger' ? TRIGGER_LABELS : CATEGORY_LABELS;
+    const ns = groupBy === 'trigger' ? 'trigger' : 'category';
     const byKey = new Map();
     for (const item of filtered) {
       const key = groupBy === 'trigger' ? item.summary.triggerType : item.category;
@@ -113,8 +123,8 @@ export default function Automations() {
       byKey.get(key).push(item);
     }
     const keys = [...order.filter(k => byKey.has(k)), ...[...byKey.keys()].filter(k => !order.includes(k))];
-    return keys.map(key => ({ key, label: labels[key] || key, items: byKey.get(key) }));
-  }, [filtered, groupBy]);
+    return keys.map(key => ({ key, label: t(`${ns}.${key}`, { defaultValue: labels[key] || key }), items: byKey.get(key) }));
+  }, [filtered, groupBy, t]);
 
   const enabledCount = enriched.filter(e => e.enabled).length;
 
@@ -127,10 +137,10 @@ export default function Automations() {
       const response = await fetch(`${API_BASE}/automations/${auto.id}/toggle`, { method: 'POST', headers: authHeaders });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      showSuccess(`"${auto.name}" ${data.enabled ? 'enabled' : 'disabled'}`);
+      showSuccess(t(data.enabled ? 'toast.enabled' : 'toast.disabled', { name: nameIso(auto.name) }));
       await fetchAutomations();
     } catch (err) {
-      showError(`Could not toggle "${auto.name}": ${err.message}`);
+      showError(t('errors.toggle', { name: nameIso(auto.name), error: err.message }));
     } finally {
       setRowBusy(auto.id, 'toggle', false);
     }
@@ -142,10 +152,10 @@ export default function Automations() {
       const response = await fetch(`${API_BASE}/automations/${auto.id}/duplicate`, { method: 'POST', headers: authHeaders });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
-      showSuccess(`${result.message || 'Duplicated'} (created disabled)`);
+      showSuccess(t('toast.duplicated', { message: result.message || t('toast.duplicatedDefault') }));
       await fetchAutomations();
     } catch (err) {
-      showError(`Could not duplicate "${auto.name}": ${err.message}`);
+      showError(t('errors.duplicate', { name: nameIso(auto.name), error: err.message }));
     } finally {
       setRowBusy(auto.id, 'duplicate', false);
     }
@@ -153,7 +163,7 @@ export default function Automations() {
 
   const openConfirm = (kind, item) => {
     const { actions } = parseAutomation(item.auto);
-    setConfirm({ kind, auto: item.auto, summary: item.summary, targets: collectTargets(actions, equipIndex), actions });
+    setConfirm({ kind, auto: item.auto, summary: item.summary, targets: collectTargets(actions, equipIndex, loc), actions });
   };
 
   const runConfirmed = async () => {
@@ -165,11 +175,11 @@ export default function Automations() {
       let data = null;
       try { data = await response.json(); } catch { data = null; }
       if (!response.ok) throw new Error(data?.message || `HTTP ${response.status}`);
-      showSuccess(data?.message || `"${auto.name}" triggered`);
+      showSuccess(data?.message || t('toast.triggered', { name: nameIso(auto.name) }));
       setConfirm(null);
       await fetchAutomations();
     } catch (err) {
-      showError(`Could not run "${auto.name}": ${err.message}`);
+      showError(t('errors.run', { name: nameIso(auto.name), error: err.message }));
     } finally {
       setConfirmBusy(false);
       setRowBusy(auto.id, 'run', false);
@@ -182,11 +192,11 @@ export default function Automations() {
     try {
       const response = await fetch(`${API_BASE}/automations/${auto.id}`, { method: 'DELETE', headers: authHeaders });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      showSuccess(`"${auto.name}" deleted`);
+      showSuccess(t('toast.deleted', { name: nameIso(auto.name) }));
       setConfirm(null);
       await fetchAutomations();
     } catch (err) {
-      showError(`Could not delete "${auto.name}": ${err.message}`);
+      showError(t('errors.delete', { name: nameIso(auto.name), error: err.message }));
     } finally {
       setConfirmBusy(false);
     }
@@ -205,49 +215,65 @@ export default function Automations() {
   const confirmCopy = useMemo(() => {
     if (!confirm) return null;
     const { kind, auto, summary, targets, actions } = confirm;
-    const items = targets.map(t => `${t.eqName} · ${t.label} → ${t.action.toUpperCase()}${t.value !== null && t.value !== undefined && t.action === 'set' ? ` ${t.value}` : ''}${t.duration ? ` for ${formatDuration(t.duration)}` : ''}${t.windows > 1 ? ` × ${t.windows}` : ''}${t.delay ? ` (${t.windows > 1 ? 'first ' : ''}after ${formatDuration(t.delay)})` : ''}`);
+    // Labels only: the channel list itself (targets) and the run / delete
+    // calls are unchanged. Channel and board names are data (isolated in RTL).
+    // The action comes FIRST in each item: ConfirmDialog truncates items on a
+    // phone, and the part that gets cut must be the board name, never what the
+    // channel will do.
+    const iso = (s) => `\u2068${s}\u2069`;
+    const items = targets.map((x) => {
+      const detail = [
+        `${actionWord(x.action, loc)}${x.value !== null && x.value !== undefined && x.action === 'set' ? ` ${x.value}` : ''}`,
+        x.duration ? t('confirm.for', { duration: formatDuration(x.duration, loc) }) : '',
+        x.windows > 1 ? `× ${x.windows}` : '',
+        x.delay ? t(x.windows > 1 ? 'confirm.firstAfter' : 'confirm.after', { delay: formatDuration(x.delay, loc) }) : '',
+      ].filter(Boolean).join(' ');
+      return t('confirm.item', { detail, channel: iso(x.label), board: iso(x.eqName) });
+    });
     const alerts = actions.filter(a => a?.type === 'alert').length;
     const logs = actions.filter(a => a?.type === 'log').length;
-    const extras = [];
-    if (alerts) extras.push(`${alerts} alert${alerts > 1 ? 's' : ''}`);
-    if (logs) extras.push(`${logs} log entr${logs > 1 ? 'ies' : 'y'}`);
-    const boards = [...new Set(targets.map(t => t.eqName))];
+    const extrasList = [];
+    if (alerts) extrasList.push(t('confirm.alertCount', { count: alerts }));
+    if (logs) extrasList.push(t('confirm.logCount', { count: logs }));
+    const extras = extrasList.length === 2 ? t('confirm.extrasPair', { a: extrasList[0], b: extrasList[1] }) : extrasList[0] || '';
+    const boards = [...new Set(targets.map(x => x.eqName))].map(iso).join(t('summary.joinComma'));
+    const channels = t('confirm.channelCount', { count: targets.length });
     const whatText = targets.length
-      ? `This switches ${targets.length} channel${targets.length > 1 ? 's' : ''} on ${boards.join(', ')}: ${summary.what}.`
-      : `This runs no relay channels${extras.length ? ` (${extras.join(' and ')})` : ''}.`;
+      ? t('confirm.switches', { channels, boards, what: summary.what })
+      : (extras ? t('confirm.noRelaysWith', { extras }) : t('confirm.noRelays'));
     if (kind === 'run') {
       return {
-        title: `Run '${auto.name}'?`,
-        body: <>{whatText}{extras.length && targets.length ? ` It also sends ${extras.join(' and ')}.` : ''}</>,
+        title: t('confirm.runTitle', { name: nameIso(auto.name) }),
+        body: <>{whatText}{extras && targets.length ? ` ${t('confirm.alsoSends', { extras })}` : ''}</>,
         items,
-        confirmLabel: 'Run now',
+        confirmLabel: t('confirm.runNow'),
         variant: 'primary',
       };
     }
     return {
-      title: `Delete '${auto.name}'?`,
+      title: t('confirm.deleteTitle', { name: nameIso(auto.name) }),
       body: <>
         <span className="font-mono tabular text-ink">{summary.text}</span>
         <br />
-        {targets.length ? `It targets ${targets.length} channel${targets.length > 1 ? 's' : ''} on ${boards.join(', ')}. ` : ''}
-        This cannot be undone.
+        {targets.length ? `${t('confirm.targets', { channels, boards })} ` : ''}
+        {t('confirm.cannotUndo')}
       </>,
       items,
-      confirmLabel: 'Delete',
+      confirmLabel: t('common:actions.delete'),
       variant: 'danger',
     };
-  }, [confirm]);
+  }, [confirm, t, loc]);
 
   // ----- render -----
   if (loading) {
-    return <p className="text-sm text-muted py-12 text-center">Loading automations…</p>;
+    return <p className="text-sm text-muted py-12 text-center">{t('page.loading')}</p>;
   }
 
   if (error) {
     return (
-      <div role="alert" className="p-4 rounded-card border border-alarm-200 dark:border-alarm-700 border-l-[3px] border-l-state-alarm bg-alarm-50 dark:bg-alarm-900/30 text-sm text-alarm-700 dark:text-alarm-300">
-        <p>{error}</p>
-        <Button variant="secondary" className="mt-3" onClick={() => { setLoading(true); fetchAutomations(); }}>Try again</Button>
+      <div role="alert" className="p-4 rounded-card border border-alarm-200 dark:border-alarm-700 border-s-[3px] border-s-state-alarm bg-alarm-50 dark:bg-alarm-900/30 text-sm text-alarm-700 dark:text-alarm-300">
+        <p>{t('errors.loadAutomations', { error })}</p>
+        <Button variant="secondary" className="mt-3" onClick={() => { setLoading(true); fetchAutomations(); }}>{t('common:actions.tryAgain')}</Button>
       </div>
     );
   }
@@ -256,14 +282,14 @@ export default function Automations() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold text-ink">Automations</h1>
-          <p className="text-sm text-muted font-mono tabular">{automations.length} rules · {enabledCount} enabled</p>
+          <h1 className="font-display text-2xl font-bold text-ink">{t('page.title')}</h1>
+          <p className="text-sm text-muted font-mono tabular">{t('page.counts', { rules: t('page.ruleCount', { count: automations.length }), enabled: t('page.enabledCount', { count: enabledCount }) })}</p>
         </div>
         {canEdit && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => setShowTemplateManager(true)}>Templates</Button>
-            <Button variant="secondary" onClick={() => setShowTemplatesModal(true)}>From template</Button>
-            <Button variant="primary" onClick={handleNew}>New</Button>
+            <Button variant="ghost" onClick={() => setShowTemplateManager(true)}>{t('page.templates')}</Button>
+            <Button variant="secondary" onClick={() => setShowTemplatesModal(true)}>{t('page.fromTemplate')}</Button>
+            <Button variant="primary" onClick={handleNew}>{t('page.new')}</Button>
           </div>
         )}
       </div>
@@ -271,30 +297,30 @@ export default function Automations() {
       <Card padding="sm">
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="flex-1">
-            <label htmlFor="automation-search" className="sr-only">Search automations</label>
+            <label htmlFor="automation-search" className="sr-only">{t('page.searchLabel')}</label>
             <input
               id="automation-search"
               type="search"
               className={INPUT}
-              placeholder="Search name, description or rule…"
+              placeholder={t('page.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <div>
-              <label htmlFor="status-filter" className="sr-only">Filter by status</label>
+              <label htmlFor="status-filter" className="sr-only">{t('page.statusFilterLabel')}</label>
               <select id="status-filter" className={`${INPUT} sm:w-40`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="">All statuses</option>
-                <option value="enabled">Enabled</option>
-                <option value="disabled">Disabled</option>
+                <option value="">{t('page.allStatuses')}</option>
+                <option value="enabled">{t('common:status.enabled')}</option>
+                <option value="disabled">{t('common:status.disabled')}</option>
               </select>
             </div>
             <div>
-              <label htmlFor="group-by" className="sr-only">Group by</label>
+              <label htmlFor="group-by" className="sr-only">{t('page.groupByLabel')}</label>
               <select id="group-by" className={`${INPUT} sm:w-44`} value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
-                <option value="purpose">Group: purpose</option>
-                <option value="trigger">Group: trigger</option>
+                <option value="purpose">{t('page.groupPurpose')}</option>
+                <option value="trigger">{t('page.groupTrigger')}</option>
               </select>
             </div>
           </div>
@@ -303,11 +329,11 @@ export default function Automations() {
 
       {filtered.length === 0 ? (
         <Card className="text-center py-10">
-          <p className="font-display font-semibold text-ink">No automations</p>
+          <p className="font-display font-semibold text-ink">{t('page.emptyTitle')}</p>
           <p className="text-sm text-muted mt-1">
-            {automations.length === 0 ? 'Create the first rule to switch relays on a schedule or a sensor threshold.' : 'Nothing matches the current filters.'}
+            {automations.length === 0 ? t('page.emptyFirst') : t('page.emptyFiltered')}
           </p>
-          {automations.length === 0 && canEdit && <Button variant="primary" className="mt-4" onClick={handleNew}>New automation</Button>}
+          {automations.length === 0 && canEdit && <Button variant="primary" className="mt-4" onClick={handleNew}>{t('page.newAutomation')}</Button>}
         </Card>
       ) : (
         groups.map(group => (
@@ -344,7 +370,7 @@ export default function Automations() {
       )}
 
       {automations.length > 0 && (
-        <p className="text-xs font-mono tabular text-muted">Showing {filtered.length} of {automations.length}</p>
+        <p className="text-xs font-mono tabular text-muted">{t('page.showing', { shown: filtered.length, total: automations.length })}</p>
       )}
 
       <AutomationBuilderModal
@@ -362,7 +388,7 @@ export default function Automations() {
         isOpen={showDetailModal}
         onClose={() => { setShowDetailModal(false); setSelectedAutomation(null); }}
         automation={selectedAutomation}
-        summary={selectedAutomation ? summarizeAutomation(selectedAutomation, equipIndex) : null}
+        summary={selectedAutomation ? summarizeAutomation(selectedAutomation, equipIndex, loc) : null}
         equipIndex={equipIndex}
         onEdit={handleEdit}
         canEdit={canEdit}

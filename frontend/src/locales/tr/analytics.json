@@ -1,1 +1,45 @@
-{}
+{
+  "title": "Analiz Dışa Aktarımı",
+  "subtitle": "Geçmiş verilerin analiz için önceden özetlenmiş, Excel uyumlu bir ZIP dosyasını indirin. Ham satırlar veritabanında kalır; yalnızca özetler dışa aktarılır (genellikle birkaç MB).",
+  "domainsTitle": "Veri alanları",
+  "domain": {
+    "sensors": {
+      "label": "Sensör okumaları",
+      "hint": "substrat nemi, EC, sıcaklık, nem, pH (saatlik/günlük özet)"
+    },
+    "fertigation": {
+      "label": "Fertigasyon olayları",
+      "hint": "röle olaylarından hesaplanan bölge başına su + besin hacimleri"
+    },
+    "automations": {
+      "label": "Otomasyon geçmişi",
+      "hint": "otomasyon başına başarılı / başarısız / atlanan (nedenler ham görünümde)"
+    },
+    "reference": {
+      "label": "Referans veriler",
+      "hint": "laboratuvar sonuçları, AMIC döngüleri, agronomist raporları, operasyon planları"
+    }
+  },
+  "trendTitle": "Uzun dönem eğilim dosyası",
+  "trendInclude": "Tüm zamanların günlük özetlerini içeren <code>trend/</code> klasörünü ekle",
+  "recentTitle": "Son dönem ayrıntı aralığı",
+  "last": "Son",
+  "window_one": "{{count}} gün",
+  "window_other": "{{count}} gün",
+  "granularity": "ayrıntı düzeyi:",
+  "hourly": "saatlik özetler",
+  "hourlyHint": "(küçük dosyalar, düzgün)",
+  "raw": "ham örnekler",
+  "rawHint": "(büyük dosyalar, her sorgu)",
+  "rawWarning_one": "{{count}} günlük ham örnekler milyonlarca satırlık bir dosya oluşturabilir. Excel sayfa başına en fazla ~1M satır açabilir.",
+  "rawWarning_other": "{{count}} günlük ham örnekler milyonlarca satırlık bir dosya oluşturabilir. Excel sayfa başına en fazla ~1M satır açabilir.",
+  "building": "ZIP hazırlanıyor…",
+  "download": "CSV paketini indir",
+  "zipNote": "Her ZIP, satır sayıları ve sütun sözlüğü içeren bir <code>README.txt</code> dosyası içerir. CSV dosyaları Excel uyumluluğu için BOM'lu UTF-8 ve ISO zaman damgaları kullanır.",
+  "insideTitle": "ZIP'in içinde ne var?",
+  "toast": {
+    "pickDomain": "En az bir veri alanı seçin",
+    "ready": "Dışa aktarım hazır — indirilenler klasörünüze bakın",
+    "failed": "Dışa aktarım başarısız: {{error}}"
+  }
+}

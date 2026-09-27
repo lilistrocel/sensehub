@@ -1,6 +1,8 @@
 import React from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { Card, Label, StatusPill } from '../../ui';
-import { formatClock, formatDuration } from './automationSummary';
+import { formatClock, formatDuration, actionWord } from './automationSummary';
+import { useSummaryLocale } from './useSummaryLocale';
 
 /** Caution is a triangle (docs/FARM-APP-STANDARDS.md §5: status = shape + colour). */
 function CautionTriangle({ className = '' }) {
@@ -13,21 +15,25 @@ function CautionTriangle({ className = '' }) {
 
 const pct = (v, scale) => `${Math.max(0, Math.min(100, (v / scale) * 100))}%`;
 
-function timeText(item) {
-  if (item.kind === 'point') return `${String(item.action || 'off').toUpperCase()} at ${formatClock(item.start)}`;
-  if (item.end === null) return `${formatClock(item.start)} → until off`;
+// Time texts are clock offsets from the trigger ("0:03–18:30"); they live in
+// the dir="ltr" timeline, so their order never flips in Arabic.
+function timeText(item, loc) {
+  const { t } = loc;
+  if (item.kind === 'point') return t('sequence.pointAt', { action: actionWord(item.action || 'off', loc), time: formatClock(item.start) });
+  if (item.end === null) return t('sequence.untilOff', { start: formatClock(item.start) });
   return `${formatClock(item.start)}–${formatClock(item.end)}`;
 }
 
 /** One segment: as before. Several (e.g. pumps once per zone): "4× 4:30 · 0:03–18:30". */
-function rowTimeText(row) {
-  if (row.segments.length === 1) return timeText(row.segments[0]);
+function rowTimeText(row, loc) {
+  const { t } = loc;
+  if (row.segments.length === 1) return timeText(row.segments[0], loc);
   const bars = row.segments.filter(s => s.kind === 'bar');
   const durs = new Set(bars.map(s => (s.end === null ? 'open' : Math.round(s.end - s.start))));
   const each = bars.length === row.segments.length && durs.size === 1 && !durs.has('open')
     ? `${row.segments.length}× ${formatClock([...durs][0])}`
-    : `${row.segments.length} windows`;
-  const end = row.end === null ? ' → until off' : `–${formatClock(row.end)}`;
+    : t('sequence.windows', { count: row.segments.length });
+  const end = row.end === null ? ` ${t('sequence.untilOffShort')}` : `–${formatClock(row.end)}`;
   return `${each} · ${formatClock(row.start)}${end}`;
 }
 
@@ -37,6 +43,8 @@ function rowTimeText(row) {
  * zones on one board overlapping.
  */
 export default function SequenceTimeline({ sequence }) {
+  const { t } = useTranslation('automations');
+  const loc = useSummaryLocale();
   if (!sequence || !sequence.show) return null;
   const { items, total, openEnded, scaleEnd, gaps, overlaps, pumpCovered } = sequence;
   const rows = sequence.rows || items.map(i => ({ key: i.key, eqId: i.eqId, eqName: i.eqName, label: i.label, stagger: i.stagger, segments: [i], start: i.start, end: i.end }));
@@ -55,14 +63,15 @@ export default function SequenceTimeline({ sequence }) {
   return (
     <Card padding="sm" rail={issues ? 'caution' : null} data-testid="sequence-timeline" className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <Label>Sequence from trigger</Label>
+        <Label>{t('sequence.title')}</Label>
         <span className="text-xs text-muted" data-testid="sequence-total">
-          Total <span className="font-mono tabular text-ink">{formatClock(total)}</span>
-          {openEnded && <span> · some channels stay on until turned off</span>}
+          <Trans t={t} i18nKey="sequence.total" values={{ time: formatClock(total) }} components={{ b: <span className="font-mono tabular text-ink" dir="ltr" /> }} />
+          {openEnded && <span> · {t('sequence.openEnded')}</span>}
         </span>
       </div>
 
-      <ol className="space-y-1.5">
+      {/* Time runs left to right in every language (like a chart). */}
+      <ol className="space-y-1.5" dir="ltr">
         {rows.map((row) => {
           const label = multiEquipment ? `${row.eqName} · ${row.label}` : row.label;
           const overlays = row.segments.flatMap(s => flagged.get(s.key) || []);
@@ -74,8 +83,8 @@ export default function SequenceTimeline({ sequence }) {
             >
               <span className="text-xs text-ink truncate flex items-center gap-1" title={`${row.eqName} · ${row.label}`}>
                 {overlays.length > 0 && <CautionTriangle />}
-                <span className="truncate">{label}</span>
-                {row.stagger ? <span className="text-muted shrink-0">· {row.stagger} s apart</span> : null}
+                <span className="truncate" dir="auto">{label}</span>
+                {row.stagger ? <span className="text-muted shrink-0">{t('sequence.apart', { duration: formatDuration(row.stagger, loc) })}</span> : null}
               </span>
               <span className="col-span-2 sm:col-span-1 order-last sm:order-none relative h-3 rounded-sm bg-field border border-line overflow-hidden" aria-hidden="true">
                 {row.segments.map((item) => (item.kind === 'bar' ? (
@@ -95,7 +104,7 @@ export default function SequenceTimeline({ sequence }) {
                   />
                 ))}
               </span>
-              <span className="text-xs font-mono tabular text-muted whitespace-nowrap text-right sm:text-left">{rowTimeText(row)}</span>
+              <span className="text-xs font-mono tabular text-muted whitespace-nowrap text-end sm:text-start">{rowTimeText(row, loc)}</span>
             </li>
           );
         })}
@@ -107,9 +116,9 @@ export default function SequenceTimeline({ sequence }) {
             <li key={`g${i}`} className="flex items-start gap-1.5 text-xs text-caution-700 dark:text-caution-300">
               <CautionTriangle className="mt-0.5" />
               <span>
-                Pump on with no zone open{' '}
-                <span className="font-mono tabular">{formatClock(g.start)}{g.end === null ? ' → until off' : `–${formatClock(g.end)}`}</span>
-                {g.end !== null && ` (${formatDuration(Math.round(g.end - g.start))})`}
+                {t('sequence.pumpNoZone')}{' '}
+                <span className="font-mono tabular" dir="ltr">{g.end === null ? t('sequence.untilOff', { start: formatClock(g.start) }) : `${formatClock(g.start)}–${formatClock(g.end)}`}</span>
+                {g.end !== null && ` (${formatDuration(Math.round(g.end - g.start), loc)})`}
               </span>
             </li>
           ))}
@@ -117,18 +126,18 @@ export default function SequenceTimeline({ sequence }) {
             <li key={`o${i}`} className="flex items-start gap-1.5 text-xs text-caution-700 dark:text-caution-300">
               <CautionTriangle className="mt-0.5" />
               <span>
-                {o.aLabel} and {o.bLabel} open together{' '}
-                <span className="font-mono tabular">{formatClock(o.start)}{o.end === null ? ' → until off' : `–${formatClock(o.end)}`}</span>
-                {o.end !== null && ` (${formatDuration(Math.round(o.end - o.start))})`}
+                {t('sequence.zonesTogether', { a: `\u2068${o.aLabel}\u2069`, b: `\u2068${o.bLabel}\u2069` })}{' '}
+                <span className="font-mono tabular" dir="ltr">{o.end === null ? t('sequence.untilOff', { start: formatClock(o.start) }) : `${formatClock(o.start)}–${formatClock(o.end)}`}</span>
+                {o.end !== null && ` (${formatDuration(Math.round(o.end - o.start), loc)})`}
               </span>
             </li>
           ))}
         </ul>
       ) : pumpCovered ? (
-        <StatusPill state="ok" filled data-testid="sequence-ok">A zone is open whenever the pump runs</StatusPill>
+        <StatusPill state="ok" filled data-testid="sequence-ok">{t('sequence.allCovered')}</StatusPill>
       ) : null}
 
-      <p className="text-xs text-muted">Preview only, from Start after and For. Warnings never block saving.</p>
+      <p className="text-xs text-muted">{t('sequence.previewNote', { startAfter: t('builder.control.startAfter'), duration: t('builder.control.for') })}</p>
     </Card>
   );
 }

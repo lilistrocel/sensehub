@@ -1,1 +1,73 @@
-{}
+{
+  "title": "Alerts",
+  "ackAll": "Acknowledge all",
+  "ackAllHelp": "Acknowledge every open alert matching the current severity / equipment filter",
+  "acknowledging": "Acknowledging…",
+  "viewerCannotAck": "Viewers cannot acknowledge alerts",
+  "loadMore": "Load more ({{n}})",
+  "summary": {
+    "open_one": "{{count}} open",
+    "open_other": "{{count}} open",
+    "critical_one": "{{count}} critical",
+    "critical_other": "{{count}} critical",
+    "repeats_one": "{{count}} repeat collapsed",
+    "repeats_other": "{{count}} repeats collapsed",
+    "loaded": "{{loaded}} of {{total}} loaded"
+  },
+  "filters": {
+    "searchPlaceholder": "Search loaded alerts…",
+    "severity": "Severity",
+    "allSeverities": "All severities",
+    "critical": "Critical",
+    "warning": "Warning",
+    "info": "Info",
+    "status": "Status",
+    "unacknowledged": "Unacknowledged",
+    "acknowledged": "Acknowledged",
+    "allAlerts": "All alerts",
+    "equipment": "Equipment",
+    "allEquipment": "All equipment",
+    "noEquipment": "No equipment"
+  },
+  "scope": {
+    "severity": "Severity: {{severity}}",
+    "equipment": "Equipment: {{name}}"
+  },
+  "empty": {
+    "noOpen": "No open alerts. Everything is acknowledged.",
+    "none": "No alerts in the system.",
+    "noMatch": "No alerts match your search."
+  },
+  "footer": {
+    "showing_one": "Showing {{shown}} of {{total}} alert",
+    "showing_other": "Showing {{shown}} of {{total}} alerts",
+    "loaded": "({{n}} loaded)"
+  },
+  "confirmAll": {
+    "title": "Acknowledge all open alerts?",
+    "body_one": "This acknowledges {{count}} open alert matching the current filter. It cannot be undone.",
+    "body_other": "This acknowledges {{count}} open alerts matching the current filter. It cannot be undone.",
+    "confirm": "Acknowledge {{n}}"
+  },
+  "toast": {
+    "acknowledged": "Alert acknowledged",
+    "acknowledgedMany_one": "Acknowledged {{count}} alert",
+    "acknowledgedMany_other": "Acknowledged {{count}} alerts",
+    "ackFailed": "Failed to acknowledge alert",
+    "ackAllFailed": "Failed to acknowledge alerts"
+  },
+  "errors": {
+    "loadFailed": "Could not load alerts: {{error}}"
+  },
+  "card": {
+    "firstSeen": "first seen",
+    "lastSeen": "last seen",
+    "repeatsTitle_one": "This condition has recurred {{count}} time since it was first raised",
+    "repeatsTitle_other": "This condition has recurred {{count}} times since it was first raised",
+    "acknowledge": "Acknowledge",
+    "acknowledged": "Acknowledged",
+    "acknowledgedBy": "Acknowledged by {{name}}",
+    "showOriginal": "Show original (English)",
+    "showTranslation": "Show translation"
+  }
+}

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { Card, Label, Reading, Button, SectionHeader } from '../../ui';
+import { formatWithUnit } from '../../i18n/format';
 import { formatScaled } from '../../utils/unitScaling';
 
 const API_BASE = '/api';
@@ -13,6 +15,7 @@ const API_BASE = '/api';
  * exactly as the Dashboard widget derived them.
  */
 export default function ConsumptionTracker({ token, canControl, showError, formatDateTime, refreshKey = 0 }) {
+  const { t } = useTranslation('reports');
   const [baselines, setBaselines] = useState([]);
   const [readings, setReadings] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -23,13 +26,13 @@ export default function ConsumptionTracker({ token, canControl, showError, forma
     try {
       const r = await fetch(`${API_BASE}/baselines/active`, { headers });
       if (r.ok) setBaselines(await r.json());
-      else if (r.status >= 500) showError?.('Could not load consumption baselines');
+      else if (r.status >= 500) showError?.(t('consumption.loadFailed'));
     } catch {
-      showError?.('Could not load consumption baselines');
+      showError?.(t('consumption.loadFailed'));
     } finally {
       setLoaded(true);
     }
-  }, [headers, showError]);
+  }, [headers, showError, t]);
 
   const fetchReadings = useCallback(async () => {
     try {
@@ -58,20 +61,20 @@ export default function ConsumptionTracker({ token, canControl, showError, forma
       if (r.ok) { await fetchBaselines(); setShowAdd(false); }
       else {
         const err = await r.json().catch(() => ({}));
-        showError?.(err.error || err.message || 'Failed to add consumption baseline');
+        showError?.(err.error || err.message || t('consumption.addFailed'));
       }
     } catch {
-      showError?.('Failed to add consumption baseline');
+      showError?.(t('consumption.addFailed'));
     }
   };
 
   const removeBaseline = async (id) => {
     try {
       const r = await fetch(`${API_BASE}/baselines/${id}`, { method: 'DELETE', headers });
-      if (!r.ok) showError?.('Failed to remove consumption baseline');
+      if (!r.ok) showError?.(t('consumption.removeFailed'));
       await fetchBaselines();
     } catch {
-      showError?.('Failed to remove consumption baseline');
+      showError?.(t('consumption.removeFailed'));
     }
   };
 
@@ -99,18 +102,18 @@ export default function ConsumptionTracker({ token, canControl, showError, forma
   return (
     <section className="mt-8" data-testid="consumption-tracker">
       <SectionHeader
-        title="Consumption Tracker"
-        subtitle="Energy imported since you started tracking each meter"
+        title={t('consumption.title')}
+        subtitle={t('consumption.subtitle')}
         right={canControl && trackableOptions.length > 0 && (
           <Button variant="secondary" size="sm" onClick={() => setShowAdd((v) => !v)}>
-            {showAdd ? 'Cancel' : '+ Track meter'}
+            {showAdd ? t('common:actions.cancel') : t('consumption.trackMeter')}
           </Button>
         )}
       />
 
       {showAdd && trackableOptions.length > 0 && (
         <Card padding="sm" className="mb-3">
-          <Label className="mb-2">Pick a meter to baseline at its current reading</Label>
+          <Label className="mb-2">{t('consumption.pickMeter')}</Label>
           <div className="flex flex-wrap gap-2">
             {trackableOptions.map((opt) => (
               <Button
@@ -118,10 +121,14 @@ export default function ConsumptionTracker({ token, canControl, showError, forma
                 variant="secondary"
                 size="sm"
                 onClick={() => addBaseline(opt.equipment_id, opt.metric_name)}
-                title={`Capture ${opt.current_value?.toFixed?.(3) ?? opt.current_value} ${opt.unit} as baseline`}
+                title={t('consumption.captureTitle', {
+                  value: typeof opt.current_value === 'number'
+                    ? formatWithUnit(opt.current_value, opt.unit, { decimals: 3 })
+                    : `${opt.current_value ?? '—'} ${opt.unit}`,
+                })}
               >
-                <span className="font-semibold">{opt.equipment_name}</span>
-                <span className="text-muted">· {opt.metric_name}</span>
+                <span className="font-semibold" dir="auto">{opt.equipment_name}</span>
+                <span className="text-muted" dir="auto">· {opt.metric_name}</span>
               </Button>
             ))}
           </div>
@@ -130,7 +137,7 @@ export default function ConsumptionTracker({ token, canControl, showError, forma
 
       {baselines.length === 0 ? (
         <Card className="text-center text-sm text-muted py-6">
-          No active trackers. Use <span className="font-semibold text-ink">+ Track meter</span> to capture a baseline.
+          <Trans t={t} i18nKey="consumption.empty" components={{ b: <span className="font-semibold text-ink" /> }} />
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -145,12 +152,12 @@ export default function ConsumptionTracker({ token, canControl, showError, forma
               <Card key={b.id} rail="lighting" padding="md">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <Label className="truncate" title={b.equipment_name}>{b.equipment_name}</Label>
-                    <p className="text-xs text-muted mt-0.5">{b.metric_name}</p>
+                    <Label className="truncate" title={b.equipment_name} dir="auto">{b.equipment_name}</Label>
+                    <p className="text-xs text-muted mt-0.5" dir="auto">{b.metric_name}</p>
                   </div>
                   {canControl && (
-                    <Button variant="danger-ghost" size="sm" onClick={() => removeBaseline(b.id)} title="Stop tracking">
-                      Stop
+                    <Button variant="danger-ghost" size="sm" onClick={() => removeBaseline(b.id)} title={t('consumption.stopTrackingTitle')}>
+                      {t('consumption.stopTracking')}
                     </Button>
                   )}
                 </div>
@@ -164,8 +171,12 @@ export default function ConsumptionTracker({ token, canControl, showError, forma
                   />
                 </div>
                 <p className="text-xs text-muted mt-2 flex flex-wrap justify-between gap-x-2 font-mono tabular">
-                  <span>Since {b.created_at ? (formatDateTime ? formatDateTime(b.created_at) : b.created_at) : '—'}</span>
-                  <span>Base {b.baseline_value?.toFixed?.(2) ?? b.baseline_value} {b.unit || 'kWh'}</span>
+                  <span>{t('consumption.since', { time: b.created_at ? (formatDateTime ? formatDateTime(b.created_at) : b.created_at) : '—' })}</span>
+                  <span>{t('consumption.base', {
+                    value: typeof b.baseline_value === 'number'
+                      ? formatWithUnit(b.baseline_value, b.unit || 'kWh', { decimals: 2 })
+                      : `${b.baseline_value ?? '—'} ${b.unit || 'kWh'}`,
+                  })}</span>
                 </p>
               </Card>
             );

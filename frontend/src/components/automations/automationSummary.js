@@ -3,9 +3,66 @@
  * "WHEN → WHAT" summary from trigger + actions, classify rules into farm
  * sections, mirror the backend hysteresis pairing (AutomationGuards.js,
  * read-only) and compute schedule previews. No React, no fetch.
+ *
+ * i18n: every helper that produces text takes an optional `loc = { t, lng }`
+ * (components pass the `t` of useTranslation('automations') and the active
+ * language). The sentence is assembled from whole templates in
+ * locales/<lng>/automations.json (`summary.*`), so each language keeps its own
+ * word order ("Irrigation Pump ON 18 min" / "Irrigation Pump AÇIK 18 dk" /
+ * "تشغيل Irrigation Pump لمدة 18 د"). Channel and equipment names are user
+ * data and are never translated; in Arabic they are wrapped in bidi isolates.
+ * Without `loc` the helpers speak English (tests, logs).
  */
 import { getChannelDisplayName } from '../../utils/channelUtils';
 import { toEpochMs } from '../../utils/freshness';
+import { DURATION_UNITS } from '../../i18n/format';
+import { dirOf, intlLocale } from '../../i18n/languages';
+import EN_AUTOMATIONS from '../../locales/en/automations.json';
+
+// ---------------------------------------------------------------------------
+// Translation plumbing (pure: no i18next instance needed)
+// ---------------------------------------------------------------------------
+
+const lookup = (res, key) => key.split('.').reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), res);
+
+/**
+ * Minimal i18next-compatible `t` over a plain resource object: dotted keys,
+ * `{{var}}` interpolation, `count` plurals via Intl.PluralRules (`key_one`,
+ * `key_few`… like i18next) and `defaultValue`. Used as the English default and
+ * by the unit tests for tr/ar.
+ */
+export function makeTranslator(resources, lng = 'en') {
+  const rules = new Intl.PluralRules(lng);
+  return (key, params = {}) => {
+    let s;
+    if (typeof params.count === 'number') {
+      s = lookup(resources, `${key}_${rules.select(params.count)}`);
+      if (s === undefined) s = lookup(resources, `${key}_other`);
+    }
+    if (s === undefined) s = lookup(resources, key);
+    if (typeof s !== 'string') return params.defaultValue !== undefined ? params.defaultValue : key;
+    return s.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (params[k] === undefined ? m : String(params[k])));
+  };
+}
+
+const EN_LOC = { t: makeTranslator(EN_AUTOMATIONS, 'en'), lng: 'en' };
+const L = (loc) => (loc && typeof loc.t === 'function' ? loc : EN_LOC);
+
+const FSI = '\u2068';
+const LRI = '\u2066';
+const PDI = '\u2069';
+const isRtl = (loc) => dirOf(loc.lng) === 'rtl';
+/** User data (names) inside a translated sentence: first-strong isolate in RTL. */
+const iso = (s, loc) => (isRtl(loc) ? `${FSI}${s}${PDI}` : String(s));
+/** Technical left-to-right fragment ("> 30 °C", cron): LTR isolate in RTL. */
+const ltrIso = (s, loc) => (isRtl(loc) ? `${LRI}${s}${PDI}` : String(s));
+/** Collapse the gaps left by empty optional slots ("{{spec}}" = ''). */
+const tidy = (s) => String(s).replace(/ {2,}/g, ' ').replace(/ ([,،)])/g, '$1').trim();
+
+/** Remove bidi isolates (e.g. before saving a suggested name to the database). */
+export function stripIsolates(s) {
+  return String(s ?? '').replace(/[\u2066-\u2069]/g, '');
+}
 
 // ---------------------------------------------------------------------------
 // Parsing
@@ -51,7 +108,7 @@ const toReg = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-export function buildEquipmentIndex(equipmentList) {
+export function buildEquipmentIndex(equipmentList, loc) {
   const index = new Map();
   for (const eq of Array.isArray(equipmentList) ? equipmentList : []) {
     if (!eq || eq.id === undefined) continue;
@@ -69,7 +126,7 @@ export function buildEquipmentIndex(equipmentList) {
     }
     index.set(Number(eq.id), {
       id: Number(eq.id),
-      name: eq.name || `Equipment #${eq.id}`,
+      name: eq.name || L(loc).t('summary.fallback.equipment', { id: eq.id }),
       type: eq.type,
       status: eq.status,
       enabled: eq.enabled === 1 || eq.enabled === true,
@@ -82,16 +139,16 @@ export function buildEquipmentIndex(equipmentList) {
   return index;
 }
 
-export function equipmentLabel(equipIndex, id) {
+export function equipmentLabel(equipIndex, id, loc) {
   const e = equipIndex?.get(Number(id));
-  return e ? e.name : `Equipment #${id}`;
+  return e ? e.name : L(loc).t('summary.fallback.equipment', { id });
 }
 
-export function channelLabel(equipIndex, eqId, channel) {
+export function channelLabel(equipIndex, eqId, channel, loc) {
   const e = equipIndex?.get(Number(eqId));
   const reg = toReg(channel);
   const c = e && reg !== null ? e.coils.get(reg) : null;
-  return c ? c.label : `Channel ${channel}`;
+  return c ? c.label : L(loc).t('summary.fallback.channel', { n: channel });
 }
 
 /** Writable coils of an equipment as [{ register, label }] sorted by register. */
@@ -110,17 +167,29 @@ export function writableCoils(equipIndex, eqId) {
 
 export const OP_SYM = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=', neq: '≠' };
 
-const METRIC_SHORT = {
-  temperature: 'Temp',
-  humidity: 'RH',
-  'substrate moisture': 'VWC',
-  'substrate temperature': 'Substrate temp',
-  'water temperature': 'Water temp',
+/** Known sensor types -> key under summary.metric (short) / summary.metricLong. */
+const METRIC_KEY = {
+  temperature: 'temp',
+  humidity: 'rh',
+  'substrate moisture': 'vwc',
+  'substrate temperature': 'substrateTemp',
+  'water temperature': 'waterTemp',
 };
 
-export function metricShort(sensorType) {
+export function metricShort(sensorType, loc) {
+  const { t } = L(loc);
   const s = String(sensorType || '').trim();
-  return METRIC_SHORT[s.toLowerCase()] || s || 'value';
+  const k = METRIC_KEY[s.toLowerCase()];
+  if (k) return t(`summary.metric.${k}`);
+  return s || t('summary.metric.value');
+}
+
+function metricLong(sensorType, loc) {
+  const { t } = L(loc);
+  const s = String(sensorType || '').trim();
+  const k = METRIC_KEY[s.toLowerCase()];
+  if (k) return t(`summary.metricLong.${k}`);
+  return s || t('summary.metric.value');
 }
 
 export function formatValueUnit(value, unit) {
@@ -129,47 +198,63 @@ export function formatValueUnit(value, unit) {
   return u ? `${v} ${u}` : v;
 }
 
-export function describeThreshold(trigger, equipIndex, { long = false } = {}) {
+export function describeThreshold(trigger, equipIndex, { long = false, loc } = {}) {
+  const lc = L(loc);
   const op = OP_SYM[trigger?.operator] || trigger?.operator || '>';
-  const metric = long ? (trigger?.sensor_type || 'value') : metricShort(trigger?.sensor_type);
-  const sensor = long && trigger?.equipment_id ? ` (${equipmentLabel(equipIndex, trigger.equipment_id)})` : '';
-  return `${metric}${sensor} ${op} ${formatValueUnit(trigger?.threshold_value, trigger?.unit)}`;
+  const metric = iso(long ? metricLong(trigger?.sensor_type, lc) : metricShort(trigger?.sensor_type, lc), lc);
+  // Comparison + value + unit stay one left-to-right unit, as on the panels.
+  const cmp = ltrIso(`${op} ${formatValueUnit(trigger?.threshold_value, trigger?.unit)}`, lc);
+  if (long && trigger?.equipment_id) {
+    return tidy(lc.t('summary.when.thresholdLong', { metric, sensor: iso(equipmentLabel(equipIndex, trigger.equipment_id, lc), lc), cmp }));
+  }
+  return tidy(lc.t('summary.when.threshold', { metric, cmp }));
 }
 
-const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const pad2 = (n) => String(n).padStart(2, '0');
 
-export function describeSchedule(trigger, { long = false } = {}) {
+/** Localized weekday name for 0 = Sunday … 6 = Saturday. */
+export function weekdayName(dow, { long = false, loc } = {}) {
+  const lc = L(loc);
+  const d = Number.isInteger(dow) && dow >= 0 && dow <= 6 ? dow : 1;
+  // 2023-01-01 was a Sunday; format in UTC so the day never shifts.
+  return new Intl.DateTimeFormat(intlLocale(lc.lng), { weekday: long ? 'long' : 'short', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(2023, 0, 1 + d)));
+}
+
+function monthShort(date, loc) {
+  return new Intl.DateTimeFormat(intlLocale(L(loc).lng), { month: 'short' }).format(date);
+}
+
+export function describeSchedule(trigger, { long = false, loc } = {}) {
+  const lc = L(loc);
+  const { t } = lc;
   const type = trigger?.schedule_type || 'daily';
   const time = trigger?.time || '08:00';
   if (type === 'once') {
-    if (!trigger?.run_at) return long ? 'One-time (date not set)' : 'Once (unset)';
+    if (!trigger?.run_at) return t(long ? 'summary.when.onceUnsetLong' : 'summary.when.onceUnset');
     const d = new Date(trigger.run_at);
-    if (Number.isNaN(d.getTime())) return `Once ${trigger.run_at}`;
-    const mon = d.toLocaleString('en-GB', { month: 'short' });
-    return `Once ${d.getDate()} ${mon} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    if (Number.isNaN(d.getTime())) return t('summary.when.once', { date: ltrIso(trigger.run_at, lc) });
+    return t('summary.when.once', { date: `${d.getDate()} ${monthShort(d, lc)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` });
   }
-  if (type === 'daily') return long ? `Daily at ${time}` : `Daily ${time}`;
+  if (type === 'daily') return t(long ? 'summary.when.dailyLong' : 'summary.when.daily', { time });
   if (type === 'weekly') {
-    const dow = parseInt(trigger?.day_of_week ?? 1, 10);
-    const day = long ? DAY_LONG[dow] : DAY_SHORT[dow];
-    return long ? `Every ${day || 'Monday'} at ${time}` : `${day || 'Mon'} ${time}`;
+    const day = weekdayName(parseInt(trigger?.day_of_week ?? 1, 10), { long, loc: lc });
+    return t(long ? 'summary.when.weeklyLong' : 'summary.when.weekly', { day, time });
   }
   if (type === 'hourly') {
     const minute = pad2(parseInt(trigger?.minute ?? 0, 10) || 0);
-    return long ? `Every hour at :${minute}` : `Hourly :${minute}`;
+    return t(long ? 'summary.when.hourlyLong' : 'summary.when.hourly', { minute });
   }
-  if (type === 'custom') return trigger?.cron ? `Cron ${trigger.cron}` : 'Cron (unset)';
-  return 'Schedule';
+  if (type === 'custom') return trigger?.cron ? t('summary.when.cron', { cron: ltrIso(trigger.cron, lc) }) : t('summary.when.cronUnset');
+  return t('summary.when.schedule');
 }
 
 export function describeWhen(trigger, equipIndex, opts = {}) {
   const type = trigger?.type || 'manual';
   if (type === 'threshold') return describeThreshold(trigger, equipIndex, opts);
   if (type === 'schedule') return describeSchedule(trigger, opts);
-  if (type === 'event') return 'Event';
-  return 'Manual';
+  if (type === 'event') return L(opts.loc).t('summary.when.event');
+  return L(opts.loc).t('summary.when.manual');
 }
 
 export const TRIGGER_LABELS = { manual: 'Manual', schedule: 'Schedule', threshold: 'Threshold', event: 'Event' };
@@ -178,17 +263,24 @@ export const TRIGGER_LABELS = { manual: 'Manual', schedule: 'Schedule', threshol
 // WHAT
 // ---------------------------------------------------------------------------
 
-export function formatDuration(seconds) {
+/**
+ * Compact duration for summaries: 18 -> "18 s", 278 -> "4 min 38 s",
+ * 3900 -> "1 h 5 min". Unit words per language (i18n/format DURATION_UNITS):
+ * "4 dk 38 sn", "4 د 38 ث". `loc` may be a { t, lng } object or a language code.
+ */
+export function formatDuration(seconds, loc) {
+  const lng = typeof loc === 'string' ? loc : L(loc).lng;
+  const u = DURATION_UNITS[lng] || DURATION_UNITS.en;
   const s = Number(seconds);
   if (!Number.isFinite(s) || s <= 0) return '';
-  if (s < 60) return `${s} s`;
+  if (s < 60) return `${s} ${u.s}`;
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const rest = s % 60;
   const parts = [];
-  if (h) parts.push(`${h} h`);
-  if (m) parts.push(`${m} min`);
-  if (rest) parts.push(`${rest} s`);
+  if (h) parts.push(`${h} ${u.h}`);
+  if (m) parts.push(`${m} ${u.min}`);
+  if (rest) parts.push(`${rest} ${u.s}`);
   return parts.join(' ');
 }
 
@@ -197,7 +289,8 @@ export function formatDuration(seconds) {
  * "All channels" control actions expand to every writable coil; transitions
  * map each channel's state. Duplicates (same key) keep the first occurrence.
  */
-export function collectTargets(actions, equipIndex) {
+export function collectTargets(actions, equipIndex, loc) {
+  const lc = L(loc);
   const out = [];
   const seen = new Map();
   const push = (eqId, channel, action, extra) => {
@@ -213,9 +306,9 @@ export function collectTargets(actions, equipIndex) {
     const e = equipIndex?.get(Number(eqId));
     const target = {
       eqId: Number(eqId),
-      eqName: e ? e.name : (extra.equipment_name || `Equipment #${eqId}`),
+      eqName: e ? e.name : (extra.equipment_name || lc.t('summary.fallback.equipment', { id: eqId })),
       channel,
-      label: e ? channelLabel(equipIndex, eqId, channel) : (extra.channel_name || `Channel ${channel}`),
+      label: e ? channelLabel(equipIndex, eqId, channel, lc) : (extra.channel_name || lc.t('summary.fallback.channel', { n: channel })),
       action,
       value: extra.value ?? null,
       duration: Number(extra.duration_seconds) > 0 ? Number(extra.duration_seconds) : null,
@@ -245,7 +338,7 @@ export function collectTargets(actions, equipIndex) {
         if (coils.length) {
           for (const c of coils) push(eqId, c.register, action, a);
         } else {
-          push(eqId, '*', action, { ...a, channel_name: 'all channels' });
+          push(eqId, '*', action, { ...a, channel_name: lc.t('summary.fallback.allChannelsLower') });
         }
       } else {
         const ch = toReg(a.channel);
@@ -256,13 +349,18 @@ export function collectTargets(actions, equipIndex) {
   return out;
 }
 
-/** "01-03-05 Big Fan" -> "big fan"; "Irrigation Zone 1" -> "irrigation zone". */
-export function kindOf(label) {
+/** "01-03-05 Big Fan" -> "Big Fan"; "Irrigation Zone 1" -> "Irrigation Zone" (case kept). */
+export function kindOfRaw(label) {
   let s = String(label || '').trim();
   s = s.replace(/^[\d\s\-–—/&.,()]+/, '');
   s = s.replace(/[\s\-–—#]*\d+\s*$/, '');
-  s = s.trim().toLowerCase();
-  return s || String(label || 'channel').toLowerCase();
+  s = s.trim();
+  return s || String(label || 'channel');
+}
+
+/** "01-03-05 Big Fan" -> "big fan"; "Irrigation Zone 1" -> "irrigation zone". */
+export function kindOf(label) {
+  return kindOfRaw(label).toLowerCase();
 }
 
 export function pluralize(kind, n) {
@@ -270,105 +368,144 @@ export function pluralize(kind, n) {
   return /s$/.test(kind) ? kind : `${kind}s`;
 }
 
-const ACTION_WORD = { on: 'ON', off: 'OFF', toggle: 'TOGGLE', set: 'SET' };
+/** Localized action word of the summary: ON / AÇIK / تشغيل … */
+export function actionWord(action, loc) {
+  const a = String(action || 'on');
+  return L(loc).t(`summary.action.${a}`, { defaultValue: a.toUpperCase() });
+}
+
+/**
+ * The channel kind of a group, as the language wants it (`summary.kindStyle`):
+ * English pluralizes the lower-cased stem ("irrigation zones"); Turkish and
+ * Arabic keep the channel name as written ("Irrigation Zone") because it is
+ * user data that cannot be inflected.
+ */
+function kindsOf(seg, n, lc) {
+  return lc.t('summary.kindStyle') === 'englishPlural' ? pluralize(seg.kind, n) : iso(seg.kindRaw, lc);
+}
 
 /**
  * Same-kind targets with different start delays: "irrigation zones 1→4" +
  * "in sequence" when each starts as the previous one's duration ends (±2 s),
  * otherwise "staggered". Null when they all start together.
  */
-function describeSequence(seg) {
+function describeSequence(seg, lc) {
+  const { t } = lc;
   const items = [...seg.items].sort((a, b) => (a.delay || 0) - (b.delay || 0));
-  const delays = new Set(items.map(t => t.delay || 0));
+  const delays = new Set(items.map(x => x.delay || 0));
   if (delays.size < 2) return null;
-  const chained = seg.duration > 0 && items.every((t, i) => i === 0 || Math.abs((t.delay || 0) - ((items[i - 1].delay || 0) + seg.duration)) <= 2);
-  const nums = items.map(t => { const m = /(\d+)\s*$/.exec(String(t.label)); return m ? parseInt(m[1], 10) : null; });
-  let subject = `${items.length} ${pluralize(seg.kind, items.length)}`;
+  const chained = seg.duration > 0 && items.every((x, i) => i === 0 || Math.abs((x.delay || 0) - ((items[i - 1].delay || 0) + seg.duration)) <= 2);
+  const nums = items.map(x => { const m = /(\d+)\s*$/.exec(String(x.label)); return m ? parseInt(m[1], 10) : null; });
+  const names = { kinds: kindsOf(seg, items.length, lc) };
+  let subject = t('summary.subject.count', { ...names, n: items.length });
   if (nums.every(n => n !== null)) {
     const consecutive = nums.every((n, i) => i === 0 || n === nums[i - 1] + 1);
-    subject = `${pluralize(seg.kind, items.length)} ${consecutive ? `${nums[0]}→${nums[nums.length - 1]}` : nums.join('→')}`;
+    subject = consecutive
+      ? t('summary.subject.range', { ...names, from: nums[0], to: nums[nums.length - 1] })
+      : t('summary.subject.list', { ...names, list: nums.join(t('summary.listArrow')) });
   }
-  return { subject, how: chained ? 'in sequence' : 'staggered' };
+  return { subject, how: t(chained ? 'summary.how.inSequence' : 'summary.how.staggered') };
 }
 
-export function describeTargets(targets) {
+export function describeTargets(targets, loc) {
+  const lc = L(loc);
+  const { t } = lc;
   if (!targets.length) return '';
   const byAction = new Map();
-  for (const t of targets) {
-    if (!byAction.has(t.action)) byAction.set(t.action, []);
-    byAction.get(t.action).push(t);
+  for (const x of targets) {
+    if (!byAction.has(x.action)) byAction.set(x.action, []);
+    byAction.get(x.action).push(x);
   }
+  const dur = (s) => formatDuration(s, lc);
   const parts = [];
   for (const [action, list] of byAction) {
-    const word = ACTION_WORD[action] || action.toUpperCase();
+    const word = actionWord(action, lc);
     const segs = new Map();
-    for (const t of list) {
-      const key = `${kindOf(t.label)}|${t.duration || ''}|${t.value ?? ''}`;
-      if (!segs.has(key)) segs.set(key, { kind: kindOf(t.label), duration: t.duration, value: t.value, items: [] });
-      segs.get(key).items.push(t);
+    for (const x of list) {
+      const key = `${kindOf(x.label)}|${x.duration || ''}|${x.value ?? ''}`;
+      if (!segs.has(key)) segs.set(key, { kind: kindOf(x.label), kindRaw: kindOfRaw(x.label), duration: x.duration, value: x.value, items: [] });
+      segs.get(key).items.push(x);
     }
-    const suffix = (dur, value) => `${action === 'set' && value !== null && value !== undefined ? ` ${value}` : ''}${dur ? ` ${formatDuration(dur)}` : ''}`;
+    // "[value] [for] duration": the part after the action word.
+    const spec = (d, value) => [
+      action === 'set' && value !== null && value !== undefined ? String(value) : '',
+      d ? t('summary.forDuration', { duration: dur(d) }) : '',
+    ].filter(Boolean).join(' ');
     if (segs.size <= 3) {
       for (const seg of segs.values()) {
         if (seg.items.length === 1) {
-          const t = seg.items[0];
-          if (t.windows > 1) {
-            const times = t.durationVaries || !seg.duration ? ` ${t.windows} times` : `${suffix(seg.duration, seg.value)} × ${t.windows}`;
-            parts.push(`${t.label} ${word}${times}${t.delay ? `, first after ${formatDuration(t.delay)}` : ''}`);
+          const x = seg.items[0];
+          const label = iso(x.label, lc);
+          if (x.windows > 1) {
+            let text = x.durationVaries || !seg.duration
+              ? t('summary.target.repeatTimes', { label, action: word, count: x.windows })
+              : t('summary.target.repeatEach', { label, action: word, spec: spec(seg.duration, seg.value), n: x.windows });
+            if (x.delay) text = t('summary.target.firstAfter', { text: tidy(text), delay: dur(x.delay) });
+            parts.push(tidy(text));
             continue;
           }
-          parts.push(`${t.label} ${word}${suffix(seg.duration, seg.value)}${t.delay ? ` after ${formatDuration(t.delay)}` : ''}`);
+          const key = x.delay ? 'summary.target.singleAfter' : 'summary.target.single';
+          parts.push(tidy(t(key, { label, action: word, spec: spec(seg.duration, seg.value), delay: x.delay ? dur(x.delay) : '' })));
           continue;
         }
-        const seq = describeSequence(seg);
+        const seq = describeSequence(seg, lc);
         if (seq) {
-          parts.push(`${seq.subject} ${word}${suffix(seg.duration, seg.value)}${seg.duration ? ' each' : ''}, ${seq.how}`);
+          const key = seg.duration ? 'summary.target.sequenceEach' : 'summary.target.sequence';
+          parts.push(tidy(t(key, { subject: seq.subject, action: word, spec: spec(seg.duration, seg.value), how: seq.how })));
           continue;
         }
-        parts.push(`${seg.items.length} ${pluralize(seg.kind, seg.items.length)} ${word}${suffix(seg.duration, seg.value)}`);
+        const subject = t('summary.subject.count', { kinds: kindsOf(seg, seg.items.length, lc), n: seg.items.length });
+        parts.push(tidy(t('summary.target.group', { subject, action: word, spec: spec(seg.duration, seg.value) })));
       }
     } else {
-      const durations = list.map(t => t.duration || 0);
+      const durations = list.map(x => x.duration || 0);
       const max = Math.max(...durations);
       const min = Math.min(...durations);
-      const durText = max > 0 ? (max === min ? ` ${formatDuration(max)}` : ` up to ${formatDuration(max)}`) : '';
-      parts.push(`${list.length} relays ${word}${durText}`);
+      const specText = max > 0
+        ? (max === min ? t('summary.forDuration', { duration: dur(max) }) : t('summary.upTo', { duration: dur(max) }))
+        : '';
+      parts.push(tidy(t('summary.target.group', { subject: t('summary.relays', { count: list.length }), action: word, spec: specText })));
     }
   }
-  return parts.join(', ');
+  return parts.join(t('summary.joinComma'));
 }
 
-export function describeWhat(actions, equipIndex) {
+export function describeWhat(actions, equipIndex, loc) {
+  const lc = L(loc);
+  const { t } = lc;
   const list = Array.isArray(actions) ? actions : [];
-  if (!list.length) return 'no actions';
+  if (!list.length) return t('summary.what.none');
   const parts = [];
-  const relayText = describeTargets(collectTargets(list, equipIndex));
+  const relayText = describeTargets(collectTargets(list, equipIndex, lc), lc);
   if (relayText) parts.push(relayText);
   const alerts = list.filter(a => a?.type === 'alert');
   const logs = list.filter(a => a?.type === 'log');
-  if (alerts.length === 1) parts.push(`${alerts[0].severity || 'info'} alert`);
-  else if (alerts.length > 1) parts.push(`${alerts.length} alerts`);
-  if (logs.length === 1) parts.push('log entry');
-  else if (logs.length > 1) parts.push(`${logs.length} log entries`);
+  if (alerts.length === 1) {
+    const sev = alerts[0].severity || 'info';
+    parts.push(t('summary.what.alertOne', { severity: t(`summary.severity.${sev}`, { defaultValue: sev }) }));
+  } else if (alerts.length > 1) parts.push(t('summary.what.alerts', { count: alerts.length }));
+  if (logs.length === 1) parts.push(t('summary.what.logOne'));
+  else if (logs.length > 1) parts.push(t('summary.what.logs', { count: logs.length }));
   const unknown = list.filter(a => a && !['alert', 'log', 'control', 'transition'].includes(a.type));
-  if (unknown.length) parts.push(`${unknown.length} other action${unknown.length > 1 ? 's' : ''}`);
-  return parts.join(' + ') || 'no actions';
+  if (unknown.length) parts.push(t('summary.what.other', { count: unknown.length }));
+  return parts.join(t('summary.joinPlus')) || t('summary.what.none');
 }
 
 /**
  * @returns {{ when: string, what: string, text: string, long: string, triggerType: string }}
  */
-export function summarizeAutomation(auto, equipIndex) {
+export function summarizeAutomation(auto, equipIndex, loc) {
+  const lc = L(loc);
   const { trigger, actions } = parseAutomation(auto);
-  const when = describeWhen(trigger, equipIndex);
-  const what = describeWhat(actions, equipIndex);
-  const long = `${describeWhen(trigger, equipIndex, { long: true })} → ${what}`;
-  return { when, what, text: `${when} → ${what}`, long, triggerType: trigger?.type || 'manual' };
+  const when = describeWhen(trigger, equipIndex, { loc: lc });
+  const what = describeWhat(actions, equipIndex, lc);
+  const long = lc.t('summary.line', { when: describeWhen(trigger, equipIndex, { long: true, loc: lc }), what });
+  return { when, what, text: lc.t('summary.line', { when, what }), long, triggerType: trigger?.type || 'manual' };
 }
 
 /** Same summary for the builder's in-progress form data (objects, not JSON). */
-export function summarizeForm(formData, equipIndex) {
-  return summarizeAutomation({ trigger_config: formData.trigger_config, actions: formData.actions }, equipIndex);
+export function summarizeForm(formData, equipIndex, loc) {
+  return summarizeAutomation({ trigger_config: formData.trigger_config, actions: formData.actions }, equipIndex, loc);
 }
 
 // ---------------------------------------------------------------------------
@@ -423,20 +560,21 @@ export function findDuplicateNames(automations) {
   return dupes;
 }
 
-export function relativeTime(ts, now = Date.now()) {
+export function relativeTime(ts, now = Date.now(), loc) {
+  const { t } = L(loc);
   const ms = toEpochMs(ts);
-  if (ms === null) return 'never';
+  if (ms === null) return t('summary.ago.never');
   const diff = Math.max(0, now - ms);
   const s = Math.round(diff / 1000);
-  if (s < 45) return 'just now';
+  if (s < 45) return t('summary.ago.justNow');
   const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
+  if (m < 60) return t('summary.ago.minutes', { n: m });
   const h = Math.round(m / 60);
-  if (h < 48) return `${h} h ago`;
+  if (h < 48) return t('summary.ago.hours', { n: h });
   const d = Math.round(h / 24);
-  if (d < 60) return `${d} d ago`;
+  if (d < 60) return t('summary.ago.days', { count: d });
   const mo = Math.round(d / 30);
-  return `${mo} mo ago`;
+  return t('summary.ago.months', { count: mo });
 }
 
 // ---------------------------------------------------------------------------
@@ -644,18 +782,22 @@ export function nextScheduleRun(trigger, now = new Date()) {
   return null;
 }
 
-export function formatNextRun(date, now = new Date()) {
+export function formatNextRun(date, now = new Date(), loc) {
   if (!date) return null;
+  const lc = L(loc);
+  const { t } = lc;
   const diffMs = date.getTime() - now.getTime();
   const mins = Math.round(diffMs / 60000);
   let rel;
-  if (mins < 1) rel = 'now';
-  else if (mins < 60) rel = `in ${mins} min`;
-  else if (mins < 48 * 60) rel = `in ${Math.round(mins / 60)} h`;
-  else rel = `in ${Math.round(mins / 1440)} d`;
+  if (mins < 1) rel = t('summary.next.now');
+  else if (mins < 60) rel = t('summary.next.inMinutes', { n: mins });
+  else if (mins < 48 * 60) rel = t('summary.next.inHours', { n: Math.round(mins / 60) });
+  else rel = t('summary.next.inDays', { count: Math.round(mins / 1440) });
   const sameDay = date.toDateString() === now.toDateString();
-  const dayPart = sameDay ? 'today' : `${DAY_SHORT[date.getDay()]} ${date.getDate()} ${date.toLocaleString('en-GB', { month: 'short' })}`;
-  return `${dayPart} ${pad2(date.getHours())}:${pad2(date.getMinutes())} (${rel})`;
+  const day = sameDay
+    ? t('summary.next.today')
+    : `${weekdayName(date.getDay(), { loc: lc })} ${date.getDate()} ${monthShort(date, lc)}`;
+  return t('summary.next.at', { day, time: `${pad2(date.getHours())}:${pad2(date.getMinutes())}`, rel });
 }
 
 // ---------------------------------------------------------------------------
@@ -728,7 +870,8 @@ function subtractIntervals(a, b) {
  * @returns {{ items: object[], show: boolean, total: number, openEnded: boolean,
  *   scaleEnd: number, gaps: object[], overlaps: object[], pumpCovered: boolean|null }}
  */
-export function buildSequence(actions, equipIndex) {
+export function buildSequence(actions, equipIndex, loc) {
+  const lc = L(loc);
   const items = [];
   const list = Array.isArray(actions) ? actions : [];
   list.forEach((a, index) => {
@@ -737,7 +880,7 @@ export function buildSequence(actions, equipIndex) {
     if (!Number.isFinite(eqId)) return;
     const start = secondsOrNull(a.delay_seconds) || 0;
     const duration = secondsOrNull(a.duration_seconds);
-    const eqName = equipmentLabel(equipIndex, eqId) || a.equipment_name;
+    const eqName = equipmentLabel(equipIndex, eqId, lc) || a.equipment_name;
     const push = (channel, label, on, extra = {}) => {
       items.push({
         key: `${index}:${channel}`,
@@ -758,20 +901,20 @@ export function buildSequence(actions, equipIndex) {
       const on = (a.action || 'on') !== 'off';
       if (a.channel === null || a.channel === undefined || a.channel === '') {
         const n = writableCoils(equipIndex, eqId).length;
-        push('*', n ? `All channels (${n})` : 'All channels', on, {
+        push('*', n ? lc.t('summary.fallback.allChannelsCount', { n }) : lc.t('summary.fallback.allChannels'), on, {
           role: null,
           stagger: secondsOrNull(a.stagger_delay_seconds),
           action: a.action || 'on',
         });
       } else {
-        const label = equipIndex?.get(eqId) ? channelLabel(equipIndex, eqId, a.channel) : (a.channel_name || `Channel ${a.channel}`);
+        const label = equipIndex?.get(eqId) ? channelLabel(equipIndex, eqId, a.channel, lc) : (a.channel_name || lc.t('summary.fallback.channel', { n: a.channel }));
         push(toReg(a.channel), label, on, { action: a.action || 'on' });
       }
     } else if (a.type === 'transition' && Array.isArray(a.transitions)) {
       for (const t of a.transitions) {
         const ch = toReg(t.channel);
         if (ch === null) continue;
-        const label = equipIndex?.get(eqId) ? channelLabel(equipIndex, eqId, ch) : (t.name || `Channel ${ch}`);
+        const label = equipIndex?.get(eqId) ? channelLabel(equipIndex, eqId, ch, lc) : (t.name || lc.t('summary.fallback.channel', { n: ch }));
         push(ch, label, !!t.state, { action: t.state ? 'on' : 'off', transition: true });
       }
     }

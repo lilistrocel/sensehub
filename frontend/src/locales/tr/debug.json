@@ -1,0 +1,48 @@
+{
+  "title": "Sistem Hata Ayıklama",
+  "adminOnly": "Yönetici erişimi gerekli",
+  "lastRefreshed": "Son yenileme: {{time}}",
+  "autoRefresh": "Otomatik yenile (10 sn)",
+  "status": {
+    "online": "çevrim içi",
+    "offline": "çevrim dışı",
+    "error": "hata",
+    "unknown": "bilinmiyor"
+  },
+  "card": {
+    "services": "Servisler",
+    "allHealthy": "Hepsi sağlıklı",
+    "someIssues": "Bazı sorunlar var",
+    "cores_one": "{{count}} çekirdek",
+    "cores_other": "{{count}} çekirdek",
+    "load": "Yük: {{load}}",
+    "memory": "Bellek",
+    "uptime": "Çalışma süresi"
+  },
+  "containers": {
+    "title": "Docker Konteynerleri",
+    "service": "Servis",
+    "container": "Konteyner",
+    "status": "Durum",
+    "port": "Port",
+    "details": "Ayrıntılar",
+    "up": "{{time}} süredir çalışıyor"
+  },
+  "internal": {
+    "title": "Dahili Servisler",
+    "devices_one": "{{count}} cihaz",
+    "devices_other": "{{count}} cihaz"
+  },
+  "info": {
+    "title": "Sistem Bilgisi",
+    "hostname": "Ana bilgisayar adı",
+    "platform": "Platform",
+    "version": "SenseHub sürümü",
+    "cpuLoad": "CPU yükü (1 dk / 5 dk / 15 dk)",
+    "memoryUsed": "{{total}} belleğin {{used}} kadarı kullanılıyor ({{pct}})",
+    "backendMemory": "Arka uç belleği (RSS)",
+    "database": "Veritabanı",
+    "connected": "bağlı",
+    "disconnected": "bağlı değil"
+  }
+}

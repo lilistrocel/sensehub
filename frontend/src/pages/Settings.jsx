@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import { useTranslation, Trans } from 'react-i18next';
+import { useFormat } from '../i18n/useFormat';
 import Users from './settings/Users';
 import Profile from './settings/Profile';
+import { LANGUAGES, intlLocale } from '../i18n/languages';
 
 const API_BASE = '/api';
 
@@ -60,6 +63,8 @@ const settingsTabs = [
 function SystemSettings() {
   const { token } = useAuth();
   const { formatDateTime } = useSettings();
+  const { t } = useTranslation('settings');
+  const fmt = useFormat();
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -80,7 +85,7 @@ function SystemSettings() {
 
   // Common timezones grouped by region
   const timezones = [
-    { group: 'Americas', options: [
+    { group: 'americas', options: [
       { value: 'America/New_York', label: 'Eastern Time (US & Canada)' },
       { value: 'America/Chicago', label: 'Central Time (US & Canada)' },
       { value: 'America/Denver', label: 'Mountain Time (US & Canada)' },
@@ -94,7 +99,7 @@ function SystemSettings() {
       { value: 'America/Sao_Paulo', label: 'São Paulo' },
       { value: 'America/Buenos_Aires', label: 'Buenos Aires' },
     ]},
-    { group: 'Europe', options: [
+    { group: 'europe', options: [
       { value: 'Europe/London', label: 'London (GMT/BST)' },
       { value: 'Europe/Paris', label: 'Paris (CET)' },
       { value: 'Europe/Berlin', label: 'Berlin (CET)' },
@@ -107,7 +112,7 @@ function SystemSettings() {
       { value: 'Europe/Athens', label: 'Athens (EET)' },
       { value: 'Europe/Moscow', label: 'Moscow (MSK)' },
     ]},
-    { group: 'Asia', options: [
+    { group: 'asia', options: [
       { value: 'Asia/Dubai', label: 'Dubai (GST)' },
       { value: 'Asia/Kolkata', label: 'India (IST)' },
       { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
@@ -118,7 +123,7 @@ function SystemSettings() {
       { value: 'Asia/Bangkok', label: 'Bangkok (ICT)' },
       { value: 'Asia/Jakarta', label: 'Jakarta (WIB)' },
     ]},
-    { group: 'Pacific & Oceania', options: [
+    { group: 'pacific', options: [
       { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
       { value: 'Australia/Melbourne', label: 'Melbourne (AEST/AEDT)' },
       { value: 'Australia/Brisbane', label: 'Brisbane (AEST)' },
@@ -127,13 +132,13 @@ function SystemSettings() {
       { value: 'Pacific/Auckland', label: 'Auckland (NZST/NZDT)' },
       { value: 'Pacific/Fiji', label: 'Fiji' },
     ]},
-    { group: 'Africa', options: [
+    { group: 'africa', options: [
       { value: 'Africa/Cairo', label: 'Cairo (EET)' },
       { value: 'Africa/Johannesburg', label: 'Johannesburg (SAST)' },
       { value: 'Africa/Lagos', label: 'Lagos (WAT)' },
       { value: 'Africa/Nairobi', label: 'Nairobi (EAT)' },
     ]},
-    { group: 'Other', options: [
+    { group: 'other', options: [
       { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
     ]},
   ];
@@ -151,12 +156,35 @@ function SystemSettings() {
     { value: 'ko-KR', label: 'Korean' },
   ];
 
+  // English keeps the hand-written labels; other languages get the zone's
+  // localized generic name from Intl plus the IANA id (an identifier).
+  const timezoneLabel = (tz) => {
+    if (fmt.lng === 'en' || fmt.lng === 'pseudo') return tz.label;
+    try {
+      const part = new Intl.DateTimeFormat(intlLocale(fmt.lng), { timeZone: tz.value, timeZoneName: 'longGeneric' })
+        .formatToParts(new Date()).find((x) => x.type === 'timeZoneName');
+      return part ? `${part.value} (${tz.value})` : tz.value;
+    } catch {
+      return tz.label;
+    }
+  };
+
+  // Locale names: English keeps its labels; other languages use Intl.DisplayNames.
+  const localeLabel = (loc) => {
+    if (fmt.lng === 'en' || fmt.lng === 'pseudo') return loc.label;
+    try {
+      return new Intl.DisplayNames([intlLocale(fmt.lng)], { type: 'language' }).of(loc.value) || loc.label;
+    } catch {
+      return loc.label;
+    }
+  };
+
   const fetchSettings = async () => {
     try {
       const response = await fetch(`${API_BASE}/settings`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch settings');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setSettings(data);
 
@@ -173,7 +201,7 @@ function SystemSettings() {
 
       setError(null);
     } catch (err) {
-      setError(err.message);
+      setError(t('system.errors.loadFailed', { error: err.message }));
     } finally {
       setLoading(false);
     }
@@ -242,29 +270,20 @@ function SystemSettings() {
 
   // Helper function to format bytes
   const formatBytes = (bytes, decimals = 2) => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return fmt.withUnit(0, 'B', { decimals: 0 });
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    return fmt.withUnit(bytes / Math.pow(k, i), sizes[i], { maxDecimals: dm });
   };
 
   // Helper function to format uptime in human-readable format
   const formatUptime = (seconds) => {
-    if (!seconds) return 'N/A';
+    if (!seconds) return t('na');
     const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    const parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
-
-    return parts.join(' ');
+    const rest = fmt.duration(seconds % 86400);
+    return days > 0 ? t('system.firmware.uptimeDays', { count: days, rest }) : rest;
   };
 
   React.useEffect(() => {
@@ -296,13 +315,13 @@ function SystemSettings() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Failed to save settings');
+        throw new Error(data.message || `HTTP ${response.status}`);
       }
 
-      setSuccessMessage('Settings saved successfully!');
+      setSuccessMessage(t('system.saved'));
       fetchSettings(); // Refresh settings
     } catch (err) {
-      setError(err.message);
+      setError(t('system.errors.saveFailed', { error: err.message }));
     } finally {
       setSaving(false);
     }
@@ -311,7 +330,7 @@ function SystemSettings() {
   // Get current time in selected timezone
   const getCurrentTime = () => {
     try {
-      return new Intl.DateTimeFormat('en-US', {
+      return new Intl.DateTimeFormat(intlLocale(fmt.lng), {
         timeZone: timezone,
         weekday: 'long',
         year: 'numeric',
@@ -320,10 +339,11 @@ function SystemSettings() {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        timeZoneName: 'short'
+        timeZoneName: 'short',
+        hour12: fmt.lng === 'en' ? undefined : false
       }).format(new Date());
     } catch {
-      return 'Invalid timezone';
+      return t('system.timezone.invalid');
     }
   };
 
@@ -340,7 +360,7 @@ function SystemSettings() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">System Settings</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{t('system.title')}</h2>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-800 dark:text-red-200 text-sm">
@@ -350,7 +370,7 @@ function SystemSettings() {
 
       {successMessage && (
         <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-800 dark:text-green-200 text-sm flex items-center">
-          <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 me-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
           {successMessage}
@@ -360,20 +380,20 @@ function SystemSettings() {
       {/* Timezone Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
-          <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 me-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          Timezone Configuration
+          {t('system.timezone.title')}
         </h3>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Select the timezone for all system timestamps and scheduled automations.
+          {t('system.timezone.help')}
         </p>
 
         <div className="space-y-4">
           <div>
             <label htmlFor="timezone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              System Timezone
+              {t('system.timezone.label')}
             </label>
             <select
               id="timezone"
@@ -382,10 +402,10 @@ function SystemSettings() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
             >
               {timezones.map((group) => (
-                <optgroup key={group.group} label={group.group}>
+                <optgroup key={group.group} label={t(`system.timezone.groups.${group.group}`)}>
                   {group.options.map((tz) => (
                     <option key={tz.value} value={tz.value}>
-                      {tz.label}
+                      {timezoneLabel(tz)}
                     </option>
                   ))}
                 </optgroup>
@@ -395,7 +415,7 @@ function SystemSettings() {
 
           {/* Time Preview */}
           <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Current time in selected timezone:</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">{t('system.timezone.preview')}</p>
             <p className="text-lg font-medium text-gray-900 dark:text-white">{getCurrentTime()}</p>
           </div>
         </div>
@@ -404,19 +424,19 @@ function SystemSettings() {
       {/* Locale Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
-          <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 me-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
           </svg>
-          Locale & Language
+          {t('system.locale.title')}
         </h3>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Select the language and regional format for dates and numbers.
+          {t('system.locale.help')}
         </p>
 
         <div>
           <label htmlFor="locale" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Language / Locale
+            {t('system.locale.label')}
           </label>
           <select
             id="locale"
@@ -426,7 +446,7 @@ function SystemSettings() {
           >
             {locales.map((loc) => (
               <option key={loc.value} value={loc.value}>
-                {loc.label}
+                {localeLabel(loc)}
               </option>
             ))}
           </select>
@@ -436,19 +456,19 @@ function SystemSettings() {
       {/* Data Retention Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
-          <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 me-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
           </svg>
-          Data Retention
+          {t('system.retention.title')}
         </h3>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Configure how long sensor readings and historical data are retained locally.
+          {t('system.retention.help')}
         </p>
 
         <div>
           <label htmlFor="dataRetention" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Retention Period (days)
+            {t('system.retention.label')}
           </label>
           <select
             id="dataRetention"
@@ -456,16 +476,16 @@ function SystemSettings() {
             onChange={(e) => setDataRetention(parseInt(e.target.value))}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
           >
-            <option value={7}>7 days</option>
-            <option value={14}>14 days</option>
-            <option value={30}>30 days (default)</option>
-            <option value={60}>60 days</option>
-            <option value={90}>90 days</option>
-            <option value={180}>180 days</option>
-            <option value={365}>365 days (1 year)</option>
+            <option value={7}>{t('system.retention.days', { count: 7 })}</option>
+            <option value={14}>{t('system.retention.days', { count: 14 })}</option>
+            <option value={30}>{t('system.retention.optionDefault', { days: t('system.retention.days', { count: 30 }) })}</option>
+            <option value={60}>{t('system.retention.days', { count: 60 })}</option>
+            <option value={90}>{t('system.retention.days', { count: 90 })}</option>
+            <option value={180}>{t('system.retention.days', { count: 180 })}</option>
+            <option value={365}>{t('system.retention.optionYear', { days: t('system.retention.days', { count: 365 }) })}</option>
           </select>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Data older than this will be automatically purged to save storage space.
+            {t('system.retention.purgeHelp')}
           </p>
         </div>
       </div>
@@ -474,16 +494,17 @@ function SystemSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
-            <svg className="h-5 w-5 mr-2 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5 me-2 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
             </svg>
-            Network Configuration
+            {t('system.network.title')}
           </h3>
           <button
             onClick={fetchNetwork}
             disabled={networkLoading}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            title="Refresh network info"
+            title={t('refreshTitle.network')}
+            aria-label={t('refreshTitle.network')}
           >
             <svg className={`h-5 w-5 ${networkLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -492,7 +513,7 @@ function SystemSettings() {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          View current network configuration for this SenseHub device.
+          {t('system.network.help')}
         </p>
 
         {networkLoading ? (
@@ -508,34 +529,34 @@ function SystemSettings() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-teal-50 rounded-lg p-4 border border-teal-200">
                 <div className="flex items-center mb-2">
-                  <svg className="h-5 w-5 mr-2 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 me-2 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="text-sm font-medium text-teal-700">IP Address</span>
+                  <span className="text-sm font-medium text-teal-700">{t('system.network.ipAddress')}</span>
                 </div>
-                <p className="text-xl font-bold text-teal-900 font-mono">{networkInfo.ipAddress}</p>
+                <p className="text-xl font-bold text-teal-900 font-mono"><bdi dir="ltr">{networkInfo.ipAddress}</bdi></p>
               </div>
 
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                 <div className="flex items-center mb-2">
-                  <svg className="h-5 w-5 mr-2 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 me-2 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
                   </svg>
-                  <span className="text-sm font-medium text-blue-700">Gateway</span>
+                  <span className="text-sm font-medium text-blue-700">{t('system.network.gateway')}</span>
                 </div>
-                <p className="text-xl font-bold text-blue-900 font-mono">{networkInfo.gateway}</p>
+                <p className="text-xl font-bold text-blue-900 font-mono"><bdi dir="ltr">{networkInfo.gateway}</bdi></p>
               </div>
 
               <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                 <div className="flex items-center mb-2">
-                  <svg className="h-5 w-5 mr-2 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 me-2 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                   </svg>
-                  <span className="text-sm font-medium text-purple-700">DNS Servers</span>
+                  <span className="text-sm font-medium text-purple-700">{t('system.network.dns')}</span>
                 </div>
                 <div className="space-y-1">
                   {networkInfo.dns && networkInfo.dns.map((dns, index) => (
-                    <p key={index} className="text-lg font-bold text-purple-900 font-mono">{dns}</p>
+                    <p key={index} className="text-lg font-bold text-purple-900 font-mono"><bdi dir="ltr">{dns}</bdi></p>
                   ))}
                 </div>
               </div>
@@ -544,26 +565,26 @@ function SystemSettings() {
             {/* Network Interfaces */}
             {networkInfo.interfaces && networkInfo.interfaces.length > 0 && (
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Network Interfaces</h4>
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{t('system.network.interfaces')}</h4>
                 <div className="space-y-3">
                   {networkInfo.interfaces.map((iface, index) => (
                     <div key={index} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-semibold text-gray-900 dark:text-white">{iface.name}</span>
-                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">Active</span>
+                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">{t('system.network.active')}</span>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
                         <div>
-                          <span className="text-gray-500 dark:text-gray-400">IP Address: </span>
-                          <span className="font-mono text-gray-900 dark:text-white">{iface.address}</span>
+                          <span className="text-gray-500 dark:text-gray-400">{t('system.network.field', { label: t('system.network.ipAddress') })} </span>
+                          <span className="font-mono text-gray-900 dark:text-white" dir="ltr">{iface.address}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500 dark:text-gray-400">Netmask: </span>
-                          <span className="font-mono text-gray-900 dark:text-white">{iface.netmask}</span>
+                          <span className="text-gray-500 dark:text-gray-400">{t('system.network.field', { label: t('system.network.netmask') })} </span>
+                          <span className="font-mono text-gray-900 dark:text-white" dir="ltr">{iface.netmask}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500 dark:text-gray-400">MAC: </span>
-                          <span className="font-mono text-gray-900 dark:text-white">{iface.mac}</span>
+                          <span className="text-gray-500 dark:text-gray-400">{t('system.network.field', { label: t('system.network.mac') })} </span>
+                          <span className="font-mono text-gray-900 dark:text-white" dir="ltr">{iface.mac}</span>
                         </div>
                       </div>
                     </div>
@@ -577,7 +598,7 @@ function SystemSettings() {
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
             </svg>
-            <p className="mt-2 text-gray-500 dark:text-gray-400">Unable to load network information</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">{t('system.network.unavailable')}</p>
           </div>
         )}
       </div>
@@ -586,16 +607,17 @@ function SystemSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
-            <svg className="h-5 w-5 mr-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5 me-2 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
-            Firmware / Version
+            {t('system.firmware.title')}
           </h3>
           <button
             onClick={fetchSystemInfo}
             disabled={systemInfoLoading}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            title="Refresh system info"
+            title={t('refreshTitle.system')}
+            aria-label={t('refreshTitle.system')}
           >
             <svg className={`h-5 w-5 ${systemInfoLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -604,7 +626,7 @@ function SystemSettings() {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          View current firmware version and system information.
+          {t('system.firmware.help')}
         </p>
 
         {systemInfoLoading ? (
@@ -620,19 +642,19 @@ function SystemSettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-200">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-indigo-700">Version</span>
+                  <span className="text-sm font-medium text-indigo-700">{t('system.firmware.version')}</span>
                   <span className="px-2 py-1 bg-indigo-100 text-indigo-800 text-xs font-medium rounded-full">
-                    {systemInfo.releaseType || 'stable'}
+                    {t(`system.firmware.release.${systemInfo.releaseType || 'stable'}`, { defaultValue: systemInfo.releaseType || 'stable' })}
                   </span>
                 </div>
-                <p className="text-2xl font-bold text-indigo-900">v{systemInfo.version}</p>
+                <p className="text-2xl font-bold text-indigo-900"><bdi dir="ltr">v{systemInfo.version}</bdi></p>
                 {systemInfo.codename && (
                   <p className="text-sm text-indigo-600 mt-1">"{systemInfo.codename}"</p>
                 )}
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Build Date</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('system.firmware.buildDate')}</span>
                 <p className="text-lg font-semibold text-gray-900 dark:text-white mt-2">
                   {systemInfo.buildDate ? formatDateTime(systemInfo.buildDate, {
                     year: 'numeric',
@@ -641,7 +663,7 @@ function SystemSettings() {
                     hour: undefined,
                     minute: undefined,
                     second: undefined
-                  }) : 'N/A'}
+                  }) : t('na')}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   {systemInfo.buildDate ? formatDateTime(systemInfo.buildDate, {
@@ -659,14 +681,14 @@ function SystemSettings() {
 
             {/* System Details */}
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">System Details</h4>
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{t('system.firmware.details')}</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Platform</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('system.firmware.platform')}</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{systemInfo.platform}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Architecture</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('system.firmware.architecture')}</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">{systemInfo.arch}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
@@ -674,28 +696,28 @@ function SystemSettings() {
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">{systemInfo.node_version}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">CPUs</p>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{systemInfo.cpus} cores</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('system.firmware.cpus')}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{t('system.firmware.cores', { count: systemInfo.cpus })}</p>
                 </div>
               </div>
             </div>
 
             {/* Runtime Info */}
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Runtime</h4>
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{t('system.firmware.runtime')}</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Hostname</p>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{systemInfo.hostname}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('system.firmware.hostname')}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white"><bdi dir="ltr">{systemInfo.hostname}</bdi></p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Uptime</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('system.firmware.uptime')}</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">{formatUptime(systemInfo.uptime)}</p>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Started At</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('system.firmware.startedAt')}</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    {systemInfo.startedAt ? formatDateTime(systemInfo.startedAt) : 'N/A'}
+                    {systemInfo.startedAt ? formatDateTime(systemInfo.startedAt) : t('na')}
                   </p>
                 </div>
               </div>
@@ -704,13 +726,13 @@ function SystemSettings() {
             {/* Memory Info */}
             {systemInfo.memory && (
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Memory Usage</h4>
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{t('system.firmware.memory')}</h4>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-gray-600 dark:text-gray-400">
                     {formatBytes(systemInfo.memory.used)} / {formatBytes(systemInfo.memory.total)}
                   </span>
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {((systemInfo.memory.used / systemInfo.memory.total) * 100).toFixed(1)}% used
+                    {t('system.firmware.percentUsed', { percent: fmt.percent((systemInfo.memory.used / systemInfo.memory.total) * 100, { decimals: 1 }) })}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
@@ -725,15 +747,15 @@ function SystemSettings() {
             {/* Database Status */}
             {systemInfo.database && (
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Database</h4>
-                <div className="flex items-center space-x-4">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{t('system.firmware.database')}</h4>
+                <div className="flex items-center gap-4">
                   <div className="flex items-center">
-                    <div className={`w-3 h-3 rounded-full mr-2 ${systemInfo.database.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <div className={`w-3 h-3 rounded-full me-2 ${systemInfo.database.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                     <span className="text-sm text-gray-900 dark:text-white">
-                      {systemInfo.database.connected ? 'Connected' : 'Disconnected'}
+                      {systemInfo.database.connected ? t('system.firmware.connected') : t('system.firmware.disconnected')}
                     </span>
                   </div>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{systemInfo.database.path}</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400" dir="ltr">{systemInfo.database.path}</span>
                 </div>
               </div>
             )}
@@ -743,7 +765,7 @@ function SystemSettings() {
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
-            <p className="mt-2 text-gray-500 dark:text-gray-400">Unable to load system information</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">{t('system.firmware.unavailable')}</p>
           </div>
         )}
       </div>
@@ -752,16 +774,17 @@ function SystemSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
-            <svg className="h-5 w-5 mr-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5 me-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
             </svg>
-            Storage Usage
+            {t('system.storage.title')}
           </h3>
           <button
             onClick={fetchStorage}
             disabled={storageLoading}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            title="Refresh storage info"
+            title={t('refreshTitle.storage')}
+            aria-label={t('refreshTitle.storage')}
           >
             <svg className={`h-5 w-5 ${storageLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -770,7 +793,7 @@ function SystemSettings() {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          View system storage usage and database statistics.
+          {t('system.storage.help')}
         </p>
 
         {storageLoading ? (
@@ -785,7 +808,7 @@ function SystemSettings() {
             {/* Disk Usage Overview */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Disk Usage</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('system.storage.disk')}</span>
                 <span className="text-sm text-gray-500 dark:text-gray-400">
                   {formatBytes(storageInfo.disk.used)} / {formatBytes(storageInfo.disk.total)}
                 </span>
@@ -800,8 +823,8 @@ function SystemSettings() {
                 ></div>
               </div>
               <div className="flex justify-between mt-1 text-xs text-gray-500 dark:text-gray-400">
-                <span>{storageInfo.disk.percentUsed}% used</span>
-                <span>{formatBytes(storageInfo.disk.available)} available</span>
+                <span>{t('system.firmware.percentUsed', { percent: fmt.percent(storageInfo.disk.percentUsed, { maxDecimals: 1 }) })}</span>
+                <span>{t('system.storage.available', { size: formatBytes(storageInfo.disk.available) })}</span>
               </div>
             </div>
 
@@ -809,30 +832,30 @@ function SystemSettings() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center mb-2">
-                  <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 me-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Database</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('system.storage.database')}</span>
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatBytes(storageInfo.database.size)}</p>
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center mb-2">
-                  <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 me-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Data Directory</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('system.storage.dataDirectory')}</span>
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatBytes(storageInfo.dataDirectory.size)}</p>
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center mb-2">
-                  <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 me-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Logs</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('system.storage.logs')}</span>
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatBytes(storageInfo.logsDirectory.size)}</p>
               </div>
@@ -840,20 +863,20 @@ function SystemSettings() {
 
             {/* Database Table Statistics */}
             <div>
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Database Records</h4>
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">{t('system.storage.records')}</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {storageInfo.tableStats && Object.entries(storageInfo.tableStats).map(([table, count]) => (
                   <div key={table} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{table.replace('_', ' ')}</p>
-                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{count.toLocaleString()}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize"><bdi dir="ltr">{table.replace('_', ' ')}</bdi></p>
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white">{fmt.int(count)}</p>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Last Updated */}
-            <p className="text-xs text-gray-400 text-right">
-              Last updated: {formatDateTime(storageInfo.timestamp)}
+            <p className="text-xs text-gray-400 text-end">
+              {t('system.storage.lastUpdated', { time: formatDateTime(storageInfo.timestamp) })}
             </p>
           </div>
         ) : (
@@ -861,7 +884,7 @@ function SystemSettings() {
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
             </svg>
-            <p className="mt-2 text-gray-500 dark:text-gray-400">Unable to load storage information</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">{t('system.storage.unavailable')}</p>
           </div>
         )}
       </div>
@@ -870,33 +893,35 @@ function SystemSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
-            <svg className="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5 me-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            System Logs
+            {t('system.logs.title')}
           </h3>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             {/* Log Level Filter */}
             <select
               value={logsFilter}
+              aria-label={t('system.logs.levelFilter')}
               onChange={(e) => {
                 setLogsFilter(e.target.value);
                 fetchLogs(e.target.value);
               }}
               className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
             >
-              <option value="all">All Levels</option>
-              <option value="error">Error & Above</option>
-              <option value="warning">Warning & Above</option>
-              <option value="info">Info & Above</option>
-              <option value="debug">Debug</option>
+              <option value="all">{t('system.logs.filter.all')}</option>
+              <option value="error">{t('system.logs.filter.error')}</option>
+              <option value="warning">{t('system.logs.filter.warning')}</option>
+              <option value="info">{t('system.logs.filter.info')}</option>
+              <option value="debug">{t('system.logs.filter.debug')}</option>
             </select>
             {/* Refresh Button */}
             <button
               onClick={() => fetchLogs()}
               disabled={logsLoading}
               className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              title="Refresh logs"
+              title={t('refreshTitle.logs')}
+              aria-label={t('refreshTitle.logs')}
             >
               <svg className={`h-5 w-5 ${logsLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -906,7 +931,7 @@ function SystemSettings() {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          View system event logs, alerts, and automation activity.
+          {t('system.logs.help')}
         </p>
 
         {logsLoading ? (
@@ -921,7 +946,7 @@ function SystemSettings() {
             {/* Logs Container with Scroll */}
             <div className="bg-gray-900 rounded-lg p-4 max-h-96 overflow-y-auto font-mono text-sm">
               {systemLogs.map((log, index) => (
-                <div key={index} className="flex items-start space-x-3 py-1 border-b border-gray-800 last:border-0">
+                <div key={index} className="flex items-start gap-3 py-1 border-b border-gray-800 last:border-0">
                   {/* Timestamp */}
                   <span className="text-gray-500 text-xs whitespace-nowrap">
                     {formatDateTime(log.timestamp)}
@@ -933,7 +958,7 @@ function SystemSettings() {
                     log.level === 'debug' ? 'bg-purple-900 text-purple-200' :
                     'bg-blue-900 text-blue-200'
                   }`}>
-                    {log.level}
+                    {t(`system.logs.level.${log.level}`, { defaultValue: log.level })}
                   </span>
                   {/* Source Badge */}
                   {log.source && (
@@ -942,7 +967,7 @@ function SystemSettings() {
                     </span>
                   )}
                   {/* Message */}
-                  <span className={`flex-1 ${
+                  <span dir="auto" className={`flex-1 ${
                     log.level === 'error' ? 'text-red-400' :
                     log.level === 'warning' ? 'text-amber-400' :
                     'text-gray-300'
@@ -953,8 +978,8 @@ function SystemSettings() {
               ))}
             </div>
             {/* Log Count */}
-            <p className="text-xs text-gray-400 text-right">
-              Showing {systemLogs.length} log entries
+            <p className="text-xs text-gray-400 text-end">
+              {t('system.logs.showing', { count: systemLogs.length })}
             </p>
           </div>
         ) : (
@@ -962,7 +987,7 @@ function SystemSettings() {
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="mt-2 text-gray-500 dark:text-gray-400">No log entries found</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">{t('system.logs.empty')}</p>
           </div>
         )}
       </div>
@@ -976,18 +1001,18 @@ function SystemSettings() {
         >
           {saving ? (
             <>
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Saving...
+              {t('common:actions.saving')}
             </>
           ) : (
             <>
-              <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              Save Settings
+              {t('system.save')}
             </>
           )}
         </button>
@@ -999,6 +1024,8 @@ function SystemSettings() {
 function CloudSettings() {
   const { token } = useAuth();
   const { formatDateTime } = useSettings();
+  const { t } = useTranslation('settings');
+  const fmt = useFormat();
   const [cloudStatus, setCloudStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1056,12 +1083,12 @@ function CloudSettings() {
       const response = await fetch(`${API_BASE}/cloud/status`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch cloud status');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setCloudStatus(data);
       setError(null);
     } catch (err) {
-      setError(err.message);
+      setError(t('cloud.errors.loadFailed', { error: err.message }));
     } finally {
       setLoading(false);
     }
@@ -1093,13 +1120,13 @@ function CloudSettings() {
       });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Failed to approve program');
+        throw new Error(data.message || `HTTP ${response.status}`);
       }
       const data = await response.json();
-      setProgramMessage({ type: 'success', text: `Program approved! Automation #${data.automationId} created.` });
+      setProgramMessage({ type: 'success', text: t('cloud.suggested.approved', { id: data.automationId }) });
       fetchSuggestedPrograms();
     } catch (err) {
-      setProgramMessage({ type: 'error', text: err.message });
+      setProgramMessage({ type: 'error', text: t('cloud.errors.approveFailed', { error: err.message }) });
     } finally {
       setActionLoading(null);
     }
@@ -1115,12 +1142,12 @@ function CloudSettings() {
       });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Failed to reject program');
+        throw new Error(data.message || `HTTP ${response.status}`);
       }
-      setProgramMessage({ type: 'success', text: 'Program rejected.' });
+      setProgramMessage({ type: 'success', text: t('cloud.suggested.rejected') });
       fetchSuggestedPrograms();
     } catch (err) {
-      setProgramMessage({ type: 'error', text: err.message });
+      setProgramMessage({ type: 'error', text: t('cloud.errors.rejectFailed', { error: err.message }) });
     } finally {
       setActionLoading(null);
     }
@@ -1141,7 +1168,7 @@ function CloudSettings() {
       if (!response.ok || !data.success) {
         setTestResult({
           success: false,
-          message: data.message || 'Connection test failed'
+          message: data.message || t('cloud.errors.testFailed')
         });
       } else {
         setTestResult({
@@ -1153,7 +1180,7 @@ function CloudSettings() {
     } catch (err) {
       setTestResult({
         success: false,
-        message: err.message || 'Failed to test connection'
+        message: err.message ? `${t('cloud.errors.testFailed')} (${err.message})` : t('cloud.errors.testFailed')
       });
     } finally {
       setTestLoading(false);
@@ -1175,7 +1202,7 @@ function CloudSettings() {
 
   const handleConnect = async () => {
     if (!connectForm.url || !connectForm.apiKey) {
-      setConnectError('Both URL and API key are required');
+      setConnectError(t('cloud.errors.fieldsRequired'));
       return;
     }
 
@@ -1194,21 +1221,21 @@ function CloudSettings() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Failed to connect');
+        throw new Error(data.message || `HTTP ${response.status}`);
       }
 
       setShowConnectModal(false);
       setConnectForm({ url: '', apiKey: '' });
       fetchCloudStatus();
     } catch (err) {
-      setConnectError(err.message);
+      setConnectError(t('cloud.errors.connectFailed', { error: err.message }));
     } finally {
       setConnectLoading(false);
     }
   };
 
   const handleDisconnect = async () => {
-    if (!confirm('Are you sure you want to disconnect from the cloud?')) return;
+    if (!confirm(t('cloud.confirmDisconnect'))) return;
 
     try {
       const response = await fetch(`${API_BASE}/cloud/disconnect`, {
@@ -1216,10 +1243,10 @@ function CloudSettings() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!response.ok) throw new Error('Failed to disconnect');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       fetchCloudStatus();
     } catch (err) {
-      setError(err.message);
+      setError(t('cloud.errors.disconnectFailed', { error: err.message }));
     }
   };
 
@@ -1233,13 +1260,13 @@ function CloudSettings() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!response.ok) throw new Error('Sync failed');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      setSyncMessage({ type: 'success', text: `Sync triggered at ${formatDateTime(data.timestamp)}` });
+      setSyncMessage({ type: 'success', text: t('cloud.sync.triggered', { time: formatDateTime(data.timestamp) }) });
       fetchCloudStatus();
       fetchSyncHistory(); // Refresh sync history
     } catch (err) {
-      setSyncMessage({ type: 'error', text: err.message });
+      setSyncMessage({ type: 'error', text: t('cloud.errors.syncFailed', { error: err.message }) });
     } finally {
       setSyncLoading(false);
     }
@@ -1258,7 +1285,7 @@ function CloudSettings() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Cloud Connection</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{t('cloud.title')}</h2>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-800 dark:text-red-200 text-sm">
@@ -1269,11 +1296,12 @@ function CloudSettings() {
       {/* Connection Status Card */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-medium text-gray-900 dark:text-white">Connection Status</h3>
+          <h3 className="text-md font-medium text-gray-900 dark:text-white">{t('cloud.status.title')}</h3>
           <button
             onClick={fetchCloudStatus}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            title="Refresh status"
+            title={t('refreshTitle.status')}
+            aria-label={t('refreshTitle.status')}
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1283,7 +1311,7 @@ function CloudSettings() {
 
         {/* Status Indicator */}
         <div className="flex items-center mb-6">
-          <div className={`h-4 w-4 rounded-full mr-3 ${
+          <div className={`h-4 w-4 rounded-full me-3 ${
             cloudStatus?.connected
               ? 'bg-green-500'
               : cloudStatus?.configured
@@ -1293,17 +1321,17 @@ function CloudSettings() {
           <div>
             <p className="font-medium text-gray-900 dark:text-white">
               {cloudStatus?.connected
-                ? 'Connected'
+                ? t('cloud.status.connected')
                 : cloudStatus?.configured
-                  ? 'Configured (Disconnected)'
-                  : 'Not Configured'}
+                  ? t('cloud.status.configuredDisconnected')
+                  : t('cloud.status.notConfigured')}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               {cloudStatus?.connected
-                ? 'Cloud sync is active'
+                ? t('cloud.status.syncActive')
                 : cloudStatus?.configured
-                  ? 'Unable to reach cloud server'
-                  : 'No cloud connection configured'}
+                  ? t('cloud.status.unreachable')
+                  : t('cloud.status.noConnection')}
             </p>
           </div>
         </div>
@@ -1338,7 +1366,7 @@ function CloudSettings() {
                 </svg>
               )}
             </div>
-            <div className="ml-4">
+            <div className="ms-4">
               <h4 className={`text-lg font-semibold ${
                 cloudStatus?.connected
                   ? 'text-green-800'
@@ -1347,10 +1375,10 @@ function CloudSettings() {
                     : 'text-gray-700'
               }`}>
                 {cloudStatus?.connected
-                  ? 'Cloud Connected'
+                  ? t('cloud.status.cloudConnected')
                   : cloudStatus?.configured
-                    ? 'Cloud Disconnected'
-                    : 'Offline Mode'}
+                    ? t('cloud.status.cloudDisconnected')
+                    : t('cloud.status.offlineMode')}
               </h4>
               <p className={`text-sm ${
                 cloudStatus?.connected
@@ -1360,10 +1388,10 @@ function CloudSettings() {
                     : 'text-gray-500'
               }`}>
                 {cloudStatus?.connected
-                  ? 'All systems syncing normally'
+                  ? t('cloud.status.syncingNormally')
                   : cloudStatus?.configured
-                    ? 'Reconnection will be attempted automatically'
-                    : 'System operating independently'}
+                    ? t('cloud.status.willReconnect')
+                    : t('cloud.status.independent')}
               </p>
             </div>
           </div>
@@ -1372,23 +1400,23 @@ function CloudSettings() {
         {/* Status Details */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Last Sync</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('cloud.status.lastSync')}</p>
             <p className="font-medium text-gray-900 dark:text-white">
               {cloudStatus?.lastSync
                 ? formatDateTime(cloudStatus.lastSync.timestamp)
-                : 'Never'}
+                : t('cloud.status.never')}
             </p>
           </div>
           <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Pending Items</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('cloud.status.pendingItems')}</p>
             <p className="font-medium text-gray-900 dark:text-white">
-              {cloudStatus?.pendingItems || 0} items
+              {t('cloud.status.items', { count: cloudStatus?.pendingItems || 0 })}
             </p>
           </div>
           <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Configuration</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('cloud.status.configuration')}</p>
             <p className="font-medium text-gray-900 dark:text-white">
-              {cloudStatus?.configured ? 'Configured' : 'Not configured'}
+              {cloudStatus?.configured ? t('cloud.status.configured') : t('cloud.status.notConfiguredLower')}
             </p>
           </div>
         </div>
@@ -1413,11 +1441,11 @@ function CloudSettings() {
           }`}>
             <div className="flex items-center">
               {testResult.success ? (
-                <svg className="h-5 w-5 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5 me-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               ) : (
-                <svg className="h-5 w-5 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5 me-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               )}
@@ -1425,8 +1453,8 @@ function CloudSettings() {
             </div>
             {testResult.success && testResult.details && (
               <div className="mt-2 text-xs grid grid-cols-2 gap-2">
-                <span>Latency: {testResult.details.latency}ms</span>
-                <span>Server: v{testResult.details.serverVersion}</span>
+                <span>{t('cloud.test.latency', { value: fmt.withUnit(testResult.details.latency, 'ms', { decimals: 0 }) })}</span>
+                <span>{t('cloud.test.server', { version: testResult.details.serverVersion })}</span>
               </div>
             )}
           </div>
@@ -1443,18 +1471,18 @@ function CloudSettings() {
               >
                 {testLoading ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Testing...
+                    {t('cloud.test.testing')}
                   </>
                 ) : (
                   <>
-                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Test Connection
+                    {t('cloud.test.button')}
                   </>
                 )}
               </button>
@@ -1465,18 +1493,18 @@ function CloudSettings() {
               >
                 {syncLoading ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Syncing...
+                    {t('cloud.sync.syncing')}
                   </>
                 ) : (
                   <>
-                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    Sync Now
+                    {t('cloud.sync.now')}
                   </>
                 )}
               </button>
@@ -1484,10 +1512,10 @@ function CloudSettings() {
                 onClick={handleDisconnect}
                 className="px-4 py-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 flex items-center"
               >
-                <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-4 w-4 me-2 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                Disconnect
+                {t('cloud.disconnect')}
               </button>
             </>
           ) : (
@@ -1495,10 +1523,10 @@ function CloudSettings() {
               onClick={() => setShowConnectModal(true)}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center"
             >
-              <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
               </svg>
-              Configure Cloud Connection
+              {t('cloud.configure')}
             </button>
           )}
         </div>
@@ -1508,12 +1536,12 @@ function CloudSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
-            <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5 me-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Pending Sync Queue
+            {t('cloud.queue.title')}
             {pendingQueue.length > 0 && (
-              <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+              <span className="ms-2 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
                 {pendingQueue.length}
               </span>
             )}
@@ -1522,7 +1550,8 @@ function CloudSettings() {
             onClick={fetchPendingQueue}
             disabled={queueLoading}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            title="Refresh pending queue"
+            title={t('refreshTitle.queue')}
+            aria-label={t('refreshTitle.queue')}
           >
             <svg className={`h-5 w-5 ${queueLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1531,7 +1560,7 @@ function CloudSettings() {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Items waiting to be synchronized with the Cloud. Changes made while offline are queued here.
+          {t('cloud.queue.help')}
         </p>
 
         {queueLoading ? (
@@ -1546,18 +1575,18 @@ function CloudSettings() {
             <svg className="mx-auto h-10 w-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            <p className="mt-2 text-gray-500 dark:text-gray-400">No pending items</p>
-            <p className="text-sm text-gray-400">All changes have been synchronized</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">{t('cloud.queue.empty')}</p>
+            <p className="text-sm text-gray-400">{t('cloud.queue.emptyHelp')}</p>
           </div>
         ) : (
-          <div className="overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Entity</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.queue.entity')}</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.queue.action')}</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.queue.status')}</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.queue.created')}</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1567,10 +1596,10 @@ function CloudSettings() {
                     <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
-                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded mr-2">
-                            {item.entity_type}
+                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded me-2">
+                            {t(`cloud.entity.${item.entity_type}`, { defaultValue: item.entity_type })}
                           </span>
-                          <span className="text-sm text-gray-900 dark:text-white">
+                          <span className="text-sm text-gray-900 dark:text-white" dir="auto">
                             {payload.name || `#${item.entity_id}`}
                           </span>
                         </div>
@@ -1581,7 +1610,7 @@ function CloudSettings() {
                           item.action === 'update' ? 'bg-blue-100 text-blue-700' :
                           'bg-red-100 text-red-700'
                         }`}>
-                          {item.action}
+                          {t(`cloud.action.${item.action}`, { defaultValue: item.action })}
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -1591,11 +1620,11 @@ function CloudSettings() {
                           item.status === 'failed' ? 'bg-red-100 text-red-700' :
                           'bg-green-100 text-green-700'
                         }`}>
-                          {item.status}
+                          {t(`cloud.queueStatus.${item.status}`, { defaultValue: item.status })}
                         </span>
                         {item.retry_count > 0 && (
-                          <span className="ml-1 text-xs text-gray-500">
-                            (retry #{item.retry_count})
+                          <span className="ms-1 text-xs text-gray-500">
+                            {t('cloud.queue.retry', { n: item.retry_count })}
                           </span>
                         )}
                       </td>
@@ -1615,16 +1644,17 @@ function CloudSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
-            <svg className="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5 me-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Sync History
+            {t('cloud.history.title')}
           </h3>
           <button
             onClick={fetchSyncHistory}
             disabled={historyLoading}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            title="Refresh sync history"
+            title={t('refreshTitle.history')}
+            aria-label={t('refreshTitle.history')}
           >
             <svg className={`h-5 w-5 ${historyLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1633,7 +1663,7 @@ function CloudSettings() {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          View the history of Cloud synchronization operations.
+          {t('cloud.history.help')}
         </p>
 
         {historyLoading ? (
@@ -1648,19 +1678,19 @@ function CloudSettings() {
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="mt-2 text-gray-500 dark:text-gray-400">No sync history yet</p>
-            <p className="text-sm text-gray-400">Sync operations will be recorded here</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">{t('cloud.history.empty')}</p>
+            <p className="text-sm text-gray-400">{t('cloud.history.emptyHelp')}</p>
           </div>
         ) : (
-          <div className="overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Items</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Triggered By</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.history.time')}</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.history.type')}</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.history.status')}</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.history.items')}</th>
+                  <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cloud.history.triggeredBy')}</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1675,7 +1705,7 @@ function CloudSettings() {
                         sync.sync_type === 'automatic' ? 'bg-purple-100 text-purple-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {sync.sync_type}
+                        {t(`cloud.syncType.${sync.sync_type}`, { defaultValue: sync.sync_type })}
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -1685,29 +1715,29 @@ function CloudSettings() {
                         'bg-red-100 text-red-700'
                       }`}>
                         {sync.status === 'success' ? (
-                          <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-3 w-3 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         ) : sync.status === 'partial' ? (
-                          <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-3 w-3 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
                         ) : (
-                          <svg className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-3 w-3 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         )}
-                        {sync.status}
+                        {t(`cloud.syncStatus.${sync.status}`, { defaultValue: sync.status })}
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                      {sync.items_synced} synced
+                      {t('cloud.history.synced', { n: sync.items_synced })}
                       {sync.items_failed > 0 && (
-                        <span className="text-red-500 ml-1">({sync.items_failed} failed)</span>
+                        <span className="text-red-500 ms-1">{t('cloud.history.failed', { n: sync.items_failed })}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                      {sync.triggered_by_name || 'System'}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400" dir="auto">
+                      {sync.triggered_by_name || t('cloud.history.system')}
                     </td>
                   </tr>
                 ))}
@@ -1721,16 +1751,17 @@ function CloudSettings() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-md font-medium text-gray-900 dark:text-white flex items-center">
-            <svg className="h-5 w-5 mr-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-5 w-5 me-2 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
-            Suggested Programs from Cloud
+            {t('cloud.suggested.title')}
           </h3>
           <button
             onClick={fetchSuggestedPrograms}
             disabled={suggestedLoading}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            title="Refresh suggested programs"
+            title={t('refreshTitle.suggested')}
+            aria-label={t('refreshTitle.suggested')}
           >
             <svg className={`h-5 w-5 ${suggestedLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1739,7 +1770,7 @@ function CloudSettings() {
         </div>
 
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          When connected to the Cloud, automation programs may be suggested for your review. You can approve them to add to your local automations or reject them.
+          {t('cloud.suggested.help')}
         </p>
 
         {programMessage && (
@@ -1764,8 +1795,8 @@ function CloudSettings() {
             <svg className="mx-auto h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
             </svg>
-            <p className="mt-2 text-gray-500 dark:text-gray-400">No pending suggested programs</p>
-            <p className="text-sm text-gray-400">Suggested automations from the Cloud will appear here</p>
+            <p className="mt-2 text-gray-500 dark:text-gray-400">{t('cloud.suggested.empty')}</p>
+            <p className="text-sm text-gray-400">{t('cloud.suggested.emptyHelp')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -1774,19 +1805,19 @@ function CloudSettings() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-medium text-gray-900 dark:text-white">{program.name}</h4>
+                      <h4 className="font-medium text-gray-900 dark:text-white" dir="auto">{program.name}</h4>
                       <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
-                        Cloud Suggested
+                        {t('cloud.suggested.badge')}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{program.description || 'No description'}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-2" dir="auto">{program.description || t('cloud.suggested.noDescription')}</p>
 
                     {/* Trigger Info */}
                     {program.trigger_config && (
                       <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mb-1">
-                        <span className="font-medium">Trigger:</span>
+                        <span className="font-medium">{t('cloud.suggested.trigger')}</span>
                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                          {program.trigger_config.type === 'schedule' ? `Schedule (${program.trigger_config.schedule || 'custom'})` : program.trigger_config.type}
+                          {program.trigger_config.type === 'schedule' ? t('cloud.suggested.schedule', { schedule: program.trigger_config.schedule || t('cloud.suggested.custom') }) : program.trigger_config.type}
                         </span>
                       </div>
                     )}
@@ -1794,18 +1825,18 @@ function CloudSettings() {
                     {/* Actions Info */}
                     {program.actions && program.actions.length > 0 && (
                       <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                        <span className="font-medium">Actions:</span>
-                        <span>{program.actions.length} action{program.actions.length !== 1 ? 's' : ''}</span>
+                        <span className="font-medium">{t('cloud.suggested.actions')}</span>
+                        <span>{t('cloud.suggested.actionCount', { count: program.actions.length })}</span>
                       </div>
                     )}
 
                     <p className="text-xs text-gray-400 mt-2">
-                      Cloud ID: {program.cloud_id} | Received: {formatDateTime(program.created_at)}
+                      {t('cloud.suggested.meta', { id: program.cloud_id, time: formatDateTime(program.created_at) })}
                     </p>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex gap-2 ml-4">
+                  <div className="flex gap-2 ms-4">
                     <button
                       onClick={() => handleApproveProgram(program.id)}
                       disabled={actionLoading === program.id}
@@ -1818,10 +1849,10 @@ function CloudSettings() {
                         </svg>
                       ) : (
                         <>
-                          <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-4 w-4 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                          Approve
+                          {t('cloud.suggested.approve')}
                         </>
                       )}
                     </button>
@@ -1830,10 +1861,10 @@ function CloudSettings() {
                       disabled={actionLoading === program.id}
                       className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 flex items-center"
                     >
-                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-4 w-4 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
-                      Reject
+                      {t('cloud.suggested.reject')}
                     </button>
                   </div>
                 </div>
@@ -1848,14 +1879,14 @@ function CloudSettings() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setShowConnectModal(false)}></div>
-            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
-              <button onClick={() => setShowConnectModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-start align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
+              <button onClick={() => setShowConnectModal(false)} aria-label={t('common:actions.close')} className="absolute top-4 end-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
 
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Configure Cloud Connection</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{t('cloud.modal.title')}</h3>
 
               {connectError && (
                 <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-800 dark:text-red-200 text-sm">
@@ -1865,9 +1896,10 @@ function CloudSettings() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cloud Server URL</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('cloud.modal.url')}</label>
                   <input
                     type="url"
+                    dir="ltr"
                     value={connectForm.url}
                     onChange={(e) => setConnectForm({ ...connectForm, url: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
@@ -1875,13 +1907,13 @@ function CloudSettings() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">API Key</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('cloud.modal.apiKey')}</label>
                   <input
                     type="password"
                     value={connectForm.apiKey}
                     onChange={(e) => setConnectForm({ ...connectForm, apiKey: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-                    placeholder="Enter your API key"
+                    placeholder={t('cloud.modal.apiKeyPlaceholder')}
                   />
                 </div>
               </div>
@@ -1891,7 +1923,7 @@ function CloudSettings() {
                   onClick={() => setShowConnectModal(false)}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                 >
-                  Cancel
+                  {t('common:actions.cancel')}
                 </button>
                 <button
                   onClick={handleConnect}
@@ -1900,14 +1932,14 @@ function CloudSettings() {
                 >
                   {connectLoading ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Connecting...
+                      {t('cloud.modal.connecting')}
                     </>
                   ) : (
-                    'Connect'
+                    t('cloud.modal.connect')
                   )}
                 </button>
               </div>
@@ -1919,7 +1951,25 @@ function CloudSettings() {
   );
 }
 
+/**
+ * Bytes as "1.23 MB" through the i18n formatters: unit abbreviations stay
+ * untranslated, the number follows the active language (Turkish groups with a
+ * narrow space, Arabic isolates value+unit). Same unit steps as before.
+ */
+function formatBytesI18n(fmt, bytes) {
+  if (!bytes || bytes === 0) return fmt.withUnit(0, 'B', { decimals: 0 });
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return fmt.withUnit(bytes / Math.pow(1024, i), units[i], { decimals: i > 1 ? 2 : 0 });
+}
+
+// Example token format shown as the input placeholder (data, not text).
+const TELEGRAM_TOKEN_PLACEHOLDER = '123456789:ABCdefGhIjKlMnOpQrStUvWxYz';
+const TELEGRAM_GET_UPDATES_URL = 'https://api.telegram.org/bot<TOKEN>/getUpdates';
+const TELEGRAM_CHAT_SNIPPET = '"chat":{"id":';
+
 function NotificationSettings() {
+  const { t } = useTranslation('settings');
   const { token } = useAuth();
   const { formatDateTime } = useSettings();
   const [loading, setLoading] = useState(true);
@@ -1932,6 +1982,8 @@ function NotificationSettings() {
   const [chatId, setChatId] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [hasToken, setHasToken] = useState(false);
+  // Language of the Telegram messages (server setting telegram_language), independent of the UI language.
+  const [telegramLanguage, setTelegramLanguage] = useState('en');
 
   const [watchdogStatus, setWatchdogStatus] = useState(null);
 
@@ -1946,12 +1998,13 @@ function NotificationSettings() {
       const response = await fetch(`${API_BASE}/notifications/telegram`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch config');
+      if (!response.ok) throw new Error(t('notifications.errors.loadFailed'));
       const data = await response.json();
       setBotToken(data.has_token ? '***configured***' : '');
       setChatId(data.chat_id || '');
       setEnabled(data.enabled);
       setHasToken(data.has_token);
+      setTelegramLanguage(LANGUAGES.some((l) => l.code === data.language) ? data.language : 'en');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1977,7 +2030,7 @@ function NotificationSettings() {
     setError(null);
     setSuccessMessage(null);
     try {
-      const body = { enabled };
+      const body = { enabled, language: telegramLanguage };
       if (botToken && botToken !== '***configured***') body.bot_token = botToken;
       if (chatId) body.chat_id = chatId;
 
@@ -1986,8 +2039,8 @@ function NotificationSettings() {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      if (!response.ok) throw new Error('Failed to save configuration');
-      setSuccessMessage('Configuration saved successfully');
+      if (!response.ok) throw new Error(t('notifications.errors.saveFailed'));
+      setSuccessMessage(t('notifications.saved'));
       if (botToken && botToken !== '***configured***') {
         setHasToken(true);
         setBotToken('***configured***');
@@ -2005,7 +2058,8 @@ function NotificationSettings() {
     setError(null);
     setSuccessMessage(null);
     try {
-      const body = {};
+      // The test message is sent in the selected Telegram language.
+      const body = { language: telegramLanguage };
       if (botToken && botToken !== '***configured***') body.bot_token = botToken;
       if (chatId) body.chat_id = chatId;
 
@@ -2016,9 +2070,9 @@ function NotificationSettings() {
       });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Test failed');
+        throw new Error(data.error || t('notifications.errors.testFailed'));
       }
-      setSuccessMessage('Test message sent! Check your Telegram.');
+      setSuccessMessage(t('notifications.testSent'));
       setTimeout(() => setSuccessMessage(null), 5000);
     } catch (err) {
       setError(err.message);
@@ -2035,9 +2089,17 @@ function NotificationSettings() {
     );
   }
 
+  const codeClass = 'bg-blue-100 dark:bg-blue-800 px-1 rounded';
+  const stepComponents = {
+    b: <strong />,
+    code: <code className={codeClass} dir="ltr" />,
+    url: <code className={`${codeClass} text-xs break-all`} dir="ltr" />,
+    br: <br />,
+  };
+
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Notifications</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{t('notifications.title')}</h2>
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4 text-sm text-red-800 dark:text-red-400">
@@ -2046,7 +2108,7 @@ function NotificationSettings() {
       )}
       {successMessage && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 mb-4 text-sm text-green-800 dark:text-green-400 flex items-center">
-          <svg className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-4 w-4 me-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
           {successMessage}
@@ -2056,90 +2118,115 @@ function NotificationSettings() {
       {/* Telegram Configuration */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <div className="flex items-center mb-4">
-          <svg className="h-6 w-6 mr-2 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+          <svg className="h-6 w-6 me-2 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
             <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
           </svg>
-          <h3 className="text-md font-medium text-gray-900 dark:text-white">Telegram Bot</h3>
+          <h3 className="text-md font-medium text-gray-900 dark:text-white">{t('notifications.telegram.title')}</h3>
         </div>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Receive instant alerts on your phone when automations miss their schedule or equipment goes offline.
+          {t('notifications.telegram.intro')}
         </p>
 
         {/* Setup instructions */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
-          <h4 className="text-sm font-medium text-blue-800 dark:text-blue-400 mb-2">Setup Instructions</h4>
+          <h4 className="text-sm font-medium text-blue-800 dark:text-blue-400 mb-2">{t('notifications.telegram.setupTitle')}</h4>
           <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
-            <li>Open Telegram and search for <strong>@BotFather</strong></li>
-            <li>Send <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">/newbot</code> and follow the prompts to create a bot</li>
-            <li>Copy the <strong>bot token</strong> and paste it below</li>
-            <li>Add your bot to a group chat (or message it directly)</li>
-            <li>Send a message in the chat, then visit:<br/>
-              <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded text-xs">https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code><br/>
-              to find your <strong>chat ID</strong> (look for <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"chat":{"{"}"id":</code>)</li>
-            <li>Paste the chat ID below and click <strong>Test Connection</strong></li>
+            <li><Trans i18nKey="settings:notifications.telegram.steps.findBotFather" components={stepComponents} /></li>
+            <li><Trans i18nKey="settings:notifications.telegram.steps.newBot" components={stepComponents} /></li>
+            <li><Trans i18nKey="settings:notifications.telegram.steps.copyToken" components={stepComponents} /></li>
+            <li>{t('notifications.telegram.steps.addToChat')}</li>
+            <li>
+              <Trans
+                i18nKey="settings:notifications.telegram.steps.findChatId"
+                values={{ url: TELEGRAM_GET_UPDATES_URL, snippet: TELEGRAM_CHAT_SNIPPET }}
+                components={stepComponents}
+              />
+            </li>
+            <li><Trans i18nKey="settings:notifications.telegram.steps.pasteAndTest" components={stepComponents} /></li>
           </ol>
         </div>
 
         <div className="space-y-4">
           {/* Enable toggle */}
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Enable Telegram Alerts</label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('notifications.telegram.enable')}</label>
             <button
               onClick={() => setEnabled(!enabled)}
+              role="switch"
+              aria-checked={enabled}
+              aria-label={t('notifications.telegram.enable')}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 enabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
               }`}
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                enabled ? 'translate-x-6' : 'translate-x-1'
+                enabled ? 'translate-x-6 rtl:-translate-x-6' : 'translate-x-1 rtl:-translate-x-1'
               }`} />
             </button>
           </div>
 
           {/* Bot Token */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bot Token</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('notifications.telegram.botToken')}</label>
             <input
               type={botToken === '***configured***' ? 'text' : 'password'}
               value={botToken}
               onChange={(e) => setBotToken(e.target.value)}
               onFocus={() => { if (botToken === '***configured***') setBotToken(''); }}
-              placeholder="123456789:ABCdefGhIjKlMnOpQrStUvWxYz"
+              placeholder={TELEGRAM_TOKEN_PLACEHOLDER}
+              dir="ltr"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono"
             />
             {hasToken && botToken === '***configured***' && (
-              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Token is configured. Click the field to change it.</p>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">{t('notifications.telegram.tokenConfigured')}</p>
             )}
           </div>
 
           {/* Chat ID */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Chat ID</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('notifications.telegram.chatId')}</label>
             <input
               type="text"
               value={chatId}
               onChange={(e) => setChatId(e.target.value)}
               placeholder="-1001234567890"
+              dir="ltr"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono"
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Group chat IDs start with a dash (-). Individual chats are just numbers.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('notifications.telegram.chatIdHelp')}</p>
+          </div>
+
+          {/* Message language */}
+          <div>
+            <label htmlFor="telegram-language" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('notifications.telegram.language')}</label>
+            <select
+              id="telegram-language"
+              value={telegramLanguage}
+              onChange={(e) => setTelegramLanguage(e.target.value)}
+              className="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code} lang={l.code} dir={l.dir}>{l.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('notifications.telegram.languageHelp')}</p>
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-wrap gap-3 pt-2">
             <button
               onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Save Configuration'}
+              {saving ? t('common:actions.saving') : t('notifications.telegram.save')}
             </button>
             <button
               onClick={handleTest}
               disabled={testing || (!hasToken && !botToken) || !chatId}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
             >
-              {testing ? 'Sending...' : 'Test Connection'}
+              {testing ? t('notifications.telegram.sending') : t('notifications.telegram.test')}
             </button>
           </div>
         </div>
@@ -2148,58 +2235,58 @@ function NotificationSettings() {
       {/* Watchdog Status */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
         <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center">
-          <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 me-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
           </svg>
-          Watchdog Monitor
+          {t('notifications.watchdog.title')}
         </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          The watchdog automatically monitors all enabled automations and equipment. It sends Telegram alerts when:
+          {t('notifications.watchdog.intro')}
         </p>
         <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-4 list-disc list-inside">
-          <li>A scheduled automation misses its fire window</li>
-          <li>A threshold condition is met but the automation doesn't execute</li>
-          <li>Equipment goes offline or reports errors</li>
+          <li>{t('notifications.watchdog.reasons.missedSchedule')}</li>
+          <li>{t('notifications.watchdog.reasons.thresholdNotExecuted')}</li>
+          <li>{t('notifications.watchdog.reasons.equipmentOffline')}</li>
         </ul>
 
         {watchdogStatus && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Monitored Automations</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('notifications.watchdog.monitoredAutomations')}</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{watchdogStatus.monitored_automations}</p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Offline Equipment</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('notifications.watchdog.offlineEquipment')}</p>
               <p className={`text-xl font-bold ${watchdogStatus.offline_equipment > 0 ? 'text-amber-600' : 'text-green-600'}`}>
                 {watchdogStatus.offline_equipment}
               </p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Equipment Errors</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('notifications.watchdog.equipmentErrors')}</p>
               <p className={`text-xl font-bold ${watchdogStatus.error_equipment > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 {watchdogStatus.error_equipment}
               </p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Telegram</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('notifications.watchdog.telegram')}</p>
               <p className={`text-xl font-bold ${watchdogStatus.telegram_configured ? 'text-green-600' : 'text-gray-400'}`}>
-                {watchdogStatus.telegram_configured ? 'Active' : 'Off'}
+                {watchdogStatus.telegram_configured ? t('notifications.watchdog.telegramActive') : t('notifications.watchdog.telegramOff')}
               </p>
             </div>
           </div>
         )}
 
-        {/* Recent watchdog alerts */}
+        {/* Recent watchdog alerts (server-generated text) */}
         {watchdogStatus?.recent_alerts?.length > 0 && (
           <div>
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recent Watchdog Alerts</h4>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('notifications.watchdog.recentAlerts')}</h4>
             <div className="max-h-60 overflow-y-auto space-y-2">
               {watchdogStatus.recent_alerts.map((alert) => (
                 <div key={alert.id} className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded p-2 text-sm">
                   <div className="flex justify-between items-start">
-                    <span className="text-amber-800 dark:text-amber-400">{alert.message?.replace('Watchdog: ', '')}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0">{formatDateTime(alert.created_at)}</span>
+                    <span className="text-amber-800 dark:text-amber-400" dir="auto">{alert.message?.replace('Watchdog: ', '')}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 ms-2 flex-shrink-0">{formatDateTime(alert.created_at)}</span>
                   </div>
                 </div>
               ))}
@@ -2209,10 +2296,10 @@ function NotificationSettings() {
 
         {watchdogStatus?.recent_alerts?.length === 0 && (
           <p className="text-sm text-green-600 dark:text-green-400 flex items-center">
-            <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4 me-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            No watchdog alerts. All systems running normally.
+            {t('notifications.watchdog.noAlerts')}
           </p>
         )}
       </div>
@@ -2221,6 +2308,8 @@ function NotificationSettings() {
 }
 
 function BackupSettings() {
+  const { t } = useTranslation('settings');
+  const fmt = useFormat();
   const { token, logout } = useAuth();
   const navigate = useNavigate();
   const [showFactoryResetModal, setShowFactoryResetModal] = useState(false);
@@ -2250,7 +2339,7 @@ function BackupSettings() {
       });
 
       if (!response.ok) {
-        let msg = 'Failed to create backup';
+        let msg = t('backup.errors.createFailed');
         try {
           const data = await response.json();
           msg = data.message || msg;
@@ -2276,8 +2365,8 @@ function BackupSettings() {
       a.remove();
       window.URL.revokeObjectURL(url);
 
-      const sizeMb = (blob.size / (1024 * 1024)).toFixed(2);
-      setBackupMessage({ type: 'success', text: `Backup downloaded: ${filename} (${sizeMb} MB)` });
+      const size = fmt.withUnit(blob.size / (1024 * 1024), 'MB', { decimals: 2 });
+      setBackupMessage({ type: 'success', text: t('backup.downloaded', { filename, size }) });
     } catch (err) {
       setBackupMessage({ type: 'error', text: err.message });
     } finally {
@@ -2287,7 +2376,7 @@ function BackupSettings() {
 
   const handleFactoryReset = async () => {
     if (!resetPassword) {
-      setResetError('Password is required');
+      setResetError(t('backup.factoryReset.passwordRequired'));
       return;
     }
 
@@ -2309,7 +2398,7 @@ function BackupSettings() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Factory reset failed');
+        throw new Error(data.message || t('backup.factoryReset.failed'));
       }
 
       setResetSuccess(true);
@@ -2342,7 +2431,7 @@ function BackupSettings() {
 
   const handleRestore = async () => {
     if (!restoreFile) {
-      setRestoreError('Please select a backup file');
+      setRestoreError(t('backup.restore.fileRequired'));
       return;
     }
 
@@ -2363,7 +2452,7 @@ function BackupSettings() {
       });
 
       if (!response.ok) {
-        let msg = 'Restore failed';
+        let msg = t('backup.restore.failed');
         try {
           const data = await response.json();
           msg = data.message || msg;
@@ -2397,18 +2486,17 @@ function BackupSettings() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Backup & Restore</h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{t('backup.title')}</h2>
 
       {/* Backup Section */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4">Create Backup</h3>
+        <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4">{t('backup.create.title')}</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Download a complete backup of the system database — including users, equipment, zones, automations,
-          readings, and all settings — as a single SQLite file you can store safely off-device.
+          {t('backup.create.description')}
         </p>
 
         {backupMessage && (
-          <div className={`mb-4 p-3 rounded text-sm ${
+          <div className={`mb-4 p-3 rounded text-sm break-words ${
             backupMessage.type === 'success'
               ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800'
               : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800'
@@ -2424,18 +2512,18 @@ function BackupSettings() {
         >
           {backupLoading ? (
             <>
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Creating Backup...
+              {t('backup.create.creating')}
             </>
           ) : (
             <>
-              <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
               </svg>
-              Create Backup
+              {t('backup.create.button')}
             </>
           )}
         </button>
@@ -2444,44 +2532,44 @@ function BackupSettings() {
       {/* Restore Section */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6 border-2 border-amber-200 dark:border-amber-700">
         <h3 className="text-md font-medium text-amber-700 mb-4 flex items-center">
-          <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          Restore from Backup
+          {t('backup.restore.title')}
         </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Restore your system from a previously created backup file. <strong className="text-amber-600">This will replace all current data with the backup data.</strong>
+          <Trans i18nKey="settings:backup.restore.description" components={{ warn: <strong className="text-amber-600" /> }} />
         </p>
         <button
           onClick={() => setShowRestoreModal(true)}
           className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center"
         >
-          <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          Restore
+          {t('backup.restore.button')}
         </button>
       </div>
 
       {/* Factory Reset Section */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-2 border-red-200 dark:border-red-800">
         <h3 className="text-md font-medium text-red-600 mb-4 flex items-center">
-          <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          Factory Reset
+          {t('backup.factoryReset.title')}
         </h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Reset the system to factory defaults. <strong className="text-red-600">This will erase all data including equipment, zones, automations, users, and settings.</strong> This action cannot be undone.
+          <Trans i18nKey="settings:backup.factoryReset.description" components={{ warn: <strong className="text-red-600" /> }} />
         </p>
         <button
           onClick={() => setShowFactoryResetModal(true)}
           className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center"
         >
-          <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
-          Factory Reset
+          {t('backup.factoryReset.button')}
         </button>
       </div>
 
@@ -2496,11 +2584,12 @@ function BackupSettings() {
             ></div>
 
             {/* Modal */}
-            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-start align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
               {/* Close button */}
               <button
                 onClick={closeFactoryResetModal}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label={t('common:actions.close')}
+                className="absolute top-4 end-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2512,28 +2601,28 @@ function BackupSettings() {
                   <svg className="mx-auto h-12 w-12 text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Factory Reset Initiated</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">The system will restart shortly...</p>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('backup.factoryReset.initiated')}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t('backup.factoryReset.restarting')}</p>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center mb-4">
-                    <div className="flex-shrink-0 h-10 w-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                  <div className="flex items-center mb-4 pe-8">
+                    <div className="flex-shrink-0 h-10 w-10 bg-red-100 rounded-full flex items-center justify-center me-3">
                       <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Confirm Factory Reset</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('backup.factoryReset.confirmTitle')}</h3>
                   </div>
 
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    This will permanently delete all data. Enter your password to confirm.
+                    {t('backup.factoryReset.confirmBody')}
                   </p>
 
                   {resetError && (
                     <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                       <div className="flex items-center">
-                        <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="h-5 w-5 text-red-500 me-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span className="text-red-800 dark:text-red-200 text-sm">{resetError}</span>
@@ -2543,7 +2632,7 @@ function BackupSettings() {
 
                   <div className="mb-4">
                     <label htmlFor="reset-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Enter your password to confirm
+                      {t('backup.factoryReset.passwordLabel')}
                     </label>
                     <input
                       type="password"
@@ -2551,7 +2640,7 @@ function BackupSettings() {
                       value={resetPassword}
                       onChange={(e) => setResetPassword(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-                      placeholder="Enter your password"
+                      placeholder={t('backup.factoryReset.passwordPlaceholder')}
                       autoFocus
                     />
                   </div>
@@ -2562,7 +2651,7 @@ function BackupSettings() {
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                       disabled={resetLoading}
                     >
-                      Cancel
+                      {t('common:actions.cancel')}
                     </button>
                     <button
                       onClick={handleFactoryReset}
@@ -2571,14 +2660,14 @@ function BackupSettings() {
                     >
                       {resetLoading ? (
                         <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          Processing...
+                          {t('backup.processing')}
                         </>
                       ) : (
-                        'Confirm Factory Reset'
+                        t('backup.factoryReset.confirmButton')
                       )}
                     </button>
                   </div>
@@ -2600,11 +2689,12 @@ function BackupSettings() {
             ></div>
 
             {/* Modal */}
-            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
+            <div className="inline-block w-full max-w-md p-4 sm:p-6 my-8 mx-4 overflow-hidden text-start align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
               {/* Close button */}
               <button
                 onClick={closeRestoreModal}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label={t('common:actions.close')}
+                className="absolute top-4 end-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2616,32 +2706,30 @@ function BackupSettings() {
                   <svg className="mx-auto h-12 w-12 text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Restore Complete</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{t('backup.restore.completeTitle')}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    The database has been restored and the system is restarting. A safety backup of your
-                    previous data was saved on the device. You will be redirected to the login screen shortly —
-                    please sign in again once the system is back online (this may take up to a minute).
+                    {t('backup.restore.completeBody')}
                   </p>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center mb-4">
-                    <div className="flex-shrink-0 h-10 w-10 bg-amber-100 rounded-full flex items-center justify-center mr-3">
+                  <div className="flex items-center mb-4 pe-8">
+                    <div className="flex-shrink-0 h-10 w-10 bg-amber-100 rounded-full flex items-center justify-center me-3">
                       <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Restore from Backup</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t('backup.restore.title')}</h3>
                   </div>
 
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    Select a backup file to restore your system. This will replace all current data.
+                    {t('backup.restore.confirmBody')}
                   </p>
 
                   {restoreError && (
                     <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                       <div className="flex items-center">
-                        <svg className="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="h-5 w-5 text-red-500 me-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span className="text-red-800 dark:text-red-200 text-sm">{restoreError}</span>
@@ -2651,7 +2739,7 @@ function BackupSettings() {
 
                   <div className="mb-4">
                     <label htmlFor="backup-file-input" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Select Backup File
+                      {t('backup.restore.selectFile')}
                     </label>
                     <input
                       type="file"
@@ -2661,11 +2749,11 @@ function BackupSettings() {
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-amber-500 focus:border-amber-500 dark:bg-gray-700 dark:text-white text-sm"
                     />
                     {restoreFile && (
-                      <p className="mt-2 text-sm text-green-600 flex items-center">
-                        <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <p className="mt-2 text-sm text-green-600 flex items-center break-all">
+                        <svg className="h-4 w-4 me-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        Selected: {restoreFile.name}
+                        {t('backup.restore.selected', { name: restoreFile.name })}
                       </p>
                     )}
                   </div>
@@ -2676,7 +2764,7 @@ function BackupSettings() {
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                       disabled={restoreLoading}
                     >
-                      Cancel
+                      {t('common:actions.cancel')}
                     </button>
                     <button
                       onClick={handleRestore}
@@ -2685,14 +2773,14 @@ function BackupSettings() {
                     >
                       {restoreLoading ? (
                         <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          Restoring...
+                          {t('backup.restore.restoring')}
                         </>
                       ) : (
-                        'Confirm Restore'
+                        t('backup.restore.confirmButton')
                       )}
                     </button>
                   </div>
@@ -2707,6 +2795,8 @@ function BackupSettings() {
 }
 
 function WatchdogHistory() {
+  const { t } = useTranslation('settings');
+  const fmt = useFormat();
   const { token } = useAuth();
   const { formatDateTime } = useSettings();
   const [connectivity, setConnectivity] = useState(null);
@@ -2757,51 +2847,45 @@ function WatchdogHistory() {
     return 'bg-gray-400';
   };
 
-  const eventTypeLabel = (type) => {
-    switch (type) {
-      case 'connectivity': return 'Connectivity';
-      case 'automation': return 'Automation';
-      case 'equipment': return 'Equipment';
-      default: return type;
-    }
+  // Status / event-type codes come from the server; unknown codes render as-is.
+  const statusLabel = (status) => (status ? t(`watchdog.status.${status}`, { defaultValue: status }) : status);
+  const eventTypeLabel = (type) => (type ? t(`watchdog.eventType.${type}`, { defaultValue: type }) : type);
+  const serviceLabel = (target) => {
+    if (target === 'go2rtc') return 'go2rtc';
+    if (target === 'mcp') return t('watchdog.service.mcp');
+    return t('watchdog.service.internet');
   };
 
   const formatDuration = (seconds) => {
     if (!seconds) return null;
-    if (seconds < 60) return `${seconds}s`;
-    const m = Math.floor(seconds / 60);
-    if (m < 60) return `${m}m ${seconds % 60}s`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ${m % 60}m`;
-    const d = Math.floor(h / 24);
-    return `${d}d ${h % 24}h`;
+    return fmt.duration(seconds);
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Watchdog Monitor</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Connectivity status, watchdog alerts, and system health history</p>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{t('watchdog.title')}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('watchdog.subtitle')}</p>
       </div>
 
       {/* Live Connectivity Status */}
       {connectivity?.current && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Live Status</h3>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('watchdog.liveStatus')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {Object.entries(connectivity.current).filter(([k]) => k !== 'pendingNotifications').map(([target, info]) => (
               <div key={target} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full ${statusDot(info.status)} ${info.status === 'up' ? 'animate-pulse' : ''}`} />
-                    <span className="text-sm font-medium text-gray-900 dark:text-white capitalize">{target === 'go2rtc' ? 'go2rtc' : target === 'mcp' ? 'MCP Server' : 'Internet'}</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">{serviceLabel(target)}</span>
                   </div>
                   <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${statusColor(info.status)}`}>
-                    {info.status}
+                    {statusLabel(info.status)}
                   </span>
                 </div>
                 {info.downSince && (
-                  <p className="text-xs text-red-500 dark:text-red-400 mt-2">Down since {formatDateTime(info.downSince)}</p>
+                  <p className="text-xs text-red-500 dark:text-red-400 mt-2">{t('watchdog.downSince', { time: formatDateTime(info.downSince) })}</p>
                 )}
               </div>
             ))}
@@ -2809,7 +2893,7 @@ function WatchdogHistory() {
           {connectivity.current.pendingNotifications > 0 && (
             <div className="mt-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
               <p className="text-sm text-amber-800 dark:text-amber-400">
-                {connectivity.current.pendingNotifications} notification{connectivity.current.pendingNotifications !== 1 ? 's' : ''} queued — will be sent when internet is restored
+                {t('watchdog.queued', { count: connectivity.current.pendingNotifications })}
               </p>
             </div>
           )}
@@ -2822,23 +2906,23 @@ function WatchdogHistory() {
         if (outages.length === 0) return null;
         return (
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Recent Outages</h3>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{t('watchdog.recentOutages')}</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Service</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Recovered At</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Downtime</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.service')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.recoveredAt')}</th>
+                    <th className="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.downtime')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {outages.slice(0, 20).map(e => (
                     <tr key={e.id}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white capitalize">{e.event_type === 'system' ? 'System Restart' : e.target === 'go2rtc' ? 'go2rtc' : e.target === 'mcp' ? 'MCP Server' : e.target}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{formatDateTime(e.created_at)}</td>
-                      <td className="px-4 py-3 text-sm text-right">
-                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{e.event_type === 'system' ? t('watchdog.systemRestart') : (e.target === 'go2rtc' || e.target === 'mcp' || e.target === 'internet') ? serviceLabel(e.target) : e.target}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{formatDateTime(e.created_at)}</td>
+                      <td className="px-4 py-3 text-sm text-end">
+                        <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 whitespace-nowrap">
                           {formatDuration(e.duration_seconds)}
                         </span>
                       </td>
@@ -2853,18 +2937,19 @@ function WatchdogHistory() {
 
       {/* Full Event History */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Event History</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('watchdog.eventHistory')}</h3>
           <div className="flex gap-2">
             <select value={filter} onChange={e => { setFilter(e.target.value); setPage(0); }}
+              aria-label={t('watchdog.filterType')}
               className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
-              <option value="">All Types</option>
-              <option value="connectivity">Connectivity</option>
-              <option value="automation">Automation</option>
-              <option value="equipment">Equipment</option>
+              <option value="">{t('watchdog.allTypes')}</option>
+              <option value="connectivity">{t('watchdog.eventType.connectivity')}</option>
+              <option value="automation">{t('watchdog.eventType.automation')}</option>
+              <option value="equipment">{t('watchdog.eventType.equipment')}</option>
             </select>
             <button onClick={fetchData} className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
-              Refresh
+              {t('common:actions.refresh')}
             </button>
           </div>
         </div>
@@ -2872,22 +2957,22 @@ function WatchdogHistory() {
         {loading ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2" />
-            Loading events...
+            {t('watchdog.loadingEvents')}
           </div>
         ) : events.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No watchdog events recorded yet. Events will appear here after the first check cycle (~30s after startup).</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('watchdog.noEvents')}</p>
         ) : (
           <>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Target</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Message</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Duration</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.time')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.type')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.target')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.status')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.message')}</th>
+                    <th className="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('watchdog.columns.duration')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -2899,28 +2984,28 @@ function WatchdogHistory() {
                           {eventTypeLabel(e.event_type)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white capitalize">{e.target || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white capitalize" dir="auto">{e.target || '-'}</td>
                       <td className="px-4 py-3 text-sm">
                         <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${statusColor(e.status)}`}>
-                          {e.status}
+                          {statusLabel(e.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate" title={e.message}>{e.message}</td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">{e.duration_seconds ? formatDuration(e.duration_seconds) : '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate" title={e.message} dir="auto">{e.message}</td>
+                      <td className="px-4 py-3 text-sm text-end text-gray-500 dark:text-gray-400 whitespace-nowrap">{e.duration_seconds ? formatDuration(e.duration_seconds) : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-3">
-                <p className="text-sm text-gray-500 dark:text-gray-400">{total} total events</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('watchdog.totalEvents', { count: total, value: fmt.int(total) })}</p>
                 <div className="flex gap-2">
                   <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                    className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">Previous</button>
-                  <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">Page {page + 1} of {totalPages}</span>
+                    className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">{t('common:actions.previous')}</button>
+                  <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">{t('watchdog.pageOf', { page: page + 1, total: totalPages })}</span>
                   <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-                    className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">Next</button>
+                    className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">{t('common:actions.next')}</button>
                 </div>
               </div>
             )}
@@ -2932,6 +3017,8 @@ function WatchdogHistory() {
 }
 
 function NetworkUsage() {
+  const { t } = useTranslation('settings');
+  const fmt = useFormat();
   const { token } = useAuth();
   const { formatDateTime } = useSettings();
   const [data, setData] = useState(null);
@@ -2941,12 +3028,7 @@ function NetworkUsage() {
 
   const headers = { 'Authorization': `Bearer ${token}` };
 
-  const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return (bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0) + ' ' + units[i];
-  };
+  const formatBytes = (bytes) => formatBytesI18n(fmt, bytes);
 
   const fetchData = () => {
     setLoading(true);
@@ -2983,26 +3065,26 @@ function NetworkUsage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Network Usage</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Monitor daily and monthly network bandwidth consumption</p>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{t('networkUsage.title')}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('networkUsage.subtitle')}</p>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Today Download</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('networkUsage.todayDownload')}</p>
           <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{formatBytes(todayTotal.rx)}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Today Upload</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('networkUsage.todayUpload')}</p>
           <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{formatBytes(todayTotal.tx)}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">This Month Download</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('networkUsage.monthDownload')}</p>
           <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{formatBytes(monthTotal.rx)}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">This Month Upload</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('networkUsage.monthUpload')}</p>
           <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{formatBytes(monthTotal.tx)}</p>
         </div>
       </div>
@@ -3014,7 +3096,7 @@ function NetworkUsage() {
             <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
           </div>
           <div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Today Total</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('networkUsage.todayTotal')}</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white">{formatBytes(todayTotal.total)}</p>
           </div>
         </div>
@@ -3023,7 +3105,7 @@ function NetworkUsage() {
             <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           </div>
           <div>
-            <p className="text-sm text-gray-500 dark:text-gray-400">This Month Total</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('networkUsage.monthTotal')}</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white">{formatBytes(monthTotal.total)}</p>
           </div>
         </div>
@@ -3035,23 +3117,24 @@ function NetworkUsage() {
           <button
             onClick={() => setPeriod('daily')}
             className={`px-4 py-2 text-sm font-medium transition-colors ${period === 'daily' ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-          >Daily</button>
+          >{t('networkUsage.daily')}</button>
           <button
             onClick={() => setPeriod('monthly')}
             className={`px-4 py-2 text-sm font-medium transition-colors ${period === 'monthly' ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-          >Monthly</button>
+          >{t('networkUsage.monthly')}</button>
         </div>
         {data?.interfaces?.length > 1 && (
           <select
             value={selectedInterface}
             onChange={(e) => setSelectedInterface(e.target.value)}
+            aria-label={t('networkUsage.columns.interface')}
             className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
           >
-            <option value="">All Interfaces</option>
+            <option value="">{t('networkUsage.allInterfaces')}</option>
             {data.interfaces.map(i => <option key={i} value={i}>{i}</option>)}
           </select>
         )}
-        <button onClick={fetchData} className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+        <button onClick={fetchData} title={t('common:actions.refresh')} aria-label={t('common:actions.refresh')} className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
         </button>
       </div>
@@ -3060,36 +3143,36 @@ function NetworkUsage() {
       {loading ? (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
-          Loading network data...
+          {t('networkUsage.loading')}
         </div>
       ) : aggregated.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
           <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-          <p className="text-gray-500 dark:text-gray-400">No network usage data yet.</p>
-          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Data is collected every 5 minutes. Check back shortly.</p>
+          <p className="text-gray-500 dark:text-gray-400">{t('networkUsage.empty')}</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">{t('networkUsage.emptyHelp')}</p>
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
-            {period === 'daily' ? 'Daily' : 'Monthly'} Usage
+            {period === 'daily' ? t('networkUsage.dailyUsage') : t('networkUsage.monthlyUsage')}
           </h3>
           <div className="space-y-2">
             {aggregated.map((row) => (
               <div key={row.period} className="group">
                 <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
-                  <span className="font-medium">{row.period}</span>
+                  <span className="font-medium" dir="ltr">{row.period}</span>
                   <span>{formatBytes(row.total)}</span>
                 </div>
                 <div className="flex h-5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
                   <div
                     className="bg-blue-500 transition-all duration-300"
                     style={{ width: maxTotal > 0 ? `${(row.rx / maxTotal) * 100}%` : '0%' }}
-                    title={`Download: ${formatBytes(row.rx)}`}
+                    title={t('networkUsage.downloadValue', { value: formatBytes(row.rx) })}
                   />
                   <div
                     className="bg-green-500 transition-all duration-300"
                     style={{ width: maxTotal > 0 ? `${(row.tx / maxTotal) * 100}%` : '0%' }}
-                    title={`Upload: ${formatBytes(row.tx)}`}
+                    title={t('networkUsage.uploadValue', { value: formatBytes(row.tx) })}
                   />
                 </div>
               </div>
@@ -3097,10 +3180,10 @@ function NetworkUsage() {
           </div>
           <div className="flex items-center gap-4 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-              <div className="w-3 h-3 rounded-sm bg-blue-500"></div> Download
+              <div className="w-3 h-3 rounded-sm bg-blue-500"></div> {t('networkUsage.download')}
             </div>
             <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-              <div className="w-3 h-3 rounded-sm bg-green-500"></div> Upload
+              <div className="w-3 h-3 rounded-sm bg-green-500"></div> {t('networkUsage.upload')}
             </div>
           </div>
         </div>
@@ -3109,25 +3192,25 @@ function NetworkUsage() {
       {/* Per-interface breakdown */}
       {data?.summary && data.summary.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Interface Breakdown (All Time)</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">{t('networkUsage.breakdownTitle')}</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
-                  <th className="pb-2 pr-4">Interface</th>
-                  <th className="pb-2 pr-4">Download</th>
-                  <th className="pb-2 pr-4">Upload</th>
-                  <th className="pb-2 pr-4">Total</th>
-                  <th className="pb-2">Since</th>
+                <tr className="text-start text-xs text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
+                  <th className="pb-2 pe-4 text-start">{t('networkUsage.columns.interface')}</th>
+                  <th className="pb-2 pe-4 text-start">{t('networkUsage.columns.download')}</th>
+                  <th className="pb-2 pe-4 text-start">{t('networkUsage.columns.upload')}</th>
+                  <th className="pb-2 pe-4 text-start">{t('networkUsage.columns.total')}</th>
+                  <th className="pb-2 text-start">{t('networkUsage.columns.since')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {data.summary.map(row => (
                   <tr key={row.interface} className="text-gray-700 dark:text-gray-300">
-                    <td className="py-2 pr-4 font-mono text-xs">{row.interface}</td>
-                    <td className="py-2 pr-4 text-blue-600 dark:text-blue-400">{formatBytes(row.rx_bytes)}</td>
-                    <td className="py-2 pr-4 text-green-600 dark:text-green-400">{formatBytes(row.tx_bytes)}</td>
-                    <td className="py-2 pr-4 font-medium">{formatBytes(row.total_bytes)}</td>
+                    <td className="py-2 pe-4 font-mono text-xs"><bdi dir="ltr">{row.interface}</bdi></td>
+                    <td className="py-2 pe-4 text-blue-600 dark:text-blue-400 whitespace-nowrap">{formatBytes(row.rx_bytes)}</td>
+                    <td className="py-2 pe-4 text-green-600 dark:text-green-400 whitespace-nowrap">{formatBytes(row.tx_bytes)}</td>
+                    <td className="py-2 pe-4 font-medium whitespace-nowrap">{formatBytes(row.total_bytes)}</td>
                     <td className="py-2 text-xs text-gray-500">{row.first_record ? formatDateTime(row.first_record) : '-'}</td>
                   </tr>
                 ))}
@@ -3143,7 +3226,12 @@ function NetworkUsage() {
   );
 }
 
+// Request-log windows in minutes; the label comes from requestLog.window.<minutes>.
+const REQUEST_LOG_WINDOWS = [5, 15, 60, 360, 1440];
+
 function RequestLog() {
+  const { t } = useTranslation('settings');
+  const fmt = useFormat();
   const { token } = useAuth();
   const { formatDateTime } = useSettings();
   const [logData, setLogData] = useState(null);
@@ -3153,12 +3241,8 @@ function RequestLog() {
 
   const headers = { 'Authorization': `Bearer ${token}` };
 
-  const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return (bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0) + ' ' + units[i];
-  };
+  const formatBytes = (bytes) => formatBytesI18n(fmt, bytes);
+  const formatMs = (ms) => fmt.withUnit(Math.round(ms || 0), 'ms', { decimals: 0 });
 
   const fetchLog = () => {
     setLogLoading(true);
@@ -3170,44 +3254,45 @@ function RequestLog() {
 
   React.useEffect(() => { fetchLog(); }, [logMinutes]);
 
+  const b = <strong />;
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">API Request Log</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Which endpoints are consuming bandwidth</p>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('requestLog.title')}</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('requestLog.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <select
             value={logMinutes}
             onChange={(e) => setLogMinutes(parseInt(e.target.value))}
+            aria-label={t('requestLog.windowLabel')}
             className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
           >
-            <option value={5}>Last 5 min</option>
-            <option value={15}>Last 15 min</option>
-            <option value={60}>Last 1 hr</option>
-            <option value={360}>Last 6 hr</option>
-            <option value={1440}>Last 24 hr</option>
+            {REQUEST_LOG_WINDOWS.map((m) => (
+              <option key={m} value={m}>{t(`requestLog.window.${m}`)}</option>
+            ))}
           </select>
-          <button onClick={fetchLog} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+          <button onClick={fetchLog} title={t('common:actions.refresh')} aria-label={t('common:actions.refresh')} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
           </button>
         </div>
       </div>
 
       {logLoading ? (
-        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">Loading...</div>
+        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">{t('common:status.loading')}</div>
       ) : !logData?.byPath?.length ? (
-        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">No requests logged yet. Data appears after the first API call.</div>
+        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">{t('requestLog.empty')}</div>
       ) : (
         <>
           {/* Totals bar */}
           {logData.totals && (
             <div className="flex flex-wrap gap-4 mb-4 text-xs text-gray-600 dark:text-gray-400">
-              <span><strong>{logData.totals.requests?.toLocaleString()}</strong> requests</span>
-              <span><strong>{formatBytes(logData.totals.total_bytes)}</strong> total response data</span>
-              <span>Avg <strong>{formatBytes(Math.round(logData.totals.avg_bytes || 0))}</strong>/req</span>
-              <span>Avg <strong>{Math.round(logData.totals.avg_duration_ms || 0)}ms</strong> latency</span>
+              <span><Trans i18nKey="settings:requestLog.totals.requests" count={logData.totals.requests || 0} values={{ value: fmt.int(logData.totals.requests) }} components={{ b }} /></span>
+              <span><Trans i18nKey="settings:requestLog.totals.data" values={{ value: formatBytes(logData.totals.total_bytes) }} components={{ b }} /></span>
+              <span><Trans i18nKey="settings:requestLog.totals.avgSize" values={{ value: formatBytes(Math.round(logData.totals.avg_bytes || 0)) }} components={{ b }} /></span>
+              <span><Trans i18nKey="settings:requestLog.totals.avgLatency" values={{ value: formatMs(logData.totals.avg_duration_ms) }} components={{ b }} /></span>
             </div>
           )}
 
@@ -3215,25 +3300,25 @@ function RequestLog() {
           <div className="overflow-x-auto mb-4">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
-                  <th className="pb-2 pr-3">Endpoint</th>
-                  <th className="pb-2 pr-3 text-right">Requests</th>
-                  <th className="pb-2 pr-3 text-right">Total Data</th>
-                  <th className="pb-2 pr-3 text-right">Avg Size</th>
-                  <th className="pb-2 text-right">Avg Latency</th>
+                <tr className="text-start text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
+                  <th className="pb-2 pe-3 text-start">{t('requestLog.columns.endpoint')}</th>
+                  <th className="pb-2 pe-3 text-end">{t('requestLog.columns.requests')}</th>
+                  <th className="pb-2 pe-3 text-end">{t('requestLog.columns.totalData')}</th>
+                  <th className="pb-2 pe-3 text-end">{t('requestLog.columns.avgSize')}</th>
+                  <th className="pb-2 text-end">{t('requestLog.columns.avgLatency')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {logData.byPath.map((row, i) => (
                   <tr key={i} className="text-gray-700 dark:text-gray-300">
-                    <td className="py-1.5 pr-3 font-mono truncate max-w-[250px]">
-                      <span className={`inline-block w-10 text-center rounded text-[10px] font-medium mr-1 ${row.method === 'GET' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'}`}>{row.method}</span>
-                      {row.path}
+                    <td className="py-1.5 pe-3 font-mono max-w-[250px]">
+                      <div dir="ltr" className="truncate text-start rtl:text-right"><span className={`inline-block w-10 text-center rounded text-[10px] font-medium me-1 ${row.method === 'GET' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'}`}>{row.method}</span>
+                      {row.path}</div>
                     </td>
-                    <td className="py-1.5 pr-3 text-right">{row.requests}</td>
-                    <td className="py-1.5 pr-3 text-right font-medium">{formatBytes(row.total_bytes)}</td>
-                    <td className="py-1.5 pr-3 text-right">{formatBytes(Math.round(row.avg_bytes || 0))}</td>
-                    <td className="py-1.5 text-right">{Math.round(row.avg_duration_ms || 0)}ms</td>
+                    <td className="py-1.5 pe-3 text-end">{fmt.int(row.requests)}</td>
+                    <td className="py-1.5 pe-3 text-end font-medium whitespace-nowrap">{formatBytes(row.total_bytes)}</td>
+                    <td className="py-1.5 pe-3 text-end whitespace-nowrap">{formatBytes(Math.round(row.avg_bytes || 0))}</td>
+                    <td className="py-1.5 text-end whitespace-nowrap">{formatMs(row.avg_duration_ms)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -3243,13 +3328,13 @@ function RequestLog() {
           {/* By IP */}
           {logData.byIp?.length > 0 && (
             <div className="mb-4">
-              <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">By Client IP</h4>
+              <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('requestLog.byIp')}</h4>
               <div className="flex flex-wrap gap-2">
                 {logData.byIp.map((row, i) => (
                   <div key={i} className="px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-400">
-                    <span className="font-mono">{row.ip || 'unknown'}</span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-white">{formatBytes(row.total_bytes)}</span>
-                    <span className="ml-1">({row.requests} reqs)</span>
+                    <span className="font-mono" dir="ltr">{row.ip || t('common:status.unknown')}</span>
+                    <span className="ms-2 font-medium text-gray-900 dark:text-white">{formatBytes(row.total_bytes)}</span>
+                    <span className="ms-1">({t('requestLog.ipRequests', { count: row.requests || 0, value: fmt.int(row.requests) })})</span>
                   </div>
                 ))}
               </div>
@@ -3261,31 +3346,33 @@ function RequestLog() {
             onClick={() => setShowRecent(!showRecent)}
             className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
           >
-            {showRecent ? 'Hide' : 'Show'} recent requests ({logData.recent?.length || 0})
+            {showRecent
+              ? t('requestLog.hideRecent', { n: logData.recent?.length || 0 })
+              : t('requestLog.showRecent', { n: logData.recent?.length || 0 })}
           </button>
 
           {showRecent && logData.recent?.length > 0 && (
             <div className="mt-2 overflow-x-auto max-h-64 overflow-y-auto">
               <table className="w-full text-[11px]">
                 <thead className="sticky top-0 bg-white dark:bg-gray-800">
-                  <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                    <th className="pb-1 pr-2">Time</th>
-                    <th className="pb-1 pr-2">Method</th>
-                    <th className="pb-1 pr-2">Path</th>
-                    <th className="pb-1 pr-2 text-right">Size</th>
-                    <th className="pb-1 pr-2 text-right">ms</th>
-                    <th className="pb-1">IP</th>
+                  <tr className="text-start text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <th className="pb-1 pe-2 text-start">{t('requestLog.columns.time')}</th>
+                    <th className="pb-1 pe-2 text-start">{t('requestLog.columns.method')}</th>
+                    <th className="pb-1 pe-2 text-start">{t('requestLog.columns.path')}</th>
+                    <th className="pb-1 pe-2 text-end">{t('requestLog.columns.size')}</th>
+                    <th className="pb-1 pe-2 text-end">ms</th>
+                    <th className="pb-1 text-start">IP</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
                   {logData.recent.map((row, i) => (
                     <tr key={i} className="text-gray-600 dark:text-gray-400">
-                      <td className="py-1 pr-2 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
-                      <td className="py-1 pr-2">{row.method}</td>
-                      <td className="py-1 pr-2 font-mono truncate max-w-[200px]">{row.path}</td>
-                      <td className="py-1 pr-2 text-right">{formatBytes(row.response_bytes)}</td>
-                      <td className="py-1 pr-2 text-right">{row.duration_ms}</td>
-                      <td className="py-1 font-mono">{row.ip}</td>
+                      <td className="py-1 pe-2 whitespace-nowrap">{formatDateTime(row.created_at)}</td>
+                      <td className="py-1 pe-2">{row.method}</td>
+                      <td className="py-1 pe-2 font-mono max-w-[200px]"><div dir="ltr" className="truncate text-start rtl:text-right">{row.path}</div></td>
+                      <td className="py-1 pe-2 text-end whitespace-nowrap">{formatBytes(row.response_bytes)}</td>
+                      <td className="py-1 pe-2 text-end">{fmt.int(row.duration_ms)}</td>
+                      <td className="py-1 font-mono"><bdi dir="ltr">{row.ip}</bdi></td>
                     </tr>
                   ))}
                 </tbody>
@@ -3298,7 +3385,24 @@ function RequestLog() {
   );
 }
 
+// History tables that can be cleared. Label/description come from data.targets.<key>.* at render.
+const DATA_TARGETS = [
+  { key: 'alerts', countKey: 'alerts' },
+  { key: 'automation-logs', countKey: 'automation_logs' },
+  { key: 'equipment-errors', countKey: 'equipment_errors' },
+  { key: 'readings', countKey: 'readings' },
+  { key: 'lab-readings', countKey: 'lab_readings' },
+  { key: 'relay-events', countKey: 'relay_events' },
+  { key: 'watchdog-events', countKey: 'watchdog_events' },
+  { key: 'sync-queue', countKey: 'sync_queue' },
+  { key: 'watchdog-cooldowns', countKey: null },
+  { key: 'request-log', countKey: 'request_log' },
+  { key: 'network-usage', countKey: 'network_usage' },
+];
+
 function DataManagement() {
+  const { t } = useTranslation('settings');
+  const fmt = useFormat();
   const { token } = useAuth();
   const { formatDateTime } = useSettings();
   const [counts, setCounts] = useState(null);
@@ -3309,12 +3413,7 @@ function DataManagement() {
 
   const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return (bytes / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 0) + ' ' + units[i];
-  };
+  const formatBytes = (bytes) => formatBytesI18n(fmt, bytes);
 
   const fetchAll = () => {
     setLoading(true);
@@ -3331,14 +3430,14 @@ function DataManagement() {
   React.useEffect(() => { fetchAll(); }, []);
 
   const clearData = async (target, label) => {
-    if (!confirm(`Are you sure you want to delete ALL ${label}? This cannot be undone.`)) return;
+    if (!confirm(t('data.confirmClear', { label }))) return;
     setClearing(prev => ({ ...prev, [target]: true }));
     setMessage(null);
     try {
       const res = await fetch(`${API_BASE}/system/clear/${target}`, { method: 'DELETE', headers });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to clear');
-      setMessage({ type: 'success', text: `Cleared ${data.deleted} ${label} record(s)` });
+      if (!res.ok) throw new Error(data.message || t('data.errors.clearFailed'));
+      setMessage({ type: 'success', text: t('data.cleared', { count: Number(data.deleted) || 0, value: fmt.int(data.deleted), label }) });
       fetchAll();
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
@@ -3347,28 +3446,23 @@ function DataManagement() {
     }
   };
 
-  const dataTargets = [
-    { key: 'alerts', label: 'Alerts', countKey: 'alerts', description: 'All alert history (info, warning, critical, watchdog)' },
-    { key: 'automation-logs', label: 'Automation Logs', countKey: 'automation_logs', description: 'Automation execution history and run logs' },
-    { key: 'equipment-errors', label: 'Equipment Errors', countKey: 'equipment_errors', description: 'Equipment error and fault history' },
-    { key: 'readings', label: 'Sensor Readings', countKey: 'readings', description: 'All sensor/Modbus polling data history' },
-    { key: 'lab-readings', label: 'Lab Readings', countKey: 'lab_readings', description: 'Manual lab analysis nutrient entries' },
-    { key: 'relay-events', label: 'Relay Events', countKey: 'relay_events', description: 'Relay on/off event history for fertigation tracking' },
-    { key: 'watchdog-events', label: 'Watchdog Events', countKey: 'watchdog_events', description: 'Watchdog and connectivity monitoring history' },
-    { key: 'sync-queue', label: 'Sync Queue', countKey: 'sync_queue', description: 'Cloud sync queue entries' },
-    { key: 'watchdog-cooldowns', label: 'Watchdog Cooldowns', countKey: null, description: 'Reset watchdog alert cooldowns so alerts can fire again immediately' },
-    { key: 'request-log', label: 'Request Log', countKey: 'request_log', description: 'API request log used for network traffic analysis' },
-    { key: 'network-usage', label: 'Network Usage', countKey: 'network_usage', description: 'Network bandwidth tracking snapshots' },
-  ];
+  const dataTargets = DATA_TARGETS.map((d) => ({
+    ...d,
+    label: t(`data.targets.${d.key}.label`),
+    description: t(`data.targets.${d.key}.description`),
+  }));
+
+  const appShare = storage?.disk?.total ? (storage.disk.usedByApp / storage.disk.total) * 100 : 0;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Data Management</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Monitor storage usage and clear history data</p>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{t('data.title')}</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('data.subtitle')}</p>
         </div>
         <button onClick={fetchAll} disabled={loading}
+          title={t('common:actions.refresh')} aria-label={t('common:actions.refresh')}
           className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-50">
           <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
         </button>
@@ -3383,49 +3477,49 @@ function DataManagement() {
       {/* Storage Overview */}
       {storage && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">SD Card Storage</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">{t('data.sdCard')}</h3>
           {/* Disk usage bar */}
           <div className="mb-4">
-            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-              <span>{formatBytes(storage.disk?.used)} used of {formatBytes(storage.disk?.total)}</span>
-              <span>{formatBytes(storage.disk?.available)} free</span>
+            <div className="flex flex-wrap justify-between gap-x-2 text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <span>{t('data.usedOf', { used: formatBytes(storage.disk?.used), total: formatBytes(storage.disk?.total) })}</span>
+              <span>{t('data.free', { value: formatBytes(storage.disk?.available) })}</span>
             </div>
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
               <div className={`h-full rounded-full transition-all ${
                 storage.disk?.percentUsed > 90 ? 'bg-red-500' :
                 storage.disk?.percentUsed > 70 ? 'bg-amber-500' : 'bg-green-500'
               }`} style={{ width: `${storage.disk?.percentUsed || 0}%` }}>
-                <span className="text-[10px] font-bold text-white pl-2 leading-4">{storage.disk?.percentUsed}%</span>
+                <span className="text-[10px] font-bold text-white ps-2 leading-4 whitespace-nowrap">{fmt.percent(storage.disk?.percentUsed)}</span>
               </div>
             </div>
           </div>
           {/* Breakdown cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Database</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('data.database')}</p>
               <p className="text-lg font-bold text-gray-900 dark:text-white">{formatBytes(storage.database?.size)}</p>
-              <p className="text-[10px] text-gray-400">sensehub.db</p>
+              <p className="text-[10px] text-gray-400"><bdi dir="ltr">sensehub.db</bdi></p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Data Directory</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('data.dataDirectory')}</p>
               <p className="text-lg font-bold text-gray-900 dark:text-white">{formatBytes(storage.dataDirectory?.size)}</p>
-              <p className="text-[10px] text-gray-400">WAL + backups</p>
+              <p className="text-[10px] text-gray-400">{t('data.walBackups')}</p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Logs</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('data.logs')}</p>
               <p className="text-lg font-bold text-gray-900 dark:text-white">{formatBytes(storage.logsDirectory?.size)}</p>
-              <p className="text-[10px] text-gray-400">Log files</p>
+              <p className="text-[10px] text-gray-400">{t('data.logFiles')}</p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">SenseHub Total</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('data.appTotal')}</p>
               <p className="text-lg font-bold text-gray-900 dark:text-white">{formatBytes(storage.disk?.usedByApp)}</p>
-              <p className="text-[10px] text-gray-400">{storage.disk?.total ? ((storage.disk.usedByApp / storage.disk.total) * 100).toFixed(1) : 0}% of SD card</p>
+              <p className="text-[10px] text-gray-400">{t('data.ofSdCard', { value: fmt.percent(appShare, { decimals: 1 }) })}</p>
             </div>
           </div>
           {/* Biggest tables */}
           {counts && (
             <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Biggest tables by row count</p>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">{t('data.biggestTables')}</p>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(counts)
                   .sort(([,a], [,b]) => b - a)
@@ -3433,8 +3527,8 @@ function DataManagement() {
                   .slice(0, 6)
                   .map(([table, count]) => (
                     <span key={table} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-400">
-                      <span className="font-medium text-gray-900 dark:text-white">{count.toLocaleString()}</span>
-                      {table.replace(/_/g, ' ')}
+                      <span className="font-medium text-gray-900 dark:text-white">{fmt.int(count)}</span>
+                      <span dir="ltr" lang="en">{table.replace(/_/g, ' ')}</span>
                     </span>
                   ))}
               </div>
@@ -3446,18 +3540,18 @@ function DataManagement() {
       {loading && !storage ? (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
-          Loading storage info...
+          {t('data.loading')}
         </div>
       ) : (
         <div className="space-y-3">
           {dataTargets.map(({ key, label, countKey, description }) => (
             <div key={key} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="flex-1">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{label}</h3>
                   {countKey && counts && (
                     <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
-                      {counts[countKey]?.toLocaleString() || 0} records
+                      {t('data.records', { count: counts[countKey] || 0, value: fmt.int(counts[countKey] || 0) })}
                     </span>
                   )}
                 </div>
@@ -3468,7 +3562,7 @@ function DataManagement() {
                 disabled={clearing[key] || (countKey && counts && counts[countKey] === 0)}
                 className="px-4 py-2 text-sm font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
               >
-                {clearing[key] ? 'Clearing...' : `Clear ${label}`}
+                {clearing[key] ? t('data.clearing') : t('data.clearButton', { label })}
               </button>
             </div>
           ))}
@@ -3477,7 +3571,7 @@ function DataManagement() {
 
       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
         <p className="text-sm text-amber-800 dark:text-amber-400">
-          <strong>Warning:</strong> Clearing data is permanent and cannot be undone. Sensor readings and lab data will be lost. Consider creating a backup first.
+          <Trans i18nKey="settings:data.warning" components={{ b: <strong /> }} />
         </p>
       </div>
     </div>
@@ -3486,6 +3580,7 @@ function DataManagement() {
 
 export default function Settings() {
   const { user } = useAuth();
+  const { t } = useTranslation('settings');
   const isAdmin = user?.role === 'admin';
 
   // Filter tabs based on user role
@@ -3495,7 +3590,7 @@ export default function Settings() {
   if (!isAdmin) {
     return (
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Settings</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('title')}</h1>
 
         <div className="flex flex-col md:flex-row gap-6">
           {/* Sidebar navigation */}
@@ -3506,15 +3601,15 @@ export default function Settings() {
                   key={tab.path}
                   to={`/settings/${tab.path}`}
                   className={({ isActive }) =>
-                    `flex items-center px-4 py-3 text-sm font-medium border-l-4 transition-colors ${
+                    `flex items-center px-4 py-3 text-sm font-medium border-s-4 transition-colors ${
                       isActive
                         ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-600 text-primary-700 dark:text-primary-400'
                         : 'border-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                     }`
                   }
                 >
-                  <span className="mr-3 text-gray-400">{tab.icon}</span>
-                  {tab.name}
+                  <span className="me-3 text-gray-400">{tab.icon}</span>
+                  {t(`tabs.${tab.path}`, { defaultValue: tab.name })}
                 </NavLink>
               ))}
             </div>
@@ -3535,7 +3630,7 @@ export default function Settings() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Settings</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('title')}</h1>
 
       <div className="flex flex-col md:flex-row gap-6">
         {/* Sidebar navigation */}
@@ -3546,15 +3641,15 @@ export default function Settings() {
                 key={tab.path}
                 to={`/settings/${tab.path}`}
                 className={({ isActive }) =>
-                  `flex items-center px-4 py-3 text-sm font-medium border-l-4 transition-colors ${
+                  `flex items-center px-4 py-3 text-sm font-medium border-s-4 transition-colors ${
                     isActive
                       ? 'bg-primary-50 dark:bg-primary-900/20 border-primary-600 text-primary-700 dark:text-primary-400'
                       : 'border-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                   }`
                 }
               >
-                <span className="mr-3 text-gray-400">{tab.icon}</span>
-                {tab.name}
+                <span className="me-3 text-gray-400">{tab.icon}</span>
+                {t(`tabs.${tab.path}`, { defaultValue: tab.name })}
               </NavLink>
             ))}
           </div>

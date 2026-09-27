@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const SIZE = {
   md: 'max-w-lg',
@@ -27,6 +28,7 @@ export default function ModalShell({
   className = '',
   bodyClassName = '',
 }) {
+  const { t } = useTranslation('common');
   const titleId = useRef(`modal-title-${Math.random().toString(36).slice(2, 9)}`).current;
 
   useEffect(() => {
@@ -48,20 +50,20 @@ export default function ModalShell({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
-          className={`relative w-full ${SIZE[size] || SIZE.md} bg-panel border border-line rounded-card shadow-xl text-left my-2 sm:my-6 ${className}`.trim()}
+          className={`relative w-full ${SIZE[size] || SIZE.md} bg-panel border border-line rounded-card shadow-xl text-start my-2 sm:my-6 ${className}`.trim()}
         >
           <div className="flex items-start gap-3 px-4 pt-4 sm:px-6 sm:pt-5">
             {icon && <div className="shrink-0 h-10 w-10 rounded-md bg-field text-muted flex items-center justify-center">{icon}</div>}
             <div className="flex-1 min-w-0">
-              <h3 id={titleId} className="font-display text-lg font-semibold leading-6 text-ink truncate">{title}</h3>
-              {subtitle && <p className="text-sm text-muted mt-0.5 truncate">{subtitle}</p>}
+              <h3 id={titleId} dir="auto" className="font-display text-lg font-semibold leading-6 text-ink truncate">{title}</h3>
+              {subtitle && <p dir="auto" className="text-sm text-muted mt-0.5 truncate">{subtitle}</p>}
             </div>
             <button
               type="button"
               onClick={onClose}
               disabled={closeDisabled}
-              aria-label="Close"
-              className="shrink-0 -mr-2 -mt-1 min-h-touch min-w-[44px] inline-flex items-center justify-center rounded-md text-muted hover:text-ink hover:bg-field disabled:opacity-50"
+              aria-label={t('actions.close')}
+              className="shrink-0 -me-2 -mt-1 min-h-touch min-w-[44px] inline-flex items-center justify-center rounded-md text-muted hover:text-ink hover:bg-field disabled:opacity-50"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

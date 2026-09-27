@@ -2,10 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
+import { useTranslation } from 'react-i18next';
+import { useFormat } from '../i18n/useFormat';
+import { ltr } from '../i18n/format';
 
 const API_BASE = '/api';
 
 export default function LabAnalysis() {
+  const { t } = useTranslation('lab');
+  const fmt = useFormat();
   const { token, user } = useAuth();
   const { formatDateTime } = useSettings();
   const { showError, showSuccess } = useToast();
@@ -140,8 +145,8 @@ export default function LabAnalysis() {
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to save');
-      setSaveMessage({ type: 'success', text: `${data.count} reading(s) saved successfully` });
+      if (!res.ok) throw new Error(data.message || t('errors.saveFailed'));
+      setSaveMessage({ type: 'success', text: t('add.saved', { count: data.count }) });
       setEntries([{ nutrient: '', value: '', unit: '', zone_id: '', notes: '' }]);
       setShowAddForm(false);
       setPage(0);
@@ -155,17 +160,17 @@ export default function LabAnalysis() {
 
   // Delete reading
   const handleDelete = async (id) => {
-    if (!confirm('Delete this lab reading?')) return;
+    if (!confirm(t('confirmDelete'))) return;
     try {
       const res = await fetch(`${API_BASE}/lab-readings/${id}`, { method: 'DELETE', headers });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to delete reading');
+        throw new Error(data.message || t('errors.deleteFailed'));
       }
-      showSuccess('Lab reading deleted');
+      showSuccess(t('toast.deleted'));
       fetchReadings();
     } catch (err) {
-      showError(err.message, 'Failed to delete reading');
+      showError(err.message, t('errors.deleteFailed'));
     }
   };
 
@@ -189,12 +194,12 @@ export default function LabAnalysis() {
         headers,
         body: JSON.stringify(editForm)
       });
-      if (!res.ok) throw new Error('Failed to update');
+      if (!res.ok) throw new Error(t('errors.update'));
       setEditingId(null);
-      showSuccess('Lab reading updated');
+      showSuccess(t('toast.updated'));
       fetchReadings();
     } catch (err) {
-      showError(err.message, 'Failed to update reading');
+      showError(err.message, t('errors.updateFailed'));
     }
   };
 
@@ -212,18 +217,18 @@ export default function LabAnalysis() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Lab Analysis</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Manual nutrient measurements and lab results</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('title')}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
         </div>
         {canEdit && (
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
           >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 me-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            {showAddForm ? 'Cancel' : 'Add Lab Reading'}
+            {showAddForm ? t('common:actions.cancel') : t('add.button')}
           </button>
         )}
       </div>
@@ -238,10 +243,10 @@ export default function LabAnalysis() {
       {/* Add Form */}
       {showAddForm && canEdit && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">New Lab Analysis Entry</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{t('add.title')}</h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sample Date</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('add.sampleDate')}</label>
               <input
                 type="date"
                 value={sampleDate}
@@ -254,14 +259,14 @@ export default function LabAnalysis() {
               {entries.map((entry, idx) => (
                 <div key={idx} className="flex flex-wrap items-end gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                   <div className="flex-1 min-w-[180px]">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Nutrient</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('fields.nutrient')}</label>
                     <select
                       value={entry.nutrient}
                       onChange={(e) => updateEntry(idx, 'nutrient', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
                       required
                     >
-                      <option value="">Select nutrient...</option>
+                      <option value="">{t('add.selectNutrient')}</option>
                       {Object.entries(nutrientsByCategory).map(([cat, items]) => (
                         <optgroup key={cat} label={cat}>
                           {items.map(n => (
@@ -272,7 +277,7 @@ export default function LabAnalysis() {
                     </select>
                   </div>
                   <div className="w-28">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Value</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('fields.value')}</label>
                     <input
                       type="number"
                       step="any"
@@ -284,7 +289,7 @@ export default function LabAnalysis() {
                     />
                   </div>
                   <div className="w-24">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Unit</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('fields.unit')}</label>
                     <input
                       type="text"
                       value={entry.unit}
@@ -294,25 +299,25 @@ export default function LabAnalysis() {
                     />
                   </div>
                   <div className="w-40">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Zone (optional)</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('fields.zoneOptional')}</label>
                     <select
                       value={entry.zone_id}
                       onChange={(e) => updateEntry(idx, 'zone_id', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
                     >
-                      <option value="">No zone</option>
+                      <option value="">{t('noZone')}</option>
                       {zones.map(z => (
                         <option key={z.id} value={z.id}>{z.name}</option>
                       ))}
                     </select>
                   </div>
                   <div className="flex-1 min-w-[120px]">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Notes</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('fields.notes')}</label>
                     <input
                       type="text"
                       value={entry.notes}
                       onChange={(e) => updateEntry(idx, 'notes', e.target.value)}
-                      placeholder="Optional notes"
+                      placeholder={t('add.notesPlaceholder')}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
                     />
                   </div>
@@ -320,7 +325,7 @@ export default function LabAnalysis() {
                     type="button"
                     onClick={() => removeEntryRow(idx)}
                     className="p-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    title="Remove row"
+                    title={t('add.removeRow')}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -336,7 +341,7 @@ export default function LabAnalysis() {
                 onClick={addEntryRow}
                 className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
               >
-                + Add another nutrient
+                {t('add.addAnother')}
               </button>
               <div className="flex-1" />
               <button
@@ -344,14 +349,14 @@ export default function LabAnalysis() {
                 onClick={() => setShowAddForm(false)}
                 className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
               >
-                Cancel
+                {t('common:actions.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={saving}
                 className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
               >
-                {saving ? 'Saving...' : `Save ${entries.filter(e => e.nutrient && e.value !== '').length} Reading(s)`}
+                {saving ? t('common:actions.saving') : t('add.save', { count: entries.filter(e => e.nutrient && e.value !== '').length })}
               </button>
             </div>
           </form>
@@ -363,7 +368,7 @@ export default function LabAnalysis() {
         // Group stats by zone
         const byZone = {};
         stats.forEach(s => {
-          const zoneName = s.zone_name || 'No Zone';
+          const zoneName = s.zone_name || t('noZone');
           if (!byZone[zoneName]) byZone[zoneName] = [];
           byZone[zoneName].push(s);
         });
@@ -379,17 +384,17 @@ export default function LabAnalysis() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 p-4">
                   {byZone[zoneName].map((s, i) => (
                     <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate" title={getNutrientName(s.nutrient)}>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate" dir="auto" title={getNutrientName(s.nutrient)}>
                         {getNutrientName(s.nutrient)}
                       </p>
-                      <p className="text-lg font-bold text-gray-900 dark:text-white mt-1">
-                        {typeof s.avg === 'number' ? s.avg.toFixed(2) : s.avg}
-                        <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">{s.unit}</span>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white mt-1" dir="ltr">
+                        {fmt.number(s.avg, { decimals: 2, grouping: false })}
+                        <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ms-1">{s.unit}</span>
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">
-                        {typeof s.min === 'number' ? s.min.toFixed(1) : s.min} - {typeof s.max === 'number' ? s.max.toFixed(1) : s.max}
+                      <p className="text-xs text-gray-400 dark:text-gray-500" dir="ltr">
+                        {fmt.number(s.min, { decimals: 1, grouping: false })} – {fmt.number(s.max, { decimals: 1, grouping: false })}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">{s.count} reading{s.count !== 1 ? 's' : ''}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{t('stats.readings', { count: s.count })}</p>
                     </div>
                   ))}
                 </div>
@@ -403,13 +408,13 @@ export default function LabAnalysis() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Nutrient</label>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('fields.nutrient')}</label>
             <select
               value={filterNutrient}
               onChange={(e) => { setFilterNutrient(e.target.value); setPage(0); }}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
             >
-              <option value="">All Nutrients</option>
+              <option value="">{t('filters.allNutrients')}</option>
               {Object.entries(nutrientsByCategory).map(([cat, items]) => (
                 <optgroup key={cat} label={cat}>
                   {items.map(n => (
@@ -420,20 +425,20 @@ export default function LabAnalysis() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Zone</label>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('fields.zone')}</label>
             <select
               value={filterZone}
               onChange={(e) => { setFilterZone(e.target.value); setPage(0); }}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
             >
-              <option value="">All Zones</option>
+              <option value="">{t('filters.allZones')}</option>
               {zones.map(z => (
                 <option key={z.id} value={z.id}>{z.name}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">From</label>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('filters.from')}</label>
             <input
               type="date"
               value={filterFrom}
@@ -442,7 +447,7 @@ export default function LabAnalysis() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">To</label>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t('filters.to')}</label>
             <input
               type="date"
               value={filterTo}
@@ -455,7 +460,7 @@ export default function LabAnalysis() {
               onClick={() => { setFilterNutrient(''); setFilterZone(''); setFilterFrom(''); setFilterTo(''); setPage(0); }}
               className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             >
-              Clear filters
+              {t('filters.clear')}
             </button>
           )}
         </div>
@@ -465,21 +470,21 @@ export default function LabAnalysis() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            History
-            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-2">({total} total)</span>
+            {t('history.title')}
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ms-2">{t('history.total', { total: fmt.int(total) })}</span>
           </h2>
         </div>
 
         {loading ? (
           <div className="p-8 text-center text-gray-500 dark:text-gray-400">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
-            Loading...
+            {t('common:status.loading')}
           </div>
         ) : error ? (
           <div className="p-8 text-center text-red-500">{error}</div>
         ) : readings.length === 0 ? (
           <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-            No lab readings found. Click "Add Lab Reading" to enter your first analysis.
+            {t('history.empty', { button: t('add.button') })}
           </div>
         ) : (
           <>
@@ -487,14 +492,14 @@ export default function LabAnalysis() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nutrient</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Value</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unit</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Zone</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Notes</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('fields.date')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('fields.nutrient')}</th>
+                    <th className="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('fields.value')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('fields.unit')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('fields.zone')}</th>
+                    <th className="px-4 py-3 text-start text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('fields.notes')}</th>
                     {canEdit && (
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                      <th className="px-4 py-3 text-end text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{t('table.actions')}</th>
                     )}
                   </tr>
                 </thead>
@@ -519,7 +524,7 @@ export default function LabAnalysis() {
                           </td>
                           <td className="px-4 py-2">
                             <input type="number" step="any" value={editForm.value} onChange={(e) => setEditForm({...editForm, value: e.target.value})}
-                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm text-right" />
+                              className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm text-end" dir="ltr" />
                           </td>
                           <td className="px-4 py-2">
                             <input type="text" value={editForm.unit} onChange={(e) => setEditForm({...editForm, unit: e.target.value})}
@@ -528,7 +533,7 @@ export default function LabAnalysis() {
                           <td className="px-4 py-2">
                             <select value={editForm.zone_id} onChange={(e) => setEditForm({...editForm, zone_id: e.target.value})}
                               className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
-                              <option value="">None</option>
+                              <option value="">{t('noZone')}</option>
                               {zones.map(z => (<option key={z.id} value={z.id}>{z.name}</option>))}
                             </select>
                           </td>
@@ -536,23 +541,27 @@ export default function LabAnalysis() {
                             <input type="text" value={editForm.notes} onChange={(e) => setEditForm({...editForm, notes: e.target.value})}
                               className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm" />
                           </td>
-                          <td className="px-4 py-2 text-right space-x-1">
-                            <button onClick={saveEdit} className="text-green-600 hover:text-green-800 dark:text-green-400 text-xs font-medium">Save</button>
-                            <button onClick={() => setEditingId(null)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 text-xs font-medium">Cancel</button>
+                          <td className="px-4 py-2 text-end">
+                            <div className="inline-flex gap-1">
+                              <button onClick={saveEdit} className="text-green-600 hover:text-green-800 dark:text-green-400 text-xs font-medium">{t('common:actions.save')}</button>
+                              <button onClick={() => setEditingId(null)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 text-xs font-medium">{t('common:actions.cancel')}</button>
+                            </div>
                           </td>
                         </>
                       ) : (
                         <>
-                          <td className="px-4 py-3 text-gray-900 dark:text-white whitespace-nowrap">{r.sample_date}</td>
+                          <td className="px-4 py-3 text-gray-900 dark:text-white whitespace-nowrap">{fmt.date(r.sample_date)}</td>
                           <td className="px-4 py-3 text-gray-900 dark:text-white font-medium">{getNutrientName(r.nutrient)}</td>
-                          <td className="px-4 py-3 text-gray-900 dark:text-white text-right font-mono">{typeof r.value === 'number' ? r.value.toFixed(2) : r.value}</td>
+                          <td className="px-4 py-3 text-gray-900 dark:text-white text-end font-mono" dir="ltr">{fmt.number(r.value, { decimals: 2, grouping: false })}</td>
                           <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{r.unit}</td>
                           <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{r.zone_name || '-'}</td>
-                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400 max-w-xs truncate">{r.notes || '-'}</td>
+                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400 max-w-xs truncate" dir="auto">{r.notes || '-'}</td>
                           {canEdit && (
-                            <td className="px-4 py-3 text-right space-x-2">
-                              <button onClick={() => startEdit(r)} className="text-primary-600 hover:text-primary-800 dark:text-primary-400 text-xs font-medium">Edit</button>
-                              <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-800 dark:text-red-400 text-xs font-medium">Delete</button>
+                            <td className="px-4 py-3 text-end">
+                              <div className="inline-flex gap-2">
+                                <button onClick={() => startEdit(r)} className="text-primary-600 hover:text-primary-800 dark:text-primary-400 text-xs font-medium">{t('common:actions.edit')}</button>
+                                <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:text-red-800 dark:text-red-400 text-xs font-medium">{t('common:actions.delete')}</button>
+                              </div>
                             </td>
                           )}
                         </>
@@ -567,7 +576,7 @@ export default function LabAnalysis() {
             {totalPages > 1 && (
               <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Showing {page * pageSize + 1}-{Math.min((page + 1) * pageSize, total)} of {total}
+                  {t('pagination.showing', { range: ltr(`${fmt.int(page * pageSize + 1)}–${fmt.int(Math.min((page + 1) * pageSize, total))}`), total: fmt.int(total) })}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -575,14 +584,14 @@ export default function LabAnalysis() {
                     disabled={page === 0}
                     className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
-                    Previous
+                    {t('common:actions.previous')}
                   </button>
                   <button
                     onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
                     className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
-                    Next
+                    {t('common:actions.next')}
                   </button>
                 </div>
               </div>

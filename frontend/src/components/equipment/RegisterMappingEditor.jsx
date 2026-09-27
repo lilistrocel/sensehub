@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button, Label } from '../../ui';
 import InterlockBadge from '../InterlockBadge';
 import { getChannelDisplayName, getInterlockPartner, getInterlockPartnerLabel, applyInterlockChange } from '../../utils/channelUtils';
@@ -24,6 +25,7 @@ import { UnverifiedPill } from './equipmentStatus';
  * flag ("scale/register inferred, not confirmed by test").
  */
 
+// Labels: t(`mapping.regType.${value}`) / t(`mapping.access.${value}`) at render.
 const TYPE_OPTIONS = [
   { value: 'holding', label: 'Holding (FC03)' },
   { value: 'input', label: 'Input (FC04)' },
@@ -44,10 +46,6 @@ const ACCESS_OPTIONS = [
   { value: 'readwrite', label: 'Read/Write' },
 ];
 const BYTE_ORDER_OPTIONS = ['ABCD', 'CDAB', 'BADC', 'DCBA'];
-const BYTE_ORDER_TITLE = 'Byte/word order for 32-bit and float32 values (ignored for 16-bit/bool). ABCD = high word first (big-endian); CDAB = word swap; BADC = byte swap; DCBA = full reverse';
-const INTERLOCK_TITLE = 'Hard interlock: the two channels can never be ON at the same time. Energising one first switches the other OFF (verified by read-back).';
-const UNVERIFIED_TITLE = 'Unverified: scale/register inferred from a datasheet, not confirmed by a controlled read against a reference.';
-const QTY_TITLE = 'Number of 16-bit registers to read (auto-set from data type: 1 for 16-bit/bool, 2 for 32-bit)';
 
 const is32 = (dataType) => dataType === 'uint32' || dataType === 'int32' || dataType === 'float32';
 
@@ -61,6 +59,11 @@ function numOrEmpty(v) {
 }
 
 export default function RegisterMappingEditor({ mappings = [], onChange, protocol = 'modbus', readOnly = false, name = '' }) {
+  const { t } = useTranslation('equipment');
+  const BYTE_ORDER_TITLE = t('mapping.byteOrderTitle');
+  const INTERLOCK_TITLE = t('mapping.interlockTitle');
+  const UNVERIFIED_TITLE = t('mapping.unverifiedTitle');
+  const QTY_TITLE = t('mapping.qtyTitle');
   const fileInputRef = useRef(null);
   const list = Array.isArray(mappings) ? mappings : [];
 
@@ -126,7 +129,7 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
     .map((m, i) => ({ m, i }))
     .filter(({ m, i }) => i !== index && m.type === 'coil' && String(m.register ?? '') !== '' && String(m.register) !== String(mapping.register))
     .map(({ m, i }) => (
-      <option key={i} value={m.register}>{getChannelDisplayName(m)} (reg {m.register})</option>
+      <option key={i} value={m.register}>{t('mapping.interlockOption', { name: getChannelDisplayName(m), reg: m.register })}</option>
     ));
 
   // ---- field renderers (shared by table + cards) ----
@@ -137,57 +140,57 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
         checked={mapping.enabled !== false}
         disabled={readOnly}
         onChange={(e) => update(index, 'enabled', e.target.checked)}
-        title={mapping.enabled !== false ? 'Reading enabled' : 'Reading disabled (polling skips it)'}
-        aria-label="Enabled"
+        title={mapping.enabled !== false ? t('mapping.readingEnabled') : t('mapping.readingDisabled')}
+        aria-label={t('mapping.enabled')}
         className="h-4 w-4"
       />
     ),
     name: (
-      <input type="text" placeholder="Name (metric key)" value={mapping.name || ''} disabled={readOnly}
-        onChange={(e) => update(index, 'name', e.target.value)} className={inputCls} aria-label="Name" />
+      <input type="text" dir="auto" placeholder={t('mapping.namePlaceholder')} value={mapping.name || ''} disabled={readOnly}
+        onChange={(e) => update(index, 'name', e.target.value)} className={inputCls} aria-label={t('mapping.name')} />
     ),
     label: (
-      <input type="text" placeholder="Label (e.g. Water Pump)" value={mapping.label || ''} disabled={readOnly}
-        onChange={(e) => update(index, 'label', e.target.value)} className={inputCls} aria-label="Label" />
+      <input type="text" dir="auto" placeholder={t('mapping.labelPlaceholder')} value={mapping.label || ''} disabled={readOnly}
+        onChange={(e) => update(index, 'label', e.target.value)} className={inputCls} aria-label={t('mapping.label')} />
     ),
     register: (
-      <input type="number" placeholder="Reg #" value={mapping.register ?? ''} disabled={readOnly}
-        onChange={(e) => update(index, 'register', e.target.value)} className={`${inputCls} font-mono`} aria-label="Register" />
+      <input type="number" dir="ltr" placeholder={t('mapping.regPlaceholder')} value={mapping.register ?? ''} disabled={readOnly}
+        onChange={(e) => update(index, 'register', e.target.value)} className={`${inputCls} font-mono`} aria-label={t('mapping.register')} />
     ),
     quantity: (
-      <input type="number" placeholder="Qty" value={mapping.quantity ?? defaultQuantityForType(mapping.dataType)} disabled={readOnly}
-        onChange={(e) => update(index, 'quantity', numOrEmpty(e.target.value))} className={`${inputCls} font-mono`} title={QTY_TITLE} aria-label="Quantity (words)" />
+      <input type="number" dir="ltr" placeholder={t('mapping.qtyPlaceholder')} value={mapping.quantity ?? defaultQuantityForType(mapping.dataType)} disabled={readOnly}
+        onChange={(e) => update(index, 'quantity', numOrEmpty(e.target.value))} className={`${inputCls} font-mono`} title={QTY_TITLE} aria-label={t('mapping.quantity')} />
     ),
     type: (
-      <select value={mapping.type || 'holding'} disabled={readOnly} onChange={(e) => update(index, 'type', e.target.value)} className={inputCls} aria-label="Register type / function code">
-        {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      <select value={mapping.type || 'holding'} disabled={readOnly} onChange={(e) => update(index, 'type', e.target.value)} className={inputCls} aria-label={t('mapping.regTypeAria')}>
+        {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(`mapping.regType.${o.value}`, { defaultValue: o.label })}</option>)}
       </select>
     ),
     dataType: (
-      <select value={mapping.dataType || 'uint16'} disabled={readOnly} onChange={(e) => update(index, 'dataType', e.target.value)} className={inputCls} aria-label="Data type">
+      <select value={mapping.dataType || 'uint16'} disabled={readOnly} onChange={(e) => update(index, 'dataType', e.target.value)} className={inputCls} aria-label={t('mapping.dataType')}>
         {DATA_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     ),
     byteOrder: (
-      <select value={mapping.byteOrder || 'ABCD'} disabled={readOnly} onChange={(e) => update(index, 'byteOrder', e.target.value)} className={inputCls} title={BYTE_ORDER_TITLE} aria-label="Byte order">
+      <select value={mapping.byteOrder || 'ABCD'} disabled={readOnly} onChange={(e) => update(index, 'byteOrder', e.target.value)} className={inputCls} title={BYTE_ORDER_TITLE} aria-label={t('mapping.byteOrder')}>
         {BYTE_ORDER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
     ),
     scale: (
-      <input type="number" step="any" placeholder="×1" value={mapping.scale ?? 1} disabled={readOnly}
-        onChange={(e) => update(index, 'scale', numOrEmpty(e.target.value))} className={`${inputCls} font-mono`} title="Multiplier applied to the raw value" aria-label="Scale" />
+      <input type="number" dir="ltr" step="any" placeholder="×1" value={mapping.scale ?? 1} disabled={readOnly}
+        onChange={(e) => update(index, 'scale', numOrEmpty(e.target.value))} className={`${inputCls} font-mono`} title={t('mapping.scaleTitle')} aria-label={t('mapping.scale')} />
     ),
     offset: (
-      <input type="number" step="any" placeholder="+0" value={mapping.offset ?? 0} disabled={readOnly}
-        onChange={(e) => update(index, 'offset', numOrEmpty(e.target.value))} className={`${inputCls} font-mono`} title="Value added after scaling" aria-label="Offset" />
+      <input type="number" dir="ltr" step="any" placeholder="+0" value={mapping.offset ?? 0} disabled={readOnly}
+        onChange={(e) => update(index, 'offset', numOrEmpty(e.target.value))} className={`${inputCls} font-mono`} title={t('mapping.offsetTitle')} aria-label={t('mapping.offset')} />
     ),
     unit: (
-      <input type="text" placeholder="unit" value={mapping.unit || ''} disabled={readOnly}
-        onChange={(e) => update(index, 'unit', e.target.value)} className={inputCls} aria-label="Unit" />
+      <input type="text" dir="ltr" placeholder={t('mapping.unitPlaceholder')} value={mapping.unit || ''} disabled={readOnly}
+        onChange={(e) => update(index, 'unit', e.target.value)} className={inputCls} aria-label={t('mapping.unit')} />
     ),
     access: (
-      <select value={mapping.access || 'read'} disabled={readOnly} onChange={(e) => update(index, 'access', e.target.value)} className={inputCls} aria-label="Access">
-        {ACCESS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      <select value={mapping.access || 'read'} disabled={readOnly} onChange={(e) => update(index, 'access', e.target.value)} className={inputCls} aria-label={t('mapping.accessAria')}>
+        {ACCESS_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(`mapping.access.${o.value}`, { defaultValue: o.label })}</option>)}
       </select>
     ),
     interlock: mapping.type === 'coil' ? (
@@ -200,9 +203,9 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
           disabled={readOnly}
           onChange={(e) => update(index, 'interlockWith', e.target.value)}
           className={inputCls}
-          aria-label="Interlock with"
+          aria-label={t('mapping.interlockWith')}
         >
-          <option value="">None</option>
+          <option value="">{t('mapping.none')}</option>
           {interlockOptions(index, mapping)}
         </select>
       </div>
@@ -216,7 +219,7 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
         disabled={readOnly}
         onChange={(e) => update(index, 'unverified', e.target.checked)}
         title={UNVERIFIED_TITLE}
-        aria-label="Unverified: scale/register inferred, not confirmed by test"
+        aria-label={t('unverified.short')}
         className="h-4 w-4 accent-caution-500"
       />
     ),
@@ -224,8 +227,8 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
       <button
         type="button"
         onClick={() => remove(index)}
-        aria-label={`Remove mapping ${index + 1}`}
-        title="Remove mapping"
+        aria-label={t('mapping.removeN', { n: index + 1 })}
+        title={t('mapping.remove')}
         className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted hover:text-alarm-600 hover:bg-alarm-50 dark:hover:text-alarm-300 dark:hover:bg-alarm-900/30"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -235,50 +238,50 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
     ),
   });
 
-  const rowRail = (mapping) => (mapping.unverified ? 'border-l-[3px] border-l-state-caution' : 'border-l-[3px] border-l-transparent');
+  const rowRail = (mapping) => (mapping.unverified ? 'border-s-[3px] border-s-state-caution' : 'border-s-[3px] border-s-transparent');
   const rowDim = (mapping) => (mapping.enabled === false ? 'opacity-60' : '');
 
   return (
     <div data-testid="register-mapping-editor">
       {/* Toolbar: preset FIRST, import/export beside it, add on the right */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <Label as="span" className="w-full sm:w-auto sm:mr-1">Register mappings</Label>
+        <Label as="span" className="w-full sm:w-auto sm:me-1">{t('mapping.title')}</Label>
         {!readOnly && (
           <>
             <select
               defaultValue=""
               onChange={(e) => { loadPreset(e.target.value); e.target.value = ''; }}
               className="!py-1.5 !text-sm min-h-[36px]"
-              aria-label="Load preset"
+              aria-label={t('mapping.loadPreset')}
             >
-              <option value="">Load preset…</option>
+              <option value="">{t('mapping.loadPresetOption')}</option>
               {Object.entries(REGISTER_PRESETS).map(([key, preset]) => (
-                <option key={key} value={key}>{preset.name}</option>
+                <option key={key} value={key}>{t(`mapping.preset.${key}`, { defaultValue: preset.name })}</option>
               ))}
             </select>
             <input type="file" ref={fileInputRef} onChange={importMappings} accept=".json" className="hidden" />
-            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} title="Import mappings from JSON">Import</Button>
+            <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} title={t('mapping.importTitle')}>{t('mapping.import')}</Button>
           </>
         )}
-        <Button variant="ghost" size="sm" onClick={exportMappings} disabled={list.length === 0} title="Export mappings to JSON">Export</Button>
+        <Button variant="ghost" size="sm" onClick={exportMappings} disabled={list.length === 0} title={t('mapping.exportTitle')}>{t('mapping.export')}</Button>
         {!readOnly && (
-          <Button variant="secondary" size="sm" onClick={add} className="ml-auto">
+          <Button variant="secondary" size="sm" onClick={add} className="ms-auto">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add mapping
+            {t('mapping.add')}
           </Button>
         )}
       </div>
 
       {list.length === 0 ? (
         <p className="text-sm text-muted italic py-2">
-          No register mappings defined. {readOnly ? '' : 'Load a preset, import JSON, or add a mapping manually.'}
+          {readOnly ? t('mapping.empty') : t('mapping.emptyEditable')}
         </p>
       ) : (
         <>
           {/* >= md: table */}
-          <div className="hidden md:block border border-line rounded-card">
+          <div className="hidden md:block border border-line rounded-card" dir="ltr">
             <table className="w-full table-fixed border-collapse text-xs">
               <colgroup>
                 <col style={{ width: '30px' }} />
@@ -296,18 +299,18 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
               </colgroup>
               <thead className="bg-field">
                 <tr>
-                  <th className="px-1 py-2 text-center" title="Enabled">On</th>
-                  <th className="px-1 py-2 text-left">Name / Label</th>
-                  <th className="px-1 py-2 text-left" title="Register address and quantity (words)">Reg · Qty</th>
-                  <th className="px-1 py-2 text-left">FC</th>
-                  <th className="px-1 py-2 text-left" title="Data type and byte order (32-bit only)">Data type</th>
-                  <th className="px-1 py-2 text-left">Scale</th>
-                  <th className="px-1 py-2 text-left">Offset</th>
-                  <th className="px-1 py-2 text-left">Unit</th>
-                  <th className="px-1 py-2 text-left">Access</th>
-                  <th className="px-1 py-2 text-left">Interlock</th>
-                  <th className="px-1 py-2 text-center" title={UNVERIFIED_TITLE}>Unv.</th>
-                  {!readOnly && <th className="px-1 py-2"><span className="sr-only">Remove</span></th>}
+                  <th className="px-1 py-2 text-center" title={t('mapping.enabled')}>{t('mapping.col.on')}</th>
+                  <th className="px-1 py-2 text-start">{t('mapping.col.nameLabel')}</th>
+                  <th className="px-1 py-2 text-start" title={t('mapping.col.regQtyTitle')}>{t('mapping.col.regQty')}</th>
+                  <th className="px-1 py-2 text-start">FC</th>
+                  <th className="px-1 py-2 text-start" title={t('mapping.col.dataTypeTitle')}>{t('mapping.dataType')}</th>
+                  <th className="px-1 py-2 text-start">{t('mapping.scale')}</th>
+                  <th className="px-1 py-2 text-start">{t('mapping.offset')}</th>
+                  <th className="px-1 py-2 text-start">{t('mapping.unit')}</th>
+                  <th className="px-1 py-2 text-start">{t('mapping.accessAria')}</th>
+                  <th className="px-1 py-2 text-start">{t('mapping.col.interlock')}</th>
+                  <th className="px-1 py-2 text-center" title={UNVERIFIED_TITLE}>{t('mapping.col.unverified')}</th>
+                  {!readOnly && <th className="px-1 py-2"><span className="sr-only">{t('mapping.remove')}</span></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -361,7 +364,7 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <label className="flex items-center gap-2 text-xs text-muted min-h-[32px]">
                       {f.enabled}
-                      <span>Mapping #{index + 1}</span>
+                      <span>{t('mapping.cardTitle', { n: index + 1 })}</span>
                       {mapping.unverified && <UnverifiedPill />}
                     </label>
                     {f.remove}
@@ -380,13 +383,13 @@ export default function RegisterMappingEditor({ mappings = [], onChange, protoco
                     {is32(mapping.dataType) && <div className="col-span-2">{f.byteOrder}</div>}
                     {mapping.type === 'coil' && (
                       <div className="col-span-2 flex items-center gap-2">
-                        <span className="text-xs text-muted whitespace-nowrap">Interlock with</span>
+                        <span className="text-xs text-muted whitespace-nowrap">{t('mapping.interlockWith')}</span>
                         <div className="flex-1 min-w-0">{f.interlock}</div>
                       </div>
                     )}
                     <label className="col-span-2 flex items-center gap-2 text-xs text-muted min-h-[32px]" title={UNVERIFIED_TITLE}>
                       {f.unverified}
-                      <span>Unverified — scale/register inferred, not confirmed by test</span>
+                      <span>{t('unverified.short')}</span>
                     </label>
                   </div>
                 </div>

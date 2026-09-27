@@ -1,1 +1,90 @@
-{}
+{
+  "title": "Zones",
+  "addZone": "Add Zone",
+  "searchPlaceholder": "Search zones by name...",
+  "clearSearch": "Clear search",
+  "showingCount_one": "Showing {{shown}} of {{count}} zone",
+  "showingCount_other": "Showing {{shown}} of {{count}} zones",
+  "empty": "No zones configured yet.",
+  "noMatch": "No zones match your search.",
+  "equipmentCount_one": "{{count}} equipment",
+  "equipmentCount_other": "{{count}} equipment",
+  "zoneNumber": "Zone #{{id}}",
+  "confirmRemoveEquipment": "Remove this equipment from the zone?",
+  "addTitle": "Add New Zone",
+  "editTitle": "Edit Zone",
+  "deleteTitle": "Delete Zone",
+  "editZone": "Edit zone",
+  "deleteZone": "Delete zone",
+  "updatedBanner": "Zone updated successfully!",
+  "form": {
+    "name": "Zone Name",
+    "namePlaceholder": "e.g., Production Floor",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional description of this zone",
+    "parent": "Parent Zone",
+    "parentNone": "None (Top Level)",
+    "parentHelp": "Optional: Select a parent zone to create a hierarchy",
+    "create": "Create Zone",
+    "creating": "Creating…",
+    "saveChanges": "Save Changes"
+  },
+  "info": {
+    "title": "Zone Information",
+    "name": "Name",
+    "id": "ID",
+    "description": "Description",
+    "created": "Created",
+    "updated": "Updated"
+  },
+  "assigned": {
+    "title": "Assigned Equipment ({{count}})",
+    "assignButton": "Assign Equipment",
+    "remove": "Remove from zone",
+    "removeNamed": "Remove {{name}} from zone",
+    "empty": "No equipment assigned to this zone",
+    "assignNow": "Assign equipment now"
+  },
+  "children": "Child Zones ({{count}})",
+  "equipStatus": {
+    "online": "online",
+    "offline": "offline",
+    "warning": "warning",
+    "error": "error",
+    "unknown": "unknown"
+  },
+  "assign": {
+    "title": "Assign Equipment to {{name}}",
+    "none": "No available equipment to assign.",
+    "noneHelp": "All equipment is either already assigned to this zone or no equipment exists.",
+    "select": "Select Equipment",
+    "selectOption": "-- Select Equipment --",
+    "option": "{{name}} ({{type}} - {{status}})",
+    "assign": "Assign",
+    "assigning": "Assigning…"
+  },
+  "delete": {
+    "confirm": "Are you sure you want to delete <b>{{name}}</b>?",
+    "help": "This action cannot be undone. Equipment assigned to this zone will be unassigned but not deleted.",
+    "deleting": "Deleting…"
+  },
+  "toast": {
+    "assigned": "Equipment assigned successfully",
+    "removed": "Equipment removed from zone",
+    "created": "Zone created successfully",
+    "updated": "Zone updated successfully",
+    "deleted": "Zone deleted successfully"
+  },
+  "err": {
+    "fetchZones": "Failed to fetch zones",
+    "fetchDetail": "Failed to fetch zone details",
+    "loadDetail": "Failed to load zone details",
+    "fetchEquipment": "Failed to fetch equipment",
+    "loadEquipment": "Failed to load equipment",
+    "assign": "Failed to assign equipment",
+    "remove": "Failed to remove equipment",
+    "create": "Failed to create zone",
+    "update": "Failed to update zone",
+    "delete": "Failed to delete zone"
+  }
+}

@@ -2,26 +2,34 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useThrottledError } from '../hooks/useThrottledError';
+import { useTranslation, Trans } from 'react-i18next';
+import { useFormat } from '../i18n/useFormat';
 
 const API_BASE = '/api';
 
+// Values only; labels come from amic:nutrient.<value> at render ('' and pH are special-cased).
 const NUTRIENT_OPTIONS = [
-  { value: '', label: '— Not configured —' },
-  { value: 'nitrate_NO3', label: 'Nitrate (NO3)' },
-  { value: 'phosphate_PO4', label: 'Phosphate (PO4)' },
-  { value: 'potassium_K', label: 'Potassium (K)' },
-  { value: 'calcium_Ca', label: 'Calcium (Ca)' },
-  { value: 'magnesium_Mg', label: 'Magnesium (Mg)' },
-  { value: 'sodium_Na', label: 'Sodium (Na)' },
-  { value: 'ammonium_NH4', label: 'Ammonium (NH4)' },
-  { value: 'chloride_Cl', label: 'Chloride (Cl)' },
-  { value: 'sulfate_SO4', label: 'Sulfate (SO4)' },
-  { value: 'pH', label: 'pH' },
+  { value: '' },
+  { value: 'nitrate_NO3' },
+  { value: 'phosphate_PO4' },
+  { value: 'potassium_K' },
+  { value: 'calcium_Ca' },
+  { value: 'magnesium_Mg' },
+  { value: 'sodium_Na' },
+  { value: 'ammonium_NH4' },
+  { value: 'chloride_Cl' },
+  { value: 'sulfate_SO4' },
+  { value: 'pH' },
 ];
+
+// Fallback host shown when the backend reports no error text.
+const AMIC_DEFAULT_HOST = '192.168.1.104:502';
 
 export default function Amic() {
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
+  const { t } = useTranslation('amic');
+  const fmt = useFormat();
   const canControl = user?.role === 'admin' || user?.role === 'operator';
 
   const [status, setStatus] = useState(null);
@@ -65,9 +73,9 @@ export default function Amic() {
     try {
       const res = await fetch(`${API_BASE}/amic/channels`, { headers });
       if (res.ok) setChannels(await res.json());
-      else showError('Could not load AMIC channel configuration');
+      else showError(t('errors.loadChannels'));
     } catch (err) {
-      showError(`Could not load AMIC channel configuration: ${err.message}`);
+      showError(t('errors.loadChannelsWith', { error: err.message }));
     }
   };
 
@@ -75,9 +83,9 @@ export default function Amic() {
     try {
       const res = await fetch(`${API_BASE}/zones`, { headers });
       if (res.ok) setZones(await res.json());
-      else showError('Could not load zones');
+      else showError(t('errors.loadZones'));
     } catch (err) {
-      showError(`Could not load zones: ${err.message}`);
+      showError(t('errors.loadZonesWith', { error: err.message }));
     }
   };
 
@@ -98,13 +106,13 @@ export default function Amic() {
   }, [status?.state?.measuring, status?.state?.calibrating, status?.state?.draining, status?.state?.empty_system, status?.state?.conditioning]);
 
   const runAction = async (action, label, expectedMin) => {
-    if (!confirm(`Start ${label}? Expected duration: ~${expectedMin} minute${expectedMin === 1 ? '' : 's'}.`)) return;
+    if (!confirm(t('ops.confirmStart', { label, count: expectedMin }))) return;
     setActionInFlight(action);
     try {
       const res = await fetch(`${API_BASE}/amic/${action}`, { method: 'POST', headers });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || 'Failed');
-      showSuccess(data.message || `${label} started`);
+      if (!res.ok) throw new Error(data.error || data.message || t('errors.failed'));
+      showSuccess(data.message || t('ops.started', { label }));
       // Backend stamps current_cycle on trigger; refresh status to pick it up
       setTimeout(() => fetchStatus(false), 2000);
     } catch (err) {
@@ -119,8 +127,8 @@ export default function Amic() {
       const res = await fetch(`${API_BASE}/amic/channels`, {
         method: 'PUT', headers, body: JSON.stringify({ channels })
       });
-      if (!res.ok) throw new Error('Failed to save channels');
-      showSuccess('Channel labels saved');
+      if (!res.ok) throw new Error(t('channels.saveFailed'));
+      showSuccess(t('channels.saved'));
       setEditingChannels(false);
     } catch (err) {
       showError(err.message);
@@ -140,9 +148,9 @@ export default function Amic() {
         body: JSON.stringify({ zone_id: labZoneId || null, sample_date: sampleDate })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      const when = labUseNow ? 'now' : new Date(sampleDate).toLocaleString();
-      showSuccess(`Saved ${data.count} measurement(s) to lab readings (${when})`);
+      if (!res.ok) throw new Error(data.error || t('errors.failed'));
+      const when = labUseNow ? t('measurements.whenNow') : fmt.dateTime(sampleDate);
+      showSuccess(t('measurements.savedToLab', { count: data.count, when }));
       // Reset to "now" after save
       setLabUseNow(true);
       setLabSampleDate('');
@@ -160,13 +168,13 @@ export default function Amic() {
     return new Date(d - tz).toISOString().slice(0, 16);
   };
 
-  // Display metadata per state — colors and human-readable names. Expected duration comes from API.
+  // Display metadata per state — colors and human-readable names (amic:state.*). Expected duration comes from API.
   const STATE_DISPLAY = {
-    measuring:    { name: 'Measuring',    color: 'blue' },
-    calibrating:  { name: 'Calibrating',  color: 'amber' },
-    draining:     { name: 'Draining',     color: 'cyan' },
-    empty_system: { name: 'Empty System', color: 'purple' },
-    conditioning: { name: 'Conditioning', color: 'pink' },
+    measuring:    { name: t('state.measuring'),    color: 'blue' },
+    calibrating:  { name: t('state.calibrating'),  color: 'amber' },
+    draining:     { name: t('state.draining'),     color: 'cyan' },
+    empty_system: { name: t('state.empty_system'), color: 'purple' },
+    conditioning: { name: t('state.conditioning'), color: 'pink' },
   };
 
   // Static, full class strings per color so Tailwind's JIT keeps them. Dynamic
@@ -216,17 +224,17 @@ export default function Amic() {
   const overrunning = expectedSecTotal > 0 && elapsedSecTotal > expectedSecTotal * 1.5;
 
   if (loading) {
-    return <div className="p-6 text-center text-gray-500">Loading AMIC status...</div>;
+    return <div className="p-6 text-center text-gray-500">{t('loading')}</div>;
   }
 
   if (!status?.connected) {
     return (
       <div className="max-w-4xl mx-auto p-4 sm:p-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">AMIC Water Analyzer</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{t('title')}</h1>
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <p className="font-semibold text-red-800 dark:text-red-400">Not connected</p>
-          <p className="text-sm text-red-700 dark:text-red-400 mt-1">{status?.error || 'AMIC device unreachable at 192.168.1.104:502'}</p>
-          <button onClick={() => fetchStatus(true)} className="mt-3 px-3 py-1.5 text-sm bg-red-600 text-white rounded">Retry</button>
+          <p className="font-semibold text-red-800 dark:text-red-400">{t('notConnected.title')}</p>
+          <p className="text-sm text-red-700 dark:text-red-400 mt-1" dir="auto">{status?.error || t('notConnected.unreachable', { host: AMIC_DEFAULT_HOST })}</p>
+          <button onClick={() => fetchStatus(true)} className="mt-3 px-3 py-1.5 text-sm bg-red-600 text-white rounded">{t('common:actions.retry')}</button>
         </div>
       </div>
     );
@@ -237,10 +245,10 @@ export default function Amic() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AMIC Water Analyzer</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">NT Sensors A7-303-MB · {status.host}</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('title')}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400" lang="en" dir="ltr">{'NT Sensors A7-303-MB'} · {status.host}</p>
         </div>
-        <button onClick={() => fetchStatus(true)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+        <button onClick={() => fetchStatus(true)} aria-label={t('refreshAria')} title={t('refreshAria')} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
         </button>
       </div>
@@ -253,31 +261,31 @@ export default function Amic() {
       }`}>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <p className="text-xs uppercase font-semibold text-gray-600 dark:text-gray-400">Current State</p>
+            <p className="text-xs uppercase font-semibold text-gray-600 dark:text-gray-400">{t('banner.currentState')}</p>
             <p className={`text-2xl font-bold ${cycleColor ? cycleColor.text : 'text-green-700 dark:text-green-400'}`}>
-              {currentCycle ? `${currentCycle.name}...` : '✓ Idle / Ready'}
+              {currentCycle ? t('banner.inProgress', { name: currentCycle.name }) : <>✓ {t('banner.idle')}</>}
             </p>
             {currentCycle?.source === 'panel' && (
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Started from AMIC panel</p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{t('banner.fromPanel')}</p>
             )}
             {currentCycle?.source === 'unknown' && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">Cycle in progress (start time unknown — detected after restart)</p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">{t('banner.startUnknown')}</p>
             )}
           </div>
           {currentCycle && currentCycle.startedAt && (
-            <div className="text-right">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Elapsed</p>
-              <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">
+            <div className="text-end">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('banner.elapsed')}</p>
+              <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white" dir="ltr">
                 {String(elapsedMin).padStart(2,'0')}:{String(elapsedSec).padStart(2,'0')}
               </p>
               {currentCycle.expected > 0 && currentCycle.source !== 'unknown' && !overrunning && (
-                <p className="text-xs text-gray-500">~{remainingMin} min remaining (of {currentCycle.expected})</p>
+                <p className="text-xs text-gray-500">{t('banner.remaining', { remaining: remainingMin, total: currentCycle.expected })}</p>
               )}
               {overrunning && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">⚠ running longer than expected ({currentCycle.expected} min)</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">⚠ {t('banner.overrunning', { min: currentCycle.expected })}</p>
               )}
               {currentCycle.expected > 0 && currentCycle.source === 'unknown' && (
-                <p className="text-xs text-gray-500">~{currentCycle.expected} min expected total</p>
+                <p className="text-xs text-gray-500">{t('banner.expectedTotal', { min: currentCycle.expected })}</p>
               )}
             </div>
           )}
@@ -294,47 +302,47 @@ export default function Amic() {
 
       {/* Action buttons */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Operations</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">{t('ops.title')}</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          <ActionBtn label="Run Measurement" subtitle="~5 min" color="blue"
+          <ActionBtn label={t('ops.runMeasurement')} subtitle={t('ops.subMin', { min: 5 })} color="blue"
             disabled={!!currentCycle || !canControl}
             loading={actionInFlight === 'measure'}
-            onClick={() => runAction('measure', 'Measurement', 5)} />
-          <ActionBtn label="Run Calibration" subtitle="~20 min · ION channels" color="amber"
+            onClick={() => runAction('measure', t('ops.measurement'), 5)} />
+          <ActionBtn label={t('ops.runCalibration')} subtitle={t('ops.subCalibrate', { min: 20 })} color="amber"
             disabled={!!currentCycle || !canControl}
             loading={actionInFlight === 'calibrate'}
-            onClick={() => runAction('calibrate', 'Calibration', 20)} />
-          <ActionBtn label="Drain" subtitle="~1 min" color="cyan"
+            onClick={() => runAction('calibrate', t('ops.calibration'), 20)} />
+          <ActionBtn label={t('ops.drain')} subtitle={t('ops.subMin', { min: 1 })} color="cyan"
             disabled={!!currentCycle || !canControl}
             loading={actionInFlight === 'drain'}
-            onClick={() => runAction('drain', 'Drain', 1)} />
-          <ActionBtn label="Empty System" subtitle="~5 min · Cleaning" color="purple"
+            onClick={() => runAction('drain', t('ops.drain'), 1)} />
+          <ActionBtn label={t('ops.emptySystem')} subtitle={t('ops.subEmpty', { min: 5 })} color="purple"
             disabled={!!currentCycle || !canControl}
             loading={actionInFlight === 'empty-system'}
-            onClick={() => runAction('empty-system', 'Empty System', 5)} />
-          <ActionBtn label="Conditioning" subtitle="~120 min · First use" color="pink"
+            onClick={() => runAction('empty-system', t('ops.emptySystem'), 5)} />
+          <ActionBtn label={t('ops.conditioning')} subtitle={t('ops.subConditioning', { min: 120 })} color="pink"
             disabled={!!currentCycle || !canControl}
             loading={actionInFlight === 'condition'}
-            onClick={() => runAction('condition', 'Conditioning', 120)} />
+            onClick={() => runAction('condition', t('ops.conditioning'), 120)} />
         </div>
       </div>
 
       {/* Latest measurements */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
         <div className="flex items-start justify-between mb-3 flex-wrap gap-3">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Latest Measurements</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('measurements.title')}</h3>
           {canControl && (
             <div className="flex items-end gap-2 flex-wrap">
               <div>
-                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 uppercase">Zone</label>
+                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 uppercase">{t('measurements.zone')}</label>
                 <select value={labZoneId} onChange={e => setLabZoneId(e.target.value)}
                   className="text-xs px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                  <option value="">No zone</option>
+                  <option value="">{t('measurements.noZone')}</option>
                   {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 uppercase">Sample taken</label>
+                <label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-0.5 uppercase">{t('measurements.sampleTaken')}</label>
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
                     <input type="checkbox" checked={labUseNow}
@@ -344,18 +352,19 @@ export default function Amic() {
                           setLabSampleDate(formatLocalDatetime(new Date()));
                         }
                       }} className="w-3.5 h-3.5" />
-                    <span className="text-gray-700 dark:text-gray-300">Now</span>
+                    <span className="text-gray-700 dark:text-gray-300">{t('measurements.now')}</span>
                   </label>
                   {!labUseNow && (
                     <input type="datetime-local" value={labSampleDate}
                       onChange={e => setLabSampleDate(e.target.value)}
+                      dir="ltr"
                       className="text-xs px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300" />
                   )}
                 </div>
               </div>
               <button onClick={saveToLab} disabled={savingToLab || (!labUseNow && !labSampleDate)}
                 className="text-xs px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-                {savingToLab ? 'Saving...' : '→ Save to Lab Readings'}
+                {savingToLab ? t('measurements.saving') : <><span aria-hidden="true" className="inline-block rtl:-scale-x-100">→</span> {t('measurements.saveToLab')}</>}
               </button>
             </div>
           )}
@@ -363,13 +372,13 @@ export default function Amic() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
-                <th className="pb-2 pr-3">Channel</th>
-                <th className="pb-2 pr-3">Ion / Type</th>
-                <th className="pb-2 pr-3 text-right">Value</th>
-                <th className="pb-2 pr-3">Unit</th>
-                <th className="pb-2 pr-3">Calibration</th>
-                <th className="pb-2 pr-3">Measurement</th>
+              <tr className="text-start text-xs text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-gray-700">
+                <th className="pb-2 pe-3 text-start">{t('measurements.colChannel')}</th>
+                <th className="pb-2 pe-3 text-start">{t('measurements.colIon')}</th>
+                <th className="pb-2 pe-3 text-end">{t('measurements.colValue')}</th>
+                <th className="pb-2 pe-3 text-start">{t('measurements.colUnit')}</th>
+                <th className="pb-2 pe-3 text-start">{t('measurements.colCalibration')}</th>
+                <th className="pb-2 pe-3 text-start">{t('measurements.colMeasurement')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -378,17 +387,17 @@ export default function Amic() {
                 const meas = status.measurement_check[i];
                 return (
                   <tr key={m.channel} className={`text-gray-700 dark:text-gray-300 ${!m.enabled ? 'opacity-40' : ''}`}>
-                    <td className="py-2 pr-3 font-medium">{m.label}</td>
-                    <td className="py-2 pr-3 text-gray-500">{m.ion || '—'}</td>
-                    <td className="py-2 pr-3 text-right font-mono font-bold text-gray-900 dark:text-white">
-                      {m.value.toFixed(2)}
+                    <td className="py-2 pe-3 font-medium" dir="auto">{m.label}</td>
+                    <td className="py-2 pe-3 text-gray-500" dir="ltr">{m.ion || '—'}</td>
+                    <td className="py-2 pe-3 text-end font-mono font-bold text-gray-900 dark:text-white" dir="ltr">
+                      {fmt.number(m.value, { decimals: 2, grouping: false })}
                     </td>
-                    <td className="py-2 pr-3 text-gray-500">{m.unit}</td>
-                    <td className="py-2 pr-3">
-                      {cal.passed ? <span className="text-green-600">✓ Passed</span> : <span className="text-red-600">✗ Error</span>}
+                    <td className="py-2 pe-3 text-gray-500" dir="ltr">{m.unit}</td>
+                    <td className="py-2 pe-3">
+                      {cal.passed ? <span className="text-green-600">✓ {t('measurements.passed')}</span> : <span className="text-red-600">✗ {t('measurements.error')}</span>}
                     </td>
-                    <td className="py-2 pr-3">
-                      {meas.passed ? <span className="text-green-600">✓ Passed</span> : <span className="text-red-600">✗ Error</span>}
+                    <td className="py-2 pe-3">
+                      {meas.passed ? <span className="text-green-600">✓ {t('measurements.passed')}</span> : <span className="text-red-600">✗ {t('measurements.error')}</span>}
                     </td>
                   </tr>
                 );
@@ -411,22 +420,22 @@ export default function Amic() {
             <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Sum of measured ions</p>
-                  <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">{sum.toFixed(0)} <span className="text-base font-normal text-gray-500">mg/L</span></p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{t('ionSum.sumTitle')}</p>
+                  <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white" dir="ltr">{fmt.int(sum)} <span className="text-base font-normal text-gray-500">mg/L</span></p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Excludes pH and any disabled channel. Excludes unmeasured anions (sulfate, phosphate, bicarbonate).
+                    {t('ionSum.sumHelp')}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Equivalent EC range</p>
-                  <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">{ecLow} – {ecHigh} <span className="text-base font-normal text-gray-500">dS/m</span></p>
+                <div className="text-end">
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{t('ionSum.ecTitle')}</p>
+                  <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white" dir="ltr">{fmt.number(ecLow, { maxDecimals: 2 })} – {fmt.number(ecHigh, { maxDecimals: 2 })} <span className="text-base font-normal text-gray-500">dS/m</span></p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Range uses TDS↔EC factor 0.55–0.75 for mixed hydroponic salts. Compare to your handheld EC meter.
+                    {t('ionSum.ecHelp')}
                   </p>
                 </div>
               </div>
               <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-2 text-xs text-blue-900 dark:text-blue-300">
-                <strong>How to use this:</strong> if your handheld EC meter reads within the bracket above ({ecLow}–{ecHigh} dS/m), the AMIC's ion concentrations are consistent with the actual feed. A handheld reading <strong>below</strong> the range = unmeasured anions or AMIC over-reading. <strong>Above</strong> the range = sample dilution, sample line on the wrong source, or AMIC under-reading.
+                <Trans t={t} i18nKey="ionSum.howTo" values={{ low: fmt.number(ecLow, { maxDecimals: 2 }), high: fmt.number(ecHigh, { maxDecimals: 2 }) }} components={{ b: <strong /> }} />
               </div>
             </div>
           );
@@ -440,46 +449,46 @@ export default function Amic() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Channel Configuration</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Assign which ion each electrode measures.</p>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('channels.title')}</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{t('channels.help')}</p>
           </div>
           {canControl && (
             <button onClick={() => editingChannels ? saveChannels() : setEditingChannels(true)}
               className="text-xs px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700">
-              {editingChannels ? 'Save' : 'Edit'}
+              {editingChannels ? t('common:actions.save') : t('common:actions.edit')}
             </button>
           )}
         </div>
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-2 mb-3 text-xs text-amber-900 dark:text-amber-200">
-          <strong>Verify with NT Sensors:</strong> The defaults below come from the manual's example layout (page 16). The manufacturer ships different electrode combinations per customer — check your delivery slip or contact NT Sensors customer service with your unit's serial number to confirm the actual installed order before trusting these labels.
+          <Trans t={t} i18nKey="channels.verify" components={{ b: <strong /> }} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {channels.map((ch, i) => (
             <div key={ch.channel} className="bg-gray-50 dark:bg-gray-900 rounded p-2 border border-gray-200 dark:border-gray-700">
-              <p className="text-xs text-gray-500 dark:text-gray-400">CH{ch.channel}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400" dir="ltr">{'CH'}{ch.channel}</p>
               {editingChannels ? (
                 <>
                   <input type="text" value={ch.label} onChange={e => {
                     const next = [...channels]; next[i] = { ...ch, label: e.target.value }; setChannels(next);
-                  }} className="w-full text-sm font-medium px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white mt-1" />
+                  }} dir="auto" className="w-full text-sm font-medium px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white mt-1" />
                   <select value={ch.ion} onChange={e => {
                     const next = [...channels]; next[i] = { ...ch, ion: e.target.value }; setChannels(next);
                   }} className="w-full text-xs px-2 py-1 mt-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300"
                     disabled={ch.channel === 8}>
-                    {NUTRIENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {NUTRIENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.value === '' ? t('channels.notConfiguredOption') : o.value === 'pH' ? 'pH' : t(`nutrient.${o.value}`, { defaultValue: o.value })}</option>)}
                   </select>
                   <label className="flex items-center gap-1 mt-1 text-xs">
                     <input type="checkbox" checked={ch.enabled !== false} onChange={e => {
                       const next = [...channels]; next[i] = { ...ch, enabled: e.target.checked }; setChannels(next);
                     }} />
-                    <span className="text-gray-600 dark:text-gray-400">Enabled</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t('channels.enabled')}</span>
                   </label>
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">{ch.label}</p>
-                  <p className="text-xs text-gray-500">{ch.ion || '— not configured —'}</p>
-                  {ch.enabled === false && <p className="text-xs text-amber-600 mt-1">disabled</p>}
+                  <p className="text-sm font-bold text-gray-900 dark:text-white" dir="auto">{ch.label}</p>
+                  <p className="text-xs text-gray-500">{ch.ion ? <span dir="ltr">{ch.ion}</span> : t('channels.notConfigured')}</p>
+                  {ch.enabled === false && <p className="text-xs text-amber-600 mt-1">{t('channels.disabled')}</p>}
                 </>
               )}
             </div>
@@ -501,6 +510,8 @@ export default function Amic() {
 
 function ScheduledCalibrations({ isAdmin, headers }) {
   const { showError, showSuccess } = useToast();
+  const { t } = useTranslation('amic');
+  const fmt = useFormat();
   const [data, setData] = useState(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -510,11 +521,11 @@ function ScheduledCalibrations({ isAdmin, headers }) {
     try {
       const res = await fetch(`${API_BASE}/amic/schedule`, { headers });
       if (res.ok) setData(await res.json());
-      else showError('Could not load calibration schedule');
+      else showError(t('errors.loadSchedule'));
     } catch (err) {
-      showError(`Could not load calibration schedule: ${err.message}`);
+      showError(t('errors.loadScheduleWith', { error: err.message }));
     }
-  }, [headers, showError]);
+  }, [headers, showError, t]);
 
   React.useEffect(() => {
     load();
@@ -535,8 +546,8 @@ function ScheduledCalibrations({ isAdmin, headers }) {
         body: JSON.stringify(draft),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error || 'Failed');
-      showSuccess('Schedule saved');
+      if (!res.ok) throw new Error(body.error || t('errors.failed'));
+      showSuccess(t('schedule.saved'));
       setEditing(false);
       load();
     } catch (err) { showError(err.message); }
@@ -552,7 +563,7 @@ function ScheduledCalibrations({ isAdmin, headers }) {
   if (!data) return null;
 
   const fmtTime = (h, m) => String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-  const fmtLastFired = (iso) => iso ? new Date(iso).toLocaleString() : 'never';
+  const fmtLastFired = (iso) => iso ? fmt.dateTime(iso) : t('common:status.never');
 
   const ls = data.last_scheduled_calibration;
   const lsAge = ls ? Math.floor((Date.now() - new Date(ls.ended_at).getTime()) / 3600000) : null;
@@ -563,44 +574,44 @@ function ScheduledCalibrations({ isAdmin, headers }) {
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Scheduled Calibrations</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('schedule.title')}</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Fire Calibrate cycles automatically at the same time(s) every day. Each slot fires at most once per day; missed-by-more-than-5-minutes slots are skipped until tomorrow.
+            {t('schedule.help')}
           </p>
         </div>
         {isAdmin && !editing && (
-          <button onClick={startEdit} className="text-xs px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700">Edit</button>
+          <button onClick={startEdit} className="text-xs px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700">{t('common:actions.edit')}</button>
         )}
       </div>
 
       {/* Status: when's the next one, when was the last one */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         <div className="bg-gray-50 dark:bg-gray-900 rounded p-3">
-          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Next scheduled cal</p>
+          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{t('schedule.next')}</p>
           {data.schedule.enabled && data.next_firing_at ? (
-            <p className="text-sm text-gray-900 dark:text-white mt-1">{new Date(data.next_firing_at).toLocaleString()}</p>
+            <p className="text-sm text-gray-900 dark:text-white mt-1">{fmt.dateTime(data.next_firing_at)}</p>
           ) : (
-            <p className="text-sm text-gray-500 italic mt-1">{data.schedule.enabled ? 'no enabled slots' : 'schedule disabled'}</p>
+            <p className="text-sm text-gray-500 italic mt-1">{data.schedule.enabled ? t('schedule.noEnabledSlots') : t('schedule.disabledSchedule')}</p>
           )}
         </div>
         <div className="bg-gray-50 dark:bg-gray-900 rounded p-3">
-          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Most recent scheduled cal</p>
+          <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{t('schedule.mostRecent')}</p>
           {ls ? (
             <div className="mt-1 text-sm">
               <p className="text-gray-900 dark:text-white">
-                {new Date(ls.ended_at).toLocaleString()}
-                {lsAge != null && <span className="text-xs text-gray-500 ml-2">({lsAge < 1 ? '<1h ago' : lsAge + 'h ago'})</span>}
+                {fmt.dateTime(ls.ended_at)}
+                {lsAge != null && <span className="text-xs text-gray-500 ms-2">({lsAge < 1 ? t('schedule.ageUnderHour') : t('schedule.ageHours', { hours: lsAge })})</span>}
               </p>
               <p className="text-xs mt-1">
-                {lsHealthy ? <span className="text-green-700 dark:text-green-400">✓ Completed cleanly</span>
-                  : lsCalFails.length > 0 ? <span className="text-red-700 dark:text-red-400">⚠ {lsCalFails.length} channel cal_check fail: {lsCalFails.map(c=>c.label).join(', ')}</span>
-                  : ls.mv_swing != null && ls.mv_swing < 20 ? <span className="text-amber-700 dark:text-amber-400">⚠ low mV swing ({ls.mv_swing} mV) — probe contact suspect</span>
-                  : <span className="text-gray-500">completed</span>}
-                {ls.mv_swing != null && <span className="text-gray-500 ml-2">· {ls.mv_swing} mV swing</span>}
-                {ls.duration_seconds != null && <span className="text-gray-500 ml-2">· {Math.floor(ls.duration_seconds/60)}m {ls.duration_seconds%60}s</span>}
+                {lsHealthy ? <span className="text-green-700 dark:text-green-400">✓ {t('schedule.completedCleanly')}</span>
+                  : lsCalFails.length > 0 ? <span className="text-red-700 dark:text-red-400">⚠ {t('schedule.calCheckFail', { count: lsCalFails.length, labels: lsCalFails.map(c=>c.label).join(', ') })}</span>
+                  : ls.mv_swing != null && ls.mv_swing < 20 ? <span className="text-amber-700 dark:text-amber-400">⚠ {t('schedule.lowSwing', { mv: ls.mv_swing })}</span>
+                  : <span className="text-gray-500">{t('schedule.completed')}</span>}
+                {ls.mv_swing != null && <span className="text-gray-500 ms-2">{t('schedule.swing', { mv: ls.mv_swing })}</span>}
+                {ls.duration_seconds != null && <span className="text-gray-500 ms-2">· {fmt.duration(ls.duration_seconds)}</span>}
               </p>
             </div>
-          ) : <p className="text-sm text-gray-500 italic mt-1">no scheduled cals on record yet</p>}
+          ) : <p className="text-sm text-gray-500 italic mt-1">{t('schedule.noneYet')}</p>}
         </div>
       </div>
 
@@ -609,51 +620,53 @@ function ScheduledCalibrations({ isAdmin, headers }) {
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={draft.enabled} onChange={e => setDraft({ ...draft, enabled: e.target.checked })} />
-            <span className="font-medium text-gray-900 dark:text-white">Schedule enabled</span>
+            <span className="font-medium text-gray-900 dark:text-white">{t('schedule.enabledToggle')}</span>
           </label>
           {(draft.times || []).map((slot, i) => (
             <div key={i} className="flex items-center gap-2 flex-wrap bg-gray-50 dark:bg-gray-900 rounded p-3">
               <label className="flex items-center gap-1 text-xs">
                 <input type="checkbox" checked={slot.enabled} onChange={e => updateSlot(i, { enabled: e.target.checked })} />
-                <span className="text-gray-600 dark:text-gray-400">on</span>
+                <span className="text-gray-600 dark:text-gray-400">{t('schedule.slotOn')}</span>
               </label>
-              <input type="number" min="0" max="23" value={slot.hour}
+              <span className="inline-flex items-center gap-2" dir="ltr">
+              <input type="number" min="0" max="23" value={slot.hour} aria-label={t('schedule.hourAria')}
                 onChange={e => updateSlot(i, { hour: parseInt(e.target.value) || 0 })}
                 className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
               <span className="text-gray-500">:</span>
-              <input type="number" min="0" max="59" value={slot.minute}
+              <input type="number" min="0" max="59" value={slot.minute} aria-label={t('schedule.minuteAria')}
                 onChange={e => updateSlot(i, { minute: parseInt(e.target.value) || 0 })}
                 className="w-16 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-              <input type="text" placeholder="label (optional)" value={slot.label || ''}
+              </span>
+              <input type="text" placeholder={t('schedule.slotLabel')} value={slot.label || ''} dir="auto"
                 onChange={e => updateSlot(i, { label: e.target.value })}
                 className="flex-1 min-w-[120px] px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300" />
-              <button onClick={() => removeSlot(i)} className="text-xs px-2 py-1 text-red-700 dark:text-red-400 hover:underline">Remove</button>
+              <button onClick={() => removeSlot(i)} className="text-xs px-2 py-1 text-red-700 dark:text-red-400 hover:underline">{t('schedule.remove')}</button>
             </div>
           ))}
           <div className="flex items-center gap-2">
-            <button onClick={addSlot} className="text-xs px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300">+ Add slot</button>
-            <span className="text-xs text-gray-500 ml-auto">Times are interpreted in the server's local timezone (Asia/Dubai).</span>
+            <button onClick={addSlot} className="text-xs px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300">{t('schedule.addSlot')}</button>
+            <span className="text-xs text-gray-500 ms-auto">{t('schedule.timezoneNote', { tz: 'Asia/Dubai' })}</span>
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-            <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300">Cancel</button>
-            <button onClick={save} disabled={saving} className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save'}</button>
+            <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300">{t('common:actions.cancel')}</button>
+            <button onClick={save} disabled={saving} className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">{saving ? t('common:actions.saving') : t('common:actions.save')}</button>
           </div>
         </div>
       ) : (
         <div className="space-y-1.5">
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Status: {data.schedule.enabled ? <span className="text-green-700 dark:text-green-400 font-medium">enabled</span> : <span className="text-gray-500 italic">disabled</span>}
+            {t('schedule.status')} {data.schedule.enabled ? <span className="text-green-700 dark:text-green-400 font-medium">{t('schedule.statusEnabled')}</span> : <span className="text-gray-500 italic">{t('schedule.statusDisabled')}</span>}
           </p>
           {(data.schedule.times || []).map((slot, i) => (
             <div key={i} className="flex items-center gap-3 text-sm">
               <span className={`inline-block w-2 h-2 rounded-full ${slot.enabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
-              <span className="font-mono font-medium text-gray-900 dark:text-white">{fmtTime(slot.hour, slot.minute)}</span>
-              {slot.label && <span className="text-xs text-gray-500">({slot.label})</span>}
-              <span className="text-xs text-gray-500 ml-auto">last fired: {fmtLastFired(slot.last_fired)}</span>
+              <span className="font-mono font-medium text-gray-900 dark:text-white" dir="ltr">{fmtTime(slot.hour, slot.minute)}</span>
+              {slot.label && <span className="text-xs text-gray-500" dir="auto">({slot.label})</span>}
+              <span className="text-xs text-gray-500 ms-auto">{t('schedule.lastFired', { time: fmtLastFired(slot.last_fired) })}</span>
             </div>
           ))}
           {(!data.schedule.times || data.schedule.times.length === 0) && (
-            <p className="text-sm text-gray-500 italic">No slots configured. {isAdmin ? 'Click Edit to add one.' : ''}</p>
+            <p className="text-sm text-gray-500 italic">{t('schedule.noSlots')} {isAdmin ? t('schedule.clickEditToAdd') : ''}</p>
           )}
         </div>
       )}
@@ -663,6 +676,7 @@ function ScheduledCalibrations({ isAdmin, headers }) {
 
 function PumpTimings({ status, isAdmin, headers, onUpdate }) {
   const { showError, showSuccess } = useToast();
+  const { t } = useTranslation('amic');
   const [editing, setEditing] = useState(false);
   const [input, setInput] = useState(status.timing.pump_input_seconds);
   const [output, setOutput] = useState(status.timing.pump_output_seconds);
@@ -683,8 +697,8 @@ function PumpTimings({ status, isAdmin, headers, onUpdate }) {
         body: JSON.stringify({ input_seconds: parseInt(input), output_seconds: parseInt(output) }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      showSuccess(`Pump times saved: input ${data.pump_input_seconds}s · output ${data.pump_output_seconds}s`);
+      if (!res.ok) throw new Error(data.error || t('errors.failed'));
+      showSuccess(t('pump.saved', { input: data.pump_input_seconds, output: data.pump_output_seconds }));
       setEditing(false);
       onUpdate();
     } catch (err) {
@@ -698,39 +712,39 @@ function PumpTimings({ status, isAdmin, headers, onUpdate }) {
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pump Timing</h3>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('pump.title')}</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Sample-in / sample-out durations during a Measure cycle. Increase <code>input</code> if the cell isn't fully covering both probes (manual p.11). Spec defaults: 12s / 16s.
+            <Trans t={t} i18nKey="pump.help" components={{ code: <code /> }} />
           </p>
         </div>
         {isAdmin && (
           <button onClick={() => editing ? save() : setEditing(true)} disabled={saving}
             className="text-xs px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
-            {saving ? 'Saving…' : editing ? 'Save' : 'Edit'}
+            {saving ? t('common:actions.saving') : editing ? t('common:actions.save') : t('common:actions.edit')}
           </button>
         )}
       </div>
       <div className="flex flex-wrap items-end gap-4 mt-3">
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">PMP_INPUT_TIME (s)</label>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" dir="ltr">{'PMP_INPUT_TIME'} (s)</label>
           {editing ? (
             <input type="number" min="1" max="120" value={input} onChange={e => setInput(e.target.value)}
               className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
           ) : (
-            <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">{status.timing.pump_input_seconds}<span className="text-sm font-normal text-gray-500"> s</span></p>
+            <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white" dir="ltr">{status.timing.pump_input_seconds}<span className="text-sm font-normal text-gray-500"> s</span></p>
           )}
         </div>
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">PMP_OUTPUT_TIME (s)</label>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" dir="ltr">{'PMP_OUTPUT_TIME'} (s)</label>
           {editing ? (
             <input type="number" min="1" max="120" value={output} onChange={e => setOutput(e.target.value)}
               className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
           ) : (
-            <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white">{status.timing.pump_output_seconds}<span className="text-sm font-normal text-gray-500"> s</span></p>
+            <p className="text-2xl font-mono font-bold text-gray-900 dark:text-white" dir="ltr">{status.timing.pump_output_seconds}<span className="text-sm font-normal text-gray-500"> s</span></p>
           )}
         </div>
         {editing && <button onClick={() => { setEditing(false); setInput(status.timing.pump_input_seconds); setOutput(status.timing.pump_output_seconds); }}
-          className="text-xs px-3 py-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded">Cancel</button>}
+          className="text-xs px-3 py-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded">{t('common:actions.cancel')}</button>}
       </div>
     </div>
   );
@@ -738,6 +752,8 @@ function PumpTimings({ status, isAdmin, headers, onUpdate }) {
 
 function CycleHistory({ headers }) {
   const { showError } = useToast();
+  const { t } = useTranslation('amic');
+  const fmt = useFormat();
   // 30 s poll: throttle to one toast per minute rather than one per tick
   const notifyPollError = useThrottledError(showError);
   const [history, setHistory] = useState([]);
@@ -753,23 +769,19 @@ function CycleHistory({ headers }) {
         const lt = await fetch(`${API_BASE}/amic/live-trace`, { headers });
         if (lt.ok && !cancelled) setLiveTrace(await lt.json());
         if ((!res.ok && res.status >= 500) || (!lt.ok && lt.status >= 500)) {
-          notifyPollError('Could not load AMIC cycle history', 'amic-cycle-history');
+          notifyPollError(t('errors.loadHistory'), 'amic-cycle-history');
         }
       } catch (err) {
-        if (!cancelled) notifyPollError(`Could not load AMIC cycle history: ${err.message}`, 'amic-cycle-history');
+        if (!cancelled) notifyPollError(t('errors.loadHistoryWith', { error: err.message }), 'amic-cycle-history');
       }
       finally { if (!cancelled) setLoading(false); }
     };
     load();
     const t = setInterval(load, 30000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [headers, notifyPollError]);
+  }, [headers, notifyPollError, t]);
 
-  const fmtDuration = (sec) => {
-    if (sec == null) return '—';
-    if (sec < 60) return sec + 's';
-    return Math.floor(sec/60) + 'm ' + (sec % 60) + 's';
-  };
+  const fmtDuration = (sec) => fmt.duration(sec);
   const stateColor = (s) => ({
     measuring: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
     calibrating: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
@@ -788,16 +800,17 @@ function CycleHistory({ headers }) {
   // 1–2 pH units apart, giving 30–120 mV swing. The pH-buffer 170 mV swing only
   // happens during manual pH calibration (separate procedure, p.17 of the manual).
   const contactDiagnosis = (r) => {
-    if (!r.live_mv_samples || r.live_mv_samples < 3) return { label: 'no trace', tone: 'gray' };
+    if (!r.live_mv_samples || r.live_mv_samples < 3) return { label: t('history.dx.noTrace'), tone: 'gray' };
     const spread = (r.live_mv_max ?? 0) - (r.live_mv_min ?? 0);
+    const mv = fmt.int(spread);
     if (r.cycle_state === 'calibrating') {
-      if (spread < 5) return { label: 'flat — probe likely NOT in contact with liquid', tone: 'red', spread };
-      if (spread < 20) return { label: 'low swing (' + spread.toFixed(0) + ' mV) — minimal solution change detected, contact suspect', tone: 'amber', spread };
-      return { label: 'healthy ' + spread.toFixed(0) + ' mV swing — pH probe responding to standards', tone: 'green', spread };
+      if (spread < 5) return { label: t('history.dx.flatNoContact'), tone: 'red', spread };
+      if (spread < 20) return { label: t('history.dx.lowSwing', { mv }), tone: 'amber', spread };
+      return { label: t('history.dx.healthy', { mv }), tone: 'green', spread };
     }
     // Measure / Drain / Empty / Conditioning — less stringent
-    if (spread < 3 && (r.cycle_state === 'measuring' || r.cycle_state === 'conditioning')) return { label: 'flat — contact suspect', tone: 'amber', spread };
-    return { label: spread.toFixed(0) + ' mV variation', tone: 'gray', spread };
+    if (spread < 3 && (r.cycle_state === 'measuring' || r.cycle_state === 'conditioning')) return { label: t('history.dx.flatSuspect'), tone: 'amber', spread };
+    return { label: t('history.dx.variation', { mv }), tone: 'gray', spread };
   };
 
   // Build a tiny SVG sparkline from a trace
@@ -812,7 +825,7 @@ function CycleHistory({ headers }) {
       return x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
     return (
-      <svg width={width} height={height} className="inline-block align-middle">
+      <svg width={width} height={height} className="inline-block align-middle" aria-hidden="true">
         <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.2" className="text-blue-600 dark:text-blue-400" />
       </svg>
     );
@@ -821,18 +834,18 @@ function CycleHistory({ headers }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
       <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Cycle History</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('history.title')}</h3>
         {lastCal ? (
           <span className={`text-xs px-2 py-0.5 rounded ${lastCalAge > 1 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'}`}>
-            Last calibration: {lastCalAge === 0 ? 'today' : lastCalAge + ' day' + (lastCalAge === 1 ? '' : 's') + ' ago'} ({lastCal.ended_at.slice(0,16).replace('T',' ')})
+            {t('history.lastCal', { age: lastCalAge === 0 ? t('history.today') : t('history.daysAgo', { count: lastCalAge }), time: fmt.dateTime(lastCal.ended_at) })}
           </span>
         ) : (
-          <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">⚠ No calibration cycle on record</span>
+          <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">⚠ {t('history.noCal')}</span>
         )}
       </div>
 
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        The pH-probe live mV is sampled every ~15s during each cycle. Calibration uses the multi-ion standards (P1 Low, P2 High), which usually differ in pH by 1–2 units — so a healthy Cal trace shows a ~30–120 mV swing as the cell drains, refills with the next standard, and the probe sees a different pH. A <strong>flat trace (&lt;5 mV swing)</strong> means the probe wasn't picking up either standard — cell didn't fill or there's air between the probe rods. (Note: the ~170 mV swing only applies to the manual pH calibration procedure with pH 4 / pH 7 buffers, not the automatic Calibration cycle.)
+        <Trans t={t} i18nKey="history.help" components={{ b: <strong /> }} />
       </p>
 
       {/* Live diagnostic during an active cycle */}
@@ -840,30 +853,33 @@ function CycleHistory({ headers }) {
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 uppercase">Live mV trace (cycle in progress)</p>
+              <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 uppercase">{t('history.liveTitle')}</p>
               <p className="text-xs text-blue-700 dark:text-blue-400">
-                {liveTrace.sample_count} samples since {liveTrace.cycle_started_at?.slice(11,16) || '—'} ·
-                spread {(Math.max(...liveTrace.samples.map(s=>s.mv)) - Math.min(...liveTrace.samples.map(s=>s.mv))).toFixed(1)} mV
+                {t('history.liveSummary', {
+                  count: liveTrace.sample_count,
+                  time: liveTrace.cycle_started_at ? fmt.clock(liveTrace.cycle_started_at) : '—',
+                  spread: fmt.number(Math.max(...liveTrace.samples.map(s=>s.mv)) - Math.min(...liveTrace.samples.map(s=>s.mv)), { decimals: 1 }),
+                })}
               </p>
             </div>
-            <Sparkline trace={liveTrace.samples} width={200} height={40} />
+            <span dir="ltr"><Sparkline trace={liveTrace.samples} width={200} height={40} /></span>
           </div>
         </div>
       )}
 
-      {loading ? <p className="text-sm text-gray-500">Loading…</p> :
-       history.length === 0 ? <p className="text-sm text-gray-500">No cycles recorded yet. The next Measure / Calibration / etc will be logged here when it completes.</p> : (
+      {loading ? <p className="text-sm text-gray-500">{t('common:status.loading')}</p> :
+       history.length === 0 ? <p className="text-sm text-gray-500">{t('history.empty')}</p> : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="text-xs uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
               <tr>
-                <th className="px-2 py-1 text-left">Started</th>
-                <th className="px-2 py-1 text-left">Cycle</th>
-                <th className="px-2 py-1 text-left">Duration</th>
-                <th className="px-2 py-1 text-left">Source</th>
-                <th className="px-2 py-1 text-left">Cal-check</th>
-                <th className="px-2 py-1 text-left">Meas-check</th>
-                <th className="px-2 py-1 text-left">pH probe contact (mV trace)</th>
+                <th className="px-2 py-1 text-start">{t('history.colStarted')}</th>
+                <th className="px-2 py-1 text-start">{t('history.colCycle')}</th>
+                <th className="px-2 py-1 text-start">{t('history.colDuration')}</th>
+                <th className="px-2 py-1 text-start">{t('history.colSource')}</th>
+                <th className="px-2 py-1 text-start">{t('history.colCalCheck')}</th>
+                <th className="px-2 py-1 text-start">{t('history.colMeasCheck')}</th>
+                <th className="px-2 py-1 text-start">{t('history.colContact')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -879,17 +895,17 @@ function CycleHistory({ headers }) {
                 }[dx.tone];
                 return (
                   <tr key={r.id}>
-                    <td className="px-2 py-1.5 font-mono text-xs">{r.started_at.slice(0,16).replace('T',' ')}</td>
-                    <td className="px-2 py-1.5"><span className={`text-xs px-2 py-0.5 rounded ${stateColor(r.cycle_state)}`}>{r.cycle_state}</span></td>
-                    <td className="px-2 py-1.5 font-mono text-xs">{fmtDuration(r.duration_seconds)}</td>
-                    <td className="px-2 py-1.5 text-xs text-gray-500">{r.source}</td>
-                    <td className="px-2 py-1.5 text-xs">{calFails.length === 0 ? <span className="text-green-600">all OK</span> : <span className="text-red-700 dark:text-red-400">{calFails.length} fail: {calFails.map(c => c.label).join(', ')}</span>}</td>
-                    <td className="px-2 py-1.5 text-xs">{measFails.length === 0 ? <span className="text-green-600">all OK</span> : <span className="text-red-700 dark:text-red-400">{measFails.length} fail: {measFails.map(c => c.label).join(', ')}</span>}</td>
+                    <td className="px-2 py-1.5 font-mono text-xs whitespace-nowrap">{fmt.dateTime(r.started_at)}</td>
+                    <td className="px-2 py-1.5"><span className={`text-xs px-2 py-0.5 rounded ${stateColor(r.cycle_state)}`}>{t(`state.${r.cycle_state}`, { defaultValue: r.cycle_state })}</span></td>
+                    <td className="px-2 py-1.5 font-mono text-xs whitespace-nowrap">{fmtDuration(r.duration_seconds)}</td>
+                    <td className="px-2 py-1.5 text-xs text-gray-500">{t(`source.${r.source}`, { defaultValue: r.source })}</td>
+                    <td className="px-2 py-1.5 text-xs">{calFails.length === 0 ? <span className="text-green-600">{t('history.allOk')}</span> : <span className="text-red-700 dark:text-red-400">{t('history.fails', { count: calFails.length, labels: calFails.map(c => c.label).join(', ') })}</span>}</td>
+                    <td className="px-2 py-1.5 text-xs">{measFails.length === 0 ? <span className="text-green-600">{t('history.allOk')}</span> : <span className="text-red-700 dark:text-red-400">{t('history.fails', { count: measFails.length, labels: measFails.map(c => c.label).join(', ') })}</span>}</td>
                     <td className="px-2 py-1.5 text-xs">
-                      <Sparkline trace={r.live_mv_trace} />
-                      <span className={`ml-2 ${toneCls}`}>{dx.label}</span>
+                      <span dir="ltr"><Sparkline trace={r.live_mv_trace} /></span>
+                      <span className={`ms-2 ${toneCls}`}>{dx.label}</span>
                       {r.live_mv_samples > 0 && (
-                        <span className="ml-1 text-gray-400">({r.live_mv_min?.toFixed(0)}→{r.live_mv_max?.toFixed(0)} mV, n={r.live_mv_samples})</span>
+                        <span className="ms-1 text-gray-400" dir="ltr">{t('history.range', { min: fmt.int(r.live_mv_min), max: fmt.int(r.live_mv_max), n: r.live_mv_samples })}</span>
                       )}
                     </td>
                   </tr>
@@ -905,6 +921,9 @@ function CycleHistory({ headers }) {
 
 function PhCalibration({ status, canControl, headers, onUpdate }) {
   const { showError, showSuccess } = useToast();
+  const { t } = useTranslation('amic');
+  const fmt = useFormat();
+  const ph2 = (v) => fmt.number(v, { decimals: 2, grouping: false });
   const [capturing, setCapturing] = useState(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [manualLow, setManualLow] = useState('');
@@ -923,7 +942,7 @@ function PhCalibration({ status, canControl, headers, onUpdate }) {
   }, [phOffset.buffer_low, phOffset.buffer_high]);
 
   const liveMv = status?.ph_live_mv;
-  const liveMvDisplay = liveMv !== null && liveMv !== undefined ? (liveMv / 100).toFixed(2) : '—';
+  const liveMvDisplay = liveMv !== null && liveMv !== undefined ? ph2(liveMv / 100) : '—';
   const cal = status?.ph_calibration;
   const phCalReady = cal && cal.mv_at_ph4 > 0 && cal.mv_at_ph7 !== cal.mv_at_ph4;
 
@@ -935,9 +954,8 @@ function PhCalibration({ status, canControl, headers, onUpdate }) {
         body: JSON.stringify({ buffer_low: parseFloat(bufferLow), buffer_high: parseFloat(bufferHigh) })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      const off = data.offset.toFixed(2);
-      showSuccess(`Buffers saved: pH ${data.buffer_low} / ${data.buffer_high} → display offset ${off >= 0 ? '+' : ''}${off}`);
+      if (!res.ok) throw new Error(data.error || t('errors.failed'));
+      showSuccess(t('ph.buffersSaved', { low: data.buffer_low, high: data.buffer_high, offset: fmt.number(data.offset, { decimals: 2, signed: true, grouping: false }) }));
       onUpdate();
     } catch (err) {
       showError(err.message);
@@ -949,13 +967,13 @@ function PhCalibration({ status, canControl, headers, onUpdate }) {
   const capture = async (point) => {
     const bl = parseFloat(bufferLow);
     const bh = parseFloat(bufferHigh);
-    const labelPh = point === 'low' ? bl.toFixed(2) : bh.toFixed(2);
-    const label = point === 'low' ? `pH ${labelPh} (low)` : `pH ${labelPh} (high)`;
+    const labelPh = point === 'low' ? ph2(bl) : ph2(bh);
+    const label = point === 'low' ? t('ph.pointLow', { ph: labelPh }) : t('ph.pointHigh', { ph: labelPh });
     if (!isFinite(bl) || !isFinite(bh) || bh <= bl) {
-      showError('Set valid buffer pH values (low < high) before capturing');
+      showError(t('ph.invalidBuffers'));
       return;
     }
-    if (!confirm(`Capture current pH probe reading (${liveMvDisplay} mV) as the ${label} calibration point?\n\nMake sure the probe is in the correct buffer solution and the reading has stabilized.\n\nThis will also save buffer values pH ${bl.toFixed(2)} / ${bh.toFixed(2)} to SenseHub.`)) return;
+    if (!confirm(t('ph.confirmCapture', { mv: liveMvDisplay, label, low: ph2(bl), high: ph2(bh) }))) return;
 
     setCapturing(point);
     try {
@@ -964,11 +982,11 @@ function PhCalibration({ status, canControl, headers, onUpdate }) {
         body: JSON.stringify({ buffer_low: bl, buffer_high: bh }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
+      if (!res.ok) throw new Error(data.error || t('errors.failed'));
       const offsetMsg = data.ph_offset?.configured
-        ? ` (offset ${data.ph_offset.offset >= 0 ? '+' : ''}${data.ph_offset.offset.toFixed(2)} pH)`
+        ? t('ph.capturedOffset', { offset: fmt.number(data.ph_offset.offset, { decimals: 2, signed: true, grouping: false }) })
         : '';
-      showSuccess(`Saved ${label} = ${data.captured_mv.toFixed(2)} mV${offsetMsg}`);
+      showSuccess(t('ph.captured', { label, mv: ph2(data.captured_mv), offset: offsetMsg }));
       onUpdate();
     } catch (err) {
       showError(err.message);
@@ -989,8 +1007,8 @@ function PhCalibration({ status, canControl, headers, onUpdate }) {
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      showSuccess('pH calibration values saved');
+      if (!res.ok) throw new Error(data.error || t('errors.failed'));
+      showSuccess(t('ph.manualSaved'));
       setManualLow(''); setManualHigh('');
       onUpdate();
     } catch (err) {
@@ -1004,37 +1022,37 @@ function PhCalibration({ status, canControl, headers, onUpdate }) {
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">pH Calibration</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">2-point calibration with pH 4.0 and pH 7.0 buffer solutions. The automatic calibration cycle does NOT calibrate pH.</p>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('ph.title')}</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{t('ph.help')}</p>
         </div>
         <span className={`px-2 py-0.5 rounded text-xs font-medium ${phCalReady ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'}`}>
-          {phCalReady ? '✓ Calibrated' : 'Not calibrated'}
+          {phCalReady ? <>✓ {t('ph.calibrated')}</> : t('ph.notCalibrated')}
         </span>
       </div>
 
       {/* Live mV reading */}
-      <div className="bg-gray-50 dark:bg-gray-900 rounded p-3 mb-4 flex items-center justify-between">
+      <div className="bg-gray-50 dark:bg-gray-900 rounded p-3 mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Live pH electrode reading</p>
-          <p className="text-3xl font-mono font-bold text-gray-900 dark:text-white">{liveMvDisplay} <span className="text-base font-normal text-gray-500">mV</span></p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{t('ph.liveReading')}</p>
+          <p className="text-3xl font-mono font-bold text-gray-900 dark:text-white" dir="ltr">{liveMvDisplay} <span className="text-base font-normal text-gray-500">mV</span></p>
         </div>
-        <p className="text-xs text-gray-400 italic max-w-xs text-right">Updates with each status refresh. Wait for the value to stabilize before capturing.</p>
+        <p className="text-xs text-gray-400 italic max-w-xs text-end">{t('ph.liveHelp')}</p>
       </div>
 
       {/* Buffer pH configuration */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 uppercase">Buffer Solutions Used</p>
+            <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 uppercase">{t('ph.buffersTitle')}</p>
             <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-              Choose the calibration buffers you actually have on hand. The AMIC firmware natively expects pH 4.0 / pH 7.0; for any other pair, SenseHub adds a display offset and records it with each saved measurement.
+              {t('ph.buffersHelp')}
             </p>
           </div>
           {phOffset.configured && (
-            <div className="text-right text-xs">
-              <p className="text-gray-500 dark:text-gray-400">Display offset</p>
-              <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                {phOffset.offset >= 0 ? '+' : ''}{phOffset.offset.toFixed(2)} pH
+            <div className="text-end text-xs">
+              <p className="text-gray-500 dark:text-gray-400">{t('ph.displayOffset')}</p>
+              <p className="text-lg font-bold text-blue-700 dark:text-blue-300" dir="ltr">
+                {phOffset.offset >= 0 ? '+' : ''}{ph2(phOffset.offset)} pH
               </p>
             </div>
           )}
@@ -1042,11 +1060,11 @@ function PhCalibration({ status, canControl, headers, onUpdate }) {
 
         {/* Quick-select presets */}
         <div className="flex flex-wrap items-center gap-2 mt-3">
-          <span className="text-xs text-gray-600 dark:text-gray-400">Preset:</span>
+          <span className="text-xs text-gray-600 dark:text-gray-400">{t('ph.preset')}</span>
           {[
-            { label: 'pH 4.0 + 7.0 (standard)', low: 4.0, high: 7.0 },
-            { label: 'pH 7.0 + 10.0 (alkaline)', low: 7.0, high: 10.0 },
-            { label: 'pH 7.01 + 10.01 (NIST)', low: 7.01, high: 10.01 },
+            { label: t('ph.presetStandard'), low: 4.0, high: 7.0 },
+            { label: t('ph.presetAlkaline'), low: 7.0, high: 10.0 },
+            { label: t('ph.presetNist'), low: 7.01, high: 10.01 },
           ].map(p => {
             const active = parseFloat(bufferLow) === p.low && parseFloat(bufferHigh) === p.high;
             return (
@@ -1063,104 +1081,106 @@ function PhCalibration({ status, canControl, headers, onUpdate }) {
 
         <div className="flex flex-wrap items-end gap-3 mt-3">
           <div>
-            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Low buffer pH</label>
-            <input type="number" step="0.01" min="0" max="14" value={bufferLow}
+            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('ph.lowBuffer')}</label>
+            <input type="number" step="0.01" min="0" max="14" value={bufferLow} dir="ltr"
               onChange={e => setBufferLow(e.target.value)}
               className="w-24 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
           </div>
           <div>
-            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">High buffer pH</label>
-            <input type="number" step="0.01" min="0" max="14" value={bufferHigh}
+            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('ph.highBuffer')}</label>
+            <input type="number" step="0.01" min="0" max="14" value={bufferHigh} dir="ltr"
               onChange={e => setBufferHigh(e.target.value)}
               className="w-24 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
           </div>
           {canControl && (
             <button onClick={saveBuffers} disabled={savingBuffers}
               className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
-              {savingBuffers ? 'Saving...' : 'Save buffer values'}
+              {savingBuffers ? t('ph.saving') : t('ph.saveBuffers')}
             </button>
           )}
         </div>
         {phOffset.span_warning && (
           <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-            ⚠ Buffer span isn't 3 pH units apart — calibration may be slightly off-slope. Standard pairs (4↔7 or 7↔10) work best.
+            ⚠ {t('ph.spanWarning')}
           </p>
         )}
       </div>
 
       {/* Calibration steps */}
       <div className="space-y-3 mb-4">
-        <Step number={1} title="Prepare probes">
-          Remove the pH and Multi-Ion probes from the measurement cell (per the manual's Probes Installation section). Don't touch the tips.
+        <Step number={1} title={t('ph.step1Title')}>
+          {t('ph.step1Body')}
         </Step>
 
-        <Step number={2} title={`Calibrate pH ${parseFloat(bufferLow).toFixed(2)} (low)`} highlight>
-          <p>Place both probes in a container with <strong>pH {parseFloat(bufferLow).toFixed(2)} buffer solution</strong>. Wait for the live reading above to stabilize (typically 30-60 seconds).</p>
+        <Step number={2} title={t('ph.step2Title', { ph: ph2(parseFloat(bufferLow)) })} highlight>
+          <p><Trans t={t} i18nKey="ph.step2Body" values={{ ph: ph2(parseFloat(bufferLow)) }} components={{ b: <strong /> }} /></p>
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             {canControl && (
               <button onClick={() => capture('low')} disabled={capturing !== null}
                 className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50">
-                {capturing === 'low' ? 'Capturing...' : `Capture as pH ${parseFloat(bufferLow).toFixed(2)} (${liveMvDisplay} mV)`}
+                {capturing === 'low' ? t('ph.capturing') : t('ph.captureAs', { ph: ph2(parseFloat(bufferLow)), mv: liveMvDisplay })}
               </button>
             )}
             {cal && (
               <span className="text-xs text-gray-500 dark:text-gray-400">
-                Stored: <strong className="text-gray-700 dark:text-gray-300">{(cal.mv_at_ph4 / 100).toFixed(2)} mV</strong>
+                {t('ph.stored')} <strong className="text-gray-700 dark:text-gray-300" dir="ltr">{ph2(cal.mv_at_ph4 / 100)} mV</strong>
               </span>
             )}
           </div>
         </Step>
 
-        <Step number={3} title="Rinse">
-          Take both probes out, rinse with deionized water, dry gently with tissue paper. Don't touch the tips.
+        <Step number={3} title={t('ph.step3Title')}>
+          {t('ph.step3Body')}
         </Step>
 
-        <Step number={4} title={`Calibrate pH ${parseFloat(bufferHigh).toFixed(2)} (high)`} highlight>
-          <p>Place both probes in <strong>pH {parseFloat(bufferHigh).toFixed(2)} buffer solution</strong>. Wait for the reading to stabilize.</p>
+        <Step number={4} title={t('ph.step4Title', { ph: ph2(parseFloat(bufferHigh)) })} highlight>
+          <p><Trans t={t} i18nKey="ph.step4Body" values={{ ph: ph2(parseFloat(bufferHigh)) }} components={{ b: <strong /> }} /></p>
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             {canControl && (
               <button onClick={() => capture('high')} disabled={capturing !== null}
                 className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50">
-                {capturing === 'high' ? 'Capturing...' : `Capture as pH ${parseFloat(bufferHigh).toFixed(2)} (${liveMvDisplay} mV)`}
+                {capturing === 'high' ? t('ph.capturing') : t('ph.captureAs', { ph: ph2(parseFloat(bufferHigh)), mv: liveMvDisplay })}
               </button>
             )}
             {cal && (
               <span className="text-xs text-gray-500 dark:text-gray-400">
-                Stored: <strong className="text-gray-700 dark:text-gray-300">{(cal.mv_at_ph7 / 100).toFixed(2)} mV</strong>
+                {t('ph.stored')} <strong className="text-gray-700 dark:text-gray-300" dir="ltr">{ph2(cal.mv_at_ph7 / 100)} mV</strong>
               </span>
             )}
           </div>
         </Step>
 
-        <Step number={5} title="Reinstall probes">
-          Rinse, dry, and reinstall both probes back into the measurement cell. The next Run Measurement will use the new pH calibration{phOffset.configured && phOffset.offset !== 0 ? ` with a ${phOffset.offset >= 0 ? '+' : ''}${phOffset.offset.toFixed(2)} pH display offset applied by SenseHub` : ''}.
+        <Step number={5} title={t('ph.step5Title')}>
+          {phOffset.configured && phOffset.offset !== 0
+            ? t('ph.step5BodyOffset', { offset: fmt.number(phOffset.offset, { decimals: 2, signed: true, grouping: false }) })
+            : t('ph.step5Body')}
         </Step>
       </div>
 
       {/* Advanced manual entry */}
       <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
         <button onClick={() => setAdvancedOpen(!advancedOpen)} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
-          {advancedOpen ? '▾' : '▸'} Advanced: Manual entry (raw values × 100)
+          <span aria-hidden="true" className={advancedOpen ? '' : 'inline-block rtl:-scale-x-100'}>{advancedOpen ? '▾' : '▸'}</span> {t('ph.advanced')}
         </button>
         {advancedOpen && canControl && (
           <form onSubmit={saveManual} className="mt-3 flex flex-wrap items-end gap-3">
             <div>
-              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">pH 4.0 raw (×100)</label>
-              <input type="number" value={manualLow} onChange={e => setManualLow(e.target.value)}
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('ph.rawLow')}</label>
+              <input type="number" value={manualLow} onChange={e => setManualLow(e.target.value)} dir="ltr"
                 placeholder="17060"
                 className="w-32 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-              <p className="text-[10px] text-gray-400 mt-0.5">e.g. 17060 = 170.60 mV</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{t('ph.rawLowHint')}</p>
             </div>
             <div>
-              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">pH 7.0 raw (×100)</label>
-              <input type="number" value={manualHigh} onChange={e => setManualHigh(e.target.value)}
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('ph.rawHigh')}</label>
+              <input type="number" value={manualHigh} onChange={e => setManualHigh(e.target.value)} dir="ltr"
                 placeholder="80"
                 className="w-32 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-              <p className="text-[10px] text-gray-400 mt-0.5">e.g. 80 = 0.80 mV</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{t('ph.rawHighHint')}</p>
             </div>
             <button type="submit" disabled={savingManual || !manualLow || !manualHigh}
               className="px-4 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50">
-              {savingManual ? 'Saving...' : 'Write raw values'}
+              {savingManual ? t('ph.saving') : t('ph.writeRaw')}
             </button>
           </form>
         )}
@@ -1184,6 +1204,7 @@ function Step({ number, title, highlight, children }) {
 }
 
 function ActionBtn({ label, subtitle, color, disabled, loading, onClick }) {
+  const { t } = useTranslation('amic');
   const colors = {
     blue: 'bg-blue-600 hover:bg-blue-700',
     amber: 'bg-amber-600 hover:bg-amber-700',
@@ -1193,8 +1214,8 @@ function ActionBtn({ label, subtitle, color, disabled, loading, onClick }) {
   };
   return (
     <button onClick={onClick} disabled={disabled || loading}
-      className={`px-3 py-2 text-white rounded text-sm font-medium ${colors[color]} disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left`}>
-      <div>{loading ? 'Sending...' : label}</div>
+      className={`px-3 py-2 text-white rounded text-sm font-medium ${colors[color]} disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-start`}>
+      <div>{loading ? t('ops.sending') : label}</div>
       <div className="text-xs opacity-80 font-normal">{subtitle}</div>
     </button>
   );

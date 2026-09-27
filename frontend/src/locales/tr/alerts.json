@@ -1,1 +1,73 @@
-{}
+{
+  "title": "Alarmlar",
+  "ackAll": "Tümünü onayla",
+  "ackAllHelp": "Geçerli önem derecesi / ekipman filtresine uyan tüm açık alarmları onayla",
+  "acknowledging": "Onaylanıyor…",
+  "viewerCannotAck": "İzleyiciler alarmları onaylayamaz",
+  "loadMore": "Daha fazla yükle ({{n}})",
+  "summary": {
+    "open_one": "{{count}} açık",
+    "open_other": "{{count}} açık",
+    "critical_one": "{{count}} kritik",
+    "critical_other": "{{count}} kritik",
+    "repeats_one": "{{count}} tekrar birleştirildi",
+    "repeats_other": "{{count}} tekrar birleştirildi",
+    "loaded": "{{total}} alarmın {{loaded}} tanesi yüklendi"
+  },
+  "filters": {
+    "searchPlaceholder": "Yüklenen alarmlarda ara…",
+    "severity": "Önem derecesi",
+    "allSeverities": "Tüm önem dereceleri",
+    "critical": "Kritik",
+    "warning": "Uyarı",
+    "info": "Bilgi",
+    "status": "Durum",
+    "unacknowledged": "Onaylanmamış",
+    "acknowledged": "Onaylanmış",
+    "allAlerts": "Tüm alarmlar",
+    "equipment": "Ekipman",
+    "allEquipment": "Tüm ekipmanlar",
+    "noEquipment": "Ekipmansız"
+  },
+  "scope": {
+    "severity": "Önem derecesi: {{severity}}",
+    "equipment": "Ekipman: {{name}}"
+  },
+  "empty": {
+    "noOpen": "Açık alarm yok. Hepsi onaylandı.",
+    "none": "Sistemde alarm yok.",
+    "noMatch": "Aramanıza uyan alarm yok."
+  },
+  "footer": {
+    "showing_one": "{{total}} alarmdan {{shown}} tanesi gösteriliyor",
+    "showing_other": "{{total}} alarmdan {{shown}} tanesi gösteriliyor",
+    "loaded": "({{n}} yüklendi)"
+  },
+  "confirmAll": {
+    "title": "Tüm açık alarmlar onaylansın mı?",
+    "body_one": "Geçerli filtreye uyan {{count}} açık alarm onaylanacak. Bu işlem geri alınamaz.",
+    "body_other": "Geçerli filtreye uyan {{count}} açık alarm onaylanacak. Bu işlem geri alınamaz.",
+    "confirm": "{{n}} alarmı onayla"
+  },
+  "toast": {
+    "acknowledged": "Alarm onaylandı",
+    "acknowledgedMany_one": "{{count}} alarm onaylandı",
+    "acknowledgedMany_other": "{{count}} alarm onaylandı",
+    "ackFailed": "Alarm onaylanamadı",
+    "ackAllFailed": "Alarmlar onaylanamadı"
+  },
+  "errors": {
+    "loadFailed": "Alarmlar yüklenemedi: {{error}}"
+  },
+  "card": {
+    "firstSeen": "ilk görülme",
+    "lastSeen": "son görülme",
+    "repeatsTitle_one": "Bu durum ilk bildirildiğinden beri {{count}} kez tekrarlandı",
+    "repeatsTitle_other": "Bu durum ilk bildirildiğinden beri {{count}} kez tekrarlandı",
+    "acknowledge": "Onayla",
+    "acknowledged": "Onaylandı",
+    "acknowledgedBy": "{{name}} onayladı",
+    "showOriginal": "Orijinali göster (İngilizce)",
+    "showTranslation": "Çeviriyi göster"
+  }
+}

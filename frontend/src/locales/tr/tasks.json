@@ -1,1 +1,120 @@
-{}
+{
+  "title": "Operatör Görevleri",
+  "subtitle": "Agronomist ve planlayıcıdan gelen uygulanabilir işler. \"Tamamlandı\" ajana teorisinin doğru olduğunu söyler; gerekçeyle reddetmek nedenini anlatır.",
+  "filters": {
+    "status": "Durum",
+    "source": "Kaynak",
+    "statusOption": {
+      "open": "Açık",
+      "done": "Tamamlandı",
+      "declined": "Reddedildi",
+      "snoozed": "Ertelendi",
+      "all": "Tümü"
+    },
+    "sourceOption": {
+      "all": "Tüm kaynaklar",
+      "agronomist": "Agronomist",
+      "planner": "Planlayıcı",
+      "watchdog": "İzleme servisi",
+      "manual": "Manuel"
+    }
+  },
+  "summary": {
+    "current_one": "{{n}} güncel",
+    "current_other": "{{n}} güncel",
+    "outdated_one": "{{n}} eskimiş",
+    "outdated_other": "{{n}} eskimiş"
+  },
+  "outdated": {
+    "chipTitle_one": "{{count}} günden eski açık görevler eskimiş sayılır",
+    "chipTitle_other": "{{count}} günden eski açık görevler eskimiş sayılır",
+    "hide": "Eskimişleri gizle",
+    "hideWithCount_one": "Eskimişleri gizle ({{n}} gizli)",
+    "hideWithCount_other": "Eskimişleri gizle ({{n}} gizli)"
+  },
+  "translation": {
+    "showOriginal": "Orijinali göster (İngilizce)",
+    "showTranslation": "Çeviriyi göster",
+    "auto": "İngilizceden otomatik çevrildi",
+    "pending": "çeviri sürüyor — İngilizce gösteriliyor",
+    "failed": "çeviri başarısız — İngilizce gösteriliyor"
+  },
+  "empty": {
+    "noOpen": "Açık görev yok. Ajanlar, yapmanız gereken fiziksel müdahaleleri veya ölçümleri belirledikçe yeni görevler ekler.",
+    "noMatch": "Geçerli filtreyle eşleşen görev yok.",
+    "allOutdated_one": "{{n}} açık görev eskimiş ({{days}} günden eski). İncelemek için \"Eskimişleri gizle\"yi kapatın.",
+    "allOutdated_other": "{{n}} açık görevin tümü eskimiş ({{days}} günden eski). İncelemek için \"Eskimişleri gizle\"yi kapatın."
+  },
+  "paging": {
+    "showing": "{{total}} görevden {{shown}} gösteriliyor",
+    "loadMore": "Daha fazla yükle ({{count}})"
+  },
+  "toast": {
+    "loadFailed": "Görevler yüklenemedi: {{error}}",
+    "declineReasonRequired": "Ajanın teorisini güncelleyebilmesi için reddetme nedeni gerekli.",
+    "actionFailed": "İşlem başarısız",
+    "done": "Görev tamamlandı olarak işaretlendi",
+    "declined": "Görev reddedildi — geri bildirim kaydedildi",
+    "snoozed": "Görev ertelendi"
+  },
+  "modal": {
+    "completeTitle": "Tamamlandı olarak işaretle",
+    "declineTitle": "Görevi reddet",
+    "snoozeTitle": "Görevi ertele",
+    "quotedTitle": "\"{{title}}\"",
+    "completionNotes": "Tamamlama notları",
+    "completionNotesHint": "(isteğe bağlı — ajanın teorisini doğrular veya iyileştirir)",
+    "completionPlaceholderExpected": "Beklenen: {{expected}}\nGözlenen: ",
+    "completionPlaceholder": "Ne yaptınız ve ne gözlemlediniz...",
+    "declineReason": "Reddetme nedeni",
+    "declineReasonHint": "(zorunlu — ajan bunu teorisini güncellemek için kullanır)",
+    "declinePlaceholder": "ör. Tank 1, 2026-05-23 tarihinde laboratuvarda 19 200 mg/L Ca olarak doğrulandı — konsantrasyon doğru, sorun başka bir yerde olmalı.",
+    "snoozeUntil": "Şu zamana kadar ertele",
+    "snoozeHelp": "Ertelenen görevler bu zamandan sonra yeniden görünür. Az kullanın — ajan alttaki durumu fark etmeye devam eder.",
+    "confirmDone": "Tamamlandığını onayla",
+    "declineWithReason": "Gerekçeyle reddet",
+    "snooze": "Ertele"
+  },
+  "priority": {
+    "critical": "kritik",
+    "high": "yüksek",
+    "medium": "orta",
+    "low": "düşük"
+  },
+  "status": {
+    "open": "açık",
+    "snoozed": "ertelendi",
+    "done": "tamamlandı",
+    "declined": "reddedildi",
+    "archived": "arşivlendi"
+  },
+  "category": {
+    "physical": "Fiziksel",
+    "measurement": "Ölçüm",
+    "tutorial": "Eğitim",
+    "config_change": "Yapılandırma değişikliği"
+  },
+  "source": {
+    "agronomist": "agronomist",
+    "planner": "planlayıcı",
+    "watchdog": "izleme servisi",
+    "manual": "manuel"
+  },
+  "card": {
+    "outdated_one": "Eskimiş — {{count}} gün önce oluşturuldu; koşullar değişmiş olabilir",
+    "outdated_other": "Eskimiş — {{count}} gün önce oluşturuldu; koşullar değişmiş olabilir",
+    "expectedOutcome": "Beklenen sonuç:",
+    "viewInstructions": "Talimatları göster",
+    "created": "Oluşturuldu",
+    "snoozedUntil": "ertelendi, bitiş:",
+    "declinedAt": "reddedildi",
+    "doneAt": "tamamlandı",
+    "byUser": "<email>{{email}}</email> tarafından",
+    "completionNotes": "Tamamlama notları",
+    "declineReason": "Reddetme nedeni (ajana iletildi)",
+    "done": "Tamamlandı",
+    "decline": "Reddet…",
+    "snooze": "Ertele…",
+    "reopen": "Yeniden aç"
+  }
+}

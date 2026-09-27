@@ -1,1 +1,271 @@
-{}
+{
+  "title": "Operational Planner",
+  "subtitle": "AI-generated automation plan for the next day, with closed-loop scoring against the prior day's targets. Plans require operator Confirm to apply.",
+  "header": {
+    "generate": "Generate plan for tomorrow",
+    "generating": "Generating…",
+    "generateNotAllowed": "Operators and admins can generate plans",
+    "settings": "Settings"
+  },
+  "scheduler": {
+    "on": "Scheduler on · fires daily at <time>{{time}}</time>",
+    "off": "Scheduler off · enable in Settings to auto-generate plans nightly",
+    "apiKeyMissing": "ANTHROPIC_API_KEY not set"
+  },
+  "statusLabel": {
+    "pending": "Awaiting decision",
+    "confirmed": "Confirmed & applied",
+    "rejected": "Rejected",
+    "failure": "Generation failed",
+    "success": "Generated (legacy)"
+  },
+  "statusShort": {
+    "pending": "pending",
+    "confirmed": "confirmed",
+    "rejected": "rejected",
+    "failure": "failed",
+    "success": "generated"
+  },
+  "verdict": {
+    "pass": "pass",
+    "partial": "partial",
+    "fail": "fail",
+    "uncomputable": "uncomputable",
+    "no_prior_targets": "no prior targets",
+    "pending": "pending"
+  },
+  "severity": {
+    "low": "low",
+    "medium": "medium",
+    "high": "high"
+  },
+  "change": {
+    "add": "add",
+    "remove": "remove",
+    "modify": "modify",
+    "keep": "keep"
+  },
+  "window": {
+    "all_day": "all day",
+    "day": "day",
+    "night": "night"
+  },
+  "card": {
+    "unknownTrigger": "unknown",
+    "dailyAt": "Daily @ {{time}}",
+    "viaTemplate": "via template",
+    "rawNoTemplate": "RAW — no template",
+    "parameters": "Parameters",
+    "actions": "Actions",
+    "channel": "ch{{n}}",
+    "channelNamed": "ch{{n}} ({{name}})",
+    "allChannels": "(all channels)",
+    "forMinutes": "for {{minutes}} min",
+    "afterSeconds": "after {{seconds}} s"
+  },
+  "stats": {
+    "inRange": "in range:",
+    "mean": "mean:",
+    "p10p90": "p10/p90:",
+    "excursion": "excursion:",
+    "breaches_one": "breaches: {{count}} (longest {{minutes}} min)",
+    "breaches_other": "breaches: {{count}} (longest {{minutes}} min)",
+    "samples_one": "samples: {{count}}",
+    "samples_other": "samples: {{count}}"
+  },
+  "review": {
+    "title": "Yesterday's review",
+    "hypothesis": "Hypothesis:",
+    "cause": "cause:"
+  },
+  "targets": {
+    "title": "Targets for tomorrow ({{count}})",
+    "previewPartial": "scorecard preview from partial today",
+    "previewFull": "scorecard preview from full day"
+  },
+  "applied": {
+    "title": "Confirmed & applied",
+    "titleAt": "Confirmed & applied at {{time}}",
+    "counts": "added: {{added}} · modified: {{modified}} · disabled: {{disabled}} · kept: {{kept}}",
+    "errors_one": "errors: {{count}}",
+    "errors_other": "errors: {{count}}"
+  },
+  "consistency": {
+    "title_one": "Consistency warning ({{count}}) — the agent's prose disagrees with its structured data",
+    "title_other": "Consistency warnings ({{count}}) — the agent's prose disagrees with its structured data",
+    "countMismatch": "<mono>{{field}}</mono>: prose says <b>{{claims}}</b>, data says <b>{{data}}</b>",
+    "unknownAutomation": "Prose references <mono>{{context}}</mono> but no live automation has id {{id}}.",
+    "untrackedAutomation": "Prose discusses <mono>{{context}}</mono> but no diff entry touches automation #{{id}}.",
+    "timeRange": "<mono>{{subject}}</mono> time range: prose says <b>{{claimed}}</b>, actual schedule spans <b>{{actual}}</b>",
+    "footer": "The structured data (proposed_automations + changes_from_today) is the source of truth for Confirm. The prose is informational and may drift."
+  },
+  "rejection": {
+    "title": "Rejected — operator feedback",
+    "footer": "A new version of this plan was regenerated addressing this feedback."
+  },
+  "discussion": {
+    "title": "Discussion",
+    "help": "Ask the planner to explain a decision, or highlight something it may have missed. Conversation only — won't modify the plan unless you convert it to a regenerate.",
+    "loadFailed": "Could not load plan discussion",
+    "loadFailedWithError": "Could not load plan discussion: {{error}}",
+    "sendFailed": "Failed to send clarification",
+    "confirmRegenerate_one": "Convert {{count}} open clarification into a rejection feedback and regenerate the plan?",
+    "confirmRegenerate_other": "Convert {{count}} open clarifications into a rejection feedback and regenerate the plan?",
+    "regenerateFailed": "Failed to regenerate",
+    "toastRegenerated": "Plan rejected and regenerated from clarifications",
+    "applyOpenTitle": "Bundle all open clarifications as rejection feedback and regenerate the plan",
+    "regenerating": "Regenerating…",
+    "applyOpen_one": "Apply {{count}} open as regenerate",
+    "applyOpen_other": "Apply {{count}} open as regenerate",
+    "empty": "No clarifications on this plan yet.",
+    "role": {
+      "question": "Question",
+      "highlight": "Highlight"
+    },
+    "operator": "operator",
+    "addressed": "addressed",
+    "addressedByPlan": "addressed (→ plan #{{id}})",
+    "plannerBadge": "Planner",
+    "verdict": {
+      "plan_correct": "Plan is correct",
+      "concern_valid": "Concern is valid",
+      "need_more_data": "Need more data"
+    },
+    "waiting": "waiting for planner…",
+    "typeLabel": "Type:",
+    "highlightHelp": "You believe the plan missed something — planner will acknowledge and propose adjustments.",
+    "questionHelp": "You want the planner to explain its reasoning — no plan change.",
+    "highlightPlaceholder": "e.g. \"VWC peaks at 60% on Sensor 1 during all 3 irrigations — too aggressive?\"",
+    "questionPlaceholder": "e.g. \"Why 3 fertigation cycles instead of 2? What's the rationale for the 12:00 timing?\"",
+    "sending": "Sending…",
+    "send": "Send to planner"
+  },
+  "toast": {
+    "loadPlansFailed": "Failed to load plans: {{error}}",
+    "loadPlanFailed": "Failed to load plan: {{error}}",
+    "configSaved": "Planner config saved",
+    "configSaveFailed": "Failed to save config",
+    "generated": "Plan generated for tomorrow",
+    "generateFailed": "Generation failed",
+    "confirmedWithOverrides": "Plan confirmed WITH guardrail overrides — recorded for audit.",
+    "confirmed": "Plan confirmed — automations updated.",
+    "changesFailed_one": "{{count}} change failed — see details on plan.",
+    "changesFailed_other": "{{count}} changes failed — see details on plan.",
+    "overrideForbidden": "Override not allowed: {{error}}",
+    "confirmFailed": "Confirm failed",
+    "feedbackRequired": "Provide feedback so the planner can regenerate addressing your concerns.",
+    "rejected": "Plan rejected — regenerating with feedback.",
+    "rejectFailed": "Reject failed",
+    "deleted": "Plan deleted"
+  },
+  "confirm": {
+    "replacePending": "A pending plan already exists for tomorrow. Regenerate (replaces it)?",
+    "deletePlan": "Delete this plan? Confirmed plans should NOT normally be deleted; this only removes the record, not the applied automations."
+  },
+  "manifest": {
+    "insert": "INSERT",
+    "update": "UPDATE",
+    "disable": "DISABLE",
+    "automation": "automation",
+    "item": "{{verb}} · {{target}}",
+    "itemWithId": "{{verb}} · {{target}} [id {{id}}]"
+  },
+  "list": {
+    "title": "Plans",
+    "empty": "No plans yet."
+  },
+  "detail": {
+    "selectPrompt": "Select a plan or generate one for tomorrow.",
+    "notGenerated": "Plan for {{date}} was not generated",
+    "rawError": "Raw error",
+    "planFor": "Plan for {{date}}",
+    "generated": "Generated {{time}}",
+    "tokens": "tokens: in {{input}} · out {{output}}",
+    "cacheHit": "cache hit {{n}}"
+  },
+  "guardrails": {
+    "wouldBlock_one": "{{count}} guardrail would block Confirm",
+    "wouldBlock_other": "{{count}} guardrails would block Confirm",
+    "latestLine": "Latest {{element}}: {{value}} ({{comparison}}) — requires {{element}} tank duty ≥ {{duty}}",
+    "noRecentSample": "no recent sample",
+    "triggeredBy": "Triggered by: {{list}}",
+    "triggerItem": "\"{{name}}\" (program {{program}}, tank duty {{duty}})",
+    "overrideRole": "Override role required:",
+    "informational_one": "{{count}} informational warning (does not block Confirm)",
+    "informational_other": "{{count}} informational warnings (does not block Confirm)",
+    "flush": "flush",
+    "fertigationOffset": "fertigation, {{minutes}} min",
+    "program": "program {{name}}"
+  },
+  "actions": {
+    "applying": "Applying…",
+    "confirmApply": "Confirm & apply",
+    "reject": "Reject…",
+    "changeCounts": "{{add}} insert · {{modify}} update · {{remove}} disable · {{keep}} keep",
+    "deletePlan": "Delete this plan record"
+  },
+  "sections": {
+    "templateRequests": "Template requests from the planner ({{count}})",
+    "templateParameters": "Parameters:",
+    "example": "e.g.",
+    "risks": "Risks flagged for operator",
+    "changes": "Changes from today's operations (apply manifest)",
+    "idTag": "[id {{id}}]",
+    "proposedTag": "[→ proposed #{{n}}]",
+    "proposed": "Proposed automations ({{count}})",
+    "noneProposed": "No automations proposed."
+  },
+  "raw": {
+    "show": "Show raw input snapshot & plan JSON",
+    "hide": "Hide raw input snapshot & plan JSON",
+    "inputSnapshot": "Input snapshot (fed to the planner)",
+    "planJson": "Full plan JSON"
+  },
+  "confirmDialog": {
+    "title": "Apply this plan to live automations?",
+    "body_one": "Confirming plan {{date}} will INSERT {{add}}, UPDATE {{modify}} and DISABLE {{remove}} automation ({{keep}} kept unchanged). Guardrails are evaluated on apply.",
+    "body_other": "Confirming plan {{date}} will INSERT {{add}}, UPDATE {{modify}} and DISABLE {{remove}} automations ({{keep}} kept unchanged). Guardrails are evaluated on apply."
+  },
+  "reject": {
+    "title": "Reject plan with feedback",
+    "help": "Describe what should change. The planner will regenerate addressing your feedback. Example: <i>\"You shifted irrigation too early — the morning dry-down is fine. Focus on the afternoon dip instead.\"</i>",
+    "placeholder": "What did the plan miss or get wrong?",
+    "regenerating": "Regenerating…",
+    "submit": "Reject & Regenerate"
+  },
+  "override": {
+    "title": "Guardrail override required",
+    "help": "This plan would normally be blocked. Provide a written reason for each guardrail below to apply anyway. Reasons are recorded in the plan's audit trail.",
+    "adminRequired": "One or more rules require admin-role override.",
+    "ruleLine": "{{element}}: {{value}} ({{comparison}}) · requires duty ≥ {{duty}}",
+    "reason": "Reason for override",
+    "reasonPlaceholder": "e.g. Fresh AMIC just confirmed Ca at 195 mg/L — sample queue stale; applying tomorrow's plan as designed.",
+    "missingReasons_one": "Provide a reason for {{count}} guardrail before applying",
+    "missingReasons_other": "Provide a reason for {{count}} guardrails before applying",
+    "apply": "Apply with override"
+  },
+  "settings": {
+    "title": "Planner settings",
+    "enabled": "Scheduler enabled (auto-generate plan every evening)",
+    "firesAt": "Fires at",
+    "hour": "Hour",
+    "minute": "Minute",
+    "localTime": "(local time, 24h)",
+    "pendingNote": "Scheduled plans are saved as <mono>pending</mono>. An operator must Confirm or Reject — the scheduler never auto-applies changes to live automations."
+  },
+  "failure": {
+    "pill": "Generation failing",
+    "headline_one": "Plan generation has failed {{count}} day in a row since {{since}}",
+    "headline_other": "Plan generation has failed {{count}} days in a row since {{since}}",
+    "reason": {
+      "none": "No error detail recorded",
+      "credits": "Anthropic API credits exhausted — top up at Plans & Billing",
+      "auth": "API key rejected"
+    },
+    "showRaw": "Show raw error",
+    "hideRaw": "Hide raw error",
+    "retryNotAllowed": "Operators and admins can retry generation",
+    "retryTitle": "Run plan generation again now",
+    "retrying": "Retrying…"
+  }
+}

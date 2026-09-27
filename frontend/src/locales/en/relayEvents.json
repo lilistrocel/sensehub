@@ -1,1 +1,127 @@
-{}
+{
+  "title": "Relay Events",
+  "subtitle": "Audit trail of every relay ON/OFF transition, with computed run durations and stuck-on safety controls.",
+  "runSafetyCheck": "Run safety check now",
+  "tab": {
+    "runs": "Zone runs (paired)",
+    "events": "Raw events",
+    "safety": "Safety watchdog"
+  },
+  "ch": "CH{{n}}",
+  "source": {
+    "manual": "manual",
+    "automation": "automation",
+    "automation_auto_off": "automation auto-off",
+    "watchdog_force_off": "watchdog force-off",
+    "all_channels": "all channels",
+    "automation_transition": "automation transition",
+    "manual_all": "manual (all channels)",
+    "manual_auto_off": "manual auto-off",
+    "scheduler": "scheduler",
+    "irrigation_run": "irrigation run",
+    "stop_all": "Stop All",
+    "stop_irrigation": "Stop irrigation",
+    "emergency_stop": "emergency stop",
+    "interlock": "interlock",
+    "interlock_conflict": "interlock conflict",
+    "flow_watch_shutdown": "flow watch shutdown",
+    "flow_watch_retry": "flow watch retry",
+    "flow_watch_retry_auto_off": "flow watch retry auto-off",
+    "dose_controller": "dose controller",
+    "dose_program": "dose program",
+    "dose_program_end": "dose program end",
+    "dose_cycle": "dose cycle",
+    "dose_run": "dose run",
+    "ph_controller": "pH controller"
+  },
+  "col": {
+    "automation": "Automation"
+  },
+  "stats": {
+    "currentlyOn": "Currently ON",
+    "allClear": "all clear",
+    "channels_one": "{{count}} channel",
+    "channels_other": "{{count}} channels",
+    "forceOff24h": "Force-OFF events (24h)",
+    "forceOff7d": "Force-OFF events (7d)",
+    "checkAlerts": "⚠ check Alerts",
+    "noneHealthy": "none — healthy",
+    "pastWeek": "past week",
+    "none": "none",
+    "total24h": "Total events (24h)",
+    "allSources": "all sources",
+    "channelsOn": "Channels currently ON",
+    "onFor": "ON for {{duration}}",
+    "src": "src {{source}}"
+  },
+  "filter": {
+    "equipment": "Equipment",
+    "channel": "Channel",
+    "any": "any",
+    "source": "Source",
+    "all": "All",
+    "from": "From",
+    "to": "To",
+    "clear": "Clear"
+  },
+  "runs": {
+    "loading": "Loading runs…",
+    "empty": "No runs found.",
+    "col": {
+      "started": "Started",
+      "equipmentCh": "Equipment / Ch",
+      "duration": "Duration",
+      "onSource": "On source",
+      "offSource": "Off source"
+    },
+    "running": "running…",
+    "overrun": "overrun"
+  },
+  "events": {
+    "loading": "Loading events…",
+    "empty": "No events found.",
+    "col": {
+      "time": "Time",
+      "state": "State"
+    }
+  },
+  "safety": {
+    "loading": "Loading config…",
+    "enable": "Enable safety watchdog",
+    "enableHelp": "When enabled, the backend will force-OFF any relay channel that has been ON longer than its configured maximum, log a watchdog event, and raise an alert. This is a safety net for crashed timers, dropped Modbus writes, and scheduler bugs.",
+    "useActionDuration": "Use action duration as threshold (recommended)",
+    "useActionDurationHelp": "When ON, the watchdog reads the automation that turned the channel on, finds its <code>duration_seconds</code> (or the gap between transition steps), and force-OFFs at <b>expected duration + grace period</b>. A 4-min zone overruns by at most {{grace}} instead of up to {{max}}. Falls back to the flat thresholds below if no expected duration can be derived (manual ONs, deleted automations, etc).",
+    "checkInterval": "Check interval (s)",
+    "checkIntervalHelp": "Default 30. How often the watchdog scans.",
+    "grace": "Grace period (s)",
+    "graceHelp": "Added to expected duration. Should be ≥ check interval.",
+    "minThreshold": "Min threshold (s)",
+    "minThresholdHelp": "Floor — never force-OFF below this.",
+    "defaultMax": "Fallback default max ON time (seconds)",
+    "defaultMaxHelp": "Used when expected duration can't be derived (manual ONs, deleted automations). Default 1500 (25 min).",
+    "perEquipment": "Per-equipment overrides",
+    "perEquipmentHelp": "Use this if a particular relay board runs longer cycles than the global default.",
+    "ignore": "Ignore",
+    "defaultPlaceholder": "default {{value}}s",
+    "seconds": "seconds",
+    "save": "Save safety config"
+  },
+  "toast": {
+    "watchdogActed_one": "Watchdog acted on {{count}} stuck channel",
+    "watchdogActed_other": "Watchdog acted on {{count}} stuck channels",
+    "watchdogClean": "Watchdog ran — no stuck channels found",
+    "safetySaved": "Safety config saved"
+  },
+  "err": {
+    "loadEquipment": "Could not load equipment list",
+    "loadEquipmentWith": "Could not load equipment list: {{error}}",
+    "loadStats": "Could not load relay event statistics",
+    "loadStatsWith": "Could not load relay event statistics: {{error}}",
+    "loadRuns": "Failed to load runs",
+    "loadEvents": "Failed to load events",
+    "loadSafety": "Could not load relay safety configuration",
+    "loadSafetyWith": "Could not load relay safety configuration: {{error}}",
+    "failed": "Failed",
+    "saveFailed": "Save failed: {{error}}"
+  }
+}

@@ -1,1 +1,362 @@
-{}
+{
+  "title": "Agronomist",
+  "subtitle": "Daily AI farm analysis with rolling long-term memory",
+  "views": {
+    "label": "Agronomist view",
+    "reports": "Reports",
+    "settings": "Settings"
+  },
+  "actions": {
+    "generateNow": "Generate Now",
+    "generating": "Generating…",
+    "generateNowTitle": "Generate today's report now",
+    "apiKeyMissingTitle": "ANTHROPIC_API_KEY not set in backend env",
+    "memory": "Memory",
+    "retryNow": "Retry now",
+    "retrying": "Retrying…",
+    "retryNowTitle": "Run today's report immediately; a success resumes the schedule",
+    "runNow": "Run Now",
+    "discard": "Discard",
+    "saveSettings": "Save settings",
+    "noRecommendations": "No structured recommendations in this report.",
+    "priorityGroup": "{{priority}} priority",
+    "tasksFromReport": "Operator tasks from this report",
+    "openTasks": "Open Tasks",
+    "tasksLoadFailed": "Could not load tasks: {{error}}",
+    "notes": "Agronomist's notes"
+  },
+  "apiKeyWarning": "<b>ANTHROPIC_API_KEY is not set in the backend container.</b> The agronomist agent cannot run until it's configured. Set it via the <code>.env</code> file alongside <code>docker-compose.yml</code>, then restart the backend.",
+  "health": {
+    "paused": "paused",
+    "failing": "failing",
+    "failuresLastAt": "{{failures}}, last at {{time}}",
+    "errorTitle": {
+      "billing": "Anthropic credit balance exhausted",
+      "auth": "Anthropic API key rejected",
+      "rate_limit": "Anthropic rate limit hit",
+      "truncated_output": "Last report output was cut off or invalid",
+      "max_tokens": "Last report hit the output token limit",
+      "refusal": "Last report was declined by the model",
+      "other": "Last agronomist report failed"
+    }
+  },
+  "status": {
+    "setup": "Setup",
+    "captureOn": "noon capture on",
+    "captureOff": "noon capture off",
+    "allSourcesInUse": "all sources in use",
+    "outOfServiceTitle": "Out of service: {{names}}",
+    "sourcesOut_one": "{{count}} source out of service: {{names}}",
+    "sourcesOut_other": "{{count}} sources out of service: {{names}}",
+    "sourcesOutShort_one": "{{count}} out of service: {{names}}",
+    "sourcesOutShort_other": "{{count}} out of service: {{names}}"
+  },
+  "sourceShort": {
+    "amic": "AMIC",
+    "lab": "Lab",
+    "water_controller": "SEKO",
+    "canopy_capture": "Camera",
+    "energy": "Energy",
+    "fertigation": "Fertigation",
+    "substrate_sensors": "Substrate",
+    "climate_sensors": "Climate",
+    "alerts": "Alerts",
+    "operator_tasks": "Tasks",
+    "automations_state": "Automations"
+  },
+  "summary": {
+    "daily": "Daily {{time}}",
+    "scheduleOff": "Scheduled run off",
+    "weekly": "weekly rollup {{day}} {{time}}",
+    "captureFrames_one": "{{count}} frame at {{time}}",
+    "captureFrames_other": "{{count}} frames at {{time}}",
+    "captureOff": "Noon capture off",
+    "none": "none",
+    "reference": "Temp {{temp}} · RH {{rh}} · Soil {{soil}}",
+    "lastSession": "last session {{time}} · {{frames}}",
+    "noSession": "no session in the last 7 days",
+    "sourcesSomeOut_one": "{{inUse}} in use, {{count}} out of service: {{names}}",
+    "sourcesSomeOut_other": "{{inUse}} in use, {{count}} out of service: {{names}}",
+    "sourcesAllIn_one": "{{count}} in use, all sources in service",
+    "sourcesAllIn_other": "{{count}} in use, all sources in service"
+  },
+  "count": {
+    "frame_one": "{{count}} frame",
+    "frame_other": "{{count}} frames",
+    "consecutiveFailure_one": "{{count}} consecutive failure",
+    "consecutiveFailure_other": "{{count}} consecutive failures",
+    "recommendation_one": "{{count}} recommendation",
+    "recommendation_other": "{{count}} recommendations",
+    "note_one": "{{count}} note",
+    "note_other": "{{count}} notes"
+  },
+  "empty": {
+    "noReports": "No reports yet. Click \"Generate Now\" to create one.",
+    "pickReport": "Pick a report date, or click \"Generate Now\" to create one."
+  },
+  "confirm": {
+    "replaceToday": "Today's report already exists. Replace it? If the new report fails, the current one is kept.",
+    "weeklyRollup": "Run weekly rollup now? This compresses last week's daily reports and refreshes the long-term memory."
+  },
+  "toast": {
+    "retryAlreadyExists": "Today's report already exists — schedule resumed",
+    "retryGenerated": "Report generated — schedule resumed",
+    "retryFailed": "Retry failed: {{error}}",
+    "loadReportsFailed": "Failed to load reports: {{error}}",
+    "loadReportFailed": "Failed to load report: {{error}}",
+    "generated": "Report generated",
+    "generateFailed": "Generation failed: {{error}}",
+    "rollupSkipped": "Rollup skipped: {{reason}}",
+    "rollupWritten": "Weekly rollup written for {{start}} → {{end}}",
+    "rollupFailed": "Rollup failed: {{error}}",
+    "settingsSaved": "Settings saved",
+    "saveFailed": "Save failed: {{error}}",
+    "translationRequested": "Translation requested — it appears here when it is ready",
+    "translationRequestFailed": "Translation request failed: {{error}}"
+  },
+  "settings": {
+    "scheduleTitle": "Schedule & model",
+    "sourcesTitle": "Data sources",
+    "captureTitle": "Canopy capture",
+    "referenceTitle": "Reference sensors",
+    "unsavedNextRun": "Unsaved changes — the next run still uses the saved settings.",
+    "enableDaily": "Enable scheduled daily report",
+    "enableDailyHelp": "When off, only manual \"Generate Now\" runs work.",
+    "model": "Model",
+    "currentOption": "{{value}} (current)",
+    "modelWithNote": "{{name}} ({{note}})",
+    "modelNote": {
+      "default": "default",
+      "mostCapable": "most capable, more expensive",
+      "cheapest": "cheapest"
+    },
+    "effortLabel": "Thinking effort",
+    "effort": {
+      "low": "Low (fastest, cheapest)",
+      "medium": "Medium (default)",
+      "high": "High (more thinking, less room for the report)",
+      "xhigh": "Extra high"
+    },
+    "effortHelp": "Thinking shares the output budget with the report. Not sent for Haiku.",
+    "dailyTime": "Daily report time (local)",
+    "hour": "Hour",
+    "minute": "Minute",
+    "weeklyRollup": "Weekly rollup",
+    "promptOverride": "System prompt override",
+    "promptOverrideHint": "(optional, advanced)",
+    "promptOverridePlaceholder": "Leave blank to use the default UAE agronomist persona."
+  },
+  "reference": {
+    "noneOption": "— None —",
+    "noZones": "No zones defined",
+    "help": "Pick the canonical sensor for each environment metric. The agent will quote these as the primary reading and treat all other sensors as cross-checks.",
+    "temperature": "Temperature",
+    "humidity": "Humidity",
+    "soil": "Soil / Substrate",
+    "zoneRoles": "Zone roles (for AMIC nutrient context)",
+    "zoneRolesHelp": "Tag which zones represent the irrigation feed water and which the drain return. Without this, the agent falls back to matching zone names containing \"irrigation\" / \"drain\".",
+    "feed": "Irrigation (feed)",
+    "drain": "Drain (return)"
+  },
+  "memory": {
+    "title": "Long-term Memory",
+    "empty": "No long-term memory yet — it gets built after the first weekly rollup.",
+    "meta": "Version {{version}} · {{size}} bytes · updated {{time}} · trigger: {{trigger}}",
+    "olderVersions": "Older versions ({{count}})",
+    "versionLine": "v{{version}} · {{time}}"
+  },
+  "errorClass": {
+    "billing": "billing",
+    "auth": "auth",
+    "rate_limit": "rate limit",
+    "other": "error",
+    "truncated_output": "truncated output",
+    "max_tokens": "output limit",
+    "refusal": "declined"
+  },
+  "section": {
+    "crop": { "label": "Crop", "title": "State of the Crop" },
+    "irrigation": { "label": "Irrigation", "title": "Irrigation & Fertigation" },
+    "nutrients": { "label": "Nutrients", "title": "Nutrient Status (AMIC + Lab)" },
+    "climate": { "label": "Climate", "title": "Climate" },
+    "risks": { "label": "Risks", "title": "Risks & Anomalies" },
+    "numbered": "{{label}} {{n}}",
+    "noDetail": "No further detail in this section.",
+    "empty": "This section is empty in the report."
+  },
+  "sectionStatus": {
+    "srLabel": "status: {{status}}"
+  },
+  "captureMode": {
+    "noon": "noon session",
+    "manual": "manual capture",
+    "fallback_4h": "4-hourly fallback",
+    "latest": "latest available",
+    "manual_night": "manual capture (night)"
+  },
+  "header": {
+    "reportDate": "Report date",
+    "olderAria": "Older report, {{date}}",
+    "olderTitle": "Older: {{date}}",
+    "noOlder": "No older report",
+    "newerAria": "Newer report, {{date}}",
+    "newerTitle": "Newer: {{date}}",
+    "noNewer": "No newer report",
+    "isLatest": "This is the latest report",
+    "optionFailed": "failed ({{reason}})",
+    "optionRegenFailed": "regenerate failed",
+    "optionExcluded_one": "{{count}} excluded",
+    "optionExcluded_other": "{{count}} excluded",
+    "failedPill": "failed · {{reason}}",
+    "olderReport": "older report",
+    "olderReportTitle": "A newer report exists — use the newer-report arrow",
+    "daysOld_one": "{{count}} day old",
+    "daysOld_other": "{{count}} days old",
+    "daysOldTitle": "No newer report has been generated",
+    "regenFailedPill": "regenerate failed · {{reason}} · showing previous version",
+    "regenFailedTitle": "Regeneration at {{failedAt}} failed; this is the version from {{generatedAt}}. {{error}}",
+    "sourcesExcluded_one": "{{count}} source excluded",
+    "sourcesExcluded_other": "{{count}} sources excluded",
+    "sourcesExcludedTitle": "Out of service when this report was built: {{names}}",
+    "generatedAt": "generated {{time}}"
+  },
+  "translation": {
+    "autoTranslated": "Translated automatically from English.",
+    "showOriginal": "Show original (English)",
+    "showingOriginal": "Showing the original English report.",
+    "showTranslation": "Show translation",
+    "inProgress": "Translation in progress",
+    "inProgressHelp": "Showing English until it is ready. This page checks again by itself.",
+    "failed": "Translation failed",
+    "failedHelp": "Translation failed — showing English.",
+    "englishOnly": "This report is only available in English.",
+    "translate": "Translate",
+    "retry": "Translate again",
+    "requesting": "Requesting…",
+    "confirmTranslate": "Translate this report into {{language}}? This makes one paid call to the AI provider.",
+    "languageName": {
+      "tr": "Turkish",
+      "ar": "Arabic"
+    }
+  },
+  "failure": {
+    "title": "Generation failed for {{date}}",
+    "body": "No analysis was produced for this day. The error below is what the provider returned."
+  },
+  "keyNumber": {
+    "notCurrent": "{{value}} · not current"
+  },
+  "overview": {
+    "glance": "Status at a glance",
+    "framesUsed": "Canopy frames used",
+    "summary": "Summary",
+    "noSummary": "This report has no summary text.",
+    "readReport": "Read the report",
+    "topActions": "Top actions",
+    "seeAllActions": "See all actions",
+    "noHighPriority_one": "{{count}} recommendation, none high priority.",
+    "noHighPriority_other": "{{count}} recommendations, none high priority.",
+    "onlyTasks_one": "No structured recommendations; {{count}} operator task from this run.",
+    "onlyTasks_other": "No structured recommendations; {{count}} operator tasks from this run."
+  },
+  "details": {
+    "title": "Report details",
+    "model": "Model",
+    "generated": "Generated",
+    "tokens": "Tokens in / out",
+    "cache": "Cache read / write",
+    "captureIds": "Capture ids",
+    "excluded": "Excluded sources",
+    "translation": "Translation",
+    "inputSnapshot": "Input snapshot (data sent to the agent)"
+  },
+  "tabs": {
+    "label": "Report sections",
+    "overview": "Overview",
+    "actions": "Actions",
+    "discussion": "Discussion"
+  },
+  "report": {
+    "table": "Table"
+  },
+  "priority": {
+    "critical": "critical",
+    "high": "high",
+    "medium": "medium",
+    "low": "low"
+  },
+  "discussion": {
+    "title": "Clarifications & discussion",
+    "typeFirst": "Type a clarification before posting",
+    "confirmRegenerate": "Regenerate the report now with this clarification? This will call Claude and replace the current report if the new one passes its checks. If regeneration fails, the current report is kept.",
+    "toastRegenerated": "Clarification posted and report regenerated",
+    "toastSavedRegenFailed": "Clarification saved (regeneration failed — see error)",
+    "toastPosted": "Clarification posted",
+    "help": "Add context the agent doesn't know about — broken sensors, recent maintenance, \"ignore today's pH because the probe is uncalibrated\", etc. Notes are stored permanently and injected into the prompt on regeneration, so the new report (and any future weekly rollup) reflects your correction.",
+    "anonymous": "Anonymous",
+    "triggeredRegen": "triggered regeneration",
+    "empty": "No clarifications yet.",
+    "fieldLabel": "Clarification",
+    "placeholder": "Add context, correct an assumption, or flag a sensor issue. Example: 'The AMIC pH probe is uncalibrated — ignore pH readings until further notice.'",
+    "chars_one": "{{count}} char",
+    "chars_other": "{{count}} chars",
+    "addOnly": "Add note only",
+    "regenerating": "Regenerating…",
+    "addAndRegenerate": "Add & regenerate report"
+  },
+  "capture": {
+    "title": "Canopy captures",
+    "openFrame": "Frame {{n}} — open full size",
+    "frameAlt": "Canopy frame {{n}}",
+    "sharpnessTitle": "Sharpness (variance of Laplacian, higher = sharper)",
+    "notAvailable": "n/a",
+    "source": {
+      "noon": "noon",
+      "manual": "manual",
+      "fallback_4h": "fallback"
+    },
+    "toastCaptured_one": "Captured {{count}} frame",
+    "toastCaptured_other": "Captured {{count}} frames",
+    "toastFailed": "Capture failed: {{error}}",
+    "help": "Noon session: {{frames}} {{spacing}} s apart, scored for sharpness. The report gets {{sharpest}}; without a noon session it falls back to the 10:00–14:00 4-hourly snapshots.",
+    "sharpestOne": "the sharpest",
+    "sharpestN_one": "the sharpest {{count}}",
+    "sharpestN_other": "the sharpest {{count}}",
+    "captureNowTitle": "Take {{frames}} now (~{{minutes}} min)",
+    "capturing": "Capturing {{frames}} (~{{minutes}} min)…",
+    "captureNow": "Capture now",
+    "manualJustTaken": "Manual session just taken ({{frames}})",
+    "today": "Today ({{date}}) — {{frames}}",
+    "loading": "Loading captures…",
+    "noneToday": "No captures yet today."
+  },
+  "sources": {
+    "intro": "What the AI is allowed to look at. Take a system out of service when it is broken and cannot be fixed yet.",
+    "appliesTo": "Applies to the daily agronomist report and the nightly planner. An out-of-service system is removed from the data the AI sees and it is told not to reason about it, ask for samples, or create tasks for it.",
+    "viewOnly": "View only — ask an operator or admin to change this.",
+    "loadFailed": "Could not load data sources: {{error}}",
+    "toastSavedSomeOut_one": "Data sources saved — {{count}} out of service",
+    "toastSavedSomeOut_other": "Data sources saved — {{count}} out of service",
+    "toastSavedAllIn": "Data sources saved — everything in use",
+    "outOfServiceCount_one": "{{count}} out of service",
+    "outOfServiceCount_other": "{{count}} out of service",
+    "allInUse": "All in use",
+    "reason": "Reason",
+    "reasonPlaceholder": "e.g. Down for the foreseeable future",
+    "backOn": "Back on (optional)",
+    "backOnPassed": "The back-on date has passed — this source is treated as in use again.",
+    "toggleAria": "{{name}}: {{state}}",
+    "inUseLower": "in use",
+    "outOfServiceLower": "out of service",
+    "clickToTakeOut": "Click to take out of service",
+    "clickToPutBack": "Click to put back in use",
+    "inUse": "In use",
+    "outOfService": "Out of service",
+    "excludedTitle": "Excluded equipment",
+    "excludedHelp": "Drop a single device from everything the AI sees (readings, reference sensors, diagnostics, alerts, the planner's inventory) without taking its whole system out of service.",
+    "currentlyExcluded": "Currently excluded: <names>{{names}}</names>.",
+    "noEquipment": "No equipment registered.",
+    "unsaved": "Unsaved changes — the next AI run still uses the saved settings.",
+    "save": "Save data sources"
+  }
+}

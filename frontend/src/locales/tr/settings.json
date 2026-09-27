@@ -1,1 +1,580 @@
-{}
+{
+  "title": "Ayarlar",
+  "tabs": {
+    "profile": "Profil",
+    "users": "Kullanıcılar",
+    "system": "Sistem",
+    "cloud": "Bulut",
+    "notifications": "Bildirimler",
+    "backup": "Yedekleme",
+    "watchdog": "İzleme servisi",
+    "network": "Ağ",
+    "data": "Veri"
+  },
+  "profile": {
+    "title": "Profil Ayarları",
+    "account": {
+      "title": "Hesabınız",
+      "name": "Ad",
+      "email": "E-posta",
+      "role": "Rol"
+    },
+    "password": {
+      "title": "Parolayı Değiştir",
+      "current": "Mevcut Parola",
+      "new": "Yeni Parola",
+      "confirm": "Yeni Parolayı Doğrula",
+      "minLength": "En az 8 karakter",
+      "submit": "Parolayı Değiştir",
+      "submitting": "Parola değiştiriliyor…",
+      "mismatch": "Yeni parolalar eşleşmiyor",
+      "tooShort": "Yeni parola en az 8 karakter olmalıdır",
+      "changed": "Parola başarıyla değiştirildi",
+      "failed": "Parola değiştirilemedi"
+    },
+    "sound": {
+      "title": "Bildirim Ayarları",
+      "enable": "Sesli Uyarıları Etkinleştir",
+      "help": "Yeni alarmlar geldiğinde sesli bildirim çal",
+      "volume": "Uyarı Ses Düzeyi",
+      "test": "Sesi Dene",
+      "save": "Tercihleri Kaydet",
+      "saved": "Bildirim tercihleri başarıyla kaydedildi",
+      "saveFailed": "Tercihler kaydedilemedi ({{error}})"
+    }
+  },
+  "na": "Yok",
+  "refreshTitle": {
+    "network": "Ağ bilgilerini yenile",
+    "system": "Sistem bilgilerini yenile",
+    "storage": "Depolama bilgilerini yenile",
+    "logs": "Kayıtları yenile",
+    "status": "Durumu yenile",
+    "queue": "Bekleyen kuyruğu yenile",
+    "history": "Eşitleme geçmişini yenile",
+    "suggested": "Önerilen programları yenile"
+  },
+  "system": {
+    "title": "Sistem Ayarları",
+    "errors": {
+      "loadFailed": "Ayarlar yüklenemedi ({{error}})",
+      "saveFailed": "Ayarlar kaydedilemedi ({{error}})"
+    },
+    "saved": "Ayarlar başarıyla kaydedildi!",
+    "save": "Ayarları Kaydet",
+    "timezone": {
+      "title": "Saat Dilimi Yapılandırması",
+      "help": "Tüm sistem zaman damgaları ve zamanlanmış otomasyonlar için saat dilimini seçin.",
+      "label": "Sistem Saat Dilimi",
+      "preview": "Seçilen saat dilimindeki güncel saat:",
+      "invalid": "Geçersiz saat dilimi",
+      "groups": {
+        "americas": "Amerika",
+        "europe": "Avrupa",
+        "asia": "Asya",
+        "pacific": "Pasifik ve Okyanusya",
+        "africa": "Afrika",
+        "other": "Diğer"
+      }
+    },
+    "locale": {
+      "title": "Sistem Yerel Ayarı",
+      "help": "Sistem genelindeki bölgesel ayar. Ekran dili kişiseldir: her kullanıcı Profil → Dil bölümünden seçer.",
+      "label": "Yerel ayar"
+    },
+    "retention": {
+      "title": "Veri Saklama",
+      "help": "Sensör okumalarının ve geçmiş verilerin cihazda ne kadar süre saklanacağını ayarlayın.",
+      "label": "Saklama Süresi (gün)",
+      "days_one": "{{count}} gün",
+      "days_other": "{{count}} gün",
+      "optionDefault": "{{days}} (varsayılan)",
+      "optionYear": "{{days}} (1 yıl)",
+      "purgeHelp": "Bundan eski veriler depolama alanı açmak için otomatik olarak silinir."
+    },
+    "network": {
+      "title": "Ağ Yapılandırması",
+      "help": "Bu SenseHub cihazının güncel ağ yapılandırmasını görüntüleyin.",
+      "ipAddress": "IP Adresi",
+      "gateway": "Ağ Geçidi",
+      "dns": "DNS Sunucuları",
+      "interfaces": "Ağ Arayüzleri",
+      "active": "Etkin",
+      "netmask": "Alt ağ maskesi",
+      "mac": "MAC",
+      "field": "{{label}}:",
+      "unavailable": "Ağ bilgileri yüklenemedi"
+    },
+    "firmware": {
+      "title": "Yazılım / Sürüm",
+      "help": "Güncel yazılım sürümünü ve sistem bilgilerini görüntüleyin.",
+      "version": "Sürüm",
+      "release": {
+        "stable": "kararlı",
+        "beta": "beta",
+        "dev": "geliştirme"
+      },
+      "buildDate": "Derleme Tarihi",
+      "details": "Sistem Ayrıntıları",
+      "platform": "Platform",
+      "architecture": "Mimari",
+      "cpus": "İşlemciler",
+      "cores_one": "{{count}} çekirdek",
+      "cores_other": "{{count}} çekirdek",
+      "runtime": "Çalışma Durumu",
+      "hostname": "Ana bilgisayar adı",
+      "uptime": "Çalışma süresi",
+      "uptimeDays_one": "{{count}} gün {{rest}}",
+      "uptimeDays_other": "{{count}} gün {{rest}}",
+      "startedAt": "Başlama Zamanı",
+      "memory": "Bellek Kullanımı",
+      "percentUsed": "{{percent}} kullanılıyor",
+      "database": "Veritabanı",
+      "connected": "Bağlı",
+      "disconnected": "Bağlı değil",
+      "unavailable": "Sistem bilgileri yüklenemedi"
+    },
+    "storage": {
+      "title": "Depolama Kullanımı",
+      "help": "Sistem depolama kullanımını ve veritabanı istatistiklerini görüntüleyin.",
+      "disk": "Disk Kullanımı",
+      "available": "{{size}} boş",
+      "database": "Veritabanı",
+      "dataDirectory": "Veri Klasörü",
+      "logs": "Kayıtlar",
+      "records": "Veritabanı Kayıtları",
+      "lastUpdated": "Son güncelleme: {{time}}",
+      "unavailable": "Depolama bilgileri yüklenemedi"
+    },
+    "logs": {
+      "title": "Sistem Kayıtları",
+      "help": "Sistem olay kayıtlarını, alarmları ve otomasyon etkinliğini görüntüleyin.",
+      "levelFilter": "Kayıt düzeyi",
+      "filter": {
+        "all": "Tüm Düzeyler",
+        "error": "Hata ve Üzeri",
+        "warning": "Uyarı ve Üzeri",
+        "info": "Bilgi ve Üzeri",
+        "debug": "Hata ayıklama"
+      },
+      "level": {
+        "error": "hata",
+        "warning": "uyarı",
+        "info": "bilgi",
+        "debug": "hata ayıklama"
+      },
+      "showing_one": "{{count}} kayıt gösteriliyor",
+      "showing_other": "{{count}} kayıt gösteriliyor",
+      "empty": "Kayıt bulunamadı"
+    }
+  },
+  "cloud": {
+    "title": "Bulut Bağlantısı",
+    "errors": {
+      "loadFailed": "Bulut durumu yüklenemedi ({{error}})",
+      "disconnectFailed": "Bağlantı kesilemedi ({{error}})",
+      "syncFailed": "Eşitleme başarısız ({{error}})",
+      "approveFailed": "Program onaylanamadı ({{error}})",
+      "rejectFailed": "Program reddedilemedi ({{error}})",
+      "connectFailed": "Bağlanılamadı ({{error}})",
+      "testFailed": "Bağlantı testi başarısız",
+      "fieldsRequired": "URL ve API anahtarı gereklidir"
+    },
+    "status": {
+      "title": "Bağlantı Durumu",
+      "connected": "Bağlı",
+      "configuredDisconnected": "Yapılandırıldı (Bağlı değil)",
+      "notConfigured": "Yapılandırılmadı",
+      "syncActive": "Bulut eşitlemesi etkin",
+      "unreachable": "Bulut sunucusuna ulaşılamıyor",
+      "noConnection": "Bulut bağlantısı yapılandırılmadı",
+      "cloudConnected": "Buluta Bağlı",
+      "cloudDisconnected": "Bulut Bağlantısı Yok",
+      "offlineMode": "Çevrim Dışı Mod",
+      "syncingNormally": "Tüm sistemler normal eşitleniyor",
+      "willReconnect": "Yeniden bağlanma otomatik olarak denenecek",
+      "independent": "Sistem bağımsız çalışıyor",
+      "lastSync": "Son Eşitleme",
+      "never": "Hiç",
+      "pendingItems": "Bekleyen Öğeler",
+      "items_one": "{{count}} öğe",
+      "items_other": "{{count}} öğe",
+      "configuration": "Yapılandırma",
+      "configured": "Yapılandırıldı",
+      "notConfiguredLower": "Yapılandırılmadı"
+    },
+    "test": {
+      "latency": "Gecikme: {{value}}",
+      "server": "Sunucu: v{{version}}",
+      "button": "Bağlantıyı Test Et",
+      "testing": "Test ediliyor…"
+    },
+    "sync": {
+      "now": "Şimdi Eşitle",
+      "syncing": "Eşitleniyor…",
+      "triggered": "Eşitleme başlatıldı: {{time}}"
+    },
+    "disconnect": "Bağlantıyı Kes",
+    "confirmDisconnect": "Bulut bağlantısını kesmek istediğinizden emin misiniz?",
+    "configure": "Bulut Bağlantısını Yapılandır",
+    "queue": {
+      "title": "Bekleyen Eşitleme Kuyruğu",
+      "help": "Bulutla eşitlenmeyi bekleyen öğeler. Çevrim dışıyken yapılan değişiklikler burada sıraya alınır.",
+      "empty": "Bekleyen öğe yok",
+      "emptyHelp": "Tüm değişiklikler eşitlendi",
+      "entity": "Varlık",
+      "action": "İşlem",
+      "status": "Durum",
+      "created": "Oluşturulma",
+      "retry": "(deneme #{{n}})"
+    },
+    "entity": {
+      "equipment": "ekipman",
+      "zone": "bölge",
+      "automation": "otomasyon",
+      "alert": "alarm",
+      "reading": "okuma"
+    },
+    "action": {
+      "create": "oluştur",
+      "update": "güncelle",
+      "delete": "sil"
+    },
+    "queueStatus": {
+      "pending": "bekliyor",
+      "syncing": "eşitleniyor",
+      "failed": "başarısız",
+      "synced": "eşitlendi",
+      "completed": "tamamlandı"
+    },
+    "history": {
+      "title": "Eşitleme Geçmişi",
+      "help": "Bulut eşitleme işlemlerinin geçmişini görüntüleyin.",
+      "empty": "Henüz eşitleme geçmişi yok",
+      "emptyHelp": "Eşitleme işlemleri burada kaydedilecek",
+      "time": "Zaman",
+      "type": "Tür",
+      "status": "Durum",
+      "items": "Öğeler",
+      "triggeredBy": "Başlatan",
+      "synced": "{{n}} eşitlendi",
+      "failed": "({{n}} başarısız)",
+      "system": "Sistem"
+    },
+    "syncType": {
+      "manual": "manuel",
+      "automatic": "otomatik",
+      "scheduled": "zamanlanmış"
+    },
+    "syncStatus": {
+      "success": "başarılı",
+      "partial": "kısmi",
+      "failed": "başarısız"
+    },
+    "suggested": {
+      "title": "Buluttan Önerilen Programlar",
+      "help": "Buluta bağlıyken otomasyon programları incelemeniz için önerilebilir. Yerel otomasyonlarınıza eklemek için onaylayabilir veya reddedebilirsiniz.",
+      "empty": "Bekleyen önerilen program yok",
+      "emptyHelp": "Buluttan önerilen otomasyonlar burada görünecek",
+      "badge": "Bulut Önerisi",
+      "noDescription": "Açıklama yok",
+      "trigger": "Tetikleyici:",
+      "schedule": "Program ({{schedule}})",
+      "custom": "özel",
+      "actions": "İşlemler:",
+      "actionCount_one": "{{count}} işlem",
+      "actionCount_other": "{{count}} işlem",
+      "meta": "Bulut ID: {{id}} | Alındı: {{time}}",
+      "approve": "Onayla",
+      "reject": "Reddet",
+      "approved": "Program onaylandı! Otomasyon #{{id}} oluşturuldu.",
+      "rejected": "Program reddedildi."
+    },
+    "modal": {
+      "title": "Bulut Bağlantısını Yapılandır",
+      "url": "Bulut Sunucusu URL'si",
+      "apiKey": "API Anahtarı",
+      "apiKeyPlaceholder": "API anahtarınızı girin",
+      "connect": "Bağlan",
+      "connecting": "Bağlanılıyor…"
+    }
+  },
+  "notifications": {
+    "title": "Bildirimler",
+    "saved": "Yapılandırma kaydedildi",
+    "testSent": "Test mesajı gönderildi! Telegram'ınızı kontrol edin.",
+    "errors": {
+      "loadFailed": "Telegram yapılandırması yüklenemedi",
+      "saveFailed": "Yapılandırma kaydedilemedi",
+      "testFailed": "Test başarısız"
+    },
+    "telegram": {
+      "title": "Telegram Botu",
+      "intro": "Otomasyonlar programını kaçırdığında veya ekipman çevrim dışı olduğunda telefonunuza anında alarm gelsin.",
+      "setupTitle": "Kurulum Talimatları",
+      "steps": {
+        "findBotFather": "Telegram'ı açın ve <b>@BotFather</b> hesabını arayın",
+        "newBot": "<code>/newbot</code> gönderin ve bot oluşturmak için yönergeleri izleyin",
+        "copyToken": "<b>Bot token</b> değerini kopyalayıp aşağıya yapıştırın",
+        "addToChat": "Botunuzu bir grup sohbetine ekleyin (veya ona doğrudan mesaj gönderin)",
+        "findChatId": "Sohbette bir mesaj gönderin, ardından şu adresi açın:<br/><url>{{url}}</url><br/>ve <b>sohbet kimliğinizi</b> bulun (<code>{{snippet}}</code> ifadesini arayın)",
+        "pasteAndTest": "Sohbet kimliğini aşağıya yapıştırın ve <b>Bağlantıyı Test Et</b> düğmesine tıklayın"
+      },
+      "enable": "Telegram Alarmlarını Etkinleştir",
+      "botToken": "Bot Token",
+      "tokenConfigured": "Token yapılandırıldı. Değiştirmek için alana tıklayın.",
+      "chatId": "Sohbet Kimliği (Chat ID)",
+      "chatIdHelp": "Grup sohbeti kimlikleri tire (-) ile başlar. Bireysel sohbetler yalnızca rakamdan oluşur.",
+      "language": "Mesaj dili",
+      "languageHelp": "Telegram alarmlarının ve test mesajının dili. Bu ekranın dilinden bağımsızdır.",
+      "save": "Yapılandırmayı Kaydet",
+      "sending": "Gönderiliyor…",
+      "test": "Bağlantıyı Test Et"
+    },
+    "watchdog": {
+      "title": "İzleme Servisi",
+      "intro": "İzleme servisi etkin tüm otomasyonları ve ekipmanları otomatik olarak izler. Şu durumlarda Telegram alarmı gönderir:",
+      "reasons": {
+        "missedSchedule": "Zamanlanmış bir otomasyon çalışma aralığını kaçırdığında",
+        "thresholdNotExecuted": "Bir eşik koşulu sağlandığı hâlde otomasyon çalışmadığında",
+        "equipmentOffline": "Ekipman çevrim dışı olduğunda veya hata bildirdiğinde"
+      },
+      "monitoredAutomations": "İzlenen Otomasyonlar",
+      "offlineEquipment": "Çevrim Dışı Ekipman",
+      "equipmentErrors": "Ekipman Hataları",
+      "telegram": "Telegram",
+      "telegramActive": "Etkin",
+      "telegramOff": "Kapalı",
+      "recentAlerts": "Son İzleme Alarmları",
+      "noAlerts": "İzleme alarmı yok. Tüm sistemler normal çalışıyor."
+    }
+  },
+  "backup": {
+    "title": "Yedekleme ve Geri Yükleme",
+    "downloaded": "Yedek indirildi: {{filename}} ({{size}})",
+    "processing": "İşleniyor…",
+    "errors": {
+      "createFailed": "Yedek oluşturulamadı"
+    },
+    "create": {
+      "title": "Yedek Oluştur",
+      "description": "Sistem veritabanının tam yedeğini — kullanıcılar, ekipman, bölgeler, otomasyonlar, okumalar ve tüm ayarlar dâhil — cihaz dışında güvenle saklayabileceğiniz tek bir SQLite dosyası olarak indirin.",
+      "creating": "Yedek Oluşturuluyor…",
+      "button": "Yedek Oluştur"
+    },
+    "restore": {
+      "title": "Yedekten Geri Yükle",
+      "description": "Sisteminizi daha önce oluşturulmuş bir yedek dosyasından geri yükleyin. <warn>Bu işlem mevcut tüm verileri yedekteki verilerle değiştirir.</warn>",
+      "button": "Geri Yükle",
+      "fileRequired": "Lütfen bir yedek dosyası seçin",
+      "failed": "Geri yükleme başarısız",
+      "completeTitle": "Geri Yükleme Tamamlandı",
+      "completeBody": "Veritabanı geri yüklendi ve sistem yeniden başlatılıyor. Önceki verilerinizin güvenlik yedeği cihaza kaydedildi. Kısa süre içinde giriş ekranına yönlendirileceksiniz — sistem yeniden çevrim içi olduğunda lütfen tekrar giriş yapın (bu bir dakika kadar sürebilir).",
+      "confirmBody": "Sisteminizi geri yüklemek için bir yedek dosyası seçin. Bu işlem mevcut tüm verileri değiştirir.",
+      "selectFile": "Yedek Dosyası Seçin",
+      "selected": "Seçilen: {{name}}",
+      "restoring": "Geri yükleniyor…",
+      "confirmButton": "Geri Yüklemeyi Onayla"
+    },
+    "factoryReset": {
+      "title": "Fabrika Ayarlarına Sıfırla",
+      "description": "Sistemi fabrika ayarlarına döndürün. <warn>Bu işlem ekipman, bölgeler, otomasyonlar, kullanıcılar ve ayarlar dâhil TÜM verileri siler.</warn> Bu işlem geri alınamaz.",
+      "button": "Fabrika Ayarlarına Sıfırla",
+      "passwordRequired": "Parola gerekli",
+      "failed": "Fabrika ayarlarına sıfırlama başarısız",
+      "initiated": "Fabrika Ayarlarına Sıfırlama Başlatıldı",
+      "restarting": "Sistem kısa süre içinde yeniden başlayacak…",
+      "confirmTitle": "Fabrika Ayarlarına Sıfırlamayı Onayla",
+      "confirmBody": "Bu işlem tüm verileri kalıcı olarak siler. Onaylamak için parolanızı girin.",
+      "passwordLabel": "Onaylamak için parolanızı girin",
+      "passwordPlaceholder": "Parolanızı girin",
+      "confirmButton": "Sıfırlamayı Onayla"
+    }
+  },
+  "watchdog": {
+    "title": "İzleme Servisi",
+    "subtitle": "Bağlantı durumu, izleme alarmları ve sistem sağlığı geçmişi",
+    "liveStatus": "Canlı Durum",
+    "downSince": "{{time}} itibarıyla erişilemiyor",
+    "queued_one": "{{count}} bildirim kuyrukta — internet bağlantısı geri geldiğinde gönderilecek",
+    "queued_other": "{{count}} bildirim kuyrukta — internet bağlantısı geri geldiğinde gönderilecek",
+    "recentOutages": "Son Kesintiler",
+    "columns": {
+      "service": "Servis",
+      "recoveredAt": "Düzelme Zamanı",
+      "downtime": "Kesinti Süresi",
+      "time": "Zaman",
+      "type": "Tür",
+      "target": "Hedef",
+      "status": "Durum",
+      "message": "Mesaj",
+      "duration": "Süre"
+    },
+    "systemRestart": "Sistem Yeniden Başlatıldı",
+    "eventHistory": "Olay Geçmişi",
+    "filterType": "Olay türü",
+    "allTypes": "Tüm Türler",
+    "eventType": {
+      "connectivity": "Bağlantı",
+      "automation": "Otomasyon",
+      "equipment": "Ekipman",
+      "system": "Sistem"
+    },
+    "status": {
+      "up": "erişilebilir",
+      "down": "erişilemiyor",
+      "online": "çevrim içi",
+      "offline": "çevrim dışı",
+      "error": "hata",
+      "restart": "yeniden başlatma"
+    },
+    "service": {
+      "mcp": "MCP Sunucusu",
+      "internet": "İnternet"
+    },
+    "loadingEvents": "Olaylar yükleniyor…",
+    "noEvents": "Henüz kayıtlı izleme olayı yok. Olaylar ilk kontrol döngüsünden sonra (başlangıçtan ~30 sn sonra) burada görünür.",
+    "totalEvents_one": "Toplam {{value}} olay",
+    "totalEvents_other": "Toplam {{value}} olay",
+    "pageOf": "Sayfa {{page}} / {{total}}"
+  },
+  "networkUsage": {
+    "title": "Ağ Kullanımı",
+    "subtitle": "Günlük ve aylık ağ bant genişliği tüketimini izleyin",
+    "todayDownload": "Bugün İndirilen",
+    "todayUpload": "Bugün Yüklenen",
+    "monthDownload": "Bu Ay İndirilen",
+    "monthUpload": "Bu Ay Yüklenen",
+    "todayTotal": "Bugün Toplam",
+    "monthTotal": "Bu Ay Toplam",
+    "daily": "Günlük",
+    "monthly": "Aylık",
+    "allInterfaces": "Tüm Arayüzler",
+    "loading": "Ağ verileri yükleniyor…",
+    "empty": "Henüz ağ kullanımı verisi yok.",
+    "emptyHelp": "Veriler her 5 dakikada bir toplanır. Kısa süre sonra tekrar bakın.",
+    "dailyUsage": "Günlük Kullanım",
+    "monthlyUsage": "Aylık Kullanım",
+    "downloadValue": "İndirilen: {{value}}",
+    "uploadValue": "Yüklenen: {{value}}",
+    "download": "İndirilen",
+    "upload": "Yüklenen",
+    "breakdownTitle": "Arayüz Dökümü (Tüm Zamanlar)",
+    "columns": {
+      "interface": "Arayüz",
+      "download": "İndirilen",
+      "upload": "Yüklenen",
+      "total": "Toplam",
+      "since": "Başlangıç"
+    }
+  },
+  "requestLog": {
+    "title": "API İstek Günlüğü",
+    "subtitle": "Bant genişliğini hangi uç noktalar tüketiyor",
+    "windowLabel": "Zaman aralığı",
+    "window": {
+      "5": "Son 5 dk",
+      "15": "Son 15 dk",
+      "60": "Son 1 sa",
+      "360": "Son 6 sa",
+      "1440": "Son 24 sa"
+    },
+    "empty": "Henüz kayıtlı istek yok. Veriler ilk API çağrısından sonra görünür.",
+    "totals": {
+      "requests_one": "<b>{{value}}</b> istek",
+      "requests_other": "<b>{{value}}</b> istek",
+      "data": "<b>{{value}}</b> toplam yanıt verisi",
+      "avgSize": "Ort. <b>{{value}}</b>/istek",
+      "avgLatency": "Ort. <b>{{value}}</b> gecikme"
+    },
+    "columns": {
+      "endpoint": "Uç Nokta",
+      "requests": "İstek",
+      "totalData": "Toplam Veri",
+      "avgSize": "Ort. Boyut",
+      "avgLatency": "Ort. Gecikme",
+      "time": "Zaman",
+      "method": "Yöntem",
+      "path": "Yol",
+      "size": "Boyut"
+    },
+    "byIp": "İstemci IP'sine Göre",
+    "ipRequests_one": "{{value}} istek",
+    "ipRequests_other": "{{value}} istek",
+    "showRecent": "Son istekleri göster ({{n}})",
+    "hideRecent": "Son istekleri gizle ({{n}})"
+  },
+  "data": {
+    "title": "Veri Yönetimi",
+    "subtitle": "Depolama kullanımını izleyin ve geçmiş verileri temizleyin",
+    "confirmClear": "«{{label}}» içindeki TÜM kayıtları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+    "errors": {
+      "clearFailed": "Temizlenemedi"
+    },
+    "cleared_one": "{{label}}: {{value}} kayıt silindi",
+    "cleared_other": "{{label}}: {{value}} kayıt silindi",
+    "sdCard": "SD Kart Depolaması",
+    "usedOf": "{{total}} alanın {{used}} kadarı kullanılıyor",
+    "free": "{{value}} boş",
+    "database": "Veritabanı",
+    "dataDirectory": "Veri Dizini",
+    "walBackups": "WAL + yedekler",
+    "logs": "Günlükler",
+    "logFiles": "Günlük dosyaları",
+    "appTotal": "SenseHub Toplamı",
+    "ofSdCard": "SD kartın {{value}} kadarı",
+    "biggestTables": "Satır sayısına göre en büyük tablolar",
+    "loading": "Depolama bilgisi yükleniyor…",
+    "records_one": "{{value}} kayıt",
+    "records_other": "{{value}} kayıt",
+    "clearing": "Temizleniyor…",
+    "clearButton": "Temizle: {{label}}",
+    "warning": "<b>Uyarı:</b> Veri temizleme kalıcıdır ve geri alınamaz. Sensör okumaları ve laboratuvar verileri kaybolur. Önce bir yedek oluşturmayı düşünün.",
+    "targets": {
+      "alerts": {
+        "label": "Alarmlar",
+        "description": "Tüm alarm geçmişi (bilgi, uyarı, kritik, izleme)"
+      },
+      "automation-logs": {
+        "label": "Otomasyon Günlükleri",
+        "description": "Otomasyon yürütme geçmişi ve çalışma günlükleri"
+      },
+      "equipment-errors": {
+        "label": "Ekipman Hataları",
+        "description": "Ekipman hata ve arıza geçmişi"
+      },
+      "readings": {
+        "label": "Sensör Okumaları",
+        "description": "Tüm sensör/Modbus sorgulama veri geçmişi"
+      },
+      "lab-readings": {
+        "label": "Laboratuvar Okumaları",
+        "description": "Elle girilen laboratuvar besin analizi kayıtları"
+      },
+      "relay-events": {
+        "label": "Röle Olayları",
+        "description": "Fertigasyon takibi için röle açma/kapama olay geçmişi"
+      },
+      "watchdog-events": {
+        "label": "İzleme Olayları",
+        "description": "İzleme servisi ve bağlantı izleme geçmişi"
+      },
+      "sync-queue": {
+        "label": "Senkronizasyon Kuyruğu",
+        "description": "Bulut eşitleme kuyruğu kayıtları"
+      },
+      "watchdog-cooldowns": {
+        "label": "İzleme Bekleme Süreleri",
+        "description": "Alarmların hemen yeniden tetiklenebilmesi için izleme alarmı bekleme sürelerini sıfırlar"
+      },
+      "request-log": {
+        "label": "İstek Günlüğü",
+        "description": "Ağ trafiği analizi için kullanılan API istek günlüğü"
+      },
+      "network-usage": {
+        "label": "Ağ Kullanımı",
+        "description": "Ağ bant genişliği takip anlık görüntüleri"
+      }
+    }
+  }
+}

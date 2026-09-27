@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -7,6 +8,7 @@ import { useSettings } from '../context/SettingsContext';
 const API_BASE = '/api';
 
 export default function Zones() {
+  const { t } = useTranslation('zones');
   const { token, user } = useAuth();
   const { formatDateTime } = useSettings();
   const { showError, showSuccess } = useToast();
@@ -59,7 +61,7 @@ export default function Zones() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch zones');
+        throw new Error(t('err.fetchZones'));
       }
 
       const data = await response.json();
@@ -82,13 +84,13 @@ export default function Zones() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch zone details');
+        throw new Error(t('err.fetchDetail'));
       }
 
       const data = await response.json();
       setZoneDetail(data);
     } catch (err) {
-      showError(err.message, 'Failed to load zone details');
+      showError(err.message, t('err.loadDetail'));
     } finally {
       setLoadingDetail(false);
     }
@@ -118,7 +120,7 @@ export default function Zones() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch equipment');
+        throw new Error(t('err.fetchEquipment'));
       }
 
       const allEquipment = await response.json();
@@ -129,7 +131,7 @@ export default function Zones() {
 
       setAvailableEquipment(available);
     } catch (err) {
-      showError(err.message, 'Failed to load equipment');
+      showError(err.message, t('err.loadEquipment'));
     } finally {
       setLoadingEquipment(false);
     }
@@ -162,7 +164,7 @@ export default function Zones() {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.message || 'Failed to assign equipment');
+        throw new Error(err.message || t('err.assign'));
       }
 
       // Refresh zone detail to show newly assigned equipment
@@ -170,9 +172,9 @@ export default function Zones() {
       closeAssignEquipmentModal();
       // Refresh zones list to update equipment counts
       fetchZones();
-      showSuccess('Equipment assigned successfully');
+      showSuccess(t('toast.assigned'));
     } catch (err) {
-      showError(err.message, 'Failed to assign equipment');
+      showError(err.message, t('err.assign'));
     } finally {
       setAssigningEquipment(false);
     }
@@ -181,7 +183,7 @@ export default function Zones() {
   const handleRemoveEquipment = async (equipmentId) => {
     if (!selectedZone) return;
 
-    if (!confirm('Remove this equipment from the zone?')) return;
+    if (!confirm(t('confirmRemoveEquipment'))) return;
 
     try {
       const response = await fetch(`${API_BASE}/zones/${selectedZone.id}/equipment/${equipmentId}`, {
@@ -193,16 +195,16 @@ export default function Zones() {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.message || 'Failed to remove equipment');
+        throw new Error(err.message || t('err.remove'));
       }
 
       // Refresh zone detail
       await fetchZoneDetail(selectedZone.id);
       // Refresh zones list to update equipment counts
       fetchZones();
-      showSuccess('Equipment removed from zone');
+      showSuccess(t('toast.removed'));
     } catch (err) {
-      showError(err.message, 'Failed to remove equipment');
+      showError(err.message, t('err.remove'));
     }
   };
 
@@ -227,15 +229,15 @@ export default function Zones() {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.message || 'Failed to create zone');
+        throw new Error(err.message || t('err.create'));
       }
 
       setNewZone({ name: '', description: '', parent_id: '' });
       setShowAddModal(false);
       fetchZones();
-      showSuccess('Zone created successfully');
+      showSuccess(t('toast.created'));
     } catch (err) {
-      showError(err.message, 'Failed to create zone');
+      showError(err.message, t('err.create'));
     } finally {
       setSaving(false);
     }
@@ -292,7 +294,7 @@ export default function Zones() {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.message || 'Failed to update zone');
+        throw new Error(err.message || t('err.update'));
       }
 
       // Update the selected zone and zone detail
@@ -308,9 +310,9 @@ export default function Zones() {
       setTimeout(() => {
         closeEditModal();
       }, 1500);
-      showSuccess('Zone updated successfully');
+      showSuccess(t('toast.updated'));
     } catch (err) {
-      showError(err.message, 'Failed to update zone');
+      showError(err.message, t('err.update'));
     } finally {
       setEditSaving(false);
     }
@@ -338,16 +340,16 @@ export default function Zones() {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.message || 'Failed to delete zone');
+        throw new Error(err.message || t('err.delete'));
       }
 
       // Close modals and refresh list
       closeDeleteModal();
       closeDetailModal();
       fetchZones();
-      showSuccess('Zone deleted successfully');
+      showSuccess(t('toast.deleted'));
     } catch (err) {
-      showError(err.message, 'Failed to delete zone');
+      showError(err.message, t('err.delete'));
     } finally {
       setDeleting(false);
     }
@@ -356,7 +358,7 @@ export default function Zones() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Zones</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('title')}</h1>
         <div className="flex justify-center items-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
@@ -367,14 +369,14 @@ export default function Zones() {
   if (error) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Zones</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('title')}</h1>
         <div role="alert" aria-live="assertive" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <p className="text-red-600">{error}</p>
           <button
             onClick={fetchZones}
             className="mt-2 text-sm text-red-700 underline"
           >
-            Try again
+            {t('common:actions.tryAgain')}
           </button>
         </div>
       </div>
@@ -384,7 +386,7 @@ export default function Zones() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Zones</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('title')}</h1>
         {canManageZones && (
           <button
             onClick={() => setShowAddModal(true)}
@@ -393,7 +395,7 @@ export default function Zones() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add Zone
+            {t('addZone')}
           </button>
         )}
       </div>
@@ -401,22 +403,25 @@ export default function Zones() {
       {/* Search Bar */}
       <div className="mb-6">
         <div className="relative max-w-md">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none">
             <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
           <input
             type="text"
-            placeholder="Search zones by name..."
+            placeholder={t('searchPlaceholder')}
+            aria-label={t('searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+            className="block w-full ps-10 pe-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
           />
           {searchTerm && (
             <button
               onClick={() => setSearchTerm('')}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              className="absolute inset-y-0 end-0 pe-3 flex items-center"
+              aria-label={t('clearSearch')}
+              title={t('clearSearch')}
             >
               <svg className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -426,18 +431,18 @@ export default function Zones() {
         </div>
         {searchTerm && (
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-            Showing {filteredZones.length} of {zones.length} zones
+            {t('showingCount', { shown: filteredZones.length, count: zones.length })}
           </p>
         )}
       </div>
 
       {zones.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <p className="text-gray-500 dark:text-gray-400 text-center">No zones configured yet.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-center">{t('empty')}</p>
         </div>
       ) : filteredZones.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <p className="text-gray-500 dark:text-gray-400 text-center">No zones match your search.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-center">{t('noMatch')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -449,17 +454,17 @@ export default function Zones() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{zone.name}</h3>
+                  <h3 dir="auto" className="text-lg font-semibold text-gray-900 dark:text-white">{zone.name}</h3>
                   {zone.description && (
-                    <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{zone.description}</p>
+                    <p dir="auto" className="text-gray-500 dark:text-gray-400 text-sm mt-1">{zone.description}</p>
                   )}
                 </div>
-                <div className="ml-4">
+                <div className="ms-4 shrink-0">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 me-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                     </svg>
-                    {zone.equipment_count} equipment
+                    {t('equipmentCount', { count: zone.equipment_count ?? 0 })}
                   </span>
                 </div>
               </div>
@@ -472,11 +477,11 @@ export default function Zones() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add New Zone</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('addTitle')}</h2>
             <form onSubmit={handleAddZone}>
               <div className="mb-4">
                 <label htmlFor="zone-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Zone Name *
+                  {t('form.name')} *
                 </label>
                 <input
                   id="zone-name"
@@ -484,26 +489,28 @@ export default function Zones() {
                   value={newZone.name}
                   onChange={(e) => setNewZone({ ...newZone, name: e.target.value })}
                   className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-                  placeholder="e.g., Production Floor"
+                  placeholder={t('form.namePlaceholder')}
+                  dir="auto"
                   required
                 />
               </div>
               <div className="mb-4">
                 <label htmlFor="zone-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Description
+                  {t('form.description')}
                 </label>
                 <textarea
                   id="zone-description"
                   value={newZone.description}
                   onChange={(e) => setNewZone({ ...newZone, description: e.target.value })}
                   className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-                  placeholder="Optional description of this zone"
+                  placeholder={t('form.descriptionPlaceholder')}
+                  dir="auto"
                   rows={3}
                 />
               </div>
               <div className="mb-6">
                 <label htmlFor="zone-parent" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Parent Zone
+                  {t('form.parent')}
                 </label>
                 <select
                   id="zone-parent"
@@ -511,7 +518,7 @@ export default function Zones() {
                   onChange={(e) => setNewZone({ ...newZone, parent_id: e.target.value })}
                   className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 >
-                  <option value="">None (Top Level)</option>
+                  <option value="">{t('form.parentNone')}</option>
                   {zones.map((zone) => (
                     <option key={zone.id} value={zone.id}>
                       {zone.name}
@@ -519,7 +526,7 @@ export default function Zones() {
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Optional: Select a parent zone to create a hierarchy
+                  {t('form.parentHelp')}
                 </p>
               </div>
               <div className="flex justify-end gap-3">
@@ -529,14 +536,14 @@ export default function Zones() {
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                   disabled={saving}
                 >
-                  Cancel
+                  {t('common:actions.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving || !newZone.name.trim()}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
                 >
-                  {saving ? 'Creating...' : 'Create Zone'}
+                  {saving ? t('form.creating') : t('form.create')}
                 </button>
               </div>
             </form>
@@ -549,14 +556,15 @@ export default function Zones() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">{selectedZone.name}</h2>
+              <h2 dir="auto" className="text-xl font-bold text-gray-900 dark:text-white min-w-0 break-words">{selectedZone.name}</h2>
               <div className="flex items-center gap-2">
                 {canManageZones && (
                   <>
                     <button
                       onClick={openEditModal}
                       className="text-blue-600 hover:text-blue-800 p-1"
-                      title="Edit zone"
+                      title={t('editZone')}
+                      aria-label={t('editZone')}
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -566,7 +574,8 @@ export default function Zones() {
                       <button
                         onClick={openDeleteModal}
                         className="text-red-600 hover:text-red-800 p-1"
-                        title="Delete zone"
+                        title={t('deleteZone')}
+                        aria-label={t('deleteZone')}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -578,6 +587,8 @@ export default function Zones() {
                 <button
                   onClick={closeDetailModal}
                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label={t('common:actions.close')}
+                  title={t('common:actions.close')}
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -594,38 +605,38 @@ export default function Zones() {
               <div className="space-y-6">
                 {/* Zone Info */}
                 <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Zone Information</h3>
+                  <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">{t('info.title')}</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Name</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{zoneDetail.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t('info.name')}</p>
+                      <p dir="auto" className="font-medium text-gray-900 dark:text-white break-words">{zoneDetail.name}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">ID</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t('info.id')}</p>
                       <p className="font-medium text-gray-900 dark:text-white">{zoneDetail.id}</p>
                     </div>
                   </div>
                   {zoneDetail.description && (
                     <div className="mt-4">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Description</p>
-                      <p className="text-gray-700 dark:text-gray-300">{zoneDetail.description}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t('info.description')}</p>
+                      <p dir="auto" className="text-gray-700 dark:text-gray-300">{zoneDetail.description}</p>
                     </div>
                   )}
                   {zoneDetail.parent_id && (
                     <div className="mt-4">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Parent Zone</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t('form.parent')}</p>
                       <p className="text-gray-700 dark:text-gray-300 font-medium">
-                        {zones.find(z => z.id === zoneDetail.parent_id)?.name || `Zone #${zoneDetail.parent_id}`}
+                        {zones.find(z => z.id === zoneDetail.parent_id)?.name || t('zoneNumber', { id: zoneDetail.parent_id })}
                       </p>
                     </div>
                   )}
                   <div className="mt-4 grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Created</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t('info.created')}</p>
                       <p className="text-gray-700 dark:text-gray-300">{formatDateTime(zoneDetail.created_at)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Updated</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{t('info.updated')}</p>
                       <p className="text-gray-700 dark:text-gray-300">{formatDateTime(zoneDetail.updated_at)}</p>
                     </div>
                   </div>
@@ -635,7 +646,7 @@ export default function Zones() {
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                      Assigned Equipment ({zoneDetail.equipment?.length || 0})
+                      {t('assigned.title', { count: zoneDetail.equipment?.length || 0 })}
                     </h3>
                     {canManageZones && (
                       <button
@@ -645,7 +656,7 @@ export default function Zones() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
-                        Assign Equipment
+                        {t('assigned.assignButton')}
                       </button>
                     )}
                   </div>
@@ -654,8 +665,8 @@ export default function Zones() {
                       {zoneDetail.equipment.map((equip) => (
                         <div key={equip.id} className="p-3 flex items-center justify-between">
                           <div>
-                            <p className="font-medium text-gray-900 dark:text-white">{equip.name}</p>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{equip.type} • {equip.protocol}</p>
+                            <p dir="auto" className="font-medium text-gray-900 dark:text-white">{equip.name}</p>
+                            <p dir="auto" className="text-sm text-gray-500 dark:text-gray-400">{equip.type} • {equip.protocol}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className={`px-2 py-1 text-xs rounded-full ${
@@ -664,13 +675,14 @@ export default function Zones() {
                               equip.status === 'warning' ? 'bg-amber-100 text-amber-800' :
                               'bg-red-100 text-red-800'
                             }`}>
-                              {equip.status}
+                              {t(`equipStatus.${equip.status}`, { defaultValue: equip.status })}
                             </span>
                             {canManageZones && (
                               <button
                                 onClick={() => handleRemoveEquipment(equip.id)}
                                 className="text-red-600 hover:text-red-800 p-1"
-                                title="Remove from zone"
+                                title={t('assigned.remove')}
+                                aria-label={t('assigned.removeNamed', { name: equip.name })}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -683,13 +695,13 @@ export default function Zones() {
                     </div>
                   ) : (
                     <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 text-center">
-                      <p className="text-gray-500 dark:text-gray-400">No equipment assigned to this zone</p>
+                      <p className="text-gray-500 dark:text-gray-400">{t('assigned.empty')}</p>
                       {canManageZones && (
                         <button
                           onClick={openAssignEquipmentModal}
                           className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
                         >
-                          Assign equipment now
+                          {t('assigned.assignNow')}
                         </button>
                       )}
                     </div>
@@ -700,14 +712,14 @@ export default function Zones() {
                 {zoneDetail.children && zoneDetail.children.length > 0 && (
                   <div>
                     <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                      Child Zones ({zoneDetail.children.length})
+                      {t('children', { count: zoneDetail.children.length })}
                     </h3>
                     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
                       {zoneDetail.children.map((child) => (
                         <div key={child.id} className="p-3">
-                          <p className="font-medium text-gray-900 dark:text-white">{child.name}</p>
+                          <p dir="auto" className="font-medium text-gray-900 dark:text-white">{child.name}</p>
                           {child.description && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{child.description}</p>
+                            <p dir="auto" className="text-sm text-gray-500 dark:text-gray-400">{child.description}</p>
                           )}
                         </div>
                       ))}
@@ -722,7 +734,7 @@ export default function Zones() {
                 onClick={closeDetailModal}
                 className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg"
               >
-                Close
+                {t('common:actions.close')}
               </button>
             </div>
           </div>
@@ -734,7 +746,7 @@ export default function Zones() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              Assign Equipment to {selectedZone.name}
+              {t('assign.title', { name: selectedZone.name })}
             </h2>
 
             {loadingEquipment ? (
@@ -743,15 +755,15 @@ export default function Zones() {
               </div>
             ) : availableEquipment.length === 0 ? (
               <div className="py-4 text-center">
-                <p className="text-gray-500 dark:text-gray-400">No available equipment to assign.</p>
+                <p className="text-gray-500 dark:text-gray-400">{t('assign.none')}</p>
                 <p className="text-sm text-gray-400 mt-1">
-                  All equipment is either already assigned to this zone or no equipment exists.
+                  {t('assign.noneHelp')}
                 </p>
               </div>
             ) : (
               <div className="mb-6">
                 <label htmlFor="select-equipment" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Select Equipment
+                  {t('assign.select')}
                 </label>
                 <select
                   id="select-equipment"
@@ -759,10 +771,10 @@ export default function Zones() {
                   onChange={(e) => setSelectedEquipmentId(e.target.value)}
                   className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                 >
-                  <option value="">-- Select Equipment --</option>
+                  <option value="">{t('assign.selectOption')}</option>
                   {availableEquipment.map((equip) => (
                     <option key={equip.id} value={equip.id}>
-                      {equip.name} ({equip.type} - {equip.status})
+                      {t('assign.option', { name: equip.name, type: equip.type, status: t(`equipStatus.${equip.status}`, { defaultValue: equip.status }) })}
                     </option>
                   ))}
                 </select>
@@ -776,7 +788,7 @@ export default function Zones() {
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                 disabled={assigningEquipment}
               >
-                Cancel
+                {t('common:actions.cancel')}
               </button>
               {availableEquipment.length > 0 && (
                 <button
@@ -784,7 +796,7 @@ export default function Zones() {
                   disabled={assigningEquipment || !selectedEquipmentId}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
                 >
-                  {assigningEquipment ? 'Assigning...' : 'Assign'}
+                  {assigningEquipment ? t('assign.assigning') : t('assign.assign')}
                 </button>
               )}
             </div>
@@ -796,7 +808,7 @@ export default function Zones() {
       {showEditModal && selectedZone && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Edit Zone</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('editTitle')}</h2>
 
             {editSuccess ? (
               <div className="py-6 text-center">
@@ -805,13 +817,13 @@ export default function Zones() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <p className="text-green-600 font-medium">Zone updated successfully!</p>
+                <p className="text-green-600 font-medium">{t('updatedBanner')}</p>
               </div>
             ) : (
               <form onSubmit={handleEditZone}>
                 <div className="mb-4">
                   <label htmlFor="edit-zone-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Zone Name *
+                    {t('form.name')} *
                   </label>
                   <input
                     id="edit-zone-name"
@@ -819,26 +831,28 @@ export default function Zones() {
                     value={editZone.name}
                     onChange={(e) => setEditZone({ ...editZone, name: e.target.value })}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-                    placeholder="e.g., Production Floor"
+                    placeholder={t('form.namePlaceholder')}
+                  dir="auto"
                     required
                   />
                 </div>
                 <div className="mb-4">
                   <label htmlFor="edit-zone-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Description
+                    {t('form.description')}
                   </label>
                   <textarea
                     id="edit-zone-description"
                     value={editZone.description}
                     onChange={(e) => setEditZone({ ...editZone, description: e.target.value })}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
-                    placeholder="Optional description of this zone"
+                    placeholder={t('form.descriptionPlaceholder')}
+                  dir="auto"
                     rows={3}
                   />
                 </div>
                 <div className="mb-6">
                   <label htmlFor="edit-zone-parent" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Parent Zone
+                    {t('form.parent')}
                   </label>
                   <select
                     id="edit-zone-parent"
@@ -846,7 +860,7 @@ export default function Zones() {
                     onChange={(e) => setEditZone({ ...editZone, parent_id: e.target.value })}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                   >
-                    <option value="">None (Top Level)</option>
+                    <option value="">{t('form.parentNone')}</option>
                     {zones.filter(z => z.id !== selectedZone.id).map((zone) => (
                       <option key={zone.id} value={zone.id}>
                         {zone.name}
@@ -854,7 +868,7 @@ export default function Zones() {
                     ))}
                   </select>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Optional: Select a parent zone to create a hierarchy
+                    {t('form.parentHelp')}
                   </p>
                 </div>
                 <div className="flex justify-end gap-3">
@@ -864,14 +878,14 @@ export default function Zones() {
                     className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                     disabled={editSaving}
                   >
-                    Cancel
+                    {t('common:actions.cancel')}
                   </button>
                   <button
                     type="submit"
                     disabled={editSaving || !editZone.name.trim()}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
                   >
-                    {editSaving ? 'Saving...' : 'Save Changes'}
+                    {editSaving ? t('common:actions.saving') : t('form.saveChanges')}
                   </button>
                 </div>
               </form>
@@ -890,14 +904,14 @@ export default function Zones() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Delete Zone</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('deleteTitle')}</h2>
             </div>
 
             <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Are you sure you want to delete <span className="font-semibold">{selectedZone.name}</span>?
+              <Trans t={t} i18nKey="delete.confirm" values={{ name: selectedZone.name }} components={{ b: <span dir="auto" className="font-semibold" /> }} />
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              This action cannot be undone. Equipment assigned to this zone will be unassigned but not deleted.
+              {t('delete.help')}
             </p>
 
             <div className="flex justify-end gap-3">
@@ -907,14 +921,14 @@ export default function Zones() {
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                 disabled={deleting}
               >
-                Cancel
+                {t('common:actions.cancel')}
               </button>
               <button
                 onClick={handleDeleteZone}
                 disabled={deleting}
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg disabled:opacity-50"
               >
-                {deleting ? 'Deleting...' : 'Delete Zone'}
+                {deleting ? t('delete.deleting') : t('deleteTitle')}
               </button>
             </div>
           </div>

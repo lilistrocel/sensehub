@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../../context/ToastContext';
 import { getChannelDisplayName } from '../../utils/channelUtils';
 import TransitionEditor from './TransitionEditor';
@@ -8,9 +9,15 @@ import { API_BASE } from './formStyles';
 
 // Template manager (CRUD) and "new from template" picker, moved out of
 // pages/Automations.jsx. Behaviour unchanged; buttons lifted to touch size.
+// Strings: `templates` namespace (shared with pages/Templates.jsx). Default
+// action messages ('Alert triggered', 'Event logged', 'Coil N') are saved
+// into the template data and stay English on purpose.
+
+const CATEGORIES = ['General', 'Monitoring', 'Control', 'Safety', 'Maintenance', 'Logging', 'Manual'];
 
 // Template Manager Modal - CRUD for automation templates
 export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated }) {
+  const { t } = useTranslation('templates');
   const { showError } = useToast();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -79,7 +86,7 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
       const response = await fetch(`${API_BASE}/automation-templates`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error('Failed to fetch templates');
+      if (!response.ok) throw new Error(t('manager.loadFailed'));
       const data = await response.json();
       setTemplates(data);
     } catch (err) {
@@ -166,7 +173,7 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
               : (selectedEq?.register_mappings || []);
             mapping = mappings.find(m => String(m.register ?? m.address) === ch);
           } catch (err) {
-            showError(`Could not read channel mappings for ${selectedEq?.name || 'the selected equipment'}: ${err.message}`);
+            showError(t('manager.channelMappings', { name: selectedEq?.name || t('manager.selectedEquipment'), error: err.message }));
           }
           return { channel: parseInt(ch), state: v, name: mapping ? getChannelDisplayName(mapping) : `Coil ${ch}` };
         });
@@ -226,7 +233,7 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
   const handleSave = async () => {
     if (!formName.trim()) return;
     if (formActions.length === 0) {
-      setError('At least one action is required');
+      setError(t('manager.actionRequired'));
       return;
     }
 
@@ -249,16 +256,16 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
       });
 
       if (!response.ok) {
-        let msg = 'Failed to save template';
+        let msg = t('manager.saveFailed');
         try { const data = await response.json(); msg = data.message || data.error || msg; } catch {}
         throw new Error(msg);
       }
       const result = await response.json();
 
       if (!isNew && result.propagated_to > 0) {
-        setSuccessMsg(`Template saved. Updated ${result.propagated_to} linked automation(s).`);
+        setSuccessMsg(t('manager.savedPropagated', { count: result.propagated_to }));
       } else {
-        setSuccessMsg(isNew ? 'Template created.' : 'Template saved.');
+        setSuccessMsg(isNew ? t('manager.created') : t('manager.saved'));
       }
 
       await fetchTemplates();
@@ -277,9 +284,9 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error('Failed to delete template');
+      if (!response.ok) throw new Error(t('manager.deleteFailed'));
       const result = await response.json();
-      setSuccessMsg(`Template deleted. ${result.unlinked_automations} automation(s) unlinked.`);
+      setSuccessMsg(t('manager.deleted', { count: Number(result.unlinked_automations) || 0 }));
       setShowDeleteConfirm(null);
       await fetchTemplates();
       if (onTemplateUpdated) onTemplateUpdated();
@@ -294,21 +301,21 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 transition-opacity bg-night/60" onClick={onClose}></div>
-        <div className="inline-block w-full max-w-4xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
-          <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="inline-block w-full max-w-4xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-start align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
+          <button onClick={onClose} aria-label={t('common:actions.close')} className="absolute top-4 end-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Manage Automation Templates</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 pe-10">{t('manager.title')}</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            Templates define reusable actions. Automations linked to a template inherit its actions — edit a template to update all linked automations at once.
+            {t('manager.intro')}
           </p>
 
           {successMsg && (
             <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 mb-4 text-sm text-green-800 dark:text-green-400 flex items-center">
-              <svg className="h-4 w-4 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-4 w-4 me-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               {successMsg}
@@ -325,86 +332,86 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
           {editingTemplate && (
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 mb-4 border border-gray-200 dark:border-gray-700">
               <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                {editingTemplate.id === 'new' ? 'Create New Template' : `Edit: ${editingTemplate.name}`}
+                {editingTemplate.id === 'new' ? t('manager.createTitle') : t('manager.editTitle', { name: editingTemplate.name })}
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
-                  <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)}
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('manager.name')}</label>
+                  <input type="text" dir="auto" value={formName} onChange={(e) => setFormName(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    placeholder="Template name" />
+                    placeholder={t('manager.namePlaceholder')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Category</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('manager.category')}</label>
                   <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                    {['General', 'Monitoring', 'Control', 'Safety', 'Maintenance', 'Logging', 'Manual'].map(c => (
-                      <option key={c} value={c}>{c}</option>
+                    {CATEGORIES.map(c => (
+                      <option key={c} value={c}>{t(`category.${c}`, { defaultValue: c })}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Description</label>
-                  <input type="text" value={formDescription} onChange={(e) => setFormDescription(e.target.value)}
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('manager.description')}</label>
+                  <input type="text" dir="auto" value={formDescription} onChange={(e) => setFormDescription(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    placeholder="What does this template do?" />
+                    placeholder={t('manager.descriptionPlaceholder')} />
                 </div>
               </div>
 
               {/* Actions list */}
               <div className="mb-3">
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Actions ({formActions.length})</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{t('manager.actions', { n: formActions.length })}</label>
                 {formActions.length > 0 && (
                   <div className="space-y-1 mb-2">
                     {formActions.map((action, idx) => (
                       <div key={idx} className="flex items-center justify-between bg-white dark:bg-gray-800 rounded px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600">
                         <span className="truncate">
                           <span className={`font-medium capitalize ${action.type === 'transition' ? 'text-violet-700 dark:text-violet-400' : ''}`}>
-                            {action.type === 'transition' ? '⚡ atomic' : action.type}
+                            {action.type === 'transition' ? `⚡ ${t('manager.actionType.transition')}` : t(`manager.actionType.${action.type}`, { defaultValue: action.type })}
                           </span>
-                          {action.type === 'alert' && <span className="ml-1 text-gray-500">({action.severity}) {action.message}</span>}
-                          {action.type === 'log' && <span className="ml-1 text-gray-500">{action.message}</span>}
+                          {action.type === 'alert' && <span className="ms-1 text-gray-500">({t(`common:severity.${action.severity}`, { defaultValue: action.severity })}) <span dir="auto">{action.message}</span></span>}
+                          {action.type === 'log' && <span className="ms-1 text-gray-500" dir="auto">{action.message}</span>}
                           {action.type === 'control' && (
-                            <span className="ml-1 text-gray-500">
-                              {action.action} {action.equipment_name || `Equipment #${action.equipment_id}`}
-                              {action.channel_name ? ` → ${action.channel_name}` : action.channel ? ` → Ch ${action.channel}` : ' → All channels'}
-                              {action.delay_seconds ? ` (delay ${action.delay_seconds}s)` : ''}
-                              {action.duration_seconds ? ` (auto-off ${action.duration_seconds}s)` : ''}
-                              {action.stagger_delay_seconds ? ` (stagger ${action.stagger_delay_seconds}s)` : ''}
+                            <span className="ms-1 text-gray-500">
+                              {t(`automations:summary.action.${action.action}`, { defaultValue: action.action })} <span dir="auto">{action.equipment_name || t('manager.equipmentFallback', { id: action.equipment_id })}</span>
+                              {' '}{t('manager.channelArrow', { channel: action.channel_name ? `\u2068${action.channel_name}\u2069` : action.channel ? t('manager.ch', { n: action.channel }) : t('manager.allChannels') })}
+                              {action.delay_seconds ? ` ${t('manager.delay', { n: action.delay_seconds })}` : ''}
+                              {action.duration_seconds ? ` ${t('manager.autoOff', { n: action.duration_seconds })}` : ''}
+                              {action.stagger_delay_seconds ? ` ${t('manager.stagger', { n: action.stagger_delay_seconds })}` : ''}
                             </span>
                           )}
                           {action.type === 'transition' && (
-                            <span className="ml-1 text-gray-500">
-                              {action.equipment_name || `Equipment #${action.equipment_id}`}
+                            <span className="ms-1 text-gray-500">
+                              <span dir="auto">{action.equipment_name || t('manager.equipmentFallback', { id: action.equipment_id })}</span>
                               {' '}
-                              {(action.transitions || []).map(t => (
-                                <span key={t.channel} className={`inline-block px-1 mx-0.5 rounded text-xs ${t.state ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                                  {t.name || `ch${t.channel}`}={t.state ? 'ON' : 'OFF'}
+                              {(action.transitions || []).map(tr => (
+                                <span key={tr.channel} dir="auto" className={`inline-block px-1 mx-0.5 rounded text-xs ${tr.state ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                  {tr.name || `ch${tr.channel}`}={tr.state ? t('common:status.on') : t('common:status.off')}
                                 </span>
                               ))}
-                              {action.delay_seconds ? ` (delay ${action.delay_seconds}s)` : ''}
-                              {action.duration_seconds ? ` (auto-revert ${action.duration_seconds}s)` : ''}
+                              {action.delay_seconds ? ` ${t('manager.delay', { n: action.delay_seconds })}` : ''}
+                              {action.duration_seconds ? ` ${t('manager.autoRevert', { n: action.duration_seconds })}` : ''}
                             </span>
                           )}
                           {Array.isArray(action.dependencies) && action.dependencies.length > 0 && (
-                            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
-                              🔒 {action.dependencies.length} dep{action.dependencies.length > 1 ? 's' : ''}
+                            <span className="ms-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                              🔒 {t('manager.depCount', { count: action.dependencies.length })}
                             </span>
                           )}
                         </span>
-                        <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                        <div className="flex items-center gap-1 ms-2 flex-shrink-0">
                           <button onClick={() => setEditingDepsIdx(editingDepsIdx === idx ? null : idx)}
                             className={`px-2 py-0.5 text-xs rounded ${editingDepsIdx === idx ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}
-                            title="Edit dependencies">
+                            title={t('manager.editDeps')} aria-label={t('manager.editDeps')}>
                             🔒
                           </button>
-                          <button onClick={() => editAction(idx)} className="text-primary-500 hover:text-primary-700">
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <button onClick={() => editAction(idx)} className="text-primary-500 hover:text-primary-700" aria-label={t('manager.editAction')} title={t('manager.editAction')}>
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                           </button>
-                          <button onClick={() => removeAction(idx)} className="text-red-500 hover:text-red-700">
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <button onClick={() => removeAction(idx)} className="text-red-500 hover:text-red-700" aria-label={t('manager.removeAction')} title={t('manager.removeAction')}>
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
                           </button>
@@ -427,13 +434,13 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
                 {/* Add/Edit action form */}
                 <div className="flex flex-wrap gap-2 items-end bg-white dark:bg-gray-800 p-3 rounded border dark:border-gray-600">
                   <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Type</label>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.type')}</label>
                     <select value={newActionType} onChange={(e) => { setNewActionType(e.target.value); setEditingActionIdx(null); }}
                       className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                      <option value="alert">Send Alert</option>
-                      <option value="control">Control Equipment</option>
-                      <option value="transition">Atomic Transition (FC15)</option>
-                      <option value="log">Log Event</option>
+                      <option value="alert">{t('manager.typeOption.alert')}</option>
+                      <option value="control">{t('manager.typeOption.control')}</option>
+                      <option value="transition">{t('manager.typeOption.transition')}</option>
+                      <option value="log">{t('manager.typeOption.log')}</option>
                     </select>
                   </div>
                   {newActionType === 'transition' && (
@@ -452,30 +459,30 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
                   {newActionType === 'alert' && (
                     <>
                       <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Severity</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.severity')}</label>
                         <select value={newActionSeverity} onChange={(e) => setNewActionSeverity(e.target.value)}
                           className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                          <option value="info">Info</option>
-                          <option value="warning">Warning</option>
-                          <option value="critical">Critical</option>
+                          <option value="info">{t('common:severity.info')}</option>
+                          <option value="warning">{t('common:severity.warning')}</option>
+                          <option value="critical">{t('common:severity.critical')}</option>
                         </select>
                       </div>
                       <div className="flex-1">
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Message</label>
-                        <input type="text" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
-                          placeholder="Alert message..." className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.message')}</label>
+                        <input type="text" dir="auto" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
+                          placeholder={t('manager.alertPlaceholder')} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
                       </div>
                     </>
                   )}
                   {newActionType === 'control' && (
                     <>
                       <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Equipment</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.equipment')}</label>
                         <select value={newControlEquipmentId}
                           onChange={(e) => { setNewControlEquipmentId(e.target.value); setNewControlChannel(''); setNewControlChannelName(''); }}
                           className="px-2 py-1.5 border border-gray-300 rounded text-sm min-w-[150px] dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                          <option value="">Select equipment...</option>
-                          {loadingEquipment ? <option disabled>Loading...</option> : equipment.map(eq => (
+                          <option value="">{t('manager.selectEquipment')}</option>
+                          {loadingEquipment ? <option disabled>{t('manager.loading')}</option> : equipment.map(eq => (
                             <option key={eq.id} value={eq.id}>{eq.name}</option>
                           ))}
                         </select>
@@ -488,7 +495,7 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
                         if (relayChannels.length === 0) return null;
                         return (
                           <div>
-                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Channel</label>
+                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.channel')}</label>
                             <select value={newControlChannel}
                               onChange={(e) => {
                                 const addr = e.target.value;
@@ -501,7 +508,7 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
                                 }
                               }}
                               className="px-2 py-1.5 border border-gray-300 rounded text-sm min-w-[120px] dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                              <option value="">All channels</option>
+                              <option value="">{t('manager.allChannels')}</option>
                               {relayChannels.map(ch => {
                                 const addr = ch.register ?? ch.address;
                                 return <option key={addr} value={addr}>{getChannelDisplayName(ch)}</option>;
@@ -511,61 +518,61 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
                         );
                       })()}
                       <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Action</label>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.action')}</label>
                         <select value={newControlAction} onChange={(e) => setNewControlAction(e.target.value)}
                           className="px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                          <option value="on">Turn On</option>
-                          <option value="off">Turn Off</option>
-                          <option value="toggle">Toggle</option>
-                          <option value="set">Set Value</option>
+                          <option value="on">{t('manager.turnOn')}</option>
+                          <option value="off">{t('manager.turnOff')}</option>
+                          <option value="toggle">{t('manager.toggle')}</option>
+                          <option value="set">{t('manager.setValue')}</option>
                         </select>
                       </div>
                       {newControlAction === 'set' && (
                         <div>
-                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Value</label>
-                          <input type="text" value={newControlValue} onChange={(e) => setNewControlValue(e.target.value)}
-                            className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="e.g., 75" />
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.value')}</label>
+                          <input type="text" dir="ltr" value={newControlValue} onChange={(e) => setNewControlValue(e.target.value)}
+                            className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder={t('manager.valuePlaceholder')} />
                         </div>
                       )}
                       <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Delay (sec)</label>
-                        <input type="number" min="0" value={newControlDelay} onChange={(e) => setNewControlDelay(e.target.value)}
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.delaySec')}</label>
+                        <input type="number" min="0" dir="ltr" value={newControlDelay} onChange={(e) => setNewControlDelay(e.target.value)}
                           className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0"
-                          title="Seconds to wait before executing" />
+                          title={t('manager.delayTitle')} />
                       </div>
                       {!newControlChannel && (
                         <div>
-                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Stagger (sec)</label>
-                          <input type="number" min="0" step="0.5" value={newControlStaggerDelay} onChange={(e) => setNewControlStaggerDelay(e.target.value)}
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.staggerSec')}</label>
+                          <input type="number" min="0" step="0.5" dir="ltr" value={newControlStaggerDelay} onChange={(e) => setNewControlStaggerDelay(e.target.value)}
                             className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0"
-                            title="Seconds between each channel firing" />
+                            title={t('manager.staggerTitle')} />
                         </div>
                       )}
                       {(newControlAction === 'on' || newControlAction === 'toggle') && (
                         <div>
-                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Auto-off (sec)</label>
-                          <input type="number" min="0" value={newControlDuration} onChange={(e) => setNewControlDuration(e.target.value)}
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.autoOffSec')}</label>
+                          <input type="number" min="0" dir="ltr" value={newControlDuration} onChange={(e) => setNewControlDuration(e.target.value)}
                             className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="0"
-                            title="Seconds until auto-off. 0 = stay on" />
+                            title={t('manager.autoOffTitle')} />
                         </div>
                       )}
                     </>
                   )}
                   {newActionType === 'log' && (
                     <div className="flex-1">
-                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Message</label>
-                      <input type="text" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
-                        placeholder="Log message..." className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('manager.message')}</label>
+                      <input type="text" dir="auto" value={newActionMessage} onChange={(e) => setNewActionMessage(e.target.value)}
+                        placeholder={t('manager.logPlaceholder')} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
                     </div>
                   )}
                   <div className="flex gap-1">
                     <button onClick={addAction}
                       className={`min-h-[40px] px-3 py-1.5 text-white rounded text-sm flex-shrink-0 ${editingActionIdx !== null ? 'bg-green-600 hover:bg-green-700' : 'bg-primary-600 hover:bg-primary-700'}`}>
-                      {editingActionIdx !== null ? 'Update' : 'Add'}
+                      {editingActionIdx !== null ? t('manager.update') : t('common:actions.add')}
                     </button>
                     {editingActionIdx !== null && (
                       <button onClick={resetActionForm} className="min-h-[40px] px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-sm hover:bg-gray-300 dark:hover:bg-gray-600">
-                        Cancel
+                        {t('common:actions.cancel')}
                       </button>
                     )}
                   </div>
@@ -574,11 +581,11 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
 
               <div className="flex justify-end gap-2">
                 <button onClick={resetForm} className="min-h-[40px] px-3 py-1.5 text-gray-600 dark:text-gray-400 bg-gray-200 dark:bg-gray-700 rounded text-sm hover:bg-gray-300 dark:hover:bg-gray-600">
-                  Cancel
+                  {t('common:actions.cancel')}
                 </button>
                 <button onClick={handleSave} disabled={saving || !formName.trim() || formActions.length === 0}
                   className="min-h-[40px] px-3 py-1.5 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 disabled:opacity-50">
-                  {saving ? 'Saving...' : editingTemplate.id === 'new' ? 'Create Template' : 'Save & Propagate'}
+                  {saving ? t('common:actions.saving') : editingTemplate.id === 'new' ? t('manager.createTemplate') : t('manager.saveAndPropagate')}
                 </button>
               </div>
             </div>
@@ -594,40 +601,40 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
               {!editingTemplate && (
                 <button onClick={startCreate}
                   className="mb-4 min-h-touch px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 flex items-center">
-                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  New Template
+                  {t('manager.newTemplate')}
                 </button>
               )}
 
               <div className="max-h-[400px] overflow-y-auto space-y-2">
-                {templates.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                {templates.map((tpl) => (
+                  <div key={tpl.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">{t.name}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{t.category}</span>
-                        {t.is_system ? <span className="text-xs text-blue-500">System</span> : null}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white" dir="auto">{tpl.name}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{t(`category.${tpl.category}`, { defaultValue: tpl.category })}</span>
+                        {tpl.is_system ? <span className="text-xs text-blue-500">{t('system')}</span> : null}
                       </div>
-                      {t.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{t.description}</p>}
-                      <div className="text-xs text-gray-400 mt-1">{t.actions?.length || 0} action(s)</div>
+                      {tpl.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate" dir="auto">{tpl.description}</p>}
+                      <div className="text-xs text-gray-400 mt-1">{t('actionCount', { count: tpl.actions?.length || 0 })}</div>
                     </div>
-                    <div className="flex items-center gap-2 ml-3">
-                      <button onClick={() => startEdit(t)}
+                    <div className="flex items-center gap-2 ms-3">
+                      <button onClick={() => startEdit(tpl)}
                         className="text-primary-600 hover:text-primary-800 text-sm">
-                        Edit
+                        {t('common:actions.edit')}
                       </button>
-                      {!t.is_system && (
-                        showDeleteConfirm === t.id ? (
+                      {!tpl.is_system && (
+                        showDeleteConfirm === tpl.id ? (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => handleDelete(t.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">Confirm</button>
-                            <button onClick={() => setShowDeleteConfirm(null)} className="text-gray-500 text-xs">Cancel</button>
+                            <button onClick={() => handleDelete(tpl.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">{t('common:actions.confirm')}</button>
+                            <button onClick={() => setShowDeleteConfirm(null)} className="text-gray-500 text-xs">{t('common:actions.cancel')}</button>
                           </div>
                         ) : (
-                          <button onClick={() => setShowDeleteConfirm(t.id)}
+                          <button onClick={() => setShowDeleteConfirm(tpl.id)}
                             className="text-red-500 hover:text-red-700 text-sm">
-                            Delete
+                            {t('common:actions.delete')}
                           </button>
                         )
                       )}
@@ -635,7 +642,7 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
                   </div>
                 ))}
                 {templates.length === 0 && (
-                  <p className="text-center text-gray-500 dark:text-gray-400 py-8 text-sm">No templates yet. Create one to get started.</p>
+                  <p className="text-center text-gray-500 dark:text-gray-400 py-8 text-sm">{t('manager.empty')}</p>
                 )}
               </div>
             </>
@@ -648,6 +655,7 @@ export function TemplateManagerModal({ isOpen, onClose, token, onTemplateUpdated
 
 // Template Selection Modal
 export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
+  const { t } = useTranslation('templates');
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -674,7 +682,7 @@ export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch templates');
+        throw new Error(t('picker.loadFailed'));
       }
 
       const data = await response.json();
@@ -713,7 +721,7 @@ export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create automation from template');
+        throw new Error(t('picker.createFailed'));
       }
 
       const newAutomation = await response.json();
@@ -795,35 +803,36 @@ export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
         ></div>
 
         {/* Modal */}
-        <div className="inline-block w-full max-w-4xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
+        <div className="inline-block w-full max-w-4xl p-4 sm:p-6 my-8 mx-4 overflow-hidden text-start align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-lg relative">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            aria-label={t('common:actions.close')}
+            className="absolute top-4 end-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
 
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-            Choose a Template
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 pe-10">
+            {t('picker.title')}
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-            Select a template to define the actions. You'll configure the trigger (schedule, threshold, or manual) after creation.
+            {t('picker.intro')}
           </p>
 
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-              <span className="ml-3 text-gray-500 dark:text-gray-400">Loading templates...</span>
+              <span className="ms-3 text-gray-500 dark:text-gray-400">{t('picker.loading')}</span>
             </div>
           )}
 
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
               <div className="flex items-center">
-                <svg className="h-5 w-5 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5 text-red-400 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="text-red-800 dark:text-red-400">{error}</span>
@@ -832,7 +841,7 @@ export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
           )}
 
           {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pe-2">
               {Object.entries(templatesByCategory).map(([category, categoryTemplates]) => (
                 <React.Fragment key={category}>
                   {categoryTemplates.map((template) => (
@@ -846,27 +855,27 @@ export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
                       }`}
                     >
                       <div className="flex items-start">
-                        <div className={`p-2 rounded-lg mr-3 ${categoryColors[category] || categoryColors.Other}`}>
+                        <div className={`p-2 rounded-lg me-3 ${categoryColors[category] || categoryColors.Other}`}>
                           {categoryIcons[category] || categoryIcons.Other}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="text-sm font-medium text-gray-900 dark:text-white truncate" dir="auto">
                               {template.name}
                             </h4>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${categoryColors[category] || categoryColors.Other}`}>
-                              {category}
+                            <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${categoryColors[category] || categoryColors.Other}`}>
+                              {t(`category.${category}`, { defaultValue: category })}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2" dir="auto">
                             {template.description}
                           </p>
                           <div className="mt-2 flex items-center text-xs text-gray-400 dark:text-gray-500">
-                            <span>{template.actions?.length || 0} action(s)</span>
+                            <span>{t('actionCount', { count: template.actions?.length || 0 })}</span>
                             {template.is_system ? (
                               <>
                                 <span className="mx-2">•</span>
-                                <span className="text-blue-500">System</span>
+                                <span className="text-blue-500">{t('system')}</span>
                               </>
                             ) : null}
                           </div>
@@ -884,23 +893,24 @@ export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
             <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
                 <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
-                  Customize Your Automation
+                  {t('picker.customize')}
                 </h4>
                 <div className="mb-4">
                   <label htmlFor="template-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Automation Name
+                    {t('picker.automationName')}
                   </label>
                   <input
                     type="text"
+                    dir="auto"
                     id="template-name"
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:placeholder-gray-400"
-                    placeholder="Enter a name for your automation"
+                    placeholder={t('picker.namePlaceholder')}
                   />
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  <strong>Template:</strong> {selectedTemplate.name} — {selectedTemplate.description}
+                  <strong>{t('picker.templateLabel')}</strong> <span dir="auto">{selectedTemplate.name} — {selectedTemplate.description}</span>
                 </p>
               </div>
             </div>
@@ -913,7 +923,7 @@ export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
               className="min-h-touch px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               disabled={creating}
             >
-              Cancel
+              {t('common:actions.cancel')}
             </button>
             <button
               onClick={handleCreateFromTemplate}
@@ -922,18 +932,18 @@ export function TemplatesModal({ isOpen, onClose, token, onSelectTemplate }) {
             >
               {creating ? (
                 <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Creating...
+                  {t('picker.creating')}
                 </>
               ) : (
                 <>
-                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-4 w-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  Create from Template
+                  {t('picker.create')}
                 </>
               )}
             </button>

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 
 const API_BASE = '/api';
 
 export default function Users() {
+  const { t } = useTranslation('users');
   const { token, user } = useAuth();
   const { formatDateTime } = useSettings();
   const [users, setUsers] = useState([]);
@@ -48,9 +50,9 @@ export default function Users() {
 
       if (!response.ok) {
         if (response.status === 403) {
-          throw new Error('Access denied. Admin privileges required.');
+          throw new Error(t('errors.accessDenied'));
         }
-        throw new Error('Failed to fetch users');
+        throw new Error(t('errors.loadFailed'));
       }
 
       const data = await response.json();
@@ -75,24 +77,24 @@ export default function Users() {
 
     // Validation
     if (!formData.name.trim()) {
-      setFormError('Name is required');
+      setFormError(t('validation.nameRequired'));
       setFormLoading(false);
       return;
     }
     if (!formData.email.trim()) {
-      setFormError('Email is required');
+      setFormError(t('validation.emailRequired'));
       setFormLoading(false);
       return;
     }
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      setFormError('Invalid email format');
+      setFormError(t('validation.emailInvalid'));
       setFormLoading(false);
       return;
     }
     if (!formData.password || formData.password.length < 8) {
-      setFormError('Password must be at least 8 characters');
+      setFormError(t('validation.passwordMin', { min: 8 }));
       setFormLoading(false);
       return;
     }
@@ -110,13 +112,13 @@ export default function Users() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to create user');
+        throw new Error(data.message || t('errors.createFailed'));
       }
 
       // Success - close modal and refresh list
       setShowModal(false);
       setFormData({ name: '', email: '', password: '', role: 'viewer' });
-      setSuccessMessage(`User "${data.name}" created successfully!`);
+      setSuccessMessage(t('success.created', { name: data.name }));
       setTimeout(() => setSuccessMessage(''), 5000);
       fetchUsers();
     } catch (err) {
@@ -133,25 +135,25 @@ export default function Users() {
 
     // Validation
     if (!formData.name.trim()) {
-      setFormError('Name is required');
+      setFormError(t('validation.nameRequired'));
       setFormLoading(false);
       return;
     }
     if (!formData.email.trim()) {
-      setFormError('Email is required');
+      setFormError(t('validation.emailRequired'));
       setFormLoading(false);
       return;
     }
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      setFormError('Invalid email format');
+      setFormError(t('validation.emailInvalid'));
       setFormLoading(false);
       return;
     }
     // Password is optional when editing
     if (formData.password && formData.password.length < 8) {
-      setFormError('Password must be at least 8 characters');
+      setFormError(t('validation.passwordMin', { min: 8 }));
       setFormLoading(false);
       return;
     }
@@ -179,14 +181,14 @@ export default function Users() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to update user');
+        throw new Error(data.message || t('errors.updateFailed'));
       }
 
       // Success - close modal and refresh list
       setShowModal(false);
       setEditingUser(null);
       setFormData({ name: '', email: '', password: '', role: 'viewer' });
-      setSuccessMessage(`User "${formData.name}" updated successfully!`);
+      setSuccessMessage(t('success.updated', { name: formData.name }));
       setTimeout(() => setSuccessMessage(''), 5000);
       fetchUsers();
     } catch (err) {
@@ -240,7 +242,7 @@ export default function Users() {
     if (!userToDelete) return;
 
     if (!deletePassword) {
-      setDeleteError('Your password is required to confirm deletion.');
+      setDeleteError(t('validation.deletePasswordRequired'));
       return;
     }
 
@@ -258,7 +260,7 @@ export default function Users() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Failed to delete user');
+        throw new Error(data.message || t('errors.deleteFailed'));
       }
 
       // Success - close modal and refresh list
@@ -266,7 +268,7 @@ export default function Users() {
       setShowDeleteConfirm(false);
       setUserToDelete(null);
       setDeletePassword('');
-      setSuccessMessage(`User "${deletedName}" deleted successfully!`);
+      setSuccessMessage(t('success.deleted', { name: deletedName }));
       setTimeout(() => setSuccessMessage(''), 5000);
       fetchUsers();
     } catch (err) {
@@ -296,11 +298,11 @@ export default function Users() {
 
     // Validation
     if (!newPassword) {
-      setResetPasswordError('Password is required');
+      setResetPasswordError(t('validation.passwordRequired'));
       return;
     }
     if (newPassword.length < 8) {
-      setResetPasswordError('Password must be at least 8 characters');
+      setResetPasswordError(t('validation.passwordMin', { min: 8 }));
       return;
     }
 
@@ -319,14 +321,14 @@ export default function Users() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Failed to reset password');
+        throw new Error(data.message || t('errors.resetFailed'));
       }
 
       // Success - close modal and show message
       setShowResetPasswordModal(false);
       setUserToResetPassword(null);
       setNewPassword('');
-      setSuccessMessage(`Password for "${userToResetPassword.name}" has been reset successfully!`);
+      setSuccessMessage(t('success.passwordReset', { name: userToResetPassword.name }));
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       setResetPasswordError(err.message);
@@ -336,7 +338,7 @@ export default function Users() {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Never';
+    if (!dateString) return t('list.neverLoggedIn');
     return formatDateTime(dateString);
   };
 
@@ -357,7 +359,7 @@ export default function Users() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        <span className="ml-2 text-gray-600">Loading users...</span>
+        <span className="ms-2 text-gray-600">{t('loading')}</span>
       </div>
     );
   }
@@ -369,8 +371,8 @@ export default function Users() {
           <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800">Error</h3>
+          <div className="ms-3">
+            <h3 className="text-sm font-medium text-red-800">{t('common:toast.error')}</h3>
             <p className="mt-1 text-sm text-red-700">{error}</p>
           </div>
         </div>
@@ -387,24 +389,24 @@ export default function Users() {
             <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            <p className="ml-3 text-sm text-green-700">{successMessage}</p>
+            <p className="ms-3 text-sm text-green-700">{successMessage}</p>
           </div>
         </div>
       )}
 
-      <div className="mb-6 flex justify-between items-center">
+      <div className="mb-6 flex flex-wrap gap-3 justify-between items-center">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
-          <p className="text-sm text-gray-500">Manage system users and their roles</p>
+          <h2 className="text-lg font-semibold text-gray-900">{t('header.title')}</h2>
+          <p className="text-sm text-gray-500">{t('header.subtitle')}</p>
         </div>
         <button
           onClick={openAddUserModal}
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
         >
-          <svg className="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="-ms-1 me-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
-          Add User
+          {t('header.addUser')}
         </button>
       </div>
 
@@ -413,20 +415,20 @@ export default function Users() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
+              <th scope="col" className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {t('table.name')}
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Email
+              <th scope="col" className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {t('table.email')}
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Role
+              <th scope="col" className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {t('table.role')}
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Last Login
+              <th scope="col" className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {t('table.lastLogin')}
               </th>
               <th scope="col" className="relative px-6 py-3">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t('table.actions')}</span>
               </th>
             </tr>
           </thead>
@@ -434,7 +436,7 @@ export default function Users() {
             {users.length === 0 ? (
               <tr>
                 <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
-                  No users found
+                  {t('list.empty')}
                 </td>
               </tr>
             ) : (
@@ -449,45 +451,45 @@ export default function Users() {
                           </span>
                         </div>
                       </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{u.name}</div>
+                      <div className="ms-4">
+                        <div className="text-sm font-medium text-gray-900" dir="auto">{u.name}</div>
                         {u.id === user?.id && (
-                          <span className="text-xs text-gray-400">(You)</span>
+                          <span className="text-xs text-gray-400">{t('list.you')}</span>
                         )}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{u.email}</div>
+                    <div className="text-sm text-gray-900"><bdi dir="ltr">{u.email}</bdi></div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full capitalize ${getRoleBadgeColor(u.role)}`}>
-                      {u.role}
+                      {t(`common:role.${u.role}`, { defaultValue: u.role })}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(u.last_login)}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap text-end text-sm font-medium">
                     <button
                       onClick={() => openEditUserModal(u)}
-                      className="text-primary-600 hover:text-primary-900 mr-3"
+                      className="text-primary-600 hover:text-primary-900 me-3"
                     >
-                      Edit
+                      {t('common:actions.edit')}
                     </button>
                     {u.id !== user?.id && (
                       <>
                         <button
                           onClick={() => openResetPasswordModal(u)}
-                          className="text-amber-600 hover:text-amber-900 mr-3"
+                          className="text-amber-600 hover:text-amber-900 me-3"
                         >
-                          Reset Password
+                          {t('actions.resetPassword')}
                         </button>
                         <button
                           onClick={() => openDeleteConfirmation(u)}
                           className="text-red-600 hover:text-red-900"
                         >
-                          Delete
+                          {t('common:actions.delete')}
                         </button>
                       </>
                     )}
@@ -501,7 +503,7 @@ export default function Users() {
       </div>
 
       <div className="mt-4 text-sm text-gray-500">
-        Total: {users.length} user{users.length !== 1 ? 's' : ''}
+        {t('list.total', { count: users.length })}
       </div>
 
       {/* Add/Edit User Modal */}
@@ -517,7 +519,7 @@ export default function Users() {
 
             {/* Modal panel */}
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div className="inline-block align-bottom bg-white rounded-lg text-start overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <form onSubmit={editingUser ? handleEditUser : handleCreateUser}>
                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                   <div className="sm:flex sm:items-start">
@@ -530,14 +532,14 @@ export default function Users() {
                         )}
                       </svg>
                     </div>
-                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
+                    <div className="mt-3 text-center sm:mt-0 sm:ms-4 sm:text-start flex-1">
                       <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                        {editingUser ? 'Edit User' : 'Add New User'}
+                        {editingUser ? t('form.editTitle') : t('form.addTitle')}
                       </h3>
                       <p className="mt-1 text-sm text-gray-500">
                         {editingUser
-                          ? 'Update user account information.'
-                          : 'Create a new user account for the system.'}
+                          ? t('form.editSubtitle')
+                          : t('form.addSubtitle')}
                       </p>
 
                       {formError && (
@@ -549,7 +551,7 @@ export default function Users() {
                       <div className="mt-4 space-y-4">
                         <div>
                           <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                            Full Name
+                            {t('form.fullName')}
                           </label>
                           <input
                             type="text"
@@ -558,13 +560,13 @@ export default function Users() {
                             value={formData.name}
                             onChange={handleInputChange}
                             className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
-                            placeholder="John Doe"
+                            placeholder={t('form.namePlaceholder')}
                           />
                         </div>
 
                         <div>
                           <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                            Email Address
+                            {t('form.email')}
                           </label>
                           <input
                             type="email"
@@ -574,12 +576,13 @@ export default function Users() {
                             onChange={handleInputChange}
                             className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                             placeholder="user@example.com"
+                            dir="ltr"
                           />
                         </div>
 
                         <div>
                           <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                            Password {editingUser && <span className="text-gray-400 font-normal">(leave blank to keep current)</span>}
+                            {t('form.password')} {editingUser && <span className="text-gray-400 font-normal">{t('form.passwordKeepHint')}</span>}
                           </label>
                           <input
                             type="password"
@@ -588,13 +591,13 @@ export default function Users() {
                             value={formData.password}
                             onChange={handleInputChange}
                             className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
-                            placeholder={editingUser ? "Leave blank to keep current password" : "Minimum 8 characters"}
+                            placeholder={editingUser ? t('form.passwordKeepPlaceholder') : t('form.passwordMinPlaceholder', { min: 8 })}
                           />
                         </div>
 
                         <div>
                           <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                            Role
+                            {t('form.role')}
                           </label>
                           <select
                             name="role"
@@ -603,9 +606,9 @@ export default function Users() {
                             onChange={handleInputChange}
                             className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
                           >
-                            <option value="viewer">Viewer - View-only access</option>
-                            <option value="operator">Operator - Can control equipment and create automations</option>
-                            <option value="admin">Admin - Full system access</option>
+                            <option value="viewer">{t('form.roleOption.viewer')}</option>
+                            <option value="operator">{t('form.roleOption.operator')}</option>
+                            <option value="admin">{t('form.roleOption.admin')}</option>
                           </select>
                         </div>
                       </div>
@@ -616,26 +619,26 @@ export default function Users() {
                   <button
                     type="submit"
                     disabled={formLoading}
-                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ms-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {formLoading ? (
                       <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        {editingUser ? 'Saving...' : 'Creating...'}
+                        {editingUser ? t('common:actions.saving') : t('form.creating')}
                       </>
                     ) : (
-                      editingUser ? 'Save Changes' : 'Create User'
+                      editingUser ? t('form.saveChanges') : t('form.createUser')
                     )}
                   </button>
                   <button
                     type="button"
                     onClick={closeModal}
-                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ms-3 sm:w-auto sm:text-sm"
                   >
-                    Cancel
+                    {t('common:actions.cancel')}
                   </button>
                 </div>
               </form>
@@ -657,7 +660,7 @@ export default function Users() {
 
             {/* Modal panel */}
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div className="inline-block align-bottom bg-white rounded-lg text-start overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="sm:flex sm:items-start">
                   <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
@@ -665,14 +668,18 @@ export default function Users() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                   </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                  <div className="mt-3 text-center sm:mt-0 sm:ms-4 sm:text-start">
                     <h3 className="text-lg leading-6 font-medium text-gray-900" id="delete-modal-title">
-                      Delete User
+                      {t('delete.title')}
                     </h3>
                     <div className="mt-2">
                       <p className="text-sm text-gray-500">
-                        Are you sure you want to delete the user <strong>{userToDelete.name}</strong> ({userToDelete.email})?
-                        This action cannot be undone.
+                        <Trans
+                          t={t}
+                          i18nKey="delete.body"
+                          values={{ name: userToDelete.name, email: userToDelete.email }}
+                          components={{ b: <strong dir="auto" />, email: <span dir="ltr" /> }}
+                        />
                       </p>
                     </div>
 
@@ -684,7 +691,7 @@ export default function Users() {
 
                     <div className="mt-4">
                       <label htmlFor="delete-confirm-password" className="block text-sm font-medium text-gray-700">
-                        Confirm with your password
+                        {t('delete.passwordLabel')}
                       </label>
                       <input
                         type="password"
@@ -696,11 +703,11 @@ export default function Users() {
                           setDeleteError('');
                         }}
                         className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
-                        placeholder="Your account password"
+                        placeholder={t('delete.passwordPlaceholder')}
                         autoFocus
                       />
                       <p className="mt-1 text-xs text-gray-500">
-                        Enter your own password to confirm this deletion.
+                        {t('delete.passwordHelp')}
                       </p>
                     </div>
                   </div>
@@ -711,27 +718,27 @@ export default function Users() {
                   type="button"
                   onClick={handleDeleteUser}
                   disabled={deleteLoading || !deletePassword}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ms-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {deleteLoading ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Deleting...
+                      {t('delete.deleting')}
                     </>
                   ) : (
-                    'Delete'
+                    t('common:actions.delete')
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={closeDeleteConfirmation}
                   disabled={deleteLoading}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ms-3 sm:w-auto sm:text-sm disabled:opacity-50"
                 >
-                  Cancel
+                  {t('common:actions.cancel')}
                 </button>
               </div>
             </div>
@@ -752,7 +759,7 @@ export default function Users() {
 
             {/* Modal panel */}
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div className="inline-block align-bottom bg-white rounded-lg text-start overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="sm:flex sm:items-start">
                   <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-amber-100 sm:mx-0 sm:h-10 sm:w-10">
@@ -760,13 +767,18 @@ export default function Users() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                     </svg>
                   </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
+                  <div className="mt-3 text-center sm:mt-0 sm:ms-4 sm:text-start flex-1">
                     <h3 className="text-lg leading-6 font-medium text-gray-900" id="reset-password-modal-title">
-                      Reset Password
+                      {t('reset.title')}
                     </h3>
                     <div className="mt-2">
                       <p className="text-sm text-gray-500">
-                        Set a new password for <strong>{userToResetPassword.name}</strong> ({userToResetPassword.email})
+                        <Trans
+                          t={t}
+                          i18nKey="reset.body"
+                          values={{ name: userToResetPassword.name, email: userToResetPassword.email }}
+                          components={{ b: <strong dir="auto" />, email: <span dir="ltr" /> }}
+                        />
                       </p>
                     </div>
 
@@ -778,7 +790,7 @@ export default function Users() {
 
                     <div className="mt-4">
                       <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
-                        New Password
+                        {t('reset.newPassword')}
                       </label>
                       <input
                         type="password"
@@ -790,11 +802,11 @@ export default function Users() {
                           setResetPasswordError('');
                         }}
                         className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-amber-500 focus:border-amber-500 sm:text-sm bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
-                        placeholder="Minimum 8 characters"
+                        placeholder={t('form.passwordMinPlaceholder', { min: 8 })}
                         autoFocus
                       />
                       <p className="mt-1 text-xs text-gray-500">
-                        The user will need to use this password to log in.
+                        {t('reset.help')}
                       </p>
                     </div>
                   </div>
@@ -805,27 +817,27 @@ export default function Users() {
                   type="button"
                   onClick={handleResetPassword}
                   disabled={resetPasswordLoading || !newPassword}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-amber-600 text-base font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-amber-600 text-base font-medium text-white hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:ms-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {resetPasswordLoading ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ms-1 me-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Resetting...
+                      {t('reset.resetting')}
                     </>
                   ) : (
-                    'Reset Password'
+                    t('reset.submit')
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={closeResetPasswordModal}
                   disabled={resetPasswordLoading}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ms-3 sm:w-auto sm:text-sm disabled:opacity-50"
                 >
-                  Cancel
+                  {t('common:actions.cancel')}
                 </button>
               </div>
             </div>

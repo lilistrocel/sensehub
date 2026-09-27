@@ -1,0 +1,85 @@
+{
+  "loading": "Loading users…",
+  "header": {
+    "title": "User Management",
+    "subtitle": "Manage system users and their roles",
+    "addUser": "Add User"
+  },
+  "table": {
+    "name": "Name",
+    "email": "Email",
+    "role": "Role",
+    "lastLogin": "Last Login",
+    "actions": "Actions"
+  },
+  "list": {
+    "empty": "No users found",
+    "you": "(You)",
+    "neverLoggedIn": "Never",
+    "total_one": "Total: {{count}} user",
+    "total_other": "Total: {{count}} users"
+  },
+  "actions": {
+    "resetPassword": "Reset Password"
+  },
+  "errors": {
+    "accessDenied": "Access denied. Admin privileges required.",
+    "loadFailed": "Failed to fetch users",
+    "createFailed": "Failed to create user",
+    "updateFailed": "Failed to update user",
+    "deleteFailed": "Failed to delete user",
+    "resetFailed": "Failed to reset password"
+  },
+  "validation": {
+    "nameRequired": "Name is required",
+    "emailRequired": "Email is required",
+    "emailInvalid": "Invalid email format",
+    "passwordRequired": "Password is required",
+    "passwordMin": "Password must be at least {{min}} characters",
+    "deletePasswordRequired": "Your password is required to confirm deletion."
+  },
+  "success": {
+    "created": "User \"{{name}}\" created successfully!",
+    "updated": "User \"{{name}}\" updated successfully!",
+    "deleted": "User \"{{name}}\" deleted successfully!",
+    "passwordReset": "Password for \"{{name}}\" has been reset successfully!"
+  },
+  "form": {
+    "addTitle": "Add New User",
+    "editTitle": "Edit User",
+    "addSubtitle": "Create a new user account for the system.",
+    "editSubtitle": "Update user account information.",
+    "fullName": "Full Name",
+    "namePlaceholder": "John Doe",
+    "email": "Email Address",
+    "password": "Password",
+    "passwordKeepHint": "(leave blank to keep current)",
+    "passwordKeepPlaceholder": "Leave blank to keep current password",
+    "passwordMinPlaceholder": "Minimum {{min}} characters",
+    "role": "Role",
+    "roleOption": {
+      "viewer": "Viewer - View-only access",
+      "operator": "Operator - Can control equipment and create automations",
+      "admin": "Admin - Full system access"
+    },
+    "creating": "Creating…",
+    "saveChanges": "Save Changes",
+    "createUser": "Create User"
+  },
+  "delete": {
+    "title": "Delete User",
+    "body": "Are you sure you want to delete the user <b>{{name}}</b> (<email>{{email}}</email>)? This action cannot be undone.",
+    "passwordLabel": "Confirm with your password",
+    "passwordPlaceholder": "Your account password",
+    "passwordHelp": "Enter your own password to confirm this deletion.",
+    "deleting": "Deleting…"
+  },
+  "reset": {
+    "title": "Reset Password",
+    "body": "Set a new password for <b>{{name}}</b> (<email>{{email}}</email>)",
+    "newPassword": "New Password",
+    "help": "The user will need to use this password to log in.",
+    "resetting": "Resetting…",
+    "submit": "Reset Password"
+  }
+}

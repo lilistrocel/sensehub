@@ -211,7 +211,7 @@ router.post('/setup/quick', (req, res) => {
 
     // Mark initial setup as complete
     db.prepare(
-      'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+      "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))"
     ).run('setup_completed', JSON.stringify(true));
 
     // Mark as quick setup so a password change can be enforced later.
@@ -223,7 +223,7 @@ router.post('/setup/quick', (req, res) => {
     // change-password screen. The admin's current password is a random secret
     // that is never disclosed, so the only way forward is to set a new one.
     db.prepare(
-      'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+      "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))"
     ).run('quick_setup', JSON.stringify(true));
 
     // Create session for immediate login
@@ -302,7 +302,7 @@ router.post('/setup', (req, res) => {
 
     // Mark initial setup as complete in system settings
     db.prepare(
-      'INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime("now"))'
+      "INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))"
     ).run('setup_completed', JSON.stringify(true));
 
     res.status(201).json({
@@ -366,7 +366,7 @@ router.post('/login', (req, res) => {
       email: user.email,
       name: user.name,
       role: user.role,
-      language: (pref && pref.language) || 'en'
+      language: (pref && pref.language) || null // null = never chosen: device language
     },
     expiresAt
   });
@@ -411,7 +411,7 @@ router.get('/session', (req, res) => {
         email: session.email,
         name: session.name,
         role: session.role,
-        language: session.language || 'en'
+        language: session.language || null // null = never chosen: device language
       },
       expiresAt: session.expires_at
     });

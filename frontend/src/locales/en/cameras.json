@@ -1,1 +1,167 @@
-{}
+{
+  "title": "Cameras",
+  "addCamera": "+ Add camera",
+  "status": {
+    "online": "online",
+    "offline": "offline",
+    "error": "error"
+  },
+  "empty": {
+    "title": "No cameras configured yet",
+    "addFirst": "Add your first camera"
+  },
+  "snapshot": {
+    "loading": "Loading snapshot…",
+    "unavailable": "Snapshot unavailable",
+    "unavailableWithError": "Snapshot unavailable ({{error}})",
+    "loadFailed": "Failed to load image"
+  },
+  "capture": {
+    "none": "No capture yet",
+    "last": "Last capture {{time}}",
+    "stale": "Stale capture — last saved {{time}}"
+  },
+  "card": {
+    "openLive": "Open live view",
+    "connectionError": "Connection error",
+    "offline": "Offline",
+    "dhcpTip": "Tip: if the camera uses DHCP its IP may have changed — give it a DHCP reservation or static IP, then update the address here.",
+    "livePtz": "Live / PTZ",
+    "live": "Live",
+    "capturing": "Capturing…",
+    "captureNow": "Capture now",
+    "history": "History",
+    "testing": "Testing…",
+    "test": "Test"
+  },
+  "toast": {
+    "loadFailed": "Failed to fetch cameras (HTTP {{status}})",
+    "snapshotsFailed": "Could not load stored snapshots",
+    "snapshotsFailedWithError": "Could not load stored snapshots: {{error}}",
+    "historyFailed": "Could not load snapshot history",
+    "historyFailedWithError": "Could not load snapshot history: {{error}}",
+    "captureFailed": "Capture failed",
+    "captured": "Snapshot captured for {{name}}",
+    "addFailed": "Failed to add camera",
+    "added": "Camera added successfully",
+    "updateFailed": "Failed to update camera",
+    "updated": "Camera updated successfully",
+    "deleteFailed": "Failed to delete camera",
+    "deleted": "Camera deleted",
+    "testFailed": "Connection test failed"
+  },
+  "form": {
+    "addTitle": "Add Camera",
+    "editTitle": "Edit Camera",
+    "adding": "Adding…",
+    "addSubmit": "Add Camera",
+    "saveChanges": "Save Changes",
+    "name": "Name",
+    "ip": "IP Address",
+    "description": "Description",
+    "rtspPort": "RTSP Port",
+    "httpPort": "HTTP Port",
+    "manufacturer": "Manufacturer",
+    "model": "Model",
+    "username": "Username",
+    "password": "Password",
+    "passwordUnchanged": "(unchanged if empty)",
+    "passwordNotSaved": "Not saved — enter to enable PTZ",
+    "noPasswordHelp": "No password is saved for this camera. PTZ falls back to the go2rtc stream password; save it here so it keeps working.",
+    "streamPath": "RTSP Stream Path",
+    "streamPathHelp": "Hikvision default: /Streaming/Channels/101 (main) or /102 (sub)",
+    "enabled": "Enabled"
+  },
+  "delete": {
+    "title": "Delete this camera?",
+    "body": "This removes the camera record and its stream from go2rtc. Stored snapshots are kept on disk.",
+    "confirm": "Delete camera"
+  },
+  "history": {
+    "title": "{{name}} — Snapshot History",
+    "count_one": "{{count}} snapshot (captured every 4 hours)",
+    "count_other": "{{count}} snapshots (captured every 4 hours)",
+    "empty": "No snapshots yet. The first capture runs 1 minute after startup, then every 4 hours."
+  },
+  "live": {
+    "dialogLabel": "{{name}} live view",
+    "close": "Close live view",
+    "authRejected": "Camera rejected the stream credentials — check the saved password",
+    "unreachableLastSeen": "Camera unreachable — last seen {{time}}",
+    "unreachableNoSnapshot": "Camera unreachable — no snapshot on record",
+    "connecting": "Connecting to {{name}}…",
+    "mjpegMode": "MJPEG fallback mode",
+    "tryMse": "Try MSE again",
+    "mseStream": "MSE live stream",
+    "unavailable": "Live stream unavailable",
+    "switchMjpeg": "Switch to MJPEG",
+    "fail": {
+      "streamFailed": "Stream failed",
+      "noVideo": "No video received",
+      "wsFailed": "WebSocket connection failed",
+      "streamError": "Stream error",
+      "closedEarly": "Stream closed before any video arrived",
+      "mjpegFailed": "MJPEG stream failed"
+    }
+  },
+  "ptz": {
+    "title": "PTZ",
+    "unreachable": "Camera unreachable",
+    "checkingCamera": "Checking camera…",
+    "authRejected": "Camera rejected the password",
+    "authRejectedWith": "Camera rejected the password — {{message}}",
+    "error": {
+      "generic": "PTZ error",
+      "commandFailed": "PTZ {{path}} failed ({{status}})",
+      "saveFailed": "Save failed ({{status}})",
+      "deleteFailed": "Delete failed ({{status}})"
+    },
+    "toast": {
+      "moving": "Moving to preset “{{name}}”",
+      "saved": "Preset “{{name}}” saved as #{{id}}",
+      "deleted": "Preset “{{name}}” deleted"
+    },
+    "dir": {
+      "up": "Tilt up",
+      "down": "Tilt down",
+      "left": "Pan left",
+      "right": "Pan right",
+      "upleft": "Pan up-left",
+      "upright": "Pan up-right",
+      "downleft": "Pan down-left",
+      "downright": "Pan down-right"
+    },
+    "groupLabel": "PTZ controls for {{name}}",
+    "badge": {
+      "checking": "Checking…",
+      "online": "Online",
+      "auth": "Auth failed",
+      "error": "Error"
+    },
+    "padLabel": "Pan/tilt pad. Use arrow keys to pan and tilt, + and - to zoom.",
+    "padHelp": "Hold a direction to move, release to stop. Arrow keys work when focused.",
+    "stopMove": "Stop moving",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomInKey": "Zoom in (+)",
+    "zoomOutKey": "Zoom out (−)",
+    "speed": "Speed {{speed}}",
+    "speedLabel": "PTZ speed",
+    "preset": "Preset",
+    "presets": "Presets",
+    "selectPreset": "Select preset…",
+    "noPresets": "No presets",
+    "go": "Go",
+    "goTitle": "Go to preset",
+    "saveAs": "Save as",
+    "saveAsTitle": "Save current position as a preset",
+    "deleteTitle": "Delete selected preset",
+    "overwritePlaceholder": "Overwrite preset #{{id}} as…",
+    "newPresetPlaceholder": "New preset name",
+    "presetName": "Preset name",
+    "deleteConfirm": {
+      "title": "Delete preset",
+      "body": "Delete preset <b>{{name}}</b> from the camera? This cannot be undone."
+    }
+  }
+}

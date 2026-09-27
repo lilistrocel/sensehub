@@ -1,1 +1,580 @@
-{}
+{
+  "title": "Settings",
+  "tabs": {
+    "profile": "Profile",
+    "users": "Users",
+    "system": "System",
+    "cloud": "Cloud",
+    "notifications": "Notifications",
+    "backup": "Backup",
+    "watchdog": "Watchdog",
+    "network": "Network",
+    "data": "Data"
+  },
+  "profile": {
+    "title": "Profile Settings",
+    "account": {
+      "title": "Your Account",
+      "name": "Name",
+      "email": "Email",
+      "role": "Role"
+    },
+    "password": {
+      "title": "Change Password",
+      "current": "Current Password",
+      "new": "New Password",
+      "confirm": "Confirm New Password",
+      "minLength": "Minimum 8 characters",
+      "submit": "Change Password",
+      "submitting": "Changing password…",
+      "mismatch": "New passwords do not match",
+      "tooShort": "New password must be at least 8 characters",
+      "changed": "Password changed successfully",
+      "failed": "Failed to change password"
+    },
+    "sound": {
+      "title": "Notification Settings",
+      "enable": "Enable Sound Alerts",
+      "help": "Play an audio notification when new alerts arrive",
+      "volume": "Alert Volume",
+      "test": "Test Sound",
+      "save": "Save Preferences",
+      "saved": "Notification preferences saved successfully",
+      "saveFailed": "Failed to save preferences ({{error}})"
+    }
+  },
+  "na": "N/A",
+  "refreshTitle": {
+    "network": "Refresh network info",
+    "system": "Refresh system info",
+    "storage": "Refresh storage info",
+    "logs": "Refresh logs",
+    "status": "Refresh status",
+    "queue": "Refresh pending queue",
+    "history": "Refresh sync history",
+    "suggested": "Refresh suggested programs"
+  },
+  "system": {
+    "title": "System Settings",
+    "errors": {
+      "loadFailed": "Could not load the settings ({{error}})",
+      "saveFailed": "Could not save the settings ({{error}})"
+    },
+    "saved": "Settings saved successfully!",
+    "save": "Save Settings",
+    "timezone": {
+      "title": "Timezone Configuration",
+      "help": "Select the timezone for all system timestamps and scheduled automations.",
+      "label": "System Timezone",
+      "preview": "Current time in selected timezone:",
+      "invalid": "Invalid timezone",
+      "groups": {
+        "americas": "Americas",
+        "europe": "Europe",
+        "asia": "Asia",
+        "pacific": "Pacific & Oceania",
+        "africa": "Africa",
+        "other": "Other"
+      }
+    },
+    "locale": {
+      "title": "System Locale",
+      "help": "System-wide regional setting. The screen language is personal: each user chooses it in Profile → Language.",
+      "label": "Locale"
+    },
+    "retention": {
+      "title": "Data Retention",
+      "help": "Configure how long sensor readings and historical data are retained locally.",
+      "label": "Retention Period (days)",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days",
+      "optionDefault": "{{days}} (default)",
+      "optionYear": "{{days}} (1 year)",
+      "purgeHelp": "Data older than this will be automatically purged to save storage space."
+    },
+    "network": {
+      "title": "Network Configuration",
+      "help": "View current network configuration for this SenseHub device.",
+      "ipAddress": "IP Address",
+      "gateway": "Gateway",
+      "dns": "DNS Servers",
+      "interfaces": "Network Interfaces",
+      "active": "Active",
+      "netmask": "Netmask",
+      "mac": "MAC",
+      "field": "{{label}}:",
+      "unavailable": "Unable to load network information"
+    },
+    "firmware": {
+      "title": "Firmware / Version",
+      "help": "View current firmware version and system information.",
+      "version": "Version",
+      "release": {
+        "stable": "stable",
+        "beta": "beta",
+        "dev": "dev"
+      },
+      "buildDate": "Build Date",
+      "details": "System Details",
+      "platform": "Platform",
+      "architecture": "Architecture",
+      "cpus": "CPUs",
+      "cores_one": "{{count}} core",
+      "cores_other": "{{count}} cores",
+      "runtime": "Runtime",
+      "hostname": "Hostname",
+      "uptime": "Uptime",
+      "uptimeDays_one": "{{count}} day {{rest}}",
+      "uptimeDays_other": "{{count}} days {{rest}}",
+      "startedAt": "Started At",
+      "memory": "Memory Usage",
+      "percentUsed": "{{percent}} used",
+      "database": "Database",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "unavailable": "Unable to load system information"
+    },
+    "storage": {
+      "title": "Storage Usage",
+      "help": "View system storage usage and database statistics.",
+      "disk": "Disk Usage",
+      "available": "{{size}} available",
+      "database": "Database",
+      "dataDirectory": "Data Directory",
+      "logs": "Logs",
+      "records": "Database Records",
+      "lastUpdated": "Last updated: {{time}}",
+      "unavailable": "Unable to load storage information"
+    },
+    "logs": {
+      "title": "System Logs",
+      "help": "View system event logs, alerts, and automation activity.",
+      "levelFilter": "Log level",
+      "filter": {
+        "all": "All Levels",
+        "error": "Error & Above",
+        "warning": "Warning & Above",
+        "info": "Info & Above",
+        "debug": "Debug"
+      },
+      "level": {
+        "error": "error",
+        "warning": "warning",
+        "info": "info",
+        "debug": "debug"
+      },
+      "showing_one": "Showing {{count}} log entry",
+      "showing_other": "Showing {{count}} log entries",
+      "empty": "No log entries found"
+    }
+  },
+  "cloud": {
+    "title": "Cloud Connection",
+    "errors": {
+      "loadFailed": "Could not load the cloud status ({{error}})",
+      "disconnectFailed": "Could not disconnect ({{error}})",
+      "syncFailed": "Sync failed ({{error}})",
+      "approveFailed": "Could not approve the program ({{error}})",
+      "rejectFailed": "Could not reject the program ({{error}})",
+      "connectFailed": "Could not connect ({{error}})",
+      "testFailed": "Connection test failed",
+      "fieldsRequired": "Both URL and API key are required"
+    },
+    "status": {
+      "title": "Connection Status",
+      "connected": "Connected",
+      "configuredDisconnected": "Configured (Disconnected)",
+      "notConfigured": "Not Configured",
+      "syncActive": "Cloud sync is active",
+      "unreachable": "Unable to reach cloud server",
+      "noConnection": "No cloud connection configured",
+      "cloudConnected": "Cloud Connected",
+      "cloudDisconnected": "Cloud Disconnected",
+      "offlineMode": "Offline Mode",
+      "syncingNormally": "All systems syncing normally",
+      "willReconnect": "Reconnection will be attempted automatically",
+      "independent": "System operating independently",
+      "lastSync": "Last Sync",
+      "never": "Never",
+      "pendingItems": "Pending Items",
+      "items_one": "{{count}} item",
+      "items_other": "{{count}} items",
+      "configuration": "Configuration",
+      "configured": "Configured",
+      "notConfiguredLower": "Not configured"
+    },
+    "test": {
+      "latency": "Latency: {{value}}",
+      "server": "Server: v{{version}}",
+      "button": "Test Connection",
+      "testing": "Testing…"
+    },
+    "sync": {
+      "now": "Sync Now",
+      "syncing": "Syncing…",
+      "triggered": "Sync triggered at {{time}}"
+    },
+    "disconnect": "Disconnect",
+    "confirmDisconnect": "Are you sure you want to disconnect from the cloud?",
+    "configure": "Configure Cloud Connection",
+    "queue": {
+      "title": "Pending Sync Queue",
+      "help": "Items waiting to be synchronized with the Cloud. Changes made while offline are queued here.",
+      "empty": "No pending items",
+      "emptyHelp": "All changes have been synchronized",
+      "entity": "Entity",
+      "action": "Action",
+      "status": "Status",
+      "created": "Created",
+      "retry": "(retry #{{n}})"
+    },
+    "entity": {
+      "equipment": "equipment",
+      "zone": "zone",
+      "automation": "automation",
+      "alert": "alert",
+      "reading": "reading"
+    },
+    "action": {
+      "create": "create",
+      "update": "update",
+      "delete": "delete"
+    },
+    "queueStatus": {
+      "pending": "pending",
+      "syncing": "syncing",
+      "failed": "failed",
+      "synced": "synced",
+      "completed": "completed"
+    },
+    "history": {
+      "title": "Sync History",
+      "help": "View the history of Cloud synchronization operations.",
+      "empty": "No sync history yet",
+      "emptyHelp": "Sync operations will be recorded here",
+      "time": "Time",
+      "type": "Type",
+      "status": "Status",
+      "items": "Items",
+      "triggeredBy": "Triggered By",
+      "synced": "{{n}} synced",
+      "failed": "({{n}} failed)",
+      "system": "System"
+    },
+    "syncType": {
+      "manual": "manual",
+      "automatic": "automatic",
+      "scheduled": "scheduled"
+    },
+    "syncStatus": {
+      "success": "success",
+      "partial": "partial",
+      "failed": "failed"
+    },
+    "suggested": {
+      "title": "Suggested Programs from Cloud",
+      "help": "When connected to the Cloud, automation programs may be suggested for your review. You can approve them to add to your local automations or reject them.",
+      "empty": "No pending suggested programs",
+      "emptyHelp": "Suggested automations from the Cloud will appear here",
+      "badge": "Cloud Suggested",
+      "noDescription": "No description",
+      "trigger": "Trigger:",
+      "schedule": "Schedule ({{schedule}})",
+      "custom": "custom",
+      "actions": "Actions:",
+      "actionCount_one": "{{count}} action",
+      "actionCount_other": "{{count}} actions",
+      "meta": "Cloud ID: {{id}} | Received: {{time}}",
+      "approve": "Approve",
+      "reject": "Reject",
+      "approved": "Program approved! Automation #{{id}} created.",
+      "rejected": "Program rejected."
+    },
+    "modal": {
+      "title": "Configure Cloud Connection",
+      "url": "Cloud Server URL",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Enter your API key",
+      "connect": "Connect",
+      "connecting": "Connecting…"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "saved": "Configuration saved successfully",
+    "testSent": "Test message sent! Check your Telegram.",
+    "errors": {
+      "loadFailed": "Failed to load the Telegram configuration",
+      "saveFailed": "Failed to save configuration",
+      "testFailed": "Test failed"
+    },
+    "telegram": {
+      "title": "Telegram Bot",
+      "intro": "Receive instant alerts on your phone when automations miss their schedule or equipment goes offline.",
+      "setupTitle": "Setup Instructions",
+      "steps": {
+        "findBotFather": "Open Telegram and search for <b>@BotFather</b>",
+        "newBot": "Send <code>/newbot</code> and follow the prompts to create a bot",
+        "copyToken": "Copy the <b>bot token</b> and paste it below",
+        "addToChat": "Add your bot to a group chat (or message it directly)",
+        "findChatId": "Send a message in the chat, then visit:<br/><url>{{url}}</url><br/>to find your <b>chat ID</b> (look for <code>{{snippet}}</code>)",
+        "pasteAndTest": "Paste the chat ID below and click <b>Test Connection</b>"
+      },
+      "enable": "Enable Telegram Alerts",
+      "botToken": "Bot Token",
+      "tokenConfigured": "Token is configured. Click the field to change it.",
+      "chatId": "Chat ID",
+      "chatIdHelp": "Group chat IDs start with a dash (-). Individual chats are just numbers.",
+      "language": "Message language",
+      "languageHelp": "Language of the Telegram alerts and the test message. Independent of the language of this screen.",
+      "save": "Save Configuration",
+      "sending": "Sending…",
+      "test": "Test Connection"
+    },
+    "watchdog": {
+      "title": "Watchdog Monitor",
+      "intro": "The watchdog automatically monitors all enabled automations and equipment. It sends Telegram alerts when:",
+      "reasons": {
+        "missedSchedule": "A scheduled automation misses its fire window",
+        "thresholdNotExecuted": "A threshold condition is met but the automation doesn't execute",
+        "equipmentOffline": "Equipment goes offline or reports errors"
+      },
+      "monitoredAutomations": "Monitored Automations",
+      "offlineEquipment": "Offline Equipment",
+      "equipmentErrors": "Equipment Errors",
+      "telegram": "Telegram",
+      "telegramActive": "Active",
+      "telegramOff": "Off",
+      "recentAlerts": "Recent Watchdog Alerts",
+      "noAlerts": "No watchdog alerts. All systems running normally."
+    }
+  },
+  "backup": {
+    "title": "Backup & Restore",
+    "downloaded": "Backup downloaded: {{filename}} ({{size}})",
+    "processing": "Processing…",
+    "errors": {
+      "createFailed": "Failed to create backup"
+    },
+    "create": {
+      "title": "Create Backup",
+      "description": "Download a complete backup of the system database — including users, equipment, zones, automations, readings, and all settings — as a single SQLite file you can store safely off-device.",
+      "creating": "Creating Backup…",
+      "button": "Create Backup"
+    },
+    "restore": {
+      "title": "Restore from Backup",
+      "description": "Restore your system from a previously created backup file. <warn>This will replace all current data with the backup data.</warn>",
+      "button": "Restore",
+      "fileRequired": "Please select a backup file",
+      "failed": "Restore failed",
+      "completeTitle": "Restore Complete",
+      "completeBody": "The database has been restored and the system is restarting. A safety backup of your previous data was saved on the device. You will be redirected to the login screen shortly — please sign in again once the system is back online (this may take up to a minute).",
+      "confirmBody": "Select a backup file to restore your system. This will replace all current data.",
+      "selectFile": "Select Backup File",
+      "selected": "Selected: {{name}}",
+      "restoring": "Restoring…",
+      "confirmButton": "Confirm Restore"
+    },
+    "factoryReset": {
+      "title": "Factory Reset",
+      "description": "Reset the system to factory defaults. <warn>This will erase all data including equipment, zones, automations, users, and settings.</warn> This action cannot be undone.",
+      "button": "Factory Reset",
+      "passwordRequired": "Password is required",
+      "failed": "Factory reset failed",
+      "initiated": "Factory Reset Initiated",
+      "restarting": "The system will restart shortly…",
+      "confirmTitle": "Confirm Factory Reset",
+      "confirmBody": "This will permanently delete all data. Enter your password to confirm.",
+      "passwordLabel": "Enter your password to confirm",
+      "passwordPlaceholder": "Enter your password",
+      "confirmButton": "Confirm Factory Reset"
+    }
+  },
+  "watchdog": {
+    "title": "Watchdog Monitor",
+    "subtitle": "Connectivity status, watchdog alerts, and system health history",
+    "liveStatus": "Live Status",
+    "downSince": "Down since {{time}}",
+    "queued_one": "{{count}} notification queued — will be sent when internet is restored",
+    "queued_other": "{{count}} notifications queued — will be sent when internet is restored",
+    "recentOutages": "Recent Outages",
+    "columns": {
+      "service": "Service",
+      "recoveredAt": "Recovered At",
+      "downtime": "Downtime",
+      "time": "Time",
+      "type": "Type",
+      "target": "Target",
+      "status": "Status",
+      "message": "Message",
+      "duration": "Duration"
+    },
+    "systemRestart": "System Restart",
+    "eventHistory": "Event History",
+    "filterType": "Event type",
+    "allTypes": "All Types",
+    "eventType": {
+      "connectivity": "Connectivity",
+      "automation": "Automation",
+      "equipment": "Equipment",
+      "system": "System"
+    },
+    "status": {
+      "up": "up",
+      "down": "down",
+      "online": "online",
+      "offline": "offline",
+      "error": "error",
+      "restart": "restart"
+    },
+    "service": {
+      "mcp": "MCP Server",
+      "internet": "Internet"
+    },
+    "loadingEvents": "Loading events…",
+    "noEvents": "No watchdog events recorded yet. Events will appear here after the first check cycle (~30 s after startup).",
+    "totalEvents_one": "{{value}} event in total",
+    "totalEvents_other": "{{value}} events in total",
+    "pageOf": "Page {{page}} of {{total}}"
+  },
+  "networkUsage": {
+    "title": "Network Usage",
+    "subtitle": "Monitor daily and monthly network bandwidth consumption",
+    "todayDownload": "Today Download",
+    "todayUpload": "Today Upload",
+    "monthDownload": "This Month Download",
+    "monthUpload": "This Month Upload",
+    "todayTotal": "Today Total",
+    "monthTotal": "This Month Total",
+    "daily": "Daily",
+    "monthly": "Monthly",
+    "allInterfaces": "All Interfaces",
+    "loading": "Loading network data…",
+    "empty": "No network usage data yet.",
+    "emptyHelp": "Data is collected every 5 minutes. Check back shortly.",
+    "dailyUsage": "Daily Usage",
+    "monthlyUsage": "Monthly Usage",
+    "downloadValue": "Download: {{value}}",
+    "uploadValue": "Upload: {{value}}",
+    "download": "Download",
+    "upload": "Upload",
+    "breakdownTitle": "Interface Breakdown (All Time)",
+    "columns": {
+      "interface": "Interface",
+      "download": "Download",
+      "upload": "Upload",
+      "total": "Total",
+      "since": "Since"
+    }
+  },
+  "requestLog": {
+    "title": "API Request Log",
+    "subtitle": "Which endpoints are consuming bandwidth",
+    "windowLabel": "Time window",
+    "window": {
+      "5": "Last 5 min",
+      "15": "Last 15 min",
+      "60": "Last 1 hr",
+      "360": "Last 6 hr",
+      "1440": "Last 24 hr"
+    },
+    "empty": "No requests logged yet. Data appears after the first API call.",
+    "totals": {
+      "requests_one": "<b>{{value}}</b> request",
+      "requests_other": "<b>{{value}}</b> requests",
+      "data": "<b>{{value}}</b> total response data",
+      "avgSize": "Avg <b>{{value}}</b>/req",
+      "avgLatency": "Avg <b>{{value}}</b> latency"
+    },
+    "columns": {
+      "endpoint": "Endpoint",
+      "requests": "Requests",
+      "totalData": "Total Data",
+      "avgSize": "Avg Size",
+      "avgLatency": "Avg Latency",
+      "time": "Time",
+      "method": "Method",
+      "path": "Path",
+      "size": "Size"
+    },
+    "byIp": "By Client IP",
+    "ipRequests_one": "{{value}} req",
+    "ipRequests_other": "{{value}} reqs",
+    "showRecent": "Show recent requests ({{n}})",
+    "hideRecent": "Hide recent requests ({{n}})"
+  },
+  "data": {
+    "title": "Data Management",
+    "subtitle": "Monitor storage usage and clear history data",
+    "confirmClear": "Are you sure you want to delete ALL {{label}}? This cannot be undone.",
+    "errors": {
+      "clearFailed": "Failed to clear"
+    },
+    "cleared_one": "Cleared {{value}} {{label}} record",
+    "cleared_other": "Cleared {{value}} {{label}} records",
+    "sdCard": "SD Card Storage",
+    "usedOf": "{{used}} used of {{total}}",
+    "free": "{{value}} free",
+    "database": "Database",
+    "dataDirectory": "Data Directory",
+    "walBackups": "WAL + backups",
+    "logs": "Logs",
+    "logFiles": "Log files",
+    "appTotal": "SenseHub Total",
+    "ofSdCard": "{{value}} of SD card",
+    "biggestTables": "Biggest tables by row count",
+    "loading": "Loading storage info…",
+    "records_one": "{{value}} record",
+    "records_other": "{{value}} records",
+    "clearing": "Clearing…",
+    "clearButton": "Clear {{label}}",
+    "warning": "<b>Warning:</b> Clearing data is permanent and cannot be undone. Sensor readings and lab data will be lost. Consider creating a backup first.",
+    "targets": {
+      "alerts": {
+        "label": "Alerts",
+        "description": "All alert history (info, warning, critical, watchdog)"
+      },
+      "automation-logs": {
+        "label": "Automation Logs",
+        "description": "Automation execution history and run logs"
+      },
+      "equipment-errors": {
+        "label": "Equipment Errors",
+        "description": "Equipment error and fault history"
+      },
+      "readings": {
+        "label": "Sensor Readings",
+        "description": "All sensor/Modbus polling data history"
+      },
+      "lab-readings": {
+        "label": "Lab Readings",
+        "description": "Manual lab analysis nutrient entries"
+      },
+      "relay-events": {
+        "label": "Relay Events",
+        "description": "Relay on/off event history for fertigation tracking"
+      },
+      "watchdog-events": {
+        "label": "Watchdog Events",
+        "description": "Watchdog and connectivity monitoring history"
+      },
+      "sync-queue": {
+        "label": "Sync Queue",
+        "description": "Cloud sync queue entries"
+      },
+      "watchdog-cooldowns": {
+        "label": "Watchdog Cooldowns",
+        "description": "Reset watchdog alert cooldowns so alerts can fire again immediately"
+      },
+      "request-log": {
+        "label": "Request Log",
+        "description": "API request log used for network traffic analysis"
+      },
+      "network-usage": {
+        "label": "Network Usage",
+        "description": "Network bandwidth tracking snapshots"
+      }
+    }
+  }
+}

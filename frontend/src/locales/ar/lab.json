@@ -1,1 +1,72 @@
-{}
+{
+  "title": "التحليل المخبري",
+  "subtitle": "قياسات يدوية للعناصر الغذائية ونتائج المختبر",
+  "noZone": "بلا منطقة",
+  "confirmDelete": "هل تريد حذف هذه القراءة المخبرية؟",
+  "fields": {
+    "date": "التاريخ",
+    "nutrient": "العنصر الغذائي",
+    "value": "القيمة",
+    "unit": "الوحدة",
+    "zone": "المنطقة",
+    "zoneOptional": "المنطقة (اختياري)",
+    "notes": "ملاحظات"
+  },
+  "add": {
+    "button": "إضافة قراءة مخبرية",
+    "title": "إدخال تحليل مخبري جديد",
+    "sampleDate": "تاريخ العينة",
+    "selectNutrient": "اختر العنصر الغذائي…",
+    "notesPlaceholder": "ملاحظات اختيارية",
+    "removeRow": "إزالة الصف",
+    "addAnother": "+ إضافة عنصر غذائي آخر",
+    "save_zero": "حفظ {{count}} قراءة",
+    "save_one": "حفظ قراءة واحدة",
+    "save_two": "حفظ قراءتين",
+    "save_few": "حفظ {{count}} قراءات",
+    "save_many": "حفظ {{count}} قراءة",
+    "save_other": "حفظ {{count}} قراءة",
+    "saved_zero": "لم تُحفظ أي قراءة",
+    "saved_one": "حُفظت قراءة واحدة بنجاح",
+    "saved_two": "حُفظت قراءتان بنجاح",
+    "saved_few": "حُفظت {{count}} قراءات بنجاح",
+    "saved_many": "حُفظت {{count}} قراءة بنجاح",
+    "saved_other": "حُفظت {{count}} قراءة بنجاح"
+  },
+  "stats": {
+    "readings_zero": "لا قراءات",
+    "readings_one": "قراءة واحدة",
+    "readings_two": "قراءتان",
+    "readings_few": "{{count}} قراءات",
+    "readings_many": "{{count}} قراءة",
+    "readings_other": "{{count}} قراءة"
+  },
+  "filters": {
+    "allNutrients": "كل العناصر الغذائية",
+    "allZones": "كل المناطق",
+    "from": "من",
+    "to": "إلى",
+    "clear": "مسح عوامل التصفية"
+  },
+  "history": {
+    "title": "السجل",
+    "total": "(الإجمالي {{total}})",
+    "empty": "لا توجد قراءات مخبرية. انقر «{{button}}» لإدخال أول تحليل."
+  },
+  "table": {
+    "actions": "الإجراءات"
+  },
+  "pagination": {
+    "showing": "عرض {{range}} من {{total}}"
+  },
+  "toast": {
+    "deleted": "حُذفت القراءة المخبرية",
+    "updated": "حُدّثت القراءة المخبرية"
+  },
+  "errors": {
+    "saveFailed": "تعذّر الحفظ",
+    "deleteFailed": "تعذّر حذف القراءة",
+    "update": "تعذّر التحديث",
+    "updateFailed": "تعذّر تحديث القراءة"
+  }
+}

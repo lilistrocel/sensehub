@@ -30,7 +30,7 @@ const authMiddleware = (req, res, next) => {
       email: session.email,
       name: session.name,
       role: session.role,
-      language: session.language || 'en'
+      language: session.language || null // null = never chosen (req.lang still resolves to a concrete language)
     };
     // Request language: explicit Accept-Language / ?lang → the user's saved language → 'en'.
     applyUserLanguage(req, session.language);

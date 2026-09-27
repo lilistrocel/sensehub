@@ -1,1 +1,98 @@
-{}
+{
+  "title": "المناطق",
+  "addZone": "إضافة منطقة",
+  "searchPlaceholder": "ابحث عن المناطق بالاسم...",
+  "clearSearch": "مسح البحث",
+  "showingCount_zero": "عرض {{shown}} من {{count}} منطقة",
+  "showingCount_one": "عرض {{shown}} من منطقة واحدة",
+  "showingCount_two": "عرض {{shown}} من منطقتين",
+  "showingCount_few": "عرض {{shown}} من {{count}} مناطق",
+  "showingCount_many": "عرض {{shown}} من {{count}} منطقة",
+  "showingCount_other": "عرض {{shown}} من {{count}} منطقة",
+  "empty": "لا توجد مناطق مُعدّة بعد.",
+  "noMatch": "لا مناطق تطابق البحث.",
+  "equipmentCount_zero": "{{count}} معدة",
+  "equipmentCount_one": "معدة واحدة",
+  "equipmentCount_two": "معدتان",
+  "equipmentCount_few": "{{count}} معدات",
+  "equipmentCount_many": "{{count}} معدة",
+  "equipmentCount_other": "{{count}} معدة",
+  "zoneNumber": "المنطقة رقم {{id}}",
+  "confirmRemoveEquipment": "إزالة هذه المعدة من المنطقة؟",
+  "addTitle": "إضافة منطقة جديدة",
+  "editTitle": "تعديل المنطقة",
+  "deleteTitle": "حذف المنطقة",
+  "editZone": "تعديل المنطقة",
+  "deleteZone": "حذف المنطقة",
+  "updatedBanner": "حُدِّثت المنطقة بنجاح!",
+  "form": {
+    "name": "اسم المنطقة",
+    "namePlaceholder": "مثال: صالة الإنتاج",
+    "description": "الوصف",
+    "descriptionPlaceholder": "وصف اختياري لهذه المنطقة",
+    "parent": "المنطقة الأم",
+    "parentNone": "لا شيء (المستوى الأعلى)",
+    "parentHelp": "اختياري: اختر منطقة أمًّا لإنشاء تسلسل هرمي",
+    "create": "إنشاء المنطقة",
+    "creating": "جارٍ الإنشاء…",
+    "saveChanges": "حفظ التغييرات"
+  },
+  "info": {
+    "title": "معلومات المنطقة",
+    "name": "الاسم",
+    "id": "المعرّف",
+    "description": "الوصف",
+    "created": "تاريخ الإنشاء",
+    "updated": "آخر تحديث"
+  },
+  "assigned": {
+    "title": "المعدات المعيّنة ({{count}})",
+    "assignButton": "تعيين معدات",
+    "remove": "إزالة من المنطقة",
+    "removeNamed": "إزالة {{name}} من المنطقة",
+    "empty": "لا معدات معيّنة لهذه المنطقة",
+    "assignNow": "تعيين معدات الآن"
+  },
+  "children": "المناطق الفرعية ({{count}})",
+  "equipStatus": {
+    "online": "متصل",
+    "offline": "غير متصل",
+    "warning": "تحذير",
+    "error": "خطأ",
+    "unknown": "غير معروف"
+  },
+  "assign": {
+    "title": "تعيين معدات إلى {{name}}",
+    "none": "لا معدات متاحة للتعيين.",
+    "noneHelp": "كل المعدات معيّنة لهذه المنطقة مسبقًا، أو لا توجد معدات.",
+    "select": "اختر المعدة",
+    "selectOption": "-- اختر المعدة --",
+    "option": "{{name}} ({{type}} - {{status}})",
+    "assign": "تعيين",
+    "assigning": "جارٍ التعيين…"
+  },
+  "delete": {
+    "confirm": "هل تريد بالتأكيد حذف <b>{{name}}</b>؟",
+    "help": "لا يمكن التراجع عن هذا الإجراء. ستُلغى تعيينات المعدات في هذه المنطقة دون حذف المعدات.",
+    "deleting": "جارٍ الحذف…"
+  },
+  "toast": {
+    "assigned": "عُيّنت المعدة بنجاح",
+    "removed": "أُزيلت المعدة من المنطقة",
+    "created": "أُنشئت المنطقة بنجاح",
+    "updated": "حُدِّثت المنطقة بنجاح",
+    "deleted": "حُذفت المنطقة بنجاح"
+  },
+  "err": {
+    "fetchZones": "تعذّر جلب المناطق",
+    "fetchDetail": "تعذّر جلب تفاصيل المنطقة",
+    "loadDetail": "تعذّر تحميل تفاصيل المنطقة",
+    "fetchEquipment": "تعذّر جلب المعدات",
+    "loadEquipment": "تعذّر تحميل المعدات",
+    "assign": "تعذّر تعيين المعدة",
+    "remove": "تعذّرت إزالة المعدة",
+    "create": "تعذّر إنشاء المنطقة",
+    "update": "تعذّر تحديث المنطقة",
+    "delete": "تعذّر حذف المنطقة"
+  }
+}

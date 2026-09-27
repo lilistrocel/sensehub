@@ -1,0 +1,85 @@
+{
+  "loading": "Kullanıcılar yükleniyor…",
+  "header": {
+    "title": "Kullanıcı Yönetimi",
+    "subtitle": "Sistem kullanıcılarını ve rollerini yönetin",
+    "addUser": "Kullanıcı Ekle"
+  },
+  "table": {
+    "name": "Ad",
+    "email": "E-posta",
+    "role": "Rol",
+    "lastLogin": "Son Giriş",
+    "actions": "İşlemler"
+  },
+  "list": {
+    "empty": "Kullanıcı bulunamadı",
+    "you": "(Siz)",
+    "neverLoggedIn": "Hiç",
+    "total_one": "Toplam: {{count}} kullanıcı",
+    "total_other": "Toplam: {{count}} kullanıcı"
+  },
+  "actions": {
+    "resetPassword": "Parolayı Sıfırla"
+  },
+  "errors": {
+    "accessDenied": "Erişim reddedildi. Yönetici yetkisi gerekir.",
+    "loadFailed": "Kullanıcılar alınamadı",
+    "createFailed": "Kullanıcı oluşturulamadı",
+    "updateFailed": "Kullanıcı güncellenemedi",
+    "deleteFailed": "Kullanıcı silinemedi",
+    "resetFailed": "Parola sıfırlanamadı"
+  },
+  "validation": {
+    "nameRequired": "Ad gereklidir",
+    "emailRequired": "E-posta gereklidir",
+    "emailInvalid": "Geçersiz e-posta biçimi",
+    "passwordRequired": "Parola gereklidir",
+    "passwordMin": "Parola en az {{min}} karakter olmalıdır",
+    "deletePasswordRequired": "Silmeyi onaylamak için parolanız gereklidir."
+  },
+  "success": {
+    "created": "\"{{name}}\" kullanıcısı oluşturuldu.",
+    "updated": "\"{{name}}\" kullanıcısı güncellendi.",
+    "deleted": "\"{{name}}\" kullanıcısı silindi.",
+    "passwordReset": "\"{{name}}\" kullanıcısının parolası sıfırlandı."
+  },
+  "form": {
+    "addTitle": "Yeni Kullanıcı Ekle",
+    "editTitle": "Kullanıcıyı Düzenle",
+    "addSubtitle": "Sistem için yeni bir kullanıcı hesabı oluşturun.",
+    "editSubtitle": "Kullanıcı hesabı bilgilerini güncelleyin.",
+    "fullName": "Ad Soyad",
+    "namePlaceholder": "Ahmet Yılmaz",
+    "email": "E-posta Adresi",
+    "password": "Parola",
+    "passwordKeepHint": "(mevcut parolayı korumak için boş bırakın)",
+    "passwordKeepPlaceholder": "Mevcut parolayı korumak için boş bırakın",
+    "passwordMinPlaceholder": "En az {{min}} karakter",
+    "role": "Rol",
+    "roleOption": {
+      "viewer": "İzleyici - Yalnızca görüntüleme",
+      "operator": "Operatör - Ekipmanı kontrol edebilir ve otomasyon oluşturabilir",
+      "admin": "Yönetici - Tam sistem erişimi"
+    },
+    "creating": "Oluşturuluyor…",
+    "saveChanges": "Değişiklikleri Kaydet",
+    "createUser": "Kullanıcı Oluştur"
+  },
+  "delete": {
+    "title": "Kullanıcıyı Sil",
+    "body": "<b>{{name}}</b> (<email>{{email}}</email>) kullanıcısını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+    "passwordLabel": "Parolanızla onaylayın",
+    "passwordPlaceholder": "Hesap parolanız",
+    "passwordHelp": "Bu silme işlemini onaylamak için kendi parolanızı girin.",
+    "deleting": "Siliniyor…"
+  },
+  "reset": {
+    "title": "Parolayı Sıfırla",
+    "body": "<b>{{name}}</b> (<email>{{email}}</email>) için yeni bir parola belirleyin",
+    "newPassword": "Yeni Parola",
+    "help": "Kullanıcı giriş yapmak için bu parolayı kullanacak.",
+    "resetting": "Sıfırlanıyor…",
+    "submit": "Parolayı Sıfırla"
+  }
+}

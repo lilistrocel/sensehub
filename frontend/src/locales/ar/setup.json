@@ -1,1 +1,140 @@
-{}
+{
+  "steps": {
+    "welcome": "الترحيب",
+    "network": "الشبكة",
+    "timezone": "المنطقة الزمنية",
+    "admin": "حساب المسؤول",
+    "cloud": "السحابة",
+    "complete": "الاكتمال"
+  },
+  "stepOf": "الخطوة {{step}} من {{total}} · {{label}}",
+  "actions": {
+    "continue": "متابعة"
+  },
+  "welcome": {
+    "title": "مرحبًا بك في SenseHub",
+    "intro": "منصة الحوسبة الطرفية لعمليات إنترنت الأشياء الصناعية. أدِر الحساسات والمرحّلات ووحدات التحكم، وأتمت عملياتك بقدرات المعالجة المحلية القوية في SenseHub.",
+    "overviewTitle": "نظرة عامة على النظام",
+    "featureProtocols": "دعم بروتوكولات متعددة (Modbus وMQTT وZigbee وZ-Wave)",
+    "featureAutomation": "منشئ أتمتة مرئي مع المشغِّلات والشروط",
+    "featureOffline": "يعمل دون اتصال أولًا، مع مزامنة سحابية عند الاتصال",
+    "featureMonitoring": "مراقبة وتنبيهات في الوقت الفعلي",
+    "getStarted": "ابدأ",
+    "skipSetup": "تخطي الإعداد"
+  },
+  "skip": {
+    "title": "تخطي الإعداد؟",
+    "warningTitle": "تحذير: الحد الأدنى من الإعداد",
+    "warningBody": "سيؤدي تخطي الإعداد إلى إنشاء حساب مسؤول افتراضي ببيانات دخول أساسية. سيتعين عليك:",
+    "todoPassword": "تغيير كلمة المرور الافتراضية فورًا",
+    "todoNetwork": "إعداد الشبكة يدويًا",
+    "todoTimezone": "ضبط المنطقة الزمنية من الإعدادات",
+    "defaultAccount": "حساب المسؤول الافتراضي:",
+    "email": "البريد الإلكتروني:",
+    "tempPassword": "تُنشأ كلمة مرور مؤقتة لهذا الحساب. لدواعٍ أمنية <b>لا تُعرض هنا</b> — وسيُطلب منك تعيين كلمة مرور جديدة عند أول تسجيل دخول.",
+    "settingUp": "جارٍ الإعداد…",
+    "confirm": "تأكيد التخطي"
+  },
+  "network": {
+    "title": "إعداد الشبكة",
+    "subtitle": "اضبط إعدادات الشبكة لجهاز SenseHub.",
+    "useDhcp": "استخدام DHCP (إعداد IP تلقائي)",
+    "ipAddress": "عنوان IP",
+    "gateway": "البوابة",
+    "dnsServer": "خادم DNS"
+  },
+  "timezone": {
+    "title": "إعداد المنطقة الزمنية",
+    "subtitle": "اختر منطقتك الزمنية لعرض الوقت والجدولة بدقة.",
+    "label": "المنطقة الزمنية",
+    "currentSelection": "الاختيار الحالي:",
+    "localTime": "الوقت المحلي: {{time}}",
+    "group": {
+      "americas": "الأمريكتان",
+      "europe": "أوروبا",
+      "asia": "آسيا",
+      "pacificOceania": "المحيط الهادئ / أوقيانوسيا",
+      "africaMiddleEast": "أفريقيا / الشرق الأوسط",
+      "other": "أخرى"
+    },
+    "hint": {
+      "eastern": "الشرقي",
+      "central": "المركزي",
+      "mountain": "الجبلي",
+      "pacific": "المحيط الهادئ",
+      "alaska": "ألاسكا",
+      "hawaii": "هاواي",
+      "india": "الهند",
+      "china": "الصين",
+      "newZealand": "نيوزيلندا",
+      "utc": "التوقيت العالمي المنسق"
+    }
+  },
+  "admin": {
+    "title": "إنشاء حساب المسؤول",
+    "subtitle": "أنشئ حساب المسؤول لإدارة SenseHub.",
+    "fullName": "الاسم الكامل",
+    "namePlaceholder": "أدخل اسمك",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "passwordPlaceholder": "8 أحرف على الأقل",
+    "confirmPassword": "تأكيد كلمة المرور",
+    "confirmPlaceholder": "أعد إدخال كلمة المرور",
+    "creating": "جارٍ إنشاء الحساب…",
+    "create": "إنشاء الحساب"
+  },
+  "cloud": {
+    "title": "الاتصال السحابي",
+    "subtitle": "اتصل بـ SenseHub Cloud للمراقبة عن بُعد والنسخ الاحتياطي للبيانات وإدارة عدة مواقع.",
+    "optionalNote": "هذا اختياري — يمكنك إعداده لاحقًا من الإعدادات.",
+    "url": "عنوان URL السحابي",
+    "apiKey": "مفتاح API",
+    "apiKeyPlaceholder": "أدخل مفتاح API السحابي",
+    "offlineTitle": "يعمل SenseHub بالكامل دون اتصال",
+    "offlineBody": "الاتصال السحابي اختياري. سيعمل نظامك باستقلال تام بدونه.",
+    "skip": "تخطَّ الآن",
+    "connecting": "جارٍ الاتصال…",
+    "connect": "الاتصال بالسحابة"
+  },
+  "complete": {
+    "title": "اكتمل الإعداد!",
+    "body": "نظام SenseHub جاهز للاستخدام. لقد سجّلت الدخول الآن بصفتك المسؤول.",
+    "summaryTitle": "ملخص الإعداد",
+    "network": "الشبكة:",
+    "timezone": "المنطقة الزمنية:",
+    "admin": "المسؤول:",
+    "email": "البريد الإلكتروني:",
+    "cloud": "السحابة:",
+    "dhcpAutomatic": "DHCP (تلقائي)",
+    "staticIp": "IP ثابت",
+    "cloudConnected": "متصل",
+    "cloudNotConfigured": "غير مُعَدّ (وضع عدم الاتصال)",
+    "nextStepsTitle": "الخطوات التالية",
+    "nextScan": "ابحث عن المعدات على شبكتك",
+    "nextZones": "نظّم المعدات في مناطق",
+    "nextAutomations": "أنشئ برامج الأتمتة",
+    "nextCloud": "اضبط المزامنة السحابية (اختياري)",
+    "goToDashboard": "الانتقال إلى لوحة المتابعة"
+  },
+  "errors": {
+    "invalidIp": "يرجى إدخال عنوان IP صالح",
+    "invalidGateway": "يرجى إدخال عنوان بوابة صالح",
+    "invalidDns": "يرجى إدخال عنوان DNS صالح",
+    "networkSaveFailed": "تعذّر حفظ إعداد الشبكة",
+    "networkSaveError": "حدث خطأ أثناء حفظ إعداد الشبكة",
+    "timezoneSaveFailed": "تعذّر حفظ إعداد المنطقة الزمنية",
+    "timezoneSaveError": "حدث خطأ أثناء حفظ إعداد المنطقة الزمنية",
+    "nameRequired": "الاسم مطلوب",
+    "emailRequired": "البريد الإلكتروني مطلوب",
+    "invalidEmail": "يرجى إدخال بريد إلكتروني صالح",
+    "passwordRequired": "كلمة المرور مطلوبة",
+    "passwordTooShort": "يجب ألا تقل كلمة المرور عن 8 أحرف",
+    "passwordMismatch": "كلمتا المرور غير متطابقتين",
+    "setupFailed": "فشل الإعداد",
+    "setupError": "حدث خطأ أثناء الإعداد",
+    "cloudConnectFailed": "تعذّر الاتصال بالسحابة",
+    "cloudConnectError": "حدث خطأ أثناء الاتصال بالسحابة",
+    "quickSetupFailed": "فشل الإعداد السريع",
+    "quickSetupError": "حدث خطأ أثناء الإعداد السريع"
+  }
+}

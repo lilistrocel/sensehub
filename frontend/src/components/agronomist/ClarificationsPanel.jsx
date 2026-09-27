@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useToast } from '../../context/ToastContext';
+import { useFormat } from '../../i18n/useFormat';
 import { Button, Card, Label } from '../../ui';
 
 const API_BASE = '/api';
@@ -10,6 +12,8 @@ const API_BASE = '/api';
  * onUpdated(report) gets the regenerated report, or null after a plain note.
  */
 export default function ClarificationsPanel({ report, canControl, headers, onUpdated }) {
+  const { t } = useTranslation('agronomist');
+  const fmt = useFormat();
   const { showError, showSuccess } = useToast();
   const [message, setMessage] = useState('');
   const [posting, setPosting] = useState(null); // 'add' | 'regenerate' | null
@@ -17,12 +21,10 @@ export default function ClarificationsPanel({ report, canControl, headers, onUpd
 
   const post = async (regenerate) => {
     if (!message.trim()) {
-      showError('Type a clarification before posting');
+      showError(t('discussion.typeFirst'));
       return;
     }
-    if (regenerate && !window.confirm(
-      'Regenerate the report now with this clarification? This will call Claude and replace the current report if the new one passes its checks. If regeneration fails, the current report is kept.'
-    )) return;
+    if (regenerate && !window.confirm(t('discussion.confirmRegenerate'))) return;
 
     setPosting(regenerate ? 'regenerate' : 'add');
     try {
@@ -40,10 +42,10 @@ export default function ClarificationsPanel({ report, canControl, headers, onUpd
       }
       setMessage('');
       if (regenerate && data.regenerated) {
-        showSuccess('Clarification posted and report regenerated');
+        showSuccess(t('discussion.toastRegenerated'));
         onUpdated(data.report);
       } else {
-        showSuccess(regenerate ? 'Clarification saved (regeneration failed — see error)' : 'Clarification posted');
+        showSuccess(regenerate ? t('discussion.toastSavedRegenFailed') : t('discussion.toastPosted'));
         onUpdated(null);
       }
     } catch (err) {
@@ -56,54 +58,55 @@ export default function ClarificationsPanel({ report, canControl, headers, onUpd
   return (
     <Card data-testid="report-clarifications">
       <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
-        <Label as="h3">Clarifications & discussion</Label>
+        <Label as="h3">{t('discussion.title')}</Label>
         <span className="text-xs text-muted font-mono">
-          {clarifications.length} note{clarifications.length === 1 ? '' : 's'}
+          {t('count.note', { count: clarifications.length })}
         </span>
       </div>
 
       <p className="text-sm text-muted mb-4 max-w-prose">
-        Add context the agent doesn't know about — broken sensors, recent maintenance, "ignore today's pH because the probe is uncalibrated", etc. Notes are stored permanently and injected into the prompt on regeneration, so the new report (and any future weekly rollup) reflects your correction.
+        {t('discussion.help')}
       </p>
 
       {clarifications.length > 0 ? (
         <ul className="space-y-2 mb-4">
           {clarifications.map(c => (
-            <li key={c.id} className="bg-field rounded-md p-3 border-l-[3px] border-l-brand-500">
+            <li key={c.id} className="bg-field rounded-md p-3 border-s-[3px] border-s-brand-500">
               <div className="flex items-baseline justify-between flex-wrap gap-x-2">
-                <span className="text-xs font-semibold text-ink">{c.user_name || 'Anonymous'}</span>
+                <span className="text-xs font-semibold text-ink" dir="auto">{c.user_name || t('discussion.anonymous')}</span>
                 <span className="text-xs text-muted font-mono">
-                  {new Date(c.created_at).toLocaleString()}
-                  {c.triggered_regenerate ? ' · triggered regeneration' : ''}
+                  {fmt.dateTime(c.created_at)}
+                  {c.triggered_regenerate ? ` · ${t('discussion.triggeredRegen')}` : ''}
                 </span>
               </div>
-              <p className="text-sm text-ink mt-1 whitespace-pre-wrap break-words">{c.message}</p>
+              <p className="text-sm text-ink mt-1 whitespace-pre-wrap break-words" dir="auto">{c.message}</p>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted mb-4">No clarifications yet.</p>
+        <p className="text-sm text-muted mb-4">{t('discussion.empty')}</p>
       )}
 
       {canControl && (
         <div className="space-y-2">
-          <label htmlFor={`clarification-${report.id}`} className="sr-only">Clarification</label>
+          <label htmlFor={`clarification-${report.id}`} className="sr-only">{t('discussion.fieldLabel')}</label>
           <textarea
             id={`clarification-${report.id}`}
             value={message}
             onChange={e => setMessage(e.target.value)}
             disabled={!!posting}
-            placeholder="Add context, correct an assumption, or flag a sensor issue. Example: 'The AMIC pH probe is uncalibrated — ignore pH readings until further notice.'"
+            placeholder={t('discussion.placeholder')}
             rows={3}
+            dir="auto"
             className="w-full"
           />
           <div className="flex flex-wrap items-center gap-2 justify-end">
-            <span className="text-xs text-muted font-mono mr-auto">{message.length} chars</span>
+            <span className="text-xs text-muted font-mono me-auto">{t('discussion.chars', { count: message.length })}</span>
             <Button variant="secondary" size="sm" onClick={() => post(false)} disabled={!!posting || !message.trim()}>
-              {posting === 'add' ? 'Saving…' : 'Add note only'}
+              {posting === 'add' ? t('common:actions.saving') : t('discussion.addOnly')}
             </Button>
             <Button variant="primary" size="sm" onClick={() => post(true)} disabled={!!posting || !message.trim()}>
-              {posting === 'regenerate' ? 'Regenerating…' : 'Add & regenerate report'}
+              {posting === 'regenerate' ? t('discussion.regenerating') : t('discussion.addAndRegenerate')}
             </Button>
           </div>
         </div>

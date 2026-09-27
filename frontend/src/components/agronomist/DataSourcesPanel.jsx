@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useToast } from '../../context/ToastContext';
 import { Card, Label, StatusPill, Button, SectionHeader } from '../../ui';
 
@@ -10,8 +11,10 @@ const API_BASE = '/api';
  * optional "back on" date. Plus an ad-hoc excluded-equipment list.
  *
  * Reads/writes GET|PUT /api/ai/data-sources. Viewers get a read-only panel.
+ * Source labels / "feeds" lines come from the server (localized there).
  */
 export default function DataSourcesPanel({ headers, canEdit, equipment = [], embedded = false, onSaved = null }) {
+  const { t } = useTranslation('agronomist');
   const { showError, showSuccess } = useToast();
   const [initial, setInitial] = useState(null);   // last saved (effective) config from the API
   const [draft, setDraft] = useState(null);       // { sources: {key:{enabled,reason,until}}, excluded_equipment_ids }
@@ -83,19 +86,19 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [], emb
       setDraft(toDraft(data));
       if (onSaved) onSaved(data);
       const n = (data.disabled || []).length;
-      showSuccess(n ? `Data sources saved — ${n} out of service` : 'Data sources saved — everything in use');
+      showSuccess(n ? t('sources.toastSavedSomeOut', { count: n }) : t('sources.toastSavedAllIn'));
     } catch (err) {
-      showError('Save failed: ' + err.message);
+      showError(t('toast.saveFailed', { error: err.message }));
     } finally {
       setSaving(false);
     }
   };
 
   const headerPill = loading
-    ? <StatusPill state="idle" text="Loading" />
+    ? <StatusPill state="idle" text={t('common:status.loading')} />
     : disabledCount > 0
-      ? <StatusPill state="caution" filled text={`${disabledCount} out of service`} />
-      : <StatusPill state="ok" filled text="All in use" />;
+      ? <StatusPill state="caution" filled text={t('sources.outOfServiceCount', { count: disabledCount })} />
+      : <StatusPill state="ok" filled text={t('sources.allInUse')} />;
 
   const excludedNames = useMemo(() => {
     if (!draft) return [];
@@ -114,22 +117,21 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [], emb
     <Wrapper {...wrapperProps}>
       {!embedded && (
         <SectionHeader
-          title="Data sources"
-          subtitle="What the AI is allowed to look at. Take a system out of service when it is broken and cannot be fixed yet."
+          title={t('settings.sourcesTitle')}
+          subtitle={t('sources.intro')}
           right={headerPill}
         />
       )}
       <p className="text-xs text-muted mb-3">
-        {embedded && 'What the AI is allowed to look at. Take a system out of service when it is broken and cannot be fixed yet. '}
-        Applies to the daily agronomist report and the nightly planner. An out-of-service system is removed from
-        the data the AI sees and it is told not to reason about it, ask for samples, or create tasks for it.
-        {!canEdit && ' View only — ask an operator or admin to change this.'}
+        {embedded && `${t('sources.intro')} `}
+        {t('sources.appliesTo')}
+        {!canEdit && ` ${t('sources.viewOnly')}`}
       </p>
 
       {error && (
         <div className="text-sm text-alarm-700 dark:text-alarm-300 mb-3">
-          Could not load data sources: {error}{' '}
-          <button type="button" className="underline" onClick={load}>Retry</button>
+          {t('sources.loadFailed', { error })}{' '}
+          <button type="button" className="underline" onClick={load}>{t('common:actions.retry')}</button>
         </div>
       )}
 
@@ -142,24 +144,25 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [], emb
             return (
               <li key={key} className="py-3 flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4" data-source={key} data-enabled={s.enabled ? 'true' : 'false'}>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-ink">{meta.label || key}</div>
-                  <p className="text-xs text-muted mt-0.5">{meta.feeds}</p>
+                  <div className="text-sm font-semibold text-ink" dir="auto">{meta.label || key}</div>
+                  <p className="text-xs text-muted mt-0.5" dir="auto">{meta.feeds}</p>
                   {!s.enabled && (
                     <div className="mt-2 flex flex-col sm:flex-row gap-2">
                       <label className="flex-1 min-w-0">
-                        <Label className="mb-1">Reason</Label>
+                        <Label className="mb-1">{t('sources.reason')}</Label>
                         <input
                           type="text"
                           value={s.reason}
                           readOnly={!canEdit}
                           maxLength={300}
-                          placeholder="e.g. Down for the foreseeable future"
+                          placeholder={t('sources.reasonPlaceholder')}
+                          dir="auto"
                           onChange={e => setSource(key, { reason: e.target.value })}
                           className="w-full min-h-[36px] px-3 py-1.5 text-sm rounded-md border border-line bg-panel text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand-500 read-only:bg-field"
                         />
                       </label>
                       <label className="sm:w-44">
-                        <Label className="mb-1">Back on (optional)</Label>
+                        <Label className="mb-1">{t('sources.backOn')}</Label>
                         <input
                           type="date"
                           value={s.until}
@@ -172,7 +175,7 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [], emb
                   )}
                   {expired && (
                     <p className="text-xs text-caution-700 dark:text-caution-300 mt-1">
-                      The back-on date has passed — this source is treated as in use again.
+                      {t('sources.backOnPassed')}
                     </p>
                   )}
                 </div>
@@ -181,13 +184,13 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [], emb
                   onClick={() => canEdit && setSource(key, { enabled: !s.enabled })}
                   disabled={!canEdit}
                   aria-pressed={s.enabled}
-                  aria-label={`${meta.label || key}: ${s.enabled ? 'in use' : 'out of service'}`}
-                  title={canEdit ? (s.enabled ? 'Click to take out of service' : 'Click to put back in use') : undefined}
+                  aria-label={t('sources.toggleAria', { name: meta.label || key, state: s.enabled ? t('sources.inUseLower') : t('sources.outOfServiceLower') })}
+                  title={canEdit ? (s.enabled ? t('sources.clickToTakeOut') : t('sources.clickToPutBack')) : undefined}
                   className="self-start shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-default"
                 >
                   {s.enabled
-                    ? <StatusPill state="ok" filled text="In use" />
-                    : <StatusPill state="idle" text="Out of service" />}
+                    ? <StatusPill state="ok" filled text={t('sources.inUse')} />
+                    : <StatusPill state="idle" text={t('sources.outOfService')} />}
                 </button>
               </li>
             );
@@ -197,14 +200,13 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [], emb
 
       {draft && (
         <div className="mt-4 pt-3 border-t border-line">
-          <Label className="mb-1">Excluded equipment</Label>
+          <Label className="mb-1">{t('sources.excludedTitle')}</Label>
           <p className="text-xs text-muted mb-2">
-            Drop a single device from everything the AI sees (readings, reference sensors, diagnostics, alerts, the planner's inventory)
-            without taking its whole system out of service.
-            {excludedNames.length > 0 && <> Currently excluded: <span className="text-ink">{excludedNames.join(', ')}</span>.</>}
+            {t('sources.excludedHelp')}
+            {excludedNames.length > 0 && <>{' '}<Trans t={t} i18nKey="sources.currentlyExcluded" values={{ names: excludedNames.join(', ') }} components={{ names: <span className="text-ink" /> }} /></>}
           </p>
           {equipment.length === 0 ? (
-            <p className="text-xs text-muted">No equipment registered.</p>
+            <p className="text-xs text-muted">{t('sources.noEquipment')}</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1 max-h-48 overflow-y-auto rounded-md border border-line bg-field p-2">
               {equipment.map(e => (
@@ -216,7 +218,7 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [], emb
                     disabled={!canEdit}
                     onChange={() => toggleEquipment(e.id)}
                   />
-                  <span className="truncate">{e.name}</span>
+                  <span className="truncate" dir="auto">{e.name}</span>
                   <span className="text-xs text-muted shrink-0">#{e.id}</span>
                 </label>
               ))}
@@ -227,9 +229,9 @@ export default function DataSourcesPanel({ headers, canEdit, equipment = [], emb
 
       {canEdit && draft && (
         <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-          {dirty && <span className="text-xs text-caution-700 dark:text-caution-300 mr-auto">Unsaved changes — the next AI run still uses the saved settings.</span>}
-          <Button variant="secondary" size="sm" onClick={() => setDraft(toDraft(initial))} disabled={!dirty || saving}>Discard</Button>
-          <Button variant="primary" size="sm" onClick={save} disabled={!dirty || saving}>{saving ? 'Saving…' : 'Save data sources'}</Button>
+          {dirty && <span className="text-xs text-caution-700 dark:text-caution-300 me-auto">{t('sources.unsaved')}</span>}
+          <Button variant="secondary" size="sm" onClick={() => setDraft(toDraft(initial))} disabled={!dirty || saving}>{t('actions.discard')}</Button>
+          <Button variant="primary" size="sm" onClick={save} disabled={!dirty || saving}>{saving ? t('common:actions.saving') : t('sources.save')}</Button>
         </div>
       )}
     </Wrapper>

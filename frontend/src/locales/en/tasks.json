@@ -1,1 +1,120 @@
-{}
+{
+  "title": "Operator Tasks",
+  "subtitle": "Actionable items from the agronomist and planner. Done tells the agent its theory was right; declining with a reason tells it why.",
+  "filters": {
+    "status": "Status",
+    "source": "Source",
+    "statusOption": {
+      "open": "Open",
+      "done": "Done",
+      "declined": "Declined",
+      "snoozed": "Snoozed",
+      "all": "All"
+    },
+    "sourceOption": {
+      "all": "All sources",
+      "agronomist": "Agronomist",
+      "planner": "Planner",
+      "watchdog": "Watchdog",
+      "manual": "Manual"
+    }
+  },
+  "summary": {
+    "current_one": "{{n}} current",
+    "current_other": "{{n}} current",
+    "outdated_one": "{{n}} outdated",
+    "outdated_other": "{{n}} outdated"
+  },
+  "outdated": {
+    "chipTitle_one": "Open tasks created more than {{count}} day ago are treated as outdated",
+    "chipTitle_other": "Open tasks created more than {{count}} days ago are treated as outdated",
+    "hide": "Hide outdated",
+    "hideWithCount_one": "Hide outdated ({{n}} hidden)",
+    "hideWithCount_other": "Hide outdated ({{n}} hidden)"
+  },
+  "translation": {
+    "showOriginal": "Show original (English)",
+    "showTranslation": "Show translation",
+    "auto": "translated automatically from English",
+    "pending": "translation in progress — showing English",
+    "failed": "translation failed — showing English"
+  },
+  "empty": {
+    "noOpen": "No open tasks. The agents will surface new ones as they identify physical interventions or measurements you need to make.",
+    "noMatch": "No tasks match the current filter.",
+    "allOutdated_one": "The {{n}} open task is outdated (older than {{days}} days). Turn off \"Hide outdated\" to review it.",
+    "allOutdated_other": "All {{n}} open tasks are outdated (older than {{days}} days). Turn off \"Hide outdated\" to review them."
+  },
+  "paging": {
+    "showing": "Showing {{shown}} of {{total}}",
+    "loadMore": "Load more ({{count}})"
+  },
+  "toast": {
+    "loadFailed": "Failed to load tasks: {{error}}",
+    "declineReasonRequired": "Decline reason is required so the agent can update its theory.",
+    "actionFailed": "Action failed",
+    "done": "Task marked done",
+    "declined": "Task declined — feedback recorded",
+    "snoozed": "Task snoozed"
+  },
+  "modal": {
+    "completeTitle": "Mark as done",
+    "declineTitle": "Decline task",
+    "snoozeTitle": "Snooze task",
+    "quotedTitle": "\"{{title}}\"",
+    "completionNotes": "Completion notes",
+    "completionNotesHint": "(optional — confirms or refines the agent's theory)",
+    "completionPlaceholderExpected": "Expected: {{expected}}\nObserved: ",
+    "completionPlaceholder": "What you did and what you observed...",
+    "declineReason": "Decline reason",
+    "declineReasonHint": "(required — the agent uses this to update its theory)",
+    "declinePlaceholder": "e.g. Tank 1 was already verified by lab on 2026-05-23 at 19,200 mg/L Ca — the concentration is correct, the issue must be elsewhere.",
+    "snoozeUntil": "Snooze until",
+    "snoozeHelp": "Snoozed tasks reappear after this time. Use sparingly — the agent will keep noticing the underlying condition.",
+    "confirmDone": "Confirm done",
+    "declineWithReason": "Decline with reason",
+    "snooze": "Snooze"
+  },
+  "priority": {
+    "critical": "critical",
+    "high": "high",
+    "medium": "medium",
+    "low": "low"
+  },
+  "status": {
+    "open": "open",
+    "snoozed": "snoozed",
+    "done": "done",
+    "declined": "declined",
+    "archived": "archived"
+  },
+  "category": {
+    "physical": "Physical",
+    "measurement": "Measurement",
+    "tutorial": "Tutorial",
+    "config_change": "Config change"
+  },
+  "source": {
+    "agronomist": "agronomist",
+    "planner": "planner",
+    "watchdog": "watchdog",
+    "manual": "manual"
+  },
+  "card": {
+    "outdated_one": "Outdated — created {{count}} day ago; conditions may have changed",
+    "outdated_other": "Outdated — created {{count}} days ago; conditions may have changed",
+    "expectedOutcome": "Expected outcome:",
+    "viewInstructions": "View instructions",
+    "created": "Created",
+    "snoozedUntil": "snoozed until",
+    "declinedAt": "declined",
+    "doneAt": "done",
+    "byUser": "by <email>{{email}}</email>",
+    "completionNotes": "Completion notes",
+    "declineReason": "Decline reason (fed back to agent)",
+    "done": "Done",
+    "decline": "Decline…",
+    "snooze": "Snooze…",
+    "reopen": "Reopen"
+  }
+}

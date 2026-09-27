@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
+import { formatAgo } from '../../i18n/format';
 import { isStale, toEpochMs, formatSince } from '../../utils/freshness';
 
 /** Re-render on a fixed cadence so "x min ago" / stale evaluation stays honest. */
@@ -21,20 +24,17 @@ export function isEquipmentStale(eq, now = Date.now()) {
   return isStale(eq.last_communication, poll, 2, now);
 }
 
-/** "just now", "45 s ago", "3 min ago", "2 h ago", "3 d ago", or "never". */
+/**
+ * "just now", "45 s ago", "3 min ago", "2 h ago", "3 d ago", or "never" in the
+ * active language (translated at call time, so callers re-render on a switch).
+ */
 export function formatRelative(ts, now = Date.now()) {
   const ms = toEpochMs(ts);
-  if (ms === null) return 'never';
+  if (ms === null) return i18n.t('common:status.never');
   const diff = Math.max(0, now - ms);
-  const s = Math.round(diff / 1000);
-  if (s < 10) return 'just now';
-  if (s < 60) return `${s} s ago`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60);
-  if (h < 48) return `${h} h ago`;
-  const d = Math.round(h / 24);
-  return `${d} d ago`;
+  if (diff < 10000) return i18n.t('equipment:relative.justNow');
+  if (diff < 48 * 3600e3) return formatAgo(diff);
+  return i18n.t('equipment:relative.daysAgo', { count: Math.round(diff / 86400e3) });
 }
 
 /**
@@ -49,29 +49,32 @@ export function getEquipmentPresentation(eq, opts = {}) {
   const disabled = isEquipmentDisabled(eq);
   const stale = isEquipmentStale(eq, now);
   const status = eq?.status || 'unknown';
+  // Translated at call time: every caller renders under useTranslation, so a
+  // language switch re-runs this.
+  const t = (key, opts) => i18n.t(key, opts);
 
   if (disabled) {
-    return { key: 'disabled', rail: 'idle', pill: 'idle', filled: false, text: 'Disabled', dim: true, stale: false, disabled: true };
+    return { key: 'disabled', rail: 'idle', pill: 'idle', filled: false, text: t('equipment:presentation.disabled'), dim: true, stale: false, disabled: true };
   }
   if (status === 'error') {
-    return { key: 'error', rail: 'alarm', pill: 'alarm', filled: true, text: 'Error', dim: false, stale, disabled: false };
+    return { key: 'error', rail: 'alarm', pill: 'alarm', filled: true, text: t('equipment:presentation.error'), dim: false, stale, disabled: false };
   }
   if (status === 'warning') {
-    return { key: 'warning', rail: 'caution', pill: 'caution', filled: true, text: 'Warning', dim: false, stale, disabled: false };
+    return { key: 'warning', rail: 'caution', pill: 'caution', filled: true, text: t('equipment:presentation.warning'), dim: false, stale, disabled: false };
   }
   if (stale) {
     const since = eq?.last_communication
-      ? `Not reported since ${formatSince(eq.last_communication, { now, format: opts.formatSinceFn })}`
-      : 'Never reported';
+      ? t('common:reading.notReportedSince', { time: formatSince(eq.last_communication, { now, format: opts.formatSinceFn }) })
+      : t('equipment:presentation.neverReported');
     return { key: 'stale', rail: 'stale', pill: 'caution', filled: false, text: since, dim: false, stale: true, disabled: false };
   }
   if (status === 'online') {
-    return { key: 'online', rail: 'ok', pill: 'ok', filled: true, text: 'Online', dim: false, stale: false, disabled: false };
+    return { key: 'online', rail: 'ok', pill: 'ok', filled: true, text: t('equipment:presentation.online'), dim: false, stale: false, disabled: false };
   }
   if (status === 'offline') {
-    return { key: 'offline', rail: 'alarm', pill: 'alarm', filled: false, text: 'Offline', dim: false, stale: false, disabled: false };
+    return { key: 'offline', rail: 'alarm', pill: 'alarm', filled: false, text: t('equipment:presentation.offline'), dim: false, stale: false, disabled: false };
   }
-  return { key: 'unknown', rail: 'idle', pill: 'idle', filled: false, text: status || 'Unknown', dim: false, stale: false, disabled: false };
+  return { key: 'unknown', rail: 'idle', pill: 'idle', filled: false, text: t(`equipment:presentation.${status || 'unknown'}`, { defaultValue: status || t('equipment:presentation.unknown') }), dim: false, stale: false, disabled: false };
 }
 
 /** Coil mappings that can be controlled (coil + readwrite), as a normalised list. */
@@ -105,7 +108,8 @@ export function parseCachedRelayStates(eq) {
 
 /** "unverified" pill: scale/register inferred, not confirmed by a controlled read. */
 export function UnverifiedPill({ className = '' }) {
-  const title = 'Unverified: scale/register inferred from a datasheet, not confirmed by a controlled read';
+  const { t } = useTranslation('equipment');
+  const title = t('unverified.title');
   return (
     <span
       title={title}
@@ -116,7 +120,7 @@ export function UnverifiedPill({ className = '' }) {
       <svg className="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path d="M10 2 1.5 17h17L10 2zm0 5a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V8a1 1 0 0 1 1-1zm0 6.5a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2z" />
       </svg>
-      unverified
+      {t('unverified.pill')}
     </span>
   );
 }
@@ -127,21 +131,22 @@ export function UnverifiedPill({ className = '' }) {
  * state: true | false | null
  */
 export function RelayLed({ state, pending = false, size = 'md', className = '' }) {
+  const { t } = useTranslation('equipment');
   const dim = size === 'sm' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5';
   let cls;
   let label;
   if (pending) {
     cls = 'border-2 border-state-caution bg-transparent animate-pulse';
-    label = 'command sent, awaiting confirmation';
+    label = t('led.pending');
   } else if (state === true) {
     cls = 'border-2 border-state-ok bg-state-ok';
-    label = 'on';
+    label = t('led.on');
   } else if (state === false) {
     cls = 'border-2 border-state-idle bg-transparent';
-    label = 'off';
+    label = t('led.off');
   } else {
     cls = 'border-2 border-dashed border-state-caution bg-transparent';
-    label = 'unknown';
+    label = t('led.unknown');
   }
   return (
     <span

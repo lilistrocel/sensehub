@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -19,6 +20,7 @@ import { toEpochMs } from '../utils/freshness';
 const API_BASE = '/api';
 
 export default function Equipment() {
+  const { t } = useTranslation('equipment');
   const { token, user } = useAuth();
   const { subscribe, connected } = useWebSocket();
   const { showError, showSuccess } = useToast();
@@ -146,7 +148,7 @@ export default function Equipment() {
       setLoading(true);
       setError(null);
       const equipmentResponse = await fetch(`${API_BASE}/equipment`, { headers: authHeaders });
-      if (!equipmentResponse.ok) throw new Error('Failed to fetch equipment');
+      if (!equipmentResponse.ok) throw new Error(t('page.fetchFailed'));
       const equipmentData = await equipmentResponse.json();
       setEquipment(equipmentData);
 
@@ -205,7 +207,7 @@ export default function Equipment() {
       const response = await fetch(`${API_BASE}/equipment/scan`, { method: 'POST', headers: authHeaders, body: JSON.stringify({ scanType: 'network' }) });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Scan failed');
+        throw new Error(data.message || t('page.scanFailed'));
       }
       const data = await response.json();
       const discovered = data.discovered || [];
@@ -243,7 +245,7 @@ export default function Equipment() {
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Slave scan failed');
+        throw new Error(data.message || t('page.slaveScanFailed'));
       }
       const data = await response.json();
       setSlaveScanProgress(100);
@@ -251,7 +253,7 @@ export default function Equipment() {
       if (data.discovered && data.discovered.length > 0) setSelectedSlaves(data.discovered.map(d => d.slaveId));
     } catch (err) {
       setSlaveScanProgress(null);
-      showError(`Scan failed: ${err.message}`);
+      showError(t('page.scanFailedWith', { error: err.message }));
     } finally {
       clearInterval(progressInterval);
     }
@@ -274,17 +276,17 @@ export default function Equipment() {
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to create equipment');
+        throw new Error(data.message || t('form.createFailed'));
       }
       const data = await response.json();
-      showSuccess(`Created ${data.count} equipment entries`);
+      showSuccess(t('page.createdEntries', { count: data.count }));
       setShowSlaveScanner(false);
       setSlaveScanProgress(null);
       setSlaveScanResults(null);
       setSelectedSlaves([]);
       await fetchData();
     } catch (err) {
-      showError(`Failed to create equipment: ${err.message}`);
+      showError(t('page.createFailedWith', { error: err.message }));
     }
   };
 
@@ -305,7 +307,7 @@ export default function Equipment() {
       });
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || 'Failed to add device');
+        throw new Error(errData.message || t('page.addDeviceFailed'));
       }
       setDiscoveredDevices(prev => prev.filter(d => d.address !== device.address));
       await fetchData();
@@ -314,7 +316,7 @@ export default function Equipment() {
         setScanResult(null);
       }
     } catch (err) {
-      showError(`Failed to add device: ${err.message}`);
+      showError(t('page.addDeviceFailedWith', { error: err.message }));
     } finally {
       setAddingDevice(null);
     }
@@ -349,13 +351,13 @@ export default function Equipment() {
       const response = await fetch(`${API_BASE}/equipment/${equipmentToDelete.id}`, { method: 'DELETE', headers: authHeaders });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || 'Failed to delete equipment');
+        throw new Error(data.message || t('page.deleteFailed'));
       }
-      showSuccess(`"${equipmentToDelete.name}" deleted`);
+      showSuccess(t('page.deleted', { name: equipmentToDelete.name }));
       setEquipmentToDelete(null);
       fetchData();
     } catch (err) {
-      showError(err.message, 'Delete failed');
+      showError(err.message, t('page.deleteFailedTitle'));
     } finally {
       setDeleteLoading(false);
     }
@@ -421,7 +423,7 @@ export default function Equipment() {
     return (
       <div className="flex items-center justify-center py-12 text-muted">
         <Spinner className="h-6 w-6" />
-        <span className="ml-3">Loading equipment…</span>
+        <span className="ms-3">{t('page.loading')}</span>
       </div>
     );
   }
@@ -430,7 +432,7 @@ export default function Equipment() {
     return (
       <InlineNotice type="error">
         {error}
-        <button type="button" onClick={fetchData} className="ml-2 underline font-semibold">Try again</button>
+        <button type="button" onClick={fetchData} className="ms-2 underline font-semibold">{t('common:actions.tryAgain')}</button>
       </InlineNotice>
     );
   }
@@ -438,9 +440,9 @@ export default function Equipment() {
   if (equipmentNotFound) {
     return (
       <Card rail="caution" padding="lg" className="max-w-lg mx-auto mt-12 text-center">
-        <h2 className="font-display text-xl font-semibold text-ink mb-2">Equipment not found</h2>
-        <p className="text-muted mb-4">The equipment with ID "{urlEquipmentId}" does not exist or may have been deleted.</p>
-        <Button variant="primary" onClick={() => navigate('/equipment')}>Back to equipment list</Button>
+        <h2 className="font-display text-xl font-semibold text-ink mb-2">{t('page.notFoundTitle')}</h2>
+        <p className="text-muted mb-4">{t('page.notFoundBody', { id: urlEquipmentId })}</p>
+        <Button variant="primary" onClick={() => navigate('/equipment')}>{t('page.backToList')}</Button>
       </Card>
     );
   }
@@ -456,35 +458,35 @@ export default function Equipment() {
     <div>
       {/* Header: one primary (Add); scans are secondary; export is ghost */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h1 className="font-display text-2xl font-semibold text-ink">Equipment</h1>
+        <h1 className="font-display text-2xl font-semibold text-ink">{t('page.title')}</h1>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button variant="secondary" onClick={handleScan} disabled={scanning} title="Scan the LAN for Modbus TCP devices">
+          <Button variant="secondary" onClick={handleScan} disabled={scanning} title={t('page.scanNetworkTitle')}>
             {scanning ? <Spinner /> : (
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             )}
-            <span className="hidden sm:inline">{scanning ? 'Scanning…' : 'Scan network'}</span>
-            <span className="sm:hidden">{scanning ? 'Scan…' : 'Scan'}</span>
+            <span className="hidden sm:inline">{scanning ? t('scan.scanning') : t('page.scanNetwork')}</span>
+            <span className="sm:hidden">{scanning ? t('page.scanShortBusy') : t('page.scanShort')}</span>
           </Button>
-          <Button variant="secondary" onClick={() => setShowSlaveScanner(true)} title="Probe slave IDs on an RS485 gateway">
+          <Button variant="secondary" onClick={() => setShowSlaveScanner(true)} title={t('page.scanSlavesTitle')}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
             </svg>
-            <span className="hidden sm:inline">Scan slaves</span>
-            <span className="sm:hidden">Slaves</span>
+            <span className="hidden sm:inline">{t('page.scanSlaves')}</span>
+            <span className="sm:hidden">{t('page.scanSlavesShort')}</span>
           </Button>
           <Button variant="primary" onClick={() => setShowAddModal(true)}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add
+            {t('common:actions.add')}
           </Button>
-          <Button variant="ghost" onClick={handleExportCSV} disabled={equipment.length === 0} title="Export equipment to CSV">
+          <Button variant="ghost" onClick={handleExportCSV} disabled={equipment.length === 0} title={t('page.exportTitle')}>
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            <span className="hidden sm:inline">Export</span>
+            <span className="hidden sm:inline">{t('mapping.export')}</span>
             <span className="sm:hidden">CSV</span>
           </Button>
         </div>
@@ -493,8 +495,8 @@ export default function Equipment() {
       {scanResult && (
         <InlineNotice type={scanResult.type === 'success' ? 'success' : 'error'} className="mb-6">
           {scanResult.message}
-          {scanResult.discovered && scanResult.discovered.length > 0 && <span className="ml-2">({scanResult.discovered.length} devices found)</span>}
-          {scanResult.discovered && scanResult.discovered.length === 0 && scanResult.type === 'success' && <span className="ml-2">(No new devices found)</span>}
+          {scanResult.discovered && scanResult.discovered.length > 0 && <span className="ms-2">{t('page.devicesFound', { count: scanResult.discovered.length })}</span>}
+          {scanResult.discovered && scanResult.discovered.length === 0 && scanResult.type === 'success' && <span className="ms-2">{t('page.noNewDevices')}</span>}
         </InlineNotice>
       )}
 
@@ -502,9 +504,9 @@ export default function Equipment() {
       <Card padding="md" className="mb-6">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
-            <label htmlFor="search" className="sr-only">Search equipment</label>
+            <label htmlFor="search" className="sr-only">{t('page.searchLabel')}</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="absolute inset-y-0 start-0 ps-3 flex items-center pointer-events-none">
                 <svg className="h-5 w-5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -512,26 +514,26 @@ export default function Equipment() {
               <input
                 type="search"
                 id="search"
-                className="w-full !pl-10 min-h-touch"
-                placeholder="Search by name, type, or description…"
+                className="w-full !ps-10 min-h-touch"
+                placeholder={t('page.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
           </div>
           <div className="sm:w-48">
-            <label htmlFor="status-filter" className="sr-only">Filter by status</label>
+            <label htmlFor="status-filter" className="sr-only">{t('page.filterStatus')}</label>
             <select id="status-filter" className="w-full min-h-touch" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="online">Online</option>
-              <option value="offline">Offline</option>
-              <option value="warning">Warning</option>
-              <option value="error">Error</option>
-              <option value="disabled">Disabled</option>
+              <option value="">{t('page.allStatuses')}</option>
+              <option value="online">{t('presentation.online')}</option>
+              <option value="offline">{t('presentation.offline')}</option>
+              <option value="warning">{t('presentation.warning')}</option>
+              <option value="error">{t('presentation.error')}</option>
+              <option value="disabled">{t('presentation.disabled')}</option>
             </select>
           </div>
           {(searchTerm || statusFilter) && (
-            <Button variant="ghost" onClick={() => { setSearchTerm(''); setStatusFilter(''); }}>Clear filters</Button>
+            <Button variant="ghost" onClick={() => { setSearchTerm(''); setStatusFilter(''); }}>{t('page.clearFilters')}</Button>
           )}
         </div>
       </Card>
@@ -539,12 +541,12 @@ export default function Equipment() {
       {/* List */}
       {filteredEquipment.length === 0 ? (
         <Card padding="lg" className="text-center py-12">
-          <h3 className="font-display text-base font-semibold text-ink">No equipment</h3>
+          <h3 className="font-display text-base font-semibold text-ink">{t('page.emptyTitle')}</h3>
           <p className="mt-1 text-sm text-muted">
-            {equipment.length === 0 ? 'Get started by adding your first piece of equipment.' : 'No equipment matches your current filters.'}
+            {equipment.length === 0 ? t('page.emptyBody') : t('page.emptyFiltered')}
           </p>
           {equipment.length === 0 && (
-            <div className="mt-6"><Button variant="primary" onClick={() => setShowAddModal(true)}>Add equipment</Button></div>
+            <div className="mt-6"><Button variant="primary" onClick={() => setShowAddModal(true)}>{t('form.addTitle')}</Button></div>
           )}
         </Card>
       ) : (
@@ -569,32 +571,32 @@ export default function Equipment() {
         <Card padding="md" className="mt-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm text-muted">
-              <label htmlFor="items-per-page">Show</label>
+              <label htmlFor="items-per-page">{t('page.show')}</label>
               <select id="items-per-page" value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }} className="!py-1.5 min-h-[36px]">
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
               </select>
-              <span>per page</span>
+              <span>{t('page.perPage')}</span>
             </div>
             <div className="text-sm text-muted font-mono tabular">
-              {startIndex + 1}–{Math.min(endIndex, filteredEquipment.length)} of {filteredEquipment.length}
-              {equipment.length !== filteredEquipment.length && <span> (filtered from {equipment.length})</span>}
+              {t('page.range', { from: startIndex + 1, to: Math.min(endIndex, filteredEquipment.length), total: filteredEquipment.length })}
+              {equipment.length !== filteredEquipment.length && <span> {t('page.filteredFrom', { total: equipment.length })}</span>}
             </div>
-            <nav className="flex items-center gap-1" aria-label="Pagination">
-              <Button variant="ghost" size="sm" onClick={() => goToPage(1)} disabled={currentPage === 1} title="First page" aria-label="First page">«</Button>
-              <Button variant="ghost" size="sm" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} title="Previous page">‹ Prev</Button>
+            <nav className="flex items-center gap-1" aria-label={t('page.pagination')}>
+              <Button variant="ghost" size="sm" onClick={() => goToPage(1)} disabled={currentPage === 1} title={t('page.firstPage')} aria-label={t('page.firstPage')}><span aria-hidden="true">«</span></Button>
+              <Button variant="ghost" size="sm" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} title={t('page.prevPage')}><span aria-hidden="true">‹</span> {t('page.prev')}</Button>
               {pageNumbers.map(n => (
                 <Button key={n} variant={currentPage === n ? 'primary' : 'ghost'} size="sm" onClick={() => goToPage(n)} aria-current={currentPage === n ? 'page' : undefined}>{n}</Button>
               ))}
-              <Button variant="ghost" size="sm" onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages || totalPages === 0} title="Next page">Next ›</Button>
-              <Button variant="ghost" size="sm" onClick={() => goToPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0} title="Last page" aria-label="Last page">»</Button>
+              <Button variant="ghost" size="sm" onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages || totalPages === 0} title={t('page.nextPage')}>{t('page.next')} <span aria-hidden="true">›</span></Button>
+              <Button variant="ghost" size="sm" onClick={() => goToPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0} title={t('page.lastPage')} aria-label={t('page.lastPage')}><span aria-hidden="true">»</span></Button>
             </nav>
           </div>
           <div className="mt-3 pt-3 border-t border-line flex items-center justify-between gap-3 text-xs">
-            <StatusPill state={connected ? 'ok' : 'idle'} filled={connected} pulse={connected} text={connected ? 'Live updates' : 'Live updates disconnected'} />
-            {lastUpdate && <span className="text-muted font-mono tabular">Last update {formatDateTime(lastUpdate)}</span>}
+            <StatusPill state={connected ? 'ok' : 'idle'} filled={connected} pulse={connected} text={connected ? t('page.live') : t('page.liveDisconnected')} />
+            {lastUpdate && <span className="text-muted font-mono tabular">{t('page.lastUpdate', { time: formatDateTime(lastUpdate) })}</span>}
           </div>
         </Card>
       )}
@@ -620,14 +622,17 @@ export default function Equipment() {
 
       <ConfirmDialog
         open={equipmentToDelete !== null}
-        title="Delete equipment?"
+        title={t('page.deleteTitle')}
         body={(
-          <>
-            <strong>{equipmentToDelete?.name}</strong> will be removed along with its readings, zone assignments and relay history. This cannot be undone.
-          </>
+          <Trans
+            t={t}
+            i18nKey="page.deleteBody"
+            values={{ name: equipmentToDelete?.name }}
+            components={{ b: <strong dir="auto" /> }}
+          />
         )}
         variant="danger"
-        confirmLabel="Delete"
+        confirmLabel={t('common:actions.delete')}
         busy={deleteLoading}
         onCancel={() => { if (!deleteLoading) setEquipmentToDelete(null); }}
         onConfirm={handleDeleteEquipment}

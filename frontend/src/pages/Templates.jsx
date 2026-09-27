@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -37,6 +38,8 @@ function emptyTemplate() {
 }
 
 const EFFECT_DIRECTIONS = ['raise', 'lower', 'neutral'];
+/** Sentinel value of the category filter ("all categories"); never shown as text. */
+const ALL = 'All';
 const EFFECT_DIRECTION_COLOR = {
   raise:   'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200',
   lower:   'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200',
@@ -52,6 +55,7 @@ function emptyParameter() {
 }
 
 export default function Templates() {
+  const { t } = useTranslation('templates');
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
   const canEdit = user?.role === 'admin' || user?.role === 'operator';
@@ -65,7 +69,7 @@ export default function Templates() {
   const [conditionsText, setConditionsText] = useState('');
   const [triggerText, setTriggerText] = useState('');
   const [filter, setFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [categoryFilter, setCategoryFilter] = useState(ALL);
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -79,7 +83,7 @@ export default function Templates() {
         if (!selected && list.length > 0) setSelected(list[0]);
       }
     } catch (err) {
-      showError('Failed to load templates: ' + err.message);
+      showError(t('errors.loadFailed', { error: err.message }));
     } finally {
       setLoading(false);
     }
@@ -87,10 +91,10 @@ export default function Templates() {
 
   useEffect(() => { fetchTemplates(); /* eslint-disable-next-line */ }, []);
 
-  const openEdit = (t) => {
-    const tpl = t ? { ...t } : emptyTemplate();
+  const openEdit = (source) => {
+    const tpl = source ? { ...source } : emptyTemplate();
     setEditing(tpl);
-    setIsNew(!t);
+    setIsNew(!source);
     setActionsText(pretty(tpl.actions || []));
     setConditionsText(pretty(tpl.conditions || []));
     setTriggerText(tpl.instantiation_trigger ? pretty(tpl.instantiation_trigger) : '');
@@ -102,22 +106,22 @@ export default function Templates() {
   };
 
   const saveTemplate = async () => {
-    if (!editing.name?.trim()) { showError('Name is required'); return; }
+    if (!editing.name?.trim()) { showError(t('errors.nameRequired')); return; }
     let parsedActions, parsedConditions, parsedTrigger;
     try { parsedActions = JSON.parse(actionsText || '[]'); }
-    catch (e) { showError('Invalid Actions JSON: ' + e.message); return; }
+    catch (e) { showError(t('errors.invalidActions', { error: e.message })); return; }
     if (!Array.isArray(parsedActions) || parsedActions.length === 0) {
-      showError('Actions must be a non-empty array'); return;
+      showError(t('errors.actionsNonEmpty')); return;
     }
     try { parsedConditions = JSON.parse(conditionsText || '[]'); }
-    catch (e) { showError('Invalid Conditions JSON: ' + e.message); return; }
+    catch (e) { showError(t('errors.invalidConditions', { error: e.message })); return; }
     try { parsedTrigger = triggerText.trim() ? JSON.parse(triggerText) : null; }
-    catch (e) { showError('Invalid Instantiation Trigger JSON: ' + e.message); return; }
+    catch (e) { showError(t('errors.invalidTrigger', { error: e.message })); return; }
 
     // Validate parameter rows
     const cleanedParams = [];
     for (const p of (editing.parameters || [])) {
-      if (!p.name?.trim()) { showError('Every parameter needs a name'); return; }
+      if (!p.name?.trim()) { showError(t('errors.paramNeedsName')); return; }
       const cleaned = {
         name: p.name.trim(),
         type: p.type || 'string',
@@ -136,7 +140,7 @@ export default function Templates() {
     for (const e of (editing.target_effects || [])) {
       if (!e.metric_name?.trim()) continue; // skip empty rows
       if (!['raise', 'lower', 'neutral'].includes(e.direction)) {
-        showError(`Effect for "${e.metric_name}" has invalid direction "${e.direction}"`);
+        showError(t('errors.invalidDirection', { metric: e.metric_name, direction: e.direction }));
         return;
       }
       cleanedEffects.push({
@@ -170,31 +174,31 @@ export default function Templates() {
       });
       if (res.ok) {
         const saved = await res.json();
-        showSuccess(isNew ? 'Template created' : 'Template updated');
+        showSuccess(isNew ? t('toast.created') : t('toast.updated'));
         closeEdit();
         await fetchTemplates();
         setSelected(saved);
       } else {
         const data = await res.json().catch(() => ({}));
-        showError(data.error || 'Save failed');
+        showError(data.error || t('errors.saveFailed'));
       }
     } catch (err) {
       showError(err.message);
     }
   };
 
-  const deleteTemplate = async (t) => {
-    if (!canEdit || t.is_system) return;
-    if (!window.confirm(`Delete template "${t.name}"? Linked automations keep their actions but lose the template reference.`)) return;
+  const deleteTemplate = async (tpl) => {
+    if (!canEdit || tpl.is_system) return;
+    if (!window.confirm(t('confirmDelete', { name: tpl.name }))) return;
     try {
-      const res = await fetch(`${API_BASE}/automation-templates/${t.id}`, { method: 'DELETE', headers });
+      const res = await fetch(`${API_BASE}/automation-templates/${tpl.id}`, { method: 'DELETE', headers });
       if (res.ok) {
-        showSuccess('Template deleted');
+        showSuccess(t('toast.deleted'));
         setSelected(null);
         await fetchTemplates();
       } else {
         const data = await res.json().catch(() => ({}));
-        showError(data.error || 'Delete failed');
+        showError(data.error || t('errors.deleteFailed'));
       }
     } catch (err) {
       showError(err.message);
@@ -230,20 +234,20 @@ export default function Templates() {
   });
 
   const categories = useMemo(() => {
-    const set = new Set(['All']);
-    for (const t of templates) if (t.category) set.add(t.category);
+    const set = new Set([ALL]);
+    for (const tpl of templates) if (tpl.category) set.add(tpl.category);
     return Array.from(set);
   }, [templates]);
 
   const filtered = useMemo(() => {
     const q = filter.toLowerCase().trim();
-    return templates.filter(t => {
-      if (categoryFilter !== 'All' && t.category !== categoryFilter) return false;
+    return templates.filter(tpl => {
+      if (categoryFilter !== ALL && tpl.category !== categoryFilter) return false;
       if (!q) return true;
       return (
-        (t.name || '').toLowerCase().includes(q) ||
-        (t.description || '').toLowerCase().includes(q) ||
-        (t.agent_usage_notes || '').toLowerCase().includes(q)
+        (tpl.name || '').toLowerCase().includes(q) ||
+        (tpl.description || '').toLowerCase().includes(q) ||
+        (tpl.agent_usage_notes || '').toLowerCase().includes(q)
       );
     });
   }, [templates, filter, categoryFilter]);
@@ -252,9 +256,9 @@ export default function Templates() {
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Automation Templates</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('page.title')}</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Pre-validated recipes the AI planner instantiates with parameters. Encode your domain rules (paired pumps, hysteresis pairs, alert escalation) here.
+            {t('page.intro')}
           </p>
         </div>
         {canEdit && (
@@ -262,7 +266,7 @@ export default function Templates() {
             onClick={() => openEdit(null)}
             className="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded"
           >
-            + New Template
+            {t('page.newTemplate')}
           </button>
         )}
       </div>
@@ -270,50 +274,51 @@ export default function Templates() {
       <div className="flex gap-2 flex-wrap mb-4 items-center">
         <input
           type="text"
-          placeholder="Search name / description / agent notes…"
+          placeholder={t('page.searchPlaceholder')}
           value={filter}
           onChange={e => setFilter(e.target.value)}
           className="flex-1 min-w-[200px] px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
         />
         <select
           value={categoryFilter}
+          aria-label={t('page.categoryFilter')}
           onChange={e => setCategoryFilter(e.target.value)}
           className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
         >
-          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          {categories.map(c => <option key={c} value={c}>{c === ALL ? t('page.allCategories') : t(`category.${c}`, { defaultValue: c })}</option>)}
         </select>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-4">
         {/* List */}
-        <aside className="lg:border-r lg:border-gray-200 dark:lg:border-gray-700 lg:pr-3">
-          {loading && <div className="text-sm text-gray-500">Loading…</div>}
+        <aside className="lg:border-e lg:border-gray-200 dark:lg:border-gray-700 lg:pe-3">
+          {loading && <div className="text-sm text-gray-500">{t('common:status.loading')}</div>}
           {!loading && filtered.length === 0 && (
-            <div className="text-sm text-gray-500 dark:text-gray-400">No templates.</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">{t('page.noTemplates')}</div>
           )}
           <div className="space-y-1 max-h-[75vh] overflow-y-auto">
-            {filtered.map(t => (
+            {filtered.map(tpl => (
               <button
-                key={t.id}
-                onClick={() => setSelected(t)}
-                className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${
-                  selected?.id === t.id
+                key={tpl.id}
+                onClick={() => setSelected(tpl)}
+                className={`w-full text-start px-2 py-1.5 rounded text-sm transition-colors ${
+                  selected?.id === tpl.id
                     ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-100'
                     : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium truncate">{t.name}</div>
-                  {t.is_system ? (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono">SYS</span>
+                  <div className="font-medium truncate" dir="auto">{tpl.name}</div>
+                  {tpl.is_system ? (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono" title={t('system')}>{t('page.systemShort')}</span>
                   ) : null}
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${CATEGORY_COLOR[t.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'}`}>
-                    {t.category}
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${CATEGORY_COLOR[tpl.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'}`}>
+                    {t(`category.${tpl.category}`, { defaultValue: tpl.category })}
                   </span>
-                  {Array.isArray(t.parameters) && t.parameters.length > 0 && (
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">{t.parameters.length} param{t.parameters.length === 1 ? '' : 's'}</span>
+                  {Array.isArray(tpl.parameters) && tpl.parameters.length > 0 && (
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono">{t('page.paramCount', { count: tpl.parameters.length })}</span>
                   )}
                 </div>
               </button>
@@ -325,7 +330,7 @@ export default function Templates() {
         <main>
           {!selected && (
             <div className="text-sm text-gray-500 dark:text-gray-400 p-8 text-center border border-dashed border-gray-300 dark:border-gray-700 rounded">
-              Select a template or create a new one.
+              {t('page.selectPrompt')}
             </div>
           )}
           {selected && (
@@ -333,20 +338,20 @@ export default function Templates() {
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{selected.name}</h2>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white" dir="auto">{selected.name}</h2>
                       <span className={`text-xs px-2 py-0.5 rounded font-semibold ${CATEGORY_COLOR[selected.category] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'}`}>
-                        {selected.category}
+                        {t(`category.${selected.category}`, { defaultValue: selected.category })}
                       </span>
                       {selected.is_system && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono">system</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono">{t('page.systemBadge')}</span>
                       )}
                       <span className="text-xs px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200 font-mono">
-                        {selected.default_trigger_type || 'schedule'}
+                        {t(`triggerType.${selected.default_trigger_type || 'schedule'}`, { defaultValue: selected.default_trigger_type })}
                       </span>
                     </div>
                     {selected.description && (
-                      <p className="text-sm text-gray-700 dark:text-gray-300">{selected.description}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300" dir="auto">{selected.description}</p>
                     )}
                   </div>
                   {canEdit && (
@@ -355,52 +360,52 @@ export default function Templates() {
                         onClick={() => openEdit(selected)}
                         className="px-3 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                       >
-                        Edit
+                        {t('common:actions.edit')}
                       </button>
                       {!selected.is_system && (
                         <button
                           onClick={() => deleteTemplate(selected)}
                           className="px-3 py-1 text-xs text-red-600 dark:text-red-400 hover:underline"
                         >
-                          Delete
+                          {t('common:actions.delete')}
                         </button>
                       )}
                     </div>
                   )}
                 </div>
                 {selected.agent_usage_notes && (
-                  <div className="mt-3 text-sm text-indigo-800 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 border-l-2 border-indigo-400 px-3 py-2 rounded">
-                    <span className="font-semibold">For the AI planner:</span> {selected.agent_usage_notes}
+                  <div className="mt-3 text-sm text-indigo-800 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 border-s-2 border-indigo-400 px-3 py-2 rounded">
+                    <span className="font-semibold">{t('page.forPlanner')}</span> <span dir="auto">{selected.agent_usage_notes}</span>
                   </div>
                 )}
               </div>
 
               {Array.isArray(selected.parameters) && selected.parameters.length > 0 && (
                 <div>
-                  <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Parameters ({selected.parameters.length})</h3>
+                  <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">{t('page.parameters', { n: selected.parameters.length })}</h3>
                   <div className="overflow-x-auto">
                     <table className="text-sm w-full">
                       <thead>
-                        <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                          <th className="py-1 pr-2">Name</th>
-                          <th className="py-1 pr-2">Type</th>
-                          <th className="py-1 pr-2">Required</th>
-                          <th className="py-1 pr-2">Default</th>
-                          <th className="py-1 pr-2">Min/Max</th>
-                          <th className="py-1 pr-2">Description</th>
+                        <tr className="text-start text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                          <th className="py-1 pe-2 text-start">{t('page.col.name')}</th>
+                          <th className="py-1 pe-2 text-start">{t('page.col.type')}</th>
+                          <th className="py-1 pe-2 text-start">{t('page.col.required')}</th>
+                          <th className="py-1 pe-2 text-start">{t('page.col.default')}</th>
+                          <th className="py-1 pe-2 text-start">{t('page.col.minMax')}</th>
+                          <th className="py-1 pe-2 text-start">{t('page.col.description')}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {selected.parameters.map((p, i) => (
                           <tr key={i} className="border-b border-gray-100 dark:border-gray-700">
-                            <td className="py-1 pr-2 font-mono text-gray-900 dark:text-gray-100">{p.name}</td>
-                            <td className="py-1 pr-2 text-gray-600 dark:text-gray-400 font-mono">{p.type}</td>
-                            <td className="py-1 pr-2">{p.required ? '✓' : ''}</td>
-                            <td className="py-1 pr-2 font-mono text-gray-600 dark:text-gray-400">{p.default ?? ''}</td>
-                            <td className="py-1 pr-2 font-mono text-gray-600 dark:text-gray-400">
+                            <td className="py-1 pe-2 font-mono text-gray-900 dark:text-gray-100" dir="ltr">{p.name}</td>
+                            <td className="py-1 pe-2 text-gray-600 dark:text-gray-400 font-mono">{p.type}</td>
+                            <td className="py-1 pe-2">{p.required ? <span aria-label={t('page.yes')}>✓</span> : ''}</td>
+                            <td className="py-1 pe-2 font-mono text-gray-600 dark:text-gray-400" dir="ltr">{p.default ?? ''}</td>
+                            <td className="py-1 pe-2 font-mono text-gray-600 dark:text-gray-400" dir="ltr">
                               {(p.min ?? '') + (p.max != null ? ` / ${p.max}` : '')}
                             </td>
-                            <td className="py-1 pr-2 text-gray-700 dark:text-gray-300">{p.description}</td>
+                            <td className="py-1 pe-2 text-gray-700 dark:text-gray-300" dir="auto">{p.description}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -412,20 +417,19 @@ export default function Templates() {
               {Array.isArray(selected.target_effects) && selected.target_effects.length > 0 && (
                 <div>
                   <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
-                    Target effects — used by the skip evaluator
+                    {t('page.targetEffectsTitle')}
                   </h3>
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-2 italic">
-                    When the active plan declares a target on one of these metrics, the engine will auto-skip this automation
-                    if the sensor is already past the band (with a 10% margin) in the direction this template would push.
+                    {t('page.targetEffectsHelp')}
                   </div>
                   <div className="space-y-1">
                     {selected.target_effects.map((e, i) => (
                       <div key={i} className="flex items-center gap-2 text-sm">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase ${EFFECT_DIRECTION_COLOR[e.direction] || EFFECT_DIRECTION_COLOR.neutral}`}>
-                          {e.direction}
+                          {t(`direction.${e.direction}`, { defaultValue: e.direction })}
                         </span>
-                        <span className="font-mono text-gray-900 dark:text-gray-100">{e.metric_name}</span>
-                        {e.magnitude_hint && <span className="text-xs text-gray-500 dark:text-gray-400">({e.magnitude_hint})</span>}
+                        <span className="font-mono text-gray-900 dark:text-gray-100" dir="auto">{e.metric_name}</span>
+                        {e.magnitude_hint && <span className="text-xs text-gray-500 dark:text-gray-400" dir="auto">({e.magnitude_hint})</span>}
                       </div>
                     ))}
                   </div>
@@ -433,21 +437,21 @@ export default function Templates() {
               )}
 
               <div>
-                <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Action blueprint</h3>
-                <pre className="text-xs p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">{pretty(selected.actions)}</pre>
+                <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">{t('page.actionBlueprint')}</h3>
+                <pre dir="ltr" className="text-xs p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">{pretty(selected.actions)}</pre>
               </div>
 
               {Array.isArray(selected.conditions) && selected.conditions.length > 0 && (
                 <div>
-                  <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Conditions</h3>
-                  <pre className="text-xs p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">{pretty(selected.conditions)}</pre>
+                  <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">{t('page.conditions')}</h3>
+                  <pre dir="ltr" className="text-xs p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">{pretty(selected.conditions)}</pre>
                 </div>
               )}
 
               {selected.instantiation_trigger && (
                 <div>
-                  <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Default trigger (overridable)</h3>
-                  <pre className="text-xs p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">{pretty(selected.instantiation_trigger)}</pre>
+                  <h3 className="text-sm uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">{t('page.defaultTrigger')}</h3>
+                  <pre dir="ltr" className="text-xs p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">{pretty(selected.instantiation_trigger)}</pre>
                 </div>
               )}
             </div>
@@ -461,26 +465,26 @@ export default function Templates() {
           <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full p-5 my-8">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {isNew ? 'New template' : `Edit "${editing.name}"`}
-                {editing.is_system && <span className="ml-2 text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono">system</span>}
+                {isNew ? t('editor.newTitle') : t('editor.editTitle', { name: editing.name })}
+                {editing.is_system && <span className="ms-2 text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 font-mono">{t('page.systemBadge')}</span>}
               </h3>
-              <button onClick={closeEdit} className="text-gray-400 hover:text-gray-600">✕</button>
+              <button onClick={closeEdit} className="text-gray-400 hover:text-gray-600" aria-label={t('common:actions.close')}>✕</button>
             </div>
 
-            <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[70vh] overflow-y-auto pe-1">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Name *</label>
+                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('editor.nameRequired')}</label>
                   <input
-                    type="text" value={editing.name || ''}
+                    type="text" dir="auto" value={editing.name || ''}
                     onChange={e => setEditing(s => ({ ...s, name: e.target.value }))}
                     className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Category</label>
+                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('editor.category')}</label>
                   <input
-                    type="text" value={editing.category || ''}
+                    type="text" dir="auto" value={editing.category || ''}
                     onChange={e => setEditing(s => ({ ...s, category: e.target.value }))}
                     className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                   />
@@ -488,9 +492,9 @@ export default function Templates() {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Description (human-readable)</label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('editor.description')}</label>
                 <textarea
-                  rows={2} value={editing.description || ''}
+                  rows={2} dir="auto" value={editing.description || ''}
                   onChange={e => setEditing(s => ({ ...s, description: e.target.value }))}
                   className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                 />
@@ -498,88 +502,99 @@ export default function Templates() {
 
               <div>
                 <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                  Agent usage notes <span className="text-indigo-600 dark:text-indigo-300">(what the AI planner reads to decide when to use this)</span>
+                  {t('editor.agentNotes')} <span className="text-indigo-600 dark:text-indigo-300">{t('editor.agentNotesHint')}</span>
                 </label>
                 <textarea
-                  rows={3} value={editing.agent_usage_notes || ''}
+                  rows={3} dir="auto" value={editing.agent_usage_notes || ''}
                   onChange={e => setEditing(s => ({ ...s, agent_usage_notes: e.target.value }))}
-                  placeholder="When to use this template, when NOT to use it, constraints, paired-template requirements…"
+                  placeholder={t('editor.agentNotesPlaceholder')}
                   className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Default trigger type</label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('editor.defaultTriggerType')}</label>
                 <select
                   value={editing.default_trigger_type || 'schedule'}
                   onChange={e => setEditing(s => ({ ...s, default_trigger_type: e.target.value }))}
                   className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                 >
-                  {TRIGGER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  {TRIGGER_TYPES.map(tt => <option key={tt} value={tt}>{t(`triggerType.${tt}`)}</option>)}
                 </select>
               </div>
 
               {/* Parameters */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs text-gray-600 dark:text-gray-400">Parameters</label>
+                  <label className="text-xs text-gray-600 dark:text-gray-400">{t('editor.parameters')}</label>
                   <button
                     onClick={addParam}
                     className="text-xs text-indigo-600 dark:text-indigo-300 hover:underline"
-                  >+ Add parameter</button>
+                  >{t('editor.addParameter')}</button>
                 </div>
                 {(editing.parameters || []).length === 0 && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400 italic">No parameters — the agent has nothing to fill in.</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 italic">{t('editor.noParameters')}</div>
                 )}
                 <div className="space-y-2">
                   {(editing.parameters || []).map((p, i) => (
                     <div key={i} className="border border-gray-200 dark:border-gray-700 rounded p-2 bg-gray-50 dark:bg-gray-800/50">
                       <div className="grid grid-cols-12 gap-2">
                         <input
-                          placeholder="name"
+                          placeholder={t('editor.paramName')}
+                          aria-label={t('editor.paramName')}
+                          dir="ltr"
                           value={p.name || ''}
                           onChange={e => updateParam(i, 'name', e.target.value)}
                           className="col-span-3 px-1.5 py-1 text-xs font-mono border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                         />
                         <select
+                          aria-label={t('editor.paramType')}
                           value={p.type || 'string'}
                           onChange={e => updateParam(i, 'type', e.target.value)}
                           className="col-span-2 px-1.5 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                         >
-                          {PARAM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                          {PARAM_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
                         </select>
                         <label className="col-span-2 flex items-center text-xs text-gray-600 dark:text-gray-400 gap-1">
                           <input
                             type="checkbox" checked={!!p.required}
                             onChange={e => updateParam(i, 'required', e.target.checked)}
                           />
-                          required
+                          {t('editor.paramRequired')}
                         </label>
                         <input
-                          placeholder="default"
+                          placeholder={t('editor.paramDefault')}
+                          aria-label={t('editor.paramDefault')}
                           value={p.default ?? ''}
                           onChange={e => updateParam(i, 'default', e.target.value)}
                           className="col-span-2 px-1.5 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                         />
                         <input
-                          placeholder="min"
+                          placeholder={t('editor.paramMin')}
+                          aria-label={t('editor.paramMin')}
+                          dir="ltr"
                           value={p.min ?? ''}
                           onChange={e => updateParam(i, 'min', e.target.value)}
                           className="col-span-1 px-1.5 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                         />
                         <input
-                          placeholder="max"
+                          placeholder={t('editor.paramMax')}
+                          aria-label={t('editor.paramMax')}
+                          dir="ltr"
                           value={p.max ?? ''}
                           onChange={e => updateParam(i, 'max', e.target.value)}
                           className="col-span-1 px-1.5 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                         />
                         <button
                           onClick={() => removeParam(i)}
+                          aria-label={t('editor.removeParameter')}
                           className="col-span-1 text-xs text-red-600 dark:text-red-400 hover:underline"
                         >✕</button>
                       </div>
                       <input
-                        placeholder="description (shown to the AI planner)"
+                        placeholder={t('editor.paramDescription')}
+                        aria-label={t('editor.paramDescription')}
+                        dir="auto"
                         value={p.description || ''}
                         onChange={e => updateParam(i, 'description', e.target.value)}
                         className="w-full mt-1 px-1.5 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
@@ -593,40 +608,46 @@ export default function Templates() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs text-gray-600 dark:text-gray-400">
-                    Target effects <span className="text-emerald-600 dark:text-emerald-300">(drives auto-skip when a plan target on this metric is in the wrong direction)</span>
+                    {t('editor.targetEffects')} <span className="text-emerald-600 dark:text-emerald-300">{t('editor.targetEffectsHint')}</span>
                   </label>
                   <button
                     onClick={addEffect}
-                    className="text-xs text-indigo-600 dark:text-indigo-300 hover:underline"
-                  >+ Add effect</button>
+                    className="shrink-0 text-xs text-indigo-600 dark:text-indigo-300 hover:underline"
+                  >{t('editor.addEffect')}</button>
                 </div>
                 {(editing.target_effects || []).length === 0 && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400 italic">No target effects — the skip evaluator will only use manual skip_conditions on each instance.</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 italic">{t('editor.noEffects')}</div>
                 )}
                 <div className="space-y-2">
                   {(editing.target_effects || []).map((e, i) => (
                     <div key={i} className="grid grid-cols-12 gap-2 items-center">
                       <input
-                        placeholder='metric (e.g. "Substrate Moisture")'
+                        placeholder={t('editor.effectMetric')}
+                        aria-label={t('editor.effectMetric')}
+                        dir="auto"
                         value={e.metric_name || ''}
                         onChange={ev => updateEffect(i, 'metric_name', ev.target.value)}
                         className="col-span-6 px-1.5 py-1 text-xs font-mono border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                       />
                       <select
+                        aria-label={t('editor.effectDirection')}
                         value={e.direction || 'raise'}
                         onChange={ev => updateEffect(i, 'direction', ev.target.value)}
                         className="col-span-2 px-1.5 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                       >
-                        {EFFECT_DIRECTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                        {EFFECT_DIRECTIONS.map(d => <option key={d} value={d}>{t(`direction.${d}`)}</option>)}
                       </select>
                       <input
-                        placeholder='magnitude hint (e.g. "moderate")'
+                        placeholder={t('editor.effectMagnitude')}
+                        aria-label={t('editor.effectMagnitude')}
+                        dir="auto"
                         value={e.magnitude_hint || ''}
                         onChange={ev => updateEffect(i, 'magnitude_hint', ev.target.value)}
                         className="col-span-3 px-1.5 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded"
                       />
                       <button
                         onClick={() => removeEffect(i)}
+                        aria-label={t('editor.removeEffect')}
                         className="col-span-1 text-xs text-red-600 dark:text-red-400 hover:underline"
                       >✕</button>
                     </div>
@@ -636,30 +657,30 @@ export default function Templates() {
 
               <div>
                 <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-                  Actions blueprint (JSON, supports <code className="font-mono">${'{param_name}'}</code> placeholders)
+                  <Trans t={t} i18nKey="editor.actionsJson" components={{ code: <code className="font-mono" dir="ltr" /> }} />
                 </label>
                 <textarea
-                  rows={6} value={actionsText}
+                  rows={6} dir="ltr" value={actionsText}
                   onChange={e => setActionsText(e.target.value)}
                   className="w-full px-2 py-1 text-xs font-mono border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Conditions (JSON, optional)</label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('editor.conditionsJson')}</label>
                 <textarea
-                  rows={2} value={conditionsText}
+                  rows={2} dir="ltr" value={conditionsText}
                   onChange={e => setConditionsText(e.target.value)}
                   className="w-full px-2 py-1 text-xs font-mono border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Instantiation trigger (JSON, optional — agent can override)</label>
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{t('editor.triggerJson')}</label>
                 <textarea
-                  rows={2} value={triggerText}
+                  rows={2} dir="ltr" value={triggerText}
                   onChange={e => setTriggerText(e.target.value)}
-                  placeholder='e.g. {"type":"schedule","schedule_type":"daily","time":"06:00"}'
+                  placeholder={t('editor.triggerPlaceholder', { example: '{"type":"schedule","schedule_type":"daily","time":"06:00"}' })}
                   className="w-full px-2 py-1 text-xs font-mono border border-gray-300 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded"
                 />
               </div>
@@ -669,11 +690,11 @@ export default function Templates() {
               <button
                 onClick={closeEdit}
                 className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200"
-              >Cancel</button>
+              >{t('common:actions.cancel')}</button>
               <button
                 onClick={saveTemplate}
                 className="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded"
-              >Save</button>
+              >{t('common:actions.save')}</button>
             </div>
           </div>
         </div>

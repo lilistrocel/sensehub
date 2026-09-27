@@ -1,0 +1,48 @@
+{
+  "title": "System Debug",
+  "adminOnly": "Admin access required",
+  "lastRefreshed": "Last refreshed: {{time}}",
+  "autoRefresh": "Auto-refresh (10 s)",
+  "status": {
+    "online": "online",
+    "offline": "offline",
+    "error": "error",
+    "unknown": "unknown"
+  },
+  "card": {
+    "services": "Services",
+    "allHealthy": "All healthy",
+    "someIssues": "Some issues",
+    "cores_one": "{{count}} core",
+    "cores_other": "{{count}} cores",
+    "load": "Load: {{load}}",
+    "memory": "Memory",
+    "uptime": "Uptime"
+  },
+  "containers": {
+    "title": "Docker Containers",
+    "service": "Service",
+    "container": "Container",
+    "status": "Status",
+    "port": "Port",
+    "details": "Details",
+    "up": "Up {{time}}"
+  },
+  "internal": {
+    "title": "Internal Services",
+    "devices_one": "{{count}} device",
+    "devices_other": "{{count}} devices"
+  },
+  "info": {
+    "title": "System Info",
+    "hostname": "Hostname",
+    "platform": "Platform",
+    "version": "SenseHub version",
+    "cpuLoad": "CPU load (1 min / 5 min / 15 min)",
+    "memoryUsed": "{{used}} used of {{total}} ({{pct}})",
+    "backendMemory": "Backend memory (RSS)",
+    "database": "Database",
+    "connected": "connected",
+    "disconnected": "disconnected"
+  }
+}

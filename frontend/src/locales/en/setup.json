@@ -1,1 +1,140 @@
-{}
+{
+  "steps": {
+    "welcome": "Welcome",
+    "network": "Network",
+    "timezone": "Timezone",
+    "admin": "Admin Account",
+    "cloud": "Cloud",
+    "complete": "Complete"
+  },
+  "stepOf": "Step {{step}} of {{total}} · {{label}}",
+  "actions": {
+    "continue": "Continue"
+  },
+  "welcome": {
+    "title": "Welcome to SenseHub",
+    "intro": "Your edge computing platform for industrial IoT operations. Manage sensors, relays, controllers, and automate your operations with SenseHub's powerful local processing capabilities.",
+    "overviewTitle": "System Overview",
+    "featureProtocols": "Multi-protocol support (Modbus, MQTT, Zigbee, Z-Wave)",
+    "featureAutomation": "Visual automation builder with triggers and conditions",
+    "featureOffline": "Offline-first operation with cloud sync when connected",
+    "featureMonitoring": "Real-time monitoring and alerts",
+    "getStarted": "Get Started",
+    "skipSetup": "Skip Setup"
+  },
+  "skip": {
+    "title": "Skip Setup?",
+    "warningTitle": "Minimal Configuration Warning",
+    "warningBody": "Skipping setup will create a default administrator account with basic credentials. You will need to:",
+    "todoPassword": "Change the default password immediately",
+    "todoNetwork": "Configure network settings manually",
+    "todoTimezone": "Set your timezone in Settings",
+    "defaultAccount": "Default Admin Account:",
+    "email": "Email:",
+    "tempPassword": "A temporary password is generated for this account. For security it is <b>not shown here</b> — you will be required to set a new password the first time you sign in.",
+    "settingUp": "Setting Up…",
+    "confirm": "Confirm Skip"
+  },
+  "network": {
+    "title": "Network Configuration",
+    "subtitle": "Configure network settings for your SenseHub device.",
+    "useDhcp": "Use DHCP (automatic IP configuration)",
+    "ipAddress": "IP Address",
+    "gateway": "Gateway",
+    "dnsServer": "DNS Server"
+  },
+  "timezone": {
+    "title": "Timezone Configuration",
+    "subtitle": "Select your timezone for accurate time display and scheduling.",
+    "label": "Timezone",
+    "currentSelection": "Current selection:",
+    "localTime": "Local time: {{time}}",
+    "group": {
+      "americas": "Americas",
+      "europe": "Europe",
+      "asia": "Asia",
+      "pacificOceania": "Pacific / Oceania",
+      "africaMiddleEast": "Africa / Middle East",
+      "other": "Other"
+    },
+    "hint": {
+      "eastern": "Eastern",
+      "central": "Central",
+      "mountain": "Mountain",
+      "pacific": "Pacific",
+      "alaska": "Alaska",
+      "hawaii": "Hawaii",
+      "india": "India",
+      "china": "China",
+      "newZealand": "New Zealand",
+      "utc": "Coordinated Universal Time"
+    }
+  },
+  "admin": {
+    "title": "Create Admin Account",
+    "subtitle": "Set up your administrator account to manage SenseHub.",
+    "fullName": "Full Name",
+    "namePlaceholder": "Enter your name",
+    "email": "Email Address",
+    "password": "Password",
+    "passwordPlaceholder": "Minimum 8 characters",
+    "confirmPassword": "Confirm Password",
+    "confirmPlaceholder": "Re-enter your password",
+    "creating": "Creating Account…",
+    "create": "Create Account"
+  },
+  "cloud": {
+    "title": "Cloud Connection",
+    "subtitle": "Connect to SenseHub Cloud for remote monitoring, data backup, and cross-site management.",
+    "optionalNote": "This is optional - you can configure it later in Settings.",
+    "url": "Cloud URL",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Enter your cloud API key",
+    "offlineTitle": "SenseHub works fully offline",
+    "offlineBody": "Cloud connection is optional. Your system will operate completely independently without it.",
+    "skip": "Skip for Now",
+    "connecting": "Connecting…",
+    "connect": "Connect to Cloud"
+  },
+  "complete": {
+    "title": "Setup Complete!",
+    "body": "Your SenseHub system is ready to use. You're now logged in as the administrator.",
+    "summaryTitle": "Configuration Summary",
+    "network": "Network:",
+    "timezone": "Timezone:",
+    "admin": "Admin:",
+    "email": "Email:",
+    "cloud": "Cloud:",
+    "dhcpAutomatic": "DHCP (Automatic)",
+    "staticIp": "Static IP",
+    "cloudConnected": "Connected",
+    "cloudNotConfigured": "Not configured (offline mode)",
+    "nextStepsTitle": "Next Steps",
+    "nextScan": "Scan for equipment on your network",
+    "nextZones": "Organize equipment into zones",
+    "nextAutomations": "Create automation programs",
+    "nextCloud": "Configure cloud sync (optional)",
+    "goToDashboard": "Go to Dashboard"
+  },
+  "errors": {
+    "invalidIp": "Please enter a valid IP address",
+    "invalidGateway": "Please enter a valid gateway address",
+    "invalidDns": "Please enter a valid DNS address",
+    "networkSaveFailed": "Failed to save network configuration",
+    "networkSaveError": "An error occurred saving network configuration",
+    "timezoneSaveFailed": "Failed to save timezone configuration",
+    "timezoneSaveError": "An error occurred saving timezone configuration",
+    "nameRequired": "Name is required",
+    "emailRequired": "Email is required",
+    "invalidEmail": "Please enter a valid email address",
+    "passwordRequired": "Password is required",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordMismatch": "Passwords do not match",
+    "setupFailed": "Setup failed",
+    "setupError": "An error occurred during setup",
+    "cloudConnectFailed": "Failed to connect to cloud",
+    "cloudConnectError": "An error occurred connecting to cloud",
+    "quickSetupFailed": "Quick setup failed",
+    "quickSetupError": "An error occurred during quick setup"
+  }
+}

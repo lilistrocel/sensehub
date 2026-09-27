@@ -1,1 +1,90 @@
-{}
+{
+  "title": "Bölgeler",
+  "addZone": "Bölge ekle",
+  "searchPlaceholder": "Bölgeleri ada göre ara...",
+  "clearSearch": "Aramayı temizle",
+  "showingCount_one": "{{count}} bölgeden {{shown}} tanesi gösteriliyor",
+  "showingCount_other": "{{count}} bölgeden {{shown}} tanesi gösteriliyor",
+  "empty": "Henüz yapılandırılmış bölge yok.",
+  "noMatch": "Aramanızla eşleşen bölge yok.",
+  "equipmentCount_one": "{{count}} ekipman",
+  "equipmentCount_other": "{{count}} ekipman",
+  "zoneNumber": "Bölge #{{id}}",
+  "confirmRemoveEquipment": "Bu ekipman bölgeden çıkarılsın mı?",
+  "addTitle": "Yeni bölge ekle",
+  "editTitle": "Bölgeyi düzenle",
+  "deleteTitle": "Bölgeyi sil",
+  "editZone": "Bölgeyi düzenle",
+  "deleteZone": "Bölgeyi sil",
+  "updatedBanner": "Bölge güncellendi!",
+  "form": {
+    "name": "Bölge adı",
+    "namePlaceholder": "örn. Üretim Alanı",
+    "description": "Açıklama",
+    "descriptionPlaceholder": "Bu bölge için isteğe bağlı açıklama",
+    "parent": "Üst bölge",
+    "parentNone": "Yok (en üst düzey)",
+    "parentHelp": "İsteğe bağlı: hiyerarşi oluşturmak için bir üst bölge seçin",
+    "create": "Bölge oluştur",
+    "creating": "Oluşturuluyor…",
+    "saveChanges": "Değişiklikleri kaydet"
+  },
+  "info": {
+    "title": "Bölge bilgileri",
+    "name": "Ad",
+    "id": "ID",
+    "description": "Açıklama",
+    "created": "Oluşturuldu",
+    "updated": "Güncellendi"
+  },
+  "assigned": {
+    "title": "Atanmış ekipman ({{count}})",
+    "assignButton": "Ekipman ata",
+    "remove": "Bölgeden çıkar",
+    "removeNamed": "{{name}} ekipmanını bölgeden çıkar",
+    "empty": "Bu bölgeye atanmış ekipman yok",
+    "assignNow": "Şimdi ekipman ata"
+  },
+  "children": "Alt bölgeler ({{count}})",
+  "equipStatus": {
+    "online": "çevrim içi",
+    "offline": "çevrim dışı",
+    "warning": "uyarı",
+    "error": "hata",
+    "unknown": "bilinmiyor"
+  },
+  "assign": {
+    "title": "{{name}} bölgesine ekipman ata",
+    "none": "Atanabilecek ekipman yok.",
+    "noneHelp": "Tüm ekipman zaten bu bölgeye atanmış ya da hiç ekipman yok.",
+    "select": "Ekipman seçin",
+    "selectOption": "-- Ekipman seçin --",
+    "option": "{{name}} ({{type}} - {{status}})",
+    "assign": "Ata",
+    "assigning": "Atanıyor…"
+  },
+  "delete": {
+    "confirm": "<b>{{name}}</b> bölgesini silmek istediğinizden emin misiniz?",
+    "help": "Bu işlem geri alınamaz. Bu bölgeye atanmış ekipmanın ataması kaldırılır ama ekipman silinmez.",
+    "deleting": "Siliniyor…"
+  },
+  "toast": {
+    "assigned": "Ekipman atandı",
+    "removed": "Ekipman bölgeden çıkarıldı",
+    "created": "Bölge oluşturuldu",
+    "updated": "Bölge güncellendi",
+    "deleted": "Bölge silindi"
+  },
+  "err": {
+    "fetchZones": "Bölgeler alınamadı",
+    "fetchDetail": "Bölge ayrıntıları alınamadı",
+    "loadDetail": "Bölge ayrıntıları yüklenemedi",
+    "fetchEquipment": "Ekipman alınamadı",
+    "loadEquipment": "Ekipman yüklenemedi",
+    "assign": "Ekipman atanamadı",
+    "remove": "Ekipman çıkarılamadı",
+    "create": "Bölge oluşturulamadı",
+    "update": "Bölge güncellenemedi",
+    "delete": "Bölge silinemedi"
+  }
+}

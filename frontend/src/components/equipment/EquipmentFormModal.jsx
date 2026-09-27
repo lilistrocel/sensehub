@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../ui';
 import ErrorMessage from '../ErrorMessage';
 import { getUserFriendlyError } from '../../utils/errorHandler';
@@ -39,6 +40,7 @@ const LABEL = 'block text-sm font-medium text-ink mb-1';
  * the mapping table fits; the overlay scrolls once (no inner scroll box).
  */
 export default function EquipmentFormModal({ isOpen, onClose, onSuccess, token, equipment = null }) {
+  const { t } = useTranslation('equipment');
   const isEdit = !!equipment;
   const idp = isEdit ? 'edit-' : 'add-';
   const [formData, setFormData] = useState(EMPTY_FORM);
@@ -81,7 +83,7 @@ export default function EquipmentFormModal({ isOpen, onClose, onSuccess, token, 
 
     if (!formData.name.trim()) {
       isSubmittingRef.current = false;
-      setError({ message: 'Name is required', canRetry: false });
+      setError({ message: t('form.nameRequired'), canRetry: false });
       return;
     }
 
@@ -109,11 +111,11 @@ export default function EquipmentFormModal({ isOpen, onClose, onSuccess, token, 
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || data.error || (isEdit ? 'Failed to update equipment' : 'Failed to create equipment'));
+        throw new Error(data.message || data.error || (isEdit ? t('form.updateFailed') : t('form.createFailed')));
       }
 
       const saved = await response.json();
-      setSuccessMessage(`Equipment "${saved.name}" ${isEdit ? 'updated' : 'created'} successfully.`);
+      setSuccessMessage(isEdit ? t('form.updated', { name: saved.name }) : t('form.created', { name: saved.name }));
       if (!isEdit) setFormData(EMPTY_FORM);
 
       setTimeout(() => {
@@ -143,14 +145,14 @@ export default function EquipmentFormModal({ isOpen, onClose, onSuccess, token, 
       onClose={onClose}
       closeDisabled={saving}
       size={isModbus ? 'xl' : 'md'}
-      title={isEdit ? 'Edit equipment' : 'Add equipment'}
+      title={isEdit ? t('form.editTitle') : t('form.addTitle')}
       subtitle={isEdit ? equipment.name : undefined}
       footer={(
         <>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-          {!isEdit && <Button variant="secondary" onClick={handleReset} disabled={saving}>Reset</Button>}
+          <Button variant="ghost" onClick={onClose} disabled={saving}>{t('common:actions.cancel')}</Button>
+          {!isEdit && <Button variant="secondary" onClick={handleReset} disabled={saving}>{t('common:actions.reset')}</Button>}
           <Button variant="primary" type="submit" form={formId} disabled={saving}>
-            {saving ? <><Spinner /> Saving…</> : (isEdit ? 'Save changes' : 'Add equipment')}
+            {saving ? <><Spinner /> {t('common:actions.saving')}</> : (isEdit ? t('form.saveChanges') : t('form.addTitle'))}
           </Button>
         </>
       )}
@@ -169,49 +171,49 @@ export default function EquipmentFormModal({ isOpen, onClose, onSuccess, token, 
       <form id={formId} onSubmit={handleSubmit} className="space-y-4">
         <div className={`grid grid-cols-1 gap-4 ${isModbus ? 'md:grid-cols-2' : ''}`}>
           <div>
-            <label htmlFor={`${idp}name`} className={LABEL}>Name <span className="text-alarm-600">*</span></label>
-            <input type="text" id={`${idp}name`} name="name" value={formData.name} onChange={handleChange} className="w-full" placeholder="e.g., Temperature Sensor 001" required />
+            <label htmlFor={`${idp}name`} className={LABEL}>{t('form.name')} <span className="text-alarm-600">*</span></label>
+            <input type="text" id={`${idp}name`} name="name" value={formData.name} onChange={handleChange} className="w-full" placeholder={t('form.namePlaceholder')} dir="auto" required />
           </div>
           <div>
-            <label htmlFor={`${idp}type`} className={LABEL}>Type</label>
-            <input type="text" id={`${idp}type`} name="type" value={formData.type} onChange={handleChange} className="w-full" placeholder="e.g., sensor, relay, meter, controller" />
+            <label htmlFor={`${idp}type`} className={LABEL}>{t('form.type')}</label>
+            <input type="text" id={`${idp}type`} name="type" value={formData.type} onChange={handleChange} className="w-full" placeholder={t('form.typePlaceholder')} dir="auto" />
           </div>
           <div className={isModbus ? 'md:col-span-2' : ''}>
-            <label htmlFor={`${idp}description`} className={LABEL}>Description</label>
-            <textarea id={`${idp}description`} name="description" value={formData.description} onChange={handleChange} rows={2} className="w-full" placeholder="Optional description" />
+            <label htmlFor={`${idp}description`} className={LABEL}>{t('form.description')}</label>
+            <textarea id={`${idp}description`} name="description" value={formData.description} onChange={handleChange} rows={2} className="w-full" placeholder={t('form.descriptionPlaceholder')} dir="auto" />
           </div>
           <div>
-            <label htmlFor={`${idp}protocol`} className={LABEL}>Protocol</label>
+            <label htmlFor={`${idp}protocol`} className={LABEL}>{t('form.protocol')}</label>
             <select id={`${idp}protocol`} name="protocol" value={formData.protocol} onChange={handleChange} className="w-full">
               <option value="modbus">Modbus</option>
               <option value="mqtt">MQTT</option>
               <option value="zigbee">Zigbee</option>
               <option value="zwave">Z-Wave</option>
-              <option value="other">Other</option>
+              <option value="other">{t('form.protocolOther')}</option>
             </select>
           </div>
           <div>
-            <label htmlFor={`${idp}address`} className={LABEL}>Connection address</label>
-            <input type="text" id={`${idp}address`} name="address" value={formData.address} onChange={handleChange} className="w-full font-mono" placeholder="e.g., 192.168.1.100:502 or /dev/ttyUSB0" />
+            <label htmlFor={`${idp}address`} className={LABEL}>{t('form.address')}</label>
+            <input type="text" id={`${idp}address`} name="address" value={formData.address} onChange={handleChange} className="w-full font-mono" dir="ltr" placeholder={t('form.addressPlaceholder')} />
           </div>
         </div>
 
         {isModbus && (
           <div className="border-t border-line pt-4 mt-2">
-            <h4 className="font-display text-sm font-semibold text-ink mb-3">Modbus configuration</h4>
+            <h4 className="font-display text-sm font-semibold text-ink mb-3">{t('form.modbusConfig')}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
-                <label htmlFor={`${idp}slave_id`} className={LABEL}>Slave ID (1–247)</label>
-                <input type="number" id={`${idp}slave_id`} name="slave_id" min="1" max="247" value={formData.slave_id} onChange={handleChange} className="w-full font-mono" placeholder="e.g., 1" />
+                <label htmlFor={`${idp}slave_id`} className={LABEL}>{t('form.slaveId')}</label>
+                <input type="number" id={`${idp}slave_id`} name="slave_id" min="1" max="247" value={formData.slave_id} onChange={handleChange} className="w-full font-mono" dir="ltr" placeholder={t('form.slaveIdPlaceholder')} />
               </div>
               <div>
-                <label htmlFor={`${idp}polling_interval_ms`} className={LABEL}>Polling interval (ms)</label>
-                <input type="number" id={`${idp}polling_interval_ms`} name="polling_interval_ms" min="100" max="60000" step="100" value={formData.polling_interval_ms} onChange={handleChange} className="w-full font-mono" placeholder="1000" />
+                <label htmlFor={`${idp}polling_interval_ms`} className={LABEL}>{t('form.pollingInterval')}</label>
+                <input type="number" id={`${idp}polling_interval_ms`} name="polling_interval_ms" min="100" max="60000" step="100" value={formData.polling_interval_ms} onChange={handleChange} className="w-full font-mono" dir="ltr" placeholder="1000" />
               </div>
               <div>
-                <label htmlFor={`${idp}request_gap_ms`} className={LABEL}>Request gap (ms)</label>
-                <input type="number" id={`${idp}request_gap_ms`} name="request_gap_ms" min="0" max="5000" step="50" value={formData.request_gap_ms} onChange={handleChange} className="w-full font-mono" placeholder="0" aria-describedby={`${idp}request_gap_ms-help`} />
-                <p id={`${idp}request_gap_ms-help`} className="mt-1 text-xs text-muted">Pause between consecutive Modbus requests to this device. Some controllers, e.g. SEKO, drop back-to-back requests. 0 = none.</p>
+                <label htmlFor={`${idp}request_gap_ms`} className={LABEL}>{t('form.requestGap')}</label>
+                <input type="number" id={`${idp}request_gap_ms`} name="request_gap_ms" min="0" max="5000" step="50" value={formData.request_gap_ms} onChange={handleChange} className="w-full font-mono" dir="ltr" placeholder="0" aria-describedby={`${idp}request_gap_ms-help`} />
+                <p id={`${idp}request_gap_ms-help`} className="mt-1 text-xs text-muted">{t('form.requestGapHelp')}</p>
               </div>
             </div>
 

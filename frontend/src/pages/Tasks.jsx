@@ -8,12 +8,20 @@
  * Stale AI output expires visually: any open task older than OUTDATED_DAYS
  * gets a caution rail + "Outdated" pill, sorts below fresh tasks and is
  * hidden by default behind the "Hide outdated" chip.
+ *
+ * i18n: chrome in locales/<lng>/tasks.json. Task text (title, description,
+ * instructions, expected outcome) comes from the server, translated there for
+ * agronomist tasks (translation_status); "Show original" refetches with
+ * ?original=1 for this visit only.
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
+import { useFormat } from '../i18n/useFormat';
+import { normalizeLanguage } from '../i18n/languages';
 import { Card, Label, Button } from '../ui';
 import TaskCard from '../components/tasks/TaskCard';
 import { daysSince } from '../components/alerts/relativeTime';
@@ -21,11 +29,17 @@ import { daysSince } from '../components/alerts/relativeTime';
 const API_BASE = '/api';
 const OUTDATED_DAYS = 7;
 const PAGE_SIZE = 50;
+const PENDING_TRANSLATION_POLL_MS = 30000;
+const STATUS_FILTERS = ['open', 'done', 'declined', 'snoozed', 'all'];
+const SOURCE_FILTERS = ['all', 'agronomist', 'planner', 'watchdog', 'manual'];
 
 const selectCls = 'min-h-touch px-3 py-2 bg-field text-ink border border-line rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-500';
 const fieldCls = 'w-full px-3 py-2 text-sm bg-field text-ink border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500';
 
 export default function Tasks() {
+  const { t, i18n } = useTranslation('tasks');
+  const fmt = useFormat();
+  const uiLang = normalizeLanguage(i18n.language) || 'en';
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
   const { formatDateTime } = useSettings();
@@ -42,6 +56,7 @@ export default function Tasks() {
   const [actionText, setActionText] = useState('');
   const [actionDate, setActionDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false); // English task text (this visit only)
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -52,29 +67,53 @@ export default function Tasks() {
       if (statusFilter !== 'all') params.set('status', statusFilter);
       if (sourceFilter !== 'all') params.set('source', sourceFilter);
       params.set('limit', '200');
+      if (showOriginal) params.set('original', '1');
       const res = await fetch(`${API_BASE}/operator-tasks?${params}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setTasks(Array.isArray(data) ? data : []);
       }
-    } catch (e) { showError('Failed to load tasks: ' + e.message); }
+    } catch (e) { showError(t('toast.loadFailed', { error: e.message })); }
     finally { setLoading(false); }
+  // Language in the deps: task text comes back translated (Accept-Language).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, sourceFilter, token]);
+  }, [statusFilter, sourceFilter, token, i18n.language, showOriginal]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setShown(PAGE_SIZE); }, [statusFilter, sourceFilter, hideOutdated]);
+
+  // Translations still being made: check again (quietly) until they are ready.
+  const anyPending = !showOriginal && tasks.some(x => x.translation_status === 'pending');
+  useEffect(() => {
+    if (!anyPending) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (statusFilter !== 'all') params.set('status', statusFilter);
+        if (sourceFilter !== 'all') params.set('source', sourceFilter);
+        params.set('limit', '200');
+        const res = await fetch(`${API_BASE}/operator-tasks?${params}`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) setTasks(data);
+        }
+      } catch { /* next tick / manual refresh */ }
+    }, PENDING_TRANSLATION_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [tasks, anyPending]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const anyTranslated = tasks.some(x => x.translation_status === 'ready');
 
   // Tag age; stable-partition fresh before outdated (server order kept within each group).
   const { fresh, outdated } = useMemo(() => {
     const now = Date.now();
     const fresh = [];
     const outdated = [];
-    for (const t of tasks) {
-      const days = daysSince(t.created_at, now);
-      const isOpen = t.status === 'open' || t.status === 'snoozed';
+    for (const task of tasks) {
+      const days = daysSince(task.created_at, now);
+      const isOpen = task.status === 'open' || task.status === 'snoozed';
       const stale = isOpen && days !== null && days > OUTDATED_DAYS;
-      (stale ? outdated : fresh).push({ task: t, days, outdated: stale });
+      (stale ? outdated : fresh).push({ task, days, outdated: stale });
     }
     return { fresh, outdated };
   }, [tasks]);
@@ -106,7 +145,7 @@ export default function Tasks() {
         body = { notes: actionText.trim() || null };
       } else if (actionMode === 'decline') {
         const reason = actionText.trim();
-        if (!reason) { showError('Decline reason is required so the agent can update its theory.'); setSubmitting(false); return; }
+        if (!reason) { showError(t('toast.declineReasonRequired')); setSubmitting(false); return; }
         url = `${API_BASE}/operator-tasks/${activeTask.id}/decline`;
         body = { reason };
       } else if (actionMode === 'snooze') {
@@ -116,9 +155,9 @@ export default function Tasks() {
       const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
-        showError(e.error || 'Action failed');
+        showError(e.error || t('toast.actionFailed'));
       } else {
-        showSuccess(actionMode === 'complete' ? 'Task marked done' : actionMode === 'decline' ? 'Task declined — feedback recorded' : 'Task snoozed');
+        showSuccess(actionMode === 'complete' ? t('toast.done') : actionMode === 'decline' ? t('toast.declined') : t('toast.snoozed'));
         closeAction();
         load();
       }
@@ -137,25 +176,17 @@ export default function Tasks() {
     <div className="max-w-5xl mx-auto">
       <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div className="min-w-0">
-          <h1 className="font-display text-2xl font-bold text-ink">Operator Tasks</h1>
+          <h1 className="font-display text-2xl font-bold text-ink">{t('title')}</h1>
           <p className="text-sm text-muted mt-1">
-            Actionable items from the agronomist and planner. Done tells the agent its theory was right; declining with a reason tells it why.
+            {t('subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectCls} aria-label="Status">
-            <option value="open">Open</option>
-            <option value="done">Done</option>
-            <option value="declined">Declined</option>
-            <option value="snoozed">Snoozed</option>
-            <option value="all">All</option>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectCls} aria-label={t('filters.status')}>
+            {STATUS_FILTERS.map(id => <option key={id} value={id}>{t(`filters.statusOption.${id}`)}</option>)}
           </select>
-          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className={selectCls} aria-label="Source">
-            <option value="all">All sources</option>
-            <option value="agronomist">Agronomist</option>
-            <option value="planner">Planner</option>
-            <option value="watchdog">Watchdog</option>
-            <option value="manual">Manual</option>
+          <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} className={selectCls} aria-label={t('filters.source')}>
+            {SOURCE_FILTERS.map(id => <option key={id} value={id}>{t(`filters.sourceOption.${id}`)}</option>)}
           </select>
         </div>
       </div>
@@ -163,8 +194,8 @@ export default function Tasks() {
       {/* Summary + outdated chip */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <Label as="p" className="font-mono tabular" data-testid="task-summary">
-          {fresh.length.toLocaleString()} current
-          <span aria-hidden="true"> · </span>{outdated.length.toLocaleString()} outdated
+          {t('summary.current', { count: fresh.length, n: fmt.int(fresh.length) })}
+          <span aria-hidden="true"> · </span>{t('summary.outdated', { count: outdated.length, n: fmt.int(outdated.length) })}
         </Label>
         <button
           type="button"
@@ -176,22 +207,35 @@ export default function Tasks() {
               ? 'bg-caution-50 dark:bg-caution-900/40 border-caution-400 text-caution-700 dark:text-caution-300'
               : 'bg-panel border-line text-muted hover:bg-field'
           }`}
-          title={`Open tasks created more than ${OUTDATED_DAYS} days ago are treated as outdated`}
+          title={t('outdated.chipTitle', { count: OUTDATED_DAYS })}
         >
           <span aria-hidden="true" className={`inline-block w-2 h-2 border-2 border-state-caution ${hideOutdated ? 'bg-state-caution' : 'bg-transparent'}`} style={{ clipPath: 'polygon(50% 0, 100% 100%, 0 100%)' }} />
-          Hide outdated{hideOutdated && outdated.length > 0 ? ` (${outdated.length.toLocaleString()} hidden)` : ''}
+          {hideOutdated && outdated.length > 0
+            ? t('outdated.hideWithCount', { count: outdated.length, n: fmt.int(outdated.length) })
+            : t('outdated.hide')}
         </button>
+        {uiLang !== 'en' && (anyTranslated || showOriginal) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowOriginal(v => !v)}
+            aria-pressed={showOriginal}
+            data-testid="tasks-show-original"
+          >
+            {showOriginal ? t('translation.showTranslation') : t('translation.showOriginal')}
+          </Button>
+        )}
       </div>
 
       {loading ? (
-        <div className="text-sm text-muted py-8 text-center">Loading…</div>
+        <div className="text-sm text-muted py-8 text-center">{t('common:status.loading')}</div>
       ) : rendered.length === 0 ? (
         <Card className="text-center text-sm text-muted py-10">
           {tasks.length === 0
             ? (statusFilter === 'open'
-              ? 'No open tasks. The agents will surface new ones as they identify physical interventions or measurements you need to make.'
-              : 'No tasks match the current filter.')
-            : `All ${outdated.length.toLocaleString()} open tasks are outdated (older than ${OUTDATED_DAYS} days). Turn off "Hide outdated" to review them.`}
+              ? t('empty.noOpen')
+              : t('empty.noMatch'))
+            : t('empty.allOutdated', { count: outdated.length, n: fmt.int(outdated.length), days: OUTDATED_DAYS })}
         </Card>
       ) : (
         <div className="space-y-3" data-testid="task-list">
@@ -205,6 +249,7 @@ export default function Tasks() {
               onAction={openAction}
               onReopen={reopen}
               formatDateTime={formatDateTime}
+              showingOriginal={showOriginal}
             />
           ))}
         </div>
@@ -212,9 +257,9 @@ export default function Tasks() {
 
       {!loading && remaining > 0 && (
         <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-xs text-muted font-mono tabular">Showing {rendered.length} of {visible.length}</p>
+          <p className="text-xs text-muted font-mono tabular">{t('paging.showing', { shown: fmt.int(rendered.length), total: fmt.int(visible.length) })}</p>
           <Button variant="secondary" size="sm" onClick={() => setShown(s => s + PAGE_SIZE)}>
-            Load more ({Math.min(PAGE_SIZE, remaining)})
+            {t('paging.loadMore', { count: Math.min(PAGE_SIZE, remaining) })}
           </Button>
         </div>
       )}
@@ -222,24 +267,24 @@ export default function Tasks() {
       {/* Action modal */}
       {activeTask && actionMode && (
         <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-end sm:items-center justify-center p-4" role="presentation">
-          <div role="dialog" aria-modal="true" className="bg-panel border border-line rounded-card shadow-xl w-full max-w-lg p-4 sm:p-5">
+          <div role="dialog" aria-modal="true" aria-labelledby="task-action-title" className="bg-panel border border-line rounded-card shadow-xl w-full max-w-lg p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-display text-lg font-semibold text-ink">
-                {actionMode === 'complete' && 'Mark as done'}
-                {actionMode === 'decline' && 'Decline task'}
-                {actionMode === 'snooze' && 'Snooze task'}
+              <h3 id="task-action-title" className="font-display text-lg font-semibold text-ink">
+                {actionMode === 'complete' && t('modal.completeTitle')}
+                {actionMode === 'decline' && t('modal.declineTitle')}
+                {actionMode === 'snooze' && t('modal.snoozeTitle')}
               </h3>
-              <Button variant="ghost" size="sm" onClick={closeAction} aria-label="Close">✕</Button>
+              <Button variant="ghost" size="sm" onClick={closeAction} aria-label={t('common:actions.close')}>✕</Button>
             </div>
-            <p className="text-sm text-muted mb-4 italic">"{activeTask.title}"</p>
+            <p className="text-sm text-muted mb-4 italic" dir="auto">{t('modal.quotedTitle', { title: activeTask.title })}</p>
 
             {actionMode === 'complete' && (
               <>
                 <Label as="label" className="mb-1">
-                  Completion notes <span className="normal-case tracking-normal font-normal">(optional — confirms or refines the agent's theory)</span>
+                  {t('modal.completionNotes')} <span className="normal-case tracking-normal font-normal">{t('modal.completionNotesHint')}</span>
                 </Label>
-                <textarea rows={4} value={actionText} onChange={e => setActionText(e.target.value)}
-                  placeholder={activeTask.expected_outcome ? `Expected: ${activeTask.expected_outcome}\nObserved: ` : 'What you did and what you observed...'}
+                <textarea rows={4} value={actionText} onChange={e => setActionText(e.target.value)} dir="auto"
+                  placeholder={activeTask.expected_outcome ? t('modal.completionPlaceholderExpected', { expected: activeTask.expected_outcome }) : t('modal.completionPlaceholder')}
                   className={fieldCls} />
               </>
             )}
@@ -247,32 +292,32 @@ export default function Tasks() {
             {actionMode === 'decline' && (
               <>
                 <Label as="label" className="mb-1">
-                  Decline reason <span className="text-alarm-600">*</span>
-                  <span className="normal-case tracking-normal font-normal ml-1">(required — the agent uses this to update its theory)</span>
+                  {t('modal.declineReason')} <span className="text-alarm-600">*</span>
+                  <span className="normal-case tracking-normal font-normal ms-1">{t('modal.declineReasonHint')}</span>
                 </Label>
-                <textarea rows={4} value={actionText} onChange={e => setActionText(e.target.value)}
-                  placeholder="e.g. Tank 1 was already verified by lab on 2026-05-23 at 19,200 mg/L Ca — the concentration is correct, the issue must be elsewhere."
+                <textarea rows={4} value={actionText} onChange={e => setActionText(e.target.value)} dir="auto"
+                  placeholder={t('modal.declinePlaceholder')}
                   className={fieldCls} />
               </>
             )}
 
             {actionMode === 'snooze' && (
               <>
-                <Label as="label" className="mb-1">Snooze until</Label>
-                <input type="datetime-local" value={actionDate} onChange={e => setActionDate(e.target.value)} className={fieldCls} />
-                <p className="text-xs text-muted mt-2">Snoozed tasks reappear after this time. Use sparingly — the agent will keep noticing the underlying condition.</p>
+                <Label as="label" className="mb-1">{t('modal.snoozeUntil')}</Label>
+                <input type="datetime-local" value={actionDate} onChange={e => setActionDate(e.target.value)} className={fieldCls} dir="ltr" />
+                <p className="text-xs text-muted mt-2">{t('modal.snoozeHelp')}</p>
               </>
             )}
 
             <div className="mt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-              <Button variant="ghost" onClick={closeAction} disabled={submitting}>Cancel</Button>
+              <Button variant="ghost" onClick={closeAction} disabled={submitting}>{t('common:actions.cancel')}</Button>
               <Button
                 variant={actionMode === 'decline' ? 'danger-ghost' : 'primary'}
                 onClick={submitAction}
                 disabled={submitting}
                 className={actionMode === 'decline' ? 'border-line' : ''}
               >
-                {submitting ? 'Saving…' : actionMode === 'complete' ? 'Confirm done' : actionMode === 'decline' ? 'Decline with reason' : 'Snooze'}
+                {submitting ? t('common:actions.saving') : actionMode === 'complete' ? t('modal.confirmDone') : actionMode === 'decline' ? t('modal.declineWithReason') : t('modal.snooze')}
               </Button>
             </div>
           </div>

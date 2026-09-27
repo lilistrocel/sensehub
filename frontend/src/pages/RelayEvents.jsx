@@ -1,16 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useFormat } from '../i18n/useFormat';
 
 const API_BASE = '/api';
 
-// Format a number of seconds as "Xm Ys" or "Hh Mm".
-const fmtDuration = (sec) => {
-  if (sec == null) return '—';
-  if (sec < 60) return `${sec}s`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
-};
+// Source codes come from the relay_events table; labels via t(`source.${code}`).
+const SOURCES = ['manual', 'automation', 'automation_auto_off', 'watchdog_force_off', 'all_channels'];
 
 const SOURCE_BADGES = {
   manual: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -22,6 +19,7 @@ const SOURCE_BADGES = {
 const sourceBadge = (s) => SOURCE_BADGES[s] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
 
 export default function RelayEvents() {
+  const { t } = useTranslation('relayEvents');
   const { token, user } = useAuth();
   const { showError, showSuccess } = useToast();
   const isAdmin = user?.role === 'admin';
@@ -43,21 +41,21 @@ export default function RelayEvents() {
     try {
       const res = await fetch(`${API_BASE}/equipment`, { headers });
       if (res.ok) setEquipment(await res.json());
-      else showError('Could not load equipment list');
+      else showError(t('err.loadEquipment'));
     } catch (err) {
-      showError(`Could not load equipment list: ${err.message}`);
+      showError(t('err.loadEquipmentWith', { error: err.message }));
     }
-  }, [headers, showError]);
+  }, [headers, showError, t]);
 
   const loadStats = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/relay-events/stats`, { headers });
       if (res.ok) setStats(await res.json());
-      else showError('Could not load relay event statistics');
+      else showError(t('err.loadStats'));
     } catch (err) {
-      showError(`Could not load relay event statistics: ${err.message}`);
+      showError(t('err.loadStatsWith', { error: err.message }));
     }
-  }, [headers, showError]);
+  }, [headers, showError, t]);
 
   const loadRuns = useCallback(async () => {
     setLoading(true);
@@ -65,7 +63,7 @@ export default function RelayEvents() {
       const qs = new URLSearchParams({ limit: '200' });
       Object.entries(filter).forEach(([k, v]) => v && qs.append(k, v));
       const res = await fetch(`${API_BASE}/relay-events/runs?${qs}`, { headers });
-      if (!res.ok) throw new Error('Failed to load runs');
+      if (!res.ok) throw new Error(t('err.loadRuns'));
       const data = await res.json();
       setRuns(data.runs || []);
     } catch (err) {
@@ -73,7 +71,7 @@ export default function RelayEvents() {
     } finally {
       setLoading(false);
     }
-  }, [headers, filter, showError]);
+  }, [headers, filter, showError, t]);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -81,7 +79,7 @@ export default function RelayEvents() {
       const qs = new URLSearchParams({ limit: '300' });
       Object.entries(filter).forEach(([k, v]) => v && qs.append(k, v));
       const res = await fetch(`${API_BASE}/relay-events?${qs}`, { headers });
-      if (!res.ok) throw new Error('Failed to load events');
+      if (!res.ok) throw new Error(t('err.loadEvents'));
       const data = await res.json();
       setEvents(data.events || []);
     } catch (err) {
@@ -89,17 +87,17 @@ export default function RelayEvents() {
     } finally {
       setLoading(false);
     }
-  }, [headers, filter, showError]);
+  }, [headers, filter, showError, t]);
 
   const loadSafetyConfig = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/relay-events/safety-config`, { headers });
       if (res.ok) setSafetyConfig(await res.json());
-      else showError('Could not load relay safety configuration');
+      else showError(t('err.loadSafety'));
     } catch (err) {
-      showError(`Could not load relay safety configuration: ${err.message}`);
+      showError(t('err.loadSafetyWith', { error: err.message }));
     }
-  }, [headers, showError]);
+  }, [headers, showError, t]);
 
   useEffect(() => { loadEquipment(); loadStats(); loadSafetyConfig(); }, [loadEquipment, loadStats, loadSafetyConfig]);
   useEffect(() => {
@@ -111,11 +109,11 @@ export default function RelayEvents() {
     try {
       const res = await fetch(`${API_BASE}/relay-events/safety-check`, { method: 'POST', headers });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
+      if (!res.ok) throw new Error(data.error || t('err.failed'));
       if (data.acted?.length) {
-        showSuccess(`Watchdog acted on ${data.acted.length} stuck channel(s)`);
+        showSuccess(t('toast.watchdogActed', { count: data.acted.length }));
       } else {
-        showSuccess('Watchdog ran — no stuck channels found');
+        showSuccess(t('toast.watchdogClean'));
       }
       loadStats();
     } catch (err) {
@@ -127,15 +125,15 @@ export default function RelayEvents() {
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Relay Events</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('title')}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Audit trail of every relay ON/OFF transition, with computed run durations and stuck-on safety controls.
+            {t('subtitle')}
           </p>
         </div>
         {canControl && (
           <button onClick={triggerSafetyCheck}
             className="px-3 py-2 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded">
-            Run safety check now
+            {t('runSafetyCheck')}
           </button>
         )}
       </div>
@@ -146,16 +144,16 @@ export default function RelayEvents() {
       {/* Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700 flex gap-1">
         {[
-          { id: 'runs', label: 'Zone runs (paired)' },
-          { id: 'events', label: 'Raw events' },
-          { id: 'safety', label: 'Safety watchdog', adminOnly: true },
-        ].filter(t => !t.adminOnly || isAdmin).map(t => (
-          <button key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-2 text-sm font-medium ${tab === t.id
+          { id: 'runs' },
+          { id: 'events' },
+          { id: 'safety', adminOnly: true },
+        ].filter(tb => !tb.adminOnly || isAdmin).map(tb => (
+          <button key={tb.id}
+            onClick={() => setTab(tb.id)}
+            className={`px-3 py-2 text-sm font-medium ${tab === tb.id
               ? 'border-b-2 border-primary-500 text-primary-700 dark:text-primary-400'
               : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
-            {t.label}
+            {t(`tab.${tb.id}`)}
           </button>
         ))}
       </div>
@@ -177,7 +175,7 @@ export default function RelayEvents() {
         <SafetyConfigPanel
           config={safetyConfig}
           equipment={equipment}
-          onSaved={(c) => { setSafetyConfig(c); showSuccess('Safety config saved'); }}
+          onSaved={(c) => { setSafetyConfig(c); showSuccess(t('toast.safetySaved')); }}
           headers={headers}
         />
       )}
@@ -186,24 +184,26 @@ export default function RelayEvents() {
 }
 
 function StatsBar({ stats }) {
+  const { t } = useTranslation('relayEvents');
+  const fmt = useFormat();
   const cur = stats.currently_on || [];
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      <StatCard label="Currently ON" value={cur.length} sub={cur.length === 0 ? 'all clear' : `${cur.length} channel${cur.length === 1 ? '' : 's'}`} tone={cur.length === 0 ? 'green' : 'blue'} />
-      <StatCard label="Force-OFF events (24h)" value={stats['24h']?.force_off_events || 0}
-        sub={(stats['24h']?.force_off_events || 0) > 0 ? '⚠ check Alerts' : 'none — healthy'}
+      <StatCard label={t('stats.currentlyOn')} value={cur.length} sub={cur.length === 0 ? t('stats.allClear') : t('stats.channels', { count: cur.length })} tone={cur.length === 0 ? 'green' : 'blue'} />
+      <StatCard label={t('stats.forceOff24h')} value={stats['24h']?.force_off_events || 0}
+        sub={(stats['24h']?.force_off_events || 0) > 0 ? t('stats.checkAlerts') : t('stats.noneHealthy')}
         tone={(stats['24h']?.force_off_events || 0) > 0 ? 'red' : 'green'} />
-      <StatCard label="Force-OFF events (7d)" value={stats['7d']?.force_off_events || 0}
-        sub={(stats['7d']?.force_off_events || 0) > 0 ? 'past week' : 'none'}
+      <StatCard label={t('stats.forceOff7d')} value={stats['7d']?.force_off_events || 0}
+        sub={(stats['7d']?.force_off_events || 0) > 0 ? t('stats.pastWeek') : t('stats.none')}
         tone={(stats['7d']?.force_off_events || 0) > 0 ? 'amber' : 'gray'} />
-      <StatCard label="Total events (24h)" value={stats['24h']?.total_events || 0} sub="all sources" tone="gray" />
+      <StatCard label={t('stats.total24h')} value={stats['24h']?.total_events || 0} sub={t('stats.allSources')} tone="gray" />
       {cur.length > 0 && (
         <div className="sm:col-span-2 lg:col-span-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
-          <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 uppercase mb-2">Channels currently ON</p>
+          <p className="text-xs font-semibold text-blue-900 dark:text-blue-300 uppercase mb-2">{t('stats.channelsOn')}</p>
           <div className="flex flex-wrap gap-2">
             {cur.map((c, i) => (
               <span key={i} className="text-xs px-2 py-1 bg-white dark:bg-gray-800 rounded border border-blue-200 dark:border-blue-800">
-                <strong>{c.equipment_name}</strong> · CH{c.channel} · ON for {fmtDuration(c.on_for_seconds)} · src {c.source}
+                <strong dir="auto">{c.equipment_name}</strong> · {t('ch', { n: c.channel })} · {t('stats.onFor', { duration: fmt.duration(c.on_for_seconds) })} · {t('stats.src', { source: t(`source.${c.source}`, { defaultValue: c.source }) })}
               </span>
             ))}
           </div>
@@ -224,77 +224,77 @@ function StatCard({ label, value, sub, tone = 'gray' }) {
   return (
     <div className={`border rounded p-3 ${tones[tone]}`}>
       <p className="text-xs uppercase tracking-wide opacity-70">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
+      <p className="text-2xl font-bold mt-1 font-mono tabular">{value}</p>
       <p className="text-xs opacity-70 mt-1">{sub}</p>
     </div>
   );
 }
 
 function FilterBar({ filter, setFilter, equipment, onApply, showSource }) {
+  const { t } = useTranslation('relayEvents');
   const set = (k, v) => setFilter(f => ({ ...f, [k]: v }));
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 flex flex-wrap items-end gap-3">
       <div>
-        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Equipment</label>
+        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('filter.equipment')}</label>
         <select value={filter.equipment_id} onChange={e => set('equipment_id', e.target.value)}
           className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-          <option value="">All</option>
+          <option value="">{t('filter.all')}</option>
           {equipment.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
       </div>
       <div>
-        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Channel</label>
-        <input type="number" value={filter.channel} onChange={e => set('channel', e.target.value)} placeholder="any"
+        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('filter.channel')}</label>
+        <input type="number" value={filter.channel} onChange={e => set('channel', e.target.value)} placeholder={t('filter.any')}
+          dir="ltr"
           className="text-sm px-2 py-1 w-20 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
       </div>
       {showSource && (
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Source</label>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('filter.source')}</label>
           <select value={filter.source} onChange={e => set('source', e.target.value)}
             className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-            <option value="">All</option>
-            <option value="manual">manual</option>
-            <option value="automation">automation</option>
-            <option value="automation_auto_off">automation_auto_off</option>
-            <option value="watchdog_force_off">watchdog_force_off</option>
-            <option value="all_channels">all_channels</option>
+            <option value="">{t('filter.all')}</option>
+            {SOURCES.map(src => <option key={src} value={src}>{t(`source.${src}`)}</option>)}
           </select>
         </div>
       )}
       <div>
-        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">From</label>
+        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('filter.from')}</label>
         <input type="datetime-local" value={filter.from} onChange={e => set('from', e.target.value.replace('T', ' '))}
           className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
       </div>
       <div>
-        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">To</label>
+        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{t('filter.to')}</label>
         <input type="datetime-local" value={filter.to} onChange={e => set('to', e.target.value.replace('T', ' '))}
           className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
       </div>
       <div className="flex gap-2">
         <button onClick={onApply}
-          className="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded">Apply</button>
+          className="px-3 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded">{t('common:actions.apply')}</button>
         <button onClick={() => { setFilter({ equipment_id: '', channel: '', source: '', from: '', to: '' }); setTimeout(onApply, 0); }}
-          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded">Clear</button>
+          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded">{t('filter.clear')}</button>
       </div>
     </div>
   );
 }
 
 function RunsTable({ runs, loading }) {
-  if (loading) return <p className="text-center text-sm text-gray-500 py-8">Loading runs…</p>;
-  if (runs.length === 0) return <p className="text-center text-sm text-gray-500 py-8">No runs found.</p>;
+  const { t } = useTranslation('relayEvents');
+  const fmt = useFormat();
+  if (loading) return <p className="text-center text-sm text-gray-500 py-8">{t('runs.loading')}</p>;
+  if (runs.length === 0) return <p className="text-center text-sm text-gray-500 py-8">{t('runs.empty')}</p>;
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-xs uppercase">
           <tr>
-            <th className="px-3 py-2 text-left">Started</th>
-            <th className="px-3 py-2 text-left">Equipment / Ch</th>
-            <th className="px-3 py-2 text-left">Duration</th>
-            <th className="px-3 py-2 text-left">On source</th>
-            <th className="px-3 py-2 text-left">Off source</th>
-            <th className="px-3 py-2 text-left">Automation</th>
+            <th className="px-3 py-2 text-start">{t('runs.col.started')}</th>
+            <th className="px-3 py-2 text-start">{t('runs.col.equipmentCh')}</th>
+            <th className="px-3 py-2 text-start">{t('runs.col.duration')}</th>
+            <th className="px-3 py-2 text-start">{t('runs.col.onSource')}</th>
+            <th className="px-3 py-2 text-start">{t('runs.col.offSource')}</th>
+            <th className="px-3 py-2 text-start">{t('col.automation')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -303,18 +303,18 @@ function RunsTable({ runs, loading }) {
             const stillRunning = r.still_running;
             return (
               <tr key={r.on_id} className={`${tooLong ? 'bg-red-50 dark:bg-red-900/20' : stillRunning ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
-                <td className="px-3 py-2 font-mono text-xs text-gray-700 dark:text-gray-300">{r.on_time}</td>
+                <td className="px-3 py-2 font-mono tabular text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">{fmt.dateTime(r.on_time)}</td>
                 <td className="px-3 py-2">
-                  <strong>{r.equipment_name}</strong> · CH{r.channel}
+                  <strong dir="auto">{r.equipment_name}</strong> · {t('ch', { n: r.channel })}
                 </td>
-                <td className="px-3 py-2 font-mono">
-                  {fmtDuration(r.duration_seconds)}
-                  {stillRunning && <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">running…</span>}
-                  {tooLong && !stillRunning && <span className="ml-2 text-xs text-red-700 dark:text-red-400">⚠ overrun</span>}
+                <td className="px-3 py-2 font-mono whitespace-nowrap">
+                  {fmt.duration(r.duration_seconds)}
+                  {stillRunning && <span className="ms-2 text-xs text-blue-600 dark:text-blue-400">{t('runs.running')}</span>}
+                  {tooLong && !stillRunning && <span className="ms-2 text-xs text-red-700 dark:text-red-400">⚠ {t('runs.overrun')}</span>}
                 </td>
-                <td className="px-3 py-2"><span className={`text-xs px-2 py-0.5 rounded ${sourceBadge(r.on_source)}`}>{r.on_source}</span></td>
-                <td className="px-3 py-2">{r.off_source ? <span className={`text-xs px-2 py-0.5 rounded ${sourceBadge(r.off_source)}`}>{r.off_source}</span> : <span className="text-xs text-gray-400">—</span>}</td>
-                <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{r.automation_name ? `#${r.on_auto_id} ${r.automation_name}` : '—'}</td>
+                <td className="px-3 py-2"><span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${sourceBadge(r.on_source)}`}>{t(`source.${r.on_source}`, { defaultValue: r.on_source })}</span></td>
+                <td className="px-3 py-2">{r.off_source ? <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${sourceBadge(r.off_source)}`}>{t(`source.${r.off_source}`, { defaultValue: r.off_source })}</span> : <span className="text-xs text-gray-400">—</span>}</td>
+                <td dir="auto" className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{r.automation_name ? `#${r.on_auto_id} ${r.automation_name}` : '—'}</td>
               </tr>
             );
           })}
@@ -325,34 +325,36 @@ function RunsTable({ runs, loading }) {
 }
 
 function EventsTable({ events, loading }) {
-  if (loading) return <p className="text-center text-sm text-gray-500 py-8">Loading events…</p>;
-  if (events.length === 0) return <p className="text-center text-sm text-gray-500 py-8">No events found.</p>;
+  const { t } = useTranslation('relayEvents');
+  const fmt = useFormat();
+  if (loading) return <p className="text-center text-sm text-gray-500 py-8">{t('events.loading')}</p>;
+  if (events.length === 0) return <p className="text-center text-sm text-gray-500 py-8">{t('events.empty')}</p>;
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead className="bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-xs uppercase">
           <tr>
-            <th className="px-3 py-2 text-left">Time</th>
-            <th className="px-3 py-2 text-left">Equipment</th>
-            <th className="px-3 py-2 text-left">Channel</th>
-            <th className="px-3 py-2 text-left">State</th>
-            <th className="px-3 py-2 text-left">Source</th>
-            <th className="px-3 py-2 text-left">Automation</th>
+            <th className="px-3 py-2 text-start">{t('events.col.time')}</th>
+            <th className="px-3 py-2 text-start">{t('filter.equipment')}</th>
+            <th className="px-3 py-2 text-start">{t('filter.channel')}</th>
+            <th className="px-3 py-2 text-start">{t('events.col.state')}</th>
+            <th className="px-3 py-2 text-start">{t('filter.source')}</th>
+            <th className="px-3 py-2 text-start">{t('col.automation')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
           {events.map(e => (
             <tr key={e.id}>
-              <td className="px-3 py-2 font-mono text-xs">{e.created_at}</td>
-              <td className="px-3 py-2">{e.equipment_name || `#${e.equipment_id}`}</td>
-              <td className="px-3 py-2">CH{e.channel}</td>
+              <td className="px-3 py-2 font-mono tabular text-xs whitespace-nowrap">{fmt.dateTime(e.created_at)}</td>
+              <td dir="auto" className="px-3 py-2">{e.equipment_name || `#${e.equipment_id}`}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{t('ch', { n: e.channel })}</td>
               <td className="px-3 py-2">
                 <span className={`text-xs font-mono px-2 py-0.5 rounded ${e.state ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
-                  {e.state ? 'ON' : 'OFF'}
+                  {e.state ? t('common:status.on') : t('common:status.off')}
                 </span>
               </td>
-              <td className="px-3 py-2"><span className={`text-xs px-2 py-0.5 rounded ${sourceBadge(e.source)}`}>{e.source}</span></td>
-              <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{e.automation_name ? `#${e.automation_id} ${e.automation_name}` : '—'}</td>
+              <td className="px-3 py-2"><span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${sourceBadge(e.source)}`}>{t(`source.${e.source}`, { defaultValue: e.source })}</span></td>
+              <td dir="auto" className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{e.automation_name ? `#${e.automation_id} ${e.automation_name}` : '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -362,6 +364,8 @@ function EventsTable({ events, loading }) {
 }
 
 function SafetyConfigPanel({ config, equipment, onSaved, headers }) {
+  const { t } = useTranslation('relayEvents');
+  const fmt = useFormat();
   const { showError } = useToast();
   const [enabled, setEnabled] = useState(config?.enabled ?? true);
   const [interval, setInterval] = useState(config?.check_interval_seconds ?? 30);
@@ -403,35 +407,40 @@ function SafetyConfigPanel({ config, equipment, onSaved, headers }) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
+      if (!res.ok) throw new Error(data.error || t('err.failed'));
       onSaved(data);
     } catch (err) {
-      showError('Save failed: ' + err.message);
+      showError(t('err.saveFailed', { error: err.message }));
     } finally {
       setSaving(false);
     }
   };
 
-  if (!config) return <p className="text-center text-sm text-gray-500 py-8">Loading config…</p>;
+  if (!config) return <p className="text-center text-sm text-gray-500 py-8">{t('safety.loading')}</p>;
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-4 space-y-4">
       <div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-          <span className="font-medium text-gray-900 dark:text-white">Enable safety watchdog</span>
+          <span className="font-medium text-gray-900 dark:text-white">{t('safety.enable')}</span>
         </label>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
-          When enabled, the backend will force-OFF any relay channel that has been ON longer than its configured maximum, log a watchdog event, and raise an alert. This is a safety net for crashed timers, dropped Modbus writes, and scheduler bugs.
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ms-6">
+          {t('safety.enableHelp')}
         </p>
       </div>
       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3">
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={useActionDuration} onChange={e => setUseActionDuration(e.target.checked)} className="mt-0.5" />
           <div>
-            <span className="font-medium text-gray-900 dark:text-white">Use action duration as threshold (recommended)</span>
+            <span className="font-medium text-gray-900 dark:text-white">{t('safety.useActionDuration')}</span>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-              When ON, the watchdog reads the automation that turned the channel on, finds its <code>duration_seconds</code> (or the gap between transition steps), and force-OFFs at <strong>expected duration + grace period</strong>. A 4-min zone overruns by at most {gracePeriod}s instead of up to {defaultMax}s. Falls back to the flat thresholds below if no expected duration can be derived (manual ONs, deleted automations, etc).
+              <Trans
+                t={t}
+                i18nKey="safety.useActionDurationHelp"
+                values={{ grace: fmt.duration(Number(gracePeriod)), max: fmt.duration(Number(defaultMax)) }}
+                components={{ code: <code dir="ltr" />, b: <strong /> }}
+              />
             </p>
           </div>
         </label>
@@ -439,53 +448,54 @@ function SafetyConfigPanel({ config, equipment, onSaved, headers }) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <label className="block">
-          <span className="text-sm text-gray-700 dark:text-gray-300">Check interval (s)</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">{t('safety.checkInterval')}</span>
           <input type="number" min="5" value={interval} onChange={e => setInterval(e.target.value)}
             className="mt-1 w-full text-sm px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-          <span className="text-xs text-gray-500">Default 30. How often the watchdog scans.</span>
+          <span className="text-xs text-gray-500">{t('safety.checkIntervalHelp')}</span>
         </label>
         <label className="block">
-          <span className="text-sm text-gray-700 dark:text-gray-300">Grace period (s)</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">{t('safety.grace')}</span>
           <input type="number" min="0" value={gracePeriod} onChange={e => setGracePeriod(e.target.value)}
             disabled={!useActionDuration}
             className="mt-1 w-full text-sm px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50" />
-          <span className="text-xs text-gray-500">Added to expected duration. Should be ≥ check interval.</span>
+          <span className="text-xs text-gray-500">{t('safety.graceHelp')}</span>
         </label>
         <label className="block">
-          <span className="text-sm text-gray-700 dark:text-gray-300">Min threshold (s)</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">{t('safety.minThreshold')}</span>
           <input type="number" min="10" value={minThreshold} onChange={e => setMinThreshold(e.target.value)}
             disabled={!useActionDuration}
             className="mt-1 w-full text-sm px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50" />
-          <span className="text-xs text-gray-500">Floor — never force-OFF below this.</span>
+          <span className="text-xs text-gray-500">{t('safety.minThresholdHelp')}</span>
         </label>
       </div>
 
       <div>
         <label className="block">
-          <span className="text-sm text-gray-700 dark:text-gray-300">Fallback default max ON time (seconds)</span>
+          <span className="text-sm text-gray-700 dark:text-gray-300">{t('safety.defaultMax')}</span>
           <input type="number" min="60" value={defaultMax} onChange={e => setDefaultMax(e.target.value)}
             className="mt-1 w-full md:w-1/2 text-sm px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white" />
-          <span className="text-xs text-gray-500">Used when expected duration can't be derived (manual ONs, deleted automations). Default 1500 (25 min).</span>
+          <span className="text-xs text-gray-500">{t('safety.defaultMaxHelp')}</span>
         </label>
       </div>
       <div>
-        <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">Per-equipment overrides</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Use this if a particular relay board runs longer cycles than the global default.</p>
+        <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">{t('safety.perEquipment')}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{t('safety.perEquipmentHelp')}</p>
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {equipment.map(eq => (
-            <div key={eq.id} className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-sm w-72">
+            <div key={eq.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <label className="flex items-center gap-2 text-sm w-full sm:w-72 min-w-0">
                 <input type="checkbox" checked={ignoreList.includes(eq.id)}
                   onChange={e => setIgnoreList(l => e.target.checked ? [...l, eq.id] : l.filter(x => x !== eq.id))} />
-                <span className="text-xs">Ignore</span>
-                <span className="text-gray-700 dark:text-gray-300">{eq.name}</span>
+                <span className="text-xs">{t('safety.ignore')}</span>
+                <span dir="auto" className="text-gray-700 dark:text-gray-300 truncate">{eq.name}</span>
               </label>
-              <input type="number" min="0" placeholder={`default ${defaultMax}s`}
+              <input type="number" min="0" placeholder={t('safety.defaultPlaceholder', { value: defaultMax })}
+                dir="ltr"
                 value={perEquipment[eq.id] ?? ''}
                 onChange={e => setPerEquipment(p => ({ ...p, [eq.id]: e.target.value }))}
                 disabled={ignoreList.includes(eq.id)}
                 className="text-sm px-2 py-1 w-32 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50" />
-              <span className="text-xs text-gray-500">seconds</span>
+              <span className="text-xs text-gray-500">{t('safety.seconds')}</span>
             </div>
           ))}
         </div>
@@ -493,7 +503,7 @@ function SafetyConfigPanel({ config, equipment, onSaved, headers }) {
       <div className="flex justify-end pt-2 border-t border-gray-200 dark:border-gray-700">
         <button onClick={save} disabled={saving}
           className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white rounded">
-          {saving ? 'Saving…' : 'Save safety config'}
+          {saving ? t('common:actions.saving') : t('safety.save')}
         </button>
       </div>
     </div>

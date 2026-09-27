@@ -1,1 +1,140 @@
-{}
+{
+  "steps": {
+    "welcome": "Hoş geldiniz",
+    "network": "Ağ",
+    "timezone": "Saat dilimi",
+    "admin": "Yönetici hesabı",
+    "cloud": "Bulut",
+    "complete": "Tamamlandı"
+  },
+  "stepOf": "Adım {{step}}/{{total}} · {{label}}",
+  "actions": {
+    "continue": "Devam"
+  },
+  "welcome": {
+    "title": "SenseHub'a hoş geldiniz",
+    "intro": "Endüstriyel IoT işletmeleri için uç bilişim platformunuz. Sensörleri, röleleri ve denetleyicileri yönetin; SenseHub'ın güçlü yerel işleme yetenekleriyle işlerinizi otomatikleştirin.",
+    "overviewTitle": "Sisteme genel bakış",
+    "featureProtocols": "Çoklu protokol desteği (Modbus, MQTT, Zigbee, Z-Wave)",
+    "featureAutomation": "Tetikleyiciler ve koşullarla görsel otomasyon oluşturucu",
+    "featureOffline": "Önce çevrim dışı çalışma, bağlıyken bulut eşitlemesi",
+    "featureMonitoring": "Gerçek zamanlı izleme ve alarmlar",
+    "getStarted": "Başlayın",
+    "skipSetup": "Kurulumu atla"
+  },
+  "skip": {
+    "title": "Kurulum atlansın mı?",
+    "warningTitle": "Asgari yapılandırma uyarısı",
+    "warningBody": "Kurulumu atlamak, temel kimlik bilgileriyle varsayılan bir yönetici hesabı oluşturur. Yapmanız gerekenler:",
+    "todoPassword": "Varsayılan parolayı hemen değiştirin",
+    "todoNetwork": "Ağ ayarlarını elle yapılandırın",
+    "todoTimezone": "Saat diliminizi Ayarlar'dan belirleyin",
+    "defaultAccount": "Varsayılan yönetici hesabı:",
+    "email": "E-posta:",
+    "tempPassword": "Bu hesap için geçici bir parola oluşturulur. Güvenlik nedeniyle <b>burada gösterilmez</b> — ilk oturum açışınızda yeni bir parola belirlemeniz istenecektir.",
+    "settingUp": "Kuruluyor…",
+    "confirm": "Atlamayı onayla"
+  },
+  "network": {
+    "title": "Ağ yapılandırması",
+    "subtitle": "SenseHub cihazınızın ağ ayarlarını yapılandırın.",
+    "useDhcp": "DHCP kullan (otomatik IP yapılandırması)",
+    "ipAddress": "IP adresi",
+    "gateway": "Ağ geçidi",
+    "dnsServer": "DNS sunucusu"
+  },
+  "timezone": {
+    "title": "Saat dilimi yapılandırması",
+    "subtitle": "Doğru saat gösterimi ve programlama için saat diliminizi seçin.",
+    "label": "Saat dilimi",
+    "currentSelection": "Geçerli seçim:",
+    "localTime": "Yerel saat: {{time}}",
+    "group": {
+      "americas": "Amerika",
+      "europe": "Avrupa",
+      "asia": "Asya",
+      "pacificOceania": "Pasifik / Okyanusya",
+      "africaMiddleEast": "Afrika / Orta Doğu",
+      "other": "Diğer"
+    },
+    "hint": {
+      "eastern": "Doğu",
+      "central": "Merkez",
+      "mountain": "Dağ",
+      "pacific": "Pasifik",
+      "alaska": "Alaska",
+      "hawaii": "Hawaii",
+      "india": "Hindistan",
+      "china": "Çin",
+      "newZealand": "Yeni Zelanda",
+      "utc": "Eşgüdümlü Evrensel Zaman"
+    }
+  },
+  "admin": {
+    "title": "Yönetici hesabı oluştur",
+    "subtitle": "SenseHub'ı yönetmek için yönetici hesabınızı oluşturun.",
+    "fullName": "Ad soyad",
+    "namePlaceholder": "Adınızı girin",
+    "email": "E-posta adresi",
+    "password": "Parola",
+    "passwordPlaceholder": "En az 8 karakter",
+    "confirmPassword": "Parolayı onayla",
+    "confirmPlaceholder": "Parolanızı yeniden girin",
+    "creating": "Hesap oluşturuluyor…",
+    "create": "Hesap oluştur"
+  },
+  "cloud": {
+    "title": "Bulut bağlantısı",
+    "subtitle": "Uzaktan izleme, veri yedekleme ve tesisler arası yönetim için SenseHub Cloud'a bağlanın.",
+    "optionalNote": "Bu isteğe bağlıdır — daha sonra Ayarlar'dan yapılandırabilirsiniz.",
+    "url": "Bulut URL'si",
+    "apiKey": "API anahtarı",
+    "apiKeyPlaceholder": "Bulut API anahtarınızı girin",
+    "offlineTitle": "SenseHub tamamen çevrim dışı çalışır",
+    "offlineBody": "Bulut bağlantısı isteğe bağlıdır. Sisteminiz onsuz da tamamen bağımsız çalışır.",
+    "skip": "Şimdilik atla",
+    "connecting": "Bağlanıyor…",
+    "connect": "Buluta bağlan"
+  },
+  "complete": {
+    "title": "Kurulum tamamlandı!",
+    "body": "SenseHub sisteminiz kullanıma hazır. Şu anda yönetici olarak oturum açtınız.",
+    "summaryTitle": "Yapılandırma özeti",
+    "network": "Ağ:",
+    "timezone": "Saat dilimi:",
+    "admin": "Yönetici:",
+    "email": "E-posta:",
+    "cloud": "Bulut:",
+    "dhcpAutomatic": "DHCP (otomatik)",
+    "staticIp": "Statik IP",
+    "cloudConnected": "Bağlı",
+    "cloudNotConfigured": "Yapılandırılmadı (çevrim dışı mod)",
+    "nextStepsTitle": "Sonraki adımlar",
+    "nextScan": "Ağınızdaki ekipmanı tarayın",
+    "nextZones": "Ekipmanı bölgelere ayırın",
+    "nextAutomations": "Otomasyon programları oluşturun",
+    "nextCloud": "Bulut eşitlemesini yapılandırın (isteğe bağlı)",
+    "goToDashboard": "Gösterge paneline git"
+  },
+  "errors": {
+    "invalidIp": "Lütfen geçerli bir IP adresi girin",
+    "invalidGateway": "Lütfen geçerli bir ağ geçidi adresi girin",
+    "invalidDns": "Lütfen geçerli bir DNS adresi girin",
+    "networkSaveFailed": "Ağ yapılandırması kaydedilemedi",
+    "networkSaveError": "Ağ yapılandırması kaydedilirken bir hata oluştu",
+    "timezoneSaveFailed": "Saat dilimi yapılandırması kaydedilemedi",
+    "timezoneSaveError": "Saat dilimi yapılandırması kaydedilirken bir hata oluştu",
+    "nameRequired": "Ad gereklidir",
+    "emailRequired": "E-posta gereklidir",
+    "invalidEmail": "Lütfen geçerli bir e-posta adresi girin",
+    "passwordRequired": "Parola gereklidir",
+    "passwordTooShort": "Parola en az 8 karakter olmalıdır",
+    "passwordMismatch": "Parolalar eşleşmiyor",
+    "setupFailed": "Kurulum başarısız oldu",
+    "setupError": "Kurulum sırasında bir hata oluştu",
+    "cloudConnectFailed": "Buluta bağlanılamadı",
+    "cloudConnectError": "Buluta bağlanırken bir hata oluştu",
+    "quickSetupFailed": "Hızlı kurulum başarısız oldu",
+    "quickSetupError": "Hızlı kurulum sırasında bir hata oluştu"
+  }
+}

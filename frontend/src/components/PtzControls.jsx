@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import ConfirmDialog from './ConfirmDialog';
 
 const API_BASE = '/api';
@@ -6,20 +7,20 @@ const STATUS_POLL_MS = 30000;
 const KEEPALIVE_MS = 1500;       // server watchdog stops after 2 s without a refresh
 const SPEEDS = [25, 50, 100];
 
-// Direction vectors: pan (+ right), tilt (+ up)
+// Direction vectors: pan (+ right), tilt (+ up). These are the CAMERA's
+// physical directions: the pad stays left-to-right in Arabic too (dir="ltr"),
+// and the arrows are not mirrored. Labels: t(`ptz.dir.${key}`).
 const DIRS = {
-  up:         { pan: 0,  tilt: 1,  label: 'Tilt up',        glyph: '↑' },
-  down:       { pan: 0,  tilt: -1, label: 'Tilt down',      glyph: '↓' },
-  left:       { pan: -1, tilt: 0,  label: 'Pan left',       glyph: '←' },
-  right:      { pan: 1,  tilt: 0,  label: 'Pan right',      glyph: '→' },
-  upleft:     { pan: -1, tilt: 1,  label: 'Pan up-left',    glyph: '↖' },
-  upright:    { pan: 1,  tilt: 1,  label: 'Pan up-right',   glyph: '↗' },
-  downleft:   { pan: -1, tilt: -1, label: 'Pan down-left',  glyph: '↙' },
-  downright:  { pan: 1,  tilt: -1, label: 'Pan down-right', glyph: '↘' },
+  up:         { pan: 0,  tilt: 1,  glyph: '↑' },
+  down:       { pan: 0,  tilt: -1, glyph: '↓' },
+  left:       { pan: -1, tilt: 0,  glyph: '←' },
+  right:      { pan: 1,  tilt: 0,  glyph: '→' },
+  upleft:     { pan: -1, tilt: 1,  glyph: '↖' },
+  upright:    { pan: 1,  tilt: 1,  glyph: '↗' },
+  downleft:   { pan: -1, tilt: -1, glyph: '↙' },
+  downright:  { pan: 1,  tilt: -1, glyph: '↘' },
 };
 const KEY_TO_DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
-
-const UNREACHABLE_TIP = 'Camera unreachable';
 
 /**
  * Compact PTZ control pad for a Hikvision ISAPI camera.
@@ -35,6 +36,7 @@ const UNREACHABLE_TIP = 'Camera unreachable';
  * Props: camera, token, showToast?: { showError, showSuccess }, onStatus?: (info|null) => void
  */
 export default function PtzControls({ camera, token, showError, showSuccess, onStatus }) {
+  const { t } = useTranslation('cameras');
   const [status, setStatus] = useState({ state: 'checking' }); // checking | online | unreachable | auth | error
   const [speedIdx, setSpeedIdx] = useState(1);
   const [presets, setPresets] = useState([]);
@@ -94,8 +96,8 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
   useEffect(() => {
     mountedRef.current = true;
     fetchStatus();
-    const t = setInterval(fetchStatus, STATUS_POLL_MS);
-    return () => { mountedRef.current = false; clearInterval(t); };
+    const timer = setInterval(fetchStatus, STATUS_POLL_MS);
+    return () => { mountedRef.current = false; clearInterval(timer); };
   }, [fetchStatus]);
 
   useEffect(() => {
@@ -111,13 +113,13 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      const err = new Error(data.message || `PTZ ${path} failed (${res.status})`);
+      const err = new Error(data.message || t('ptz.error.commandFailed', { path, status: res.status }));
       err.status = data.status;
       err.httpStatus = res.status;
       throw err;
     }
     return res.json();
-  }, [camera.id, authHeaders]);
+  }, [camera.id, authHeaders, t]);
 
   const sendMove = useCallback(async (vec) => {
     try {
@@ -215,7 +217,7 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
     setBusy(true);
     try {
       await post(`presets/${selectedPreset}/goto`);
-      showSuccess && showSuccess(`Moving to preset "${presetName(selectedPreset)}"`);
+      showSuccess && showSuccess(t('ptz.toast.moving', { name: presetName(selectedPreset) }));
     } catch (err) {
       showError ? showError(err.message) : setLastError(err.message);
     } finally { setBusy(false); }
@@ -241,9 +243,9 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Save failed (${res.status})`);
+        throw new Error(data.message || t('ptz.error.saveFailed', { status: res.status }));
       }
-      showSuccess && showSuccess(`Preset "${name}" saved as #${id}`);
+      showSuccess && showSuccess(t('ptz.toast.saved', { name, id }));
       setNewPresetName('');
       setShowSaveForm(false);
       await fetchPresets();
@@ -263,9 +265,9 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || `Delete failed (${res.status})`);
+        throw new Error(data.message || t('ptz.error.deleteFailed', { status: res.status }));
       }
-      showSuccess && showSuccess(`Preset "${name}" deleted`);
+      showSuccess && showSuccess(t('ptz.toast.deleted', { name }));
       setSelectedPreset('');
       setConfirmDelete(false);
       await fetchPresets();
@@ -281,10 +283,11 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
 
   // --- render ---------------------------------------------------------------
   const disabled = !online;
-  const tip = status.state === 'checking' ? 'Checking camera…'
-    : status.state === 'unreachable' ? UNREACHABLE_TIP
-    : status.state === 'auth' ? `Camera rejected the password${status.message ? ` — ${status.message}` : ''}`
-    : status.state === 'error' ? (status.message || 'PTZ error')
+  const unreachableTip = t('ptz.unreachable');
+  const tip = status.state === 'checking' ? t('ptz.checkingCamera')
+    : status.state === 'unreachable' ? unreachableTip
+    : status.state === 'auth' ? (status.message ? t('ptz.authRejectedWith', { message: status.message }) : t('ptz.authRejected'))
+    : status.state === 'error' ? (status.message || t('ptz.error.generic'))
     : '';
 
   const btnBase = 'select-none touch-none inline-flex items-center justify-center rounded-lg text-lg font-semibold ' +
@@ -296,12 +299,13 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
 
   const dirBtn = (dirKey) => {
     const id = `dir:${dirKey}`;
+    const label = t(`ptz.dir.${dirKey}`);
     return (
       <button
         key={id}
         type="button"
-        aria-label={DIRS[dirKey].label}
-        title={disabled ? tip : DIRS[dirKey].label}
+        aria-label={label}
+        title={disabled ? tip : label}
         disabled={disabled}
         className={cls(id)}
         {...holdProps(id, vecFor(dirKey))}
@@ -318,18 +322,18 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
       data-ptz-state={status.state}
       className="bg-gray-800/90 rounded-lg p-3 text-white w-full sm:w-auto"
       role="group"
-      aria-label={`PTZ controls for ${camera.name}`}
+      aria-label={t('ptz.groupLabel', { name: camera.name })}
       aria-disabled={disabled}
       title={disabled ? tip : undefined}
     >
       <div className="flex items-center justify-between mb-2 gap-2">
-        <span className="text-sm font-medium">PTZ</span>
+        <span className="text-sm font-medium" lang="en">{t('ptz.title')}</span>
         <span
           className={`text-xs px-2 py-0.5 rounded-full ${online ? 'bg-green-900/60 text-green-300' : status.state === 'checking' ? 'bg-gray-700 text-gray-300' : 'bg-red-900/60 text-red-300'}`}
           title={tip || (status.model ? `${status.model}${status.firmware ? ` · ${status.firmware}` : ''}` : '')}
           data-testid="ptz-status-badge"
         >
-          {status.state === 'checking' ? 'Checking…' : online ? 'Online' : status.state === 'unreachable' ? UNREACHABLE_TIP : status.state === 'auth' ? 'Auth failed' : 'Error'}
+          {status.state === 'checking' ? t('ptz.badge.checking') : online ? t('ptz.badge.online') : status.state === 'unreachable' ? unreachableTip : status.state === 'auth' ? t('ptz.badge.auth') : t('ptz.badge.error')}
         </span>
       </div>
 
@@ -337,10 +341,11 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
         {/* Direction pad: focusable container for keyboard control */}
         <div
           className="grid grid-cols-3 gap-1.5 outline-none rounded-lg focus:ring-2 focus:ring-blue-400 p-0.5 w-max mx-auto sm:mx-0"
+          dir="ltr"
           tabIndex={disabled ? -1 : 0}
           role="application"
-          aria-label="Pan/tilt pad. Use arrow keys to pan and tilt, + and - to zoom."
-          title={disabled ? tip : 'Hold a direction to move, release to stop. Arrow keys work when focused.'}
+          aria-label={t('ptz.padLabel')}
+          title={disabled ? tip : t('ptz.padHelp')}
           onKeyDown={onPadKeyDown}
           onKeyUp={onPadKeyUp}
           onBlur={() => { if (holdRef.current && String(holdRef.current.id).startsWith('dir:')) stop(); }}
@@ -349,8 +354,8 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
           {dirBtn('left')}
           <button
             type="button"
-            aria-label="Stop"
-            title={disabled ? tip : 'Stop'}
+            aria-label={t('ptz.stopMove')}
+            title={disabled ? tip : t('ptz.stopMove')}
             disabled={disabled}
             className={`${btnBase} bg-red-700 hover:bg-red-600 text-white`}
             onClick={forceStop}
@@ -365,19 +370,19 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
         <div className="flex flex-row sm:flex-col gap-2 items-center justify-center sm:justify-start">
           {hasZoom && (
             <div className="flex flex-row sm:flex-col gap-1.5">
-              <button type="button" aria-label="Zoom in" title={disabled ? tip : 'Zoom in (+)'} disabled={disabled}
+              <button type="button" aria-label={t('ptz.zoomIn')} title={disabled ? tip : t('ptz.zoomInKey')} disabled={disabled}
                 className={cls('zoom:in')} {...holdProps('zoom:in', { pan: 0, tilt: 0, zoom: speed })}>+</button>
-              <button type="button" aria-label="Zoom out" title={disabled ? tip : 'Zoom out (−)'} disabled={disabled}
+              <button type="button" aria-label={t('ptz.zoomOut')} title={disabled ? tip : t('ptz.zoomOutKey')} disabled={disabled}
                 className={cls('zoom:out')} {...holdProps('zoom:out', { pan: 0, tilt: 0, zoom: -speed })}>−</button>
             </div>
           )}
           <label className="flex flex-col items-center text-xs text-gray-300 gap-1 min-w-[88px]">
-            <span>Speed {speed}</span>
+            <span>{t('ptz.speed', { speed })}</span>
             <input
               type="range" min={0} max={SPEEDS.length - 1} step={1} value={speedIdx}
               onChange={(e) => setSpeedIdx(Number(e.target.value))}
               disabled={disabled}
-              aria-label="PTZ speed"
+              aria-label={t('ptz.speedLabel')}
               aria-valuetext={`${speed}`}
               className="w-full h-11 accent-blue-500"
               list={`ptz-speeds-${camera.id}`}
@@ -396,41 +401,41 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
             value={selectedPreset}
             onChange={(e) => setSelectedPreset(e.target.value)}
             disabled={disabled}
-            aria-label="Preset"
-            title={disabled ? tip : 'Presets'}
+            aria-label={t('ptz.preset')}
+            title={disabled ? tip : t('ptz.presets')}
             className="flex-1 min-w-[140px] h-11 bg-gray-700 text-white rounded-lg px-3 text-sm disabled:opacity-40"
           >
-            <option value="">{presets.length ? 'Select preset…' : (online ? 'No presets' : 'Presets')}</option>
+            <option value="">{presets.length ? t('ptz.selectPreset') : (online ? t('ptz.noPresets') : t('ptz.presets'))}</option>
             {presets.map(p => <option key={p.id} value={p.id}>{p.id}: {p.name}</option>)}
           </select>
           <button type="button" onClick={gotoPreset} disabled={disabled || busy || !selectedPreset}
-            title={disabled ? tip : 'Go to preset'}
+            title={disabled ? tip : t('ptz.goTitle')}
             className="h-11 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
-            Go
+            {t('ptz.go')}
           </button>
           <button type="button" onClick={() => setShowSaveForm(v => !v)} disabled={disabled || busy}
-            title={disabled ? tip : 'Save current position as a preset'}
+            title={disabled ? tip : t('ptz.saveAsTitle')}
             className="h-11 px-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
-            Save as
+            {t('ptz.saveAs')}
           </button>
           <button type="button" onClick={() => setConfirmDelete(true)} disabled={disabled || busy || !selectedPreset}
-            title={disabled ? tip : 'Delete selected preset'}
+            title={disabled ? tip : t('ptz.deleteTitle')}
             className="h-11 px-3 rounded-lg bg-red-900/60 hover:bg-red-800 text-red-200 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
-            Delete
+            {t('common:actions.delete')}
           </button>
         </div>
         {showSaveForm && (
           <form onSubmit={savePreset} className="mt-2 flex gap-2">
             <input
               type="text" value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)}
-              placeholder={selectedPreset ? `Overwrite preset #${selectedPreset} as…` : 'New preset name'}
+              placeholder={selectedPreset ? t('ptz.overwritePlaceholder', { id: selectedPreset }) : t('ptz.newPresetPlaceholder')}
               maxLength={32} autoFocus
-              aria-label="Preset name"
+              aria-label={t('ptz.presetName')}
               className="flex-1 min-w-0 h-11 bg-gray-700 text-white rounded-lg px-3 text-sm"
             />
             <button type="submit" disabled={busy || !newPresetName.trim()}
               className="h-11 px-3 rounded-lg bg-green-700 hover:bg-green-600 text-sm font-medium disabled:opacity-40">
-              {busy ? 'Saving…' : 'Save'}
+              {busy ? t('common:actions.saving') : t('common:actions.save')}
             </button>
           </form>
         )}
@@ -440,17 +445,17 @@ export default function PtzControls({ camera, token, showError, showSuccess, onS
         <p className="mt-2 text-xs text-amber-300" role="status">
           {lastError || tip}
           {!online && (
-            <button type="button" onClick={fetchStatus} className="ml-2 underline text-blue-300 hover:text-blue-200">Retry</button>
+            <button type="button" onClick={fetchStatus} className="ms-2 underline text-blue-300 hover:text-blue-200">{t('common:actions.retry')}</button>
           )}
         </p>
       )}
 
       <ConfirmDialog
         open={confirmDelete}
-        title="Delete preset"
-        body={<>Delete preset <strong>{presetName(selectedPreset)}</strong> from the camera? This cannot be undone.</>}
+        title={t('ptz.deleteConfirm.title')}
+        body={<Trans t={t} i18nKey="ptz.deleteConfirm.body" values={{ name: presetName(selectedPreset) }} components={{ b: <strong /> }} />}
         variant="danger"
-        confirmLabel="Delete"
+        confirmLabel={t('common:actions.delete')}
         busy={busy}
         onConfirm={deletePreset}
         onCancel={() => setConfirmDelete(false)}

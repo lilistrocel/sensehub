@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import i18n from '../i18n';
 
 /**
  * Loads an image that lives behind bearer-token auth.
@@ -69,7 +70,7 @@ export function useAuthedImage(url, { enabled = true, refreshMs = 0 } = {}) {
       .catch((err) => {
         if (cancelled || err.name === 'AbortError') return;
         setSrc(null);
-        setError(err.message || 'Failed to load image');
+        setError(err.message || i18n.t('cameras:snapshot.loadFailed'));
         setLoading(false);
       });
 

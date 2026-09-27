@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { StatusPill } from '../../ui';
 
 /**
@@ -6,6 +7,7 @@ import { StatusPill } from '../../ui';
  * Status is shape + colour + text (FARM-APP-STANDARDS): ok = filled circle,
  * caution = triangle, alarm = square, unknown = dashed hollow circle in the
  * neutral colour — never green, so "no data" can't read as "fine".
+ * `text` is the English reference; the UI shows common:state.<key>.
  */
 export const SECTION_STATUS = {
   ok: { pill: 'ok', filled: true, rail: 'ok', text: 'ok' },
@@ -25,6 +27,7 @@ const COLOR = {
 
 /** Small inline shape; `label` adds screen-reader text ("status: caution"). */
 export function StatusMark({ status, label = true, className = '' }) {
+  const { t } = useTranslation('agronomist');
   const s = statusOf(status);
   return (
     <span className={`inline-flex items-center shrink-0 ${COLOR[s]} ${className}`} data-status={s}>
@@ -34,19 +37,20 @@ export function StatusMark({ status, label = true, className = '' }) {
         {s === 'alarm' && <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill="currentColor" />}
         {s === 'unknown' && <circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeDasharray="2.2 1.6" />}
       </svg>
-      {label && <span className="sr-only">status: {SECTION_STATUS[s].text}</span>}
+      {label && <span className="sr-only">{t('sectionStatus.srLabel', { status: t(`common:state.${s}`) })}</span>}
     </span>
   );
 }
 
 export function SectionStatusPill({ status, className = '' }) {
+  const { t } = useTranslation('agronomist');
   const s = statusOf(status);
   const cfg = SECTION_STATUS[s];
   return (
     <StatusPill
       state={cfg.pill}
       filled={cfg.filled}
-      text={cfg.text}
+      text={t(`common:state.${s}`)}
       className={`${s === 'unknown' ? '!border-dashed' : ''} ${className}`.trim()}
       data-section-status={s}
     />

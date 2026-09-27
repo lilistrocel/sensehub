@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { getChannelDisplayName, getInterlockPairs, getInterlockPartnerLabel } from '../../utils/channelUtils';
 import InterlockBadge from '../InterlockBadge';
 import { parseRegisterMappings } from './automationSummary';
@@ -14,6 +15,7 @@ export default function TransitionEditor({
   equipment, equipmentId, setEquipmentId, states, setStates,
   delay, setDelay, duration, setDuration, showTiming = true,
 }) {
+  const { t } = useTranslation('automations');
   const relays = equipment.filter(e => parseRegisterMappings(e).some(x => x.type === 'coil' && x.access === 'readwrite'));
   const selectedEq = relays.find(eq => eq.id === parseInt(equipmentId, 10));
   const coils = parseRegisterMappings(selectedEq)
@@ -32,7 +34,10 @@ export default function TransitionEditor({
   const findCoil = (reg) => coils.find(c => (c.register ?? c.address) == reg) || {};
   const interlockConflicts = getInterlockPairs(selectedEq?.register_mappings)
     .filter(([a, b]) => states[a] === true && states[b] === true)
-    .map(([a, b]) => `${getChannelDisplayName(findCoil(a))} (ch ${a}) and ${getChannelDisplayName(findCoil(b))} (ch ${b})`);
+    .map(([a, b]) => t('transition.interlockPair', {
+      a: `\u2068${getChannelDisplayName(findCoil(a))}\u2069`, chA: a,
+      b: `\u2068${getChannelDisplayName(findCoil(b))}\u2069`, chB: b,
+    }));
 
   const segBtn = (active, tone) => `flex-1 min-h-[40px] px-2 text-xs font-semibold rounded-md border transition-colors ${
     active
@@ -46,39 +51,39 @@ export default function TransitionEditor({
 
   return (
     <div className="w-full bg-field/60 border border-line rounded-md p-3 space-y-3">
-      <p className={HELP}>All selected coils flip in a single Modbus frame, so there is no timing drift between channels.</p>
+      <p className={HELP}>{t('transition.help')}</p>
 
       <div className={`grid grid-cols-1 ${showTiming ? 'sm:grid-cols-3' : ''} gap-3`}>
         <div>
-          <label className={FIELD_LABEL}>Relay board</label>
+          <label className={FIELD_LABEL}>{t('transition.relayBoard')}</label>
           <select value={equipmentId} onChange={e => { setEquipmentId(e.target.value); setStates({}); }} className={INPUT_SM}>
-            <option value="">Select relay equipment...</option>
+            <option value="">{t('transition.selectRelay')}</option>
             {relays.map(eq => <option key={eq.id} value={eq.id}>{eq.name}</option>)}
           </select>
         </div>
         {showTiming && (
           <>
             <div>
-              <label className={FIELD_LABEL}>Delay (s, optional)</label>
-              <input type="number" min="0" inputMode="numeric" value={delay} onChange={e => setDelay(e.target.value)} placeholder="0" className={INPUT_SM} />
+              <label className={FIELD_LABEL}>{t('transition.delay')}</label>
+              <input type="number" min="0" inputMode="numeric" dir="ltr" value={delay} onChange={e => setDelay(e.target.value)} placeholder="0" className={INPUT_SM} />
             </div>
             <div>
-              <label className={FIELD_LABEL}>Auto-revert OFF (s, optional)</label>
-              <input type="number" min="0" inputMode="numeric" value={duration} onChange={e => setDuration(e.target.value)} placeholder="0" className={INPUT_SM} />
+              <label className={FIELD_LABEL}>{t('transition.autoRevert')}</label>
+              <input type="number" min="0" inputMode="numeric" dir="ltr" value={duration} onChange={e => setDuration(e.target.value)} placeholder="0" className={INPUT_SM} />
             </div>
           </>
         )}
       </div>
 
       {interlockConflicts.length > 0 && (
-        <div role="alert" className="p-2 rounded-md border border-alarm-300 border-l-[3px] border-l-state-alarm bg-alarm-50 text-alarm-700 dark:bg-alarm-900/30 dark:border-alarm-700 dark:text-alarm-300 text-xs">
-          Interlock: {interlockConflicts.join('; ')} can never be ON at the same time. This transition will be rejected.
+        <div role="alert" className="p-2 rounded-md border border-alarm-300 border-s-[3px] border-s-state-alarm bg-alarm-50 text-alarm-700 dark:bg-alarm-900/30 dark:border-alarm-700 dark:text-alarm-300 text-xs">
+          {t('transition.interlock', { pairs: interlockConflicts.join('; ') })}
         </div>
       )}
 
       {coils.length > 0 && (
         <div>
-          <p className={`${FIELD_LABEL} mb-2`}>Channels: pick the target state for each (— = leave alone)</p>
+          <p className={`${FIELD_LABEL} mb-2`}>{t('transition.channelsHelp')}</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {coils.map(c => {
               const addr = c.register ?? c.address;
@@ -87,14 +92,14 @@ export default function TransitionEditor({
               return (
                 <div key={addr} className="bg-panel border border-line rounded-md p-2">
                   <p className="text-xs font-semibold text-ink truncate flex items-center gap-1" title={getChannelDisplayName(c)}>
-                    <span className="truncate">{getChannelDisplayName(c)}</span>
+                    <span className="truncate" dir="auto">{getChannelDisplayName(c)}</span>
                     {partner && <InterlockBadge partnerLabel={partner} />}
                   </p>
-                  <p className="text-[10px] font-mono tabular text-muted">ch {addr}</p>
+                  <p className="text-[10px] font-mono tabular text-muted">{t('transition.ch', { n: addr })}</p>
                   <div className="flex gap-1 mt-1">
-                    <button type="button" onClick={() => setCoil(addr, true)} className={segBtn(current === true, 'on')} aria-pressed={current === true}>ON</button>
-                    <button type="button" onClick={() => setCoil(addr, false)} className={segBtn(current === false, 'off')} aria-pressed={current === false}>OFF</button>
-                    <button type="button" onClick={() => clearCoil(addr)} className={segBtn(current === undefined, 'skip')} aria-pressed={current === undefined} aria-label="Leave alone">—</button>
+                    <button type="button" onClick={() => setCoil(addr, true)} className={segBtn(current === true, 'on')} aria-pressed={current === true}>{t('common:status.on')}</button>
+                    <button type="button" onClick={() => setCoil(addr, false)} className={segBtn(current === false, 'off')} aria-pressed={current === false}>{t('common:status.off')}</button>
+                    <button type="button" onClick={() => clearCoil(addr)} className={segBtn(current === undefined, 'skip')} aria-pressed={current === undefined} aria-label={t('transition.leaveAlone')}>—</button>
                   </div>
                 </div>
               );

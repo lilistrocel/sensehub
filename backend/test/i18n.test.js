@@ -137,10 +137,10 @@ const call = (method, p, token, body, headers = {}) => fetch(base + p, {
   body: body === undefined ? undefined : JSON.stringify(body),
 }).then(async r => ({ status: r.status, body: await r.json() }));
 
-test('preferences: default en, set tr, reject invalid, drives req.lang', async () => {
+test('preferences: default null (never chosen), set tr, reject invalid, drives req.lang', async () => {
   let r = await call('GET', '/users/me/preferences', operator.token);
   assert.equal(r.status, 200);
-  assert.equal(r.body.language, 'en');
+  assert.equal(r.body.language, null, 'never chosen → null (frontend uses the device language)');
   r = await call('PUT', '/users/me/preferences', operator.token, { language: 'fr' });
   assert.equal(r.status, 400);
   r = await call('PUT', '/users/me/preferences', operator.token, { language: 'tr' });

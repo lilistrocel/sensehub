@@ -1,1 +1,127 @@
-{}
+{
+  "title": "Röle olayları",
+  "subtitle": "Her röle AÇIK/KAPALI geçişinin denetim kaydı; hesaplanan çalışma süreleri ve takılı kalma güvenlik kontrolleriyle.",
+  "runSafetyCheck": "Güvenlik kontrolünü şimdi çalıştır",
+  "tab": {
+    "runs": "Bölge çalışmaları (eşlenmiş)",
+    "events": "Ham olaylar",
+    "safety": "Güvenlik izleme servisi"
+  },
+  "ch": "CH{{n}}",
+  "source": {
+    "manual": "manuel",
+    "automation": "otomasyon",
+    "automation_auto_off": "otomasyon otomatik kapatma",
+    "watchdog_force_off": "izleme servisi zorla kapatma",
+    "all_channels": "tüm kanallar",
+    "automation_transition": "otomasyon geçişi",
+    "manual_all": "manuel (tüm kanallar)",
+    "manual_auto_off": "manuel otomatik kapatma",
+    "scheduler": "zamanlayıcı",
+    "irrigation_run": "sulama çalışması",
+    "stop_all": "Tümünü Durdur",
+    "stop_irrigation": "Sulamayı Durdur",
+    "emergency_stop": "acil durdurma",
+    "interlock": "kilitleme",
+    "interlock_conflict": "kilitleme çakışması",
+    "flow_watch_shutdown": "debi izleme kapatması",
+    "flow_watch_retry": "debi izleme yeniden deneme",
+    "flow_watch_retry_auto_off": "debi izleme yeniden deneme otomatik kapatma",
+    "dose_controller": "dozlama denetleyicisi",
+    "dose_program": "dozlama programı",
+    "dose_program_end": "dozlama programı sonu",
+    "dose_cycle": "dozlama döngüsü",
+    "dose_run": "dozlama çalışması",
+    "ph_controller": "pH denetleyicisi"
+  },
+  "col": {
+    "automation": "Otomasyon"
+  },
+  "stats": {
+    "currentlyOn": "Şu an AÇIK",
+    "allClear": "sorun yok",
+    "channels_one": "{{count}} kanal",
+    "channels_other": "{{count}} kanal",
+    "forceOff24h": "Zorla kapatma olayları (24 sa)",
+    "forceOff7d": "Zorla kapatma olayları (7 gün)",
+    "checkAlerts": "⚠ Alarmları kontrol edin",
+    "noneHealthy": "yok — sağlıklı",
+    "pastWeek": "geçen hafta",
+    "none": "yok",
+    "total24h": "Toplam olay (24 sa)",
+    "allSources": "tüm kaynaklar",
+    "channelsOn": "Şu an AÇIK olan kanallar",
+    "onFor": "{{duration}} süredir AÇIK",
+    "src": "kaynak {{source}}"
+  },
+  "filter": {
+    "equipment": "Ekipman",
+    "channel": "Kanal",
+    "any": "tümü",
+    "source": "Kaynak",
+    "all": "Tümü",
+    "from": "Başlangıç",
+    "to": "Bitiş",
+    "clear": "Temizle"
+  },
+  "runs": {
+    "loading": "Çalışmalar yükleniyor…",
+    "empty": "Çalışma bulunamadı.",
+    "col": {
+      "started": "Başladı",
+      "equipmentCh": "Ekipman / Kanal",
+      "duration": "Süre",
+      "onSource": "Açma kaynağı",
+      "offSource": "Kapatma kaynağı"
+    },
+    "running": "çalışıyor…",
+    "overrun": "süre aşımı"
+  },
+  "events": {
+    "loading": "Olaylar yükleniyor…",
+    "empty": "Olay bulunamadı.",
+    "col": {
+      "time": "Zaman",
+      "state": "Durum"
+    }
+  },
+  "safety": {
+    "loading": "Yapılandırma yükleniyor…",
+    "enable": "Güvenlik izleme servisini etkinleştir",
+    "enableHelp": "Etkinken, arka uç yapılandırılmış azami süreden uzun süre AÇIK kalan her röle kanalını zorla KAPATIR, bir izleme olayı kaydeder ve alarm üretir. Bu; çöken zamanlayıcılar, kaybolan Modbus yazmaları ve zamanlayıcı hataları için bir güvenlik ağıdır.",
+    "useActionDuration": "Eşik olarak eylem süresini kullan (önerilir)",
+    "useActionDurationHelp": "AÇIK olduğunda izleme servisi kanalı açan otomasyonu okur, onun <code>duration_seconds</code> değerini (veya geçiş adımları arasındaki aralığı) bulur ve <b>beklenen süre + tolerans süresi</b> dolunca zorla KAPATIR. 4 dakikalık bir bölge süresini {{max}} yerine en fazla {{grace}} aşar. Beklenen süre çıkarılamazsa (manuel açmalar, silinmiş otomasyonlar vb.) aşağıdaki sabit eşiklere geri döner.",
+    "checkInterval": "Kontrol aralığı (sn)",
+    "checkIntervalHelp": "Varsayılan 30. İzleme servisinin tarama sıklığı.",
+    "grace": "Tolerans süresi (sn)",
+    "graceHelp": "Beklenen süreye eklenir. Kontrol aralığından küçük olmamalıdır.",
+    "minThreshold": "Asgari eşik (sn)",
+    "minThresholdHelp": "Alt sınır — bunun altında asla zorla KAPATMA yapılmaz.",
+    "defaultMax": "Yedek varsayılan azami AÇIK kalma süresi (saniye)",
+    "defaultMaxHelp": "Beklenen süre çıkarılamadığında kullanılır (manuel açmalar, silinmiş otomasyonlar). Varsayılan 1500 (25 dk).",
+    "perEquipment": "Ekipmana özel ayarlar",
+    "perEquipmentHelp": "Belirli bir röle kartı genel varsayılandan daha uzun döngüler çalıştırıyorsa bunu kullanın.",
+    "ignore": "Yok say",
+    "defaultPlaceholder": "varsayılan {{value}} sn",
+    "seconds": "saniye",
+    "save": "Güvenlik yapılandırmasını kaydet"
+  },
+  "toast": {
+    "watchdogActed_one": "İzleme servisi takılı kalan {{count}} kanala müdahale etti",
+    "watchdogActed_other": "İzleme servisi takılı kalan {{count}} kanala müdahale etti",
+    "watchdogClean": "İzleme servisi çalıştı — takılı kanal bulunamadı",
+    "safetySaved": "Güvenlik yapılandırması kaydedildi"
+  },
+  "err": {
+    "loadEquipment": "Ekipman listesi yüklenemedi",
+    "loadEquipmentWith": "Ekipman listesi yüklenemedi: {{error}}",
+    "loadStats": "Röle olayı istatistikleri yüklenemedi",
+    "loadStatsWith": "Röle olayı istatistikleri yüklenemedi: {{error}}",
+    "loadRuns": "Çalışmalar yüklenemedi",
+    "loadEvents": "Olaylar yüklenemedi",
+    "loadSafety": "Röle güvenlik yapılandırması yüklenemedi",
+    "loadSafetyWith": "Röle güvenlik yapılandırması yüklenemedi: {{error}}",
+    "failed": "Başarısız",
+    "saveFailed": "Kaydetme başarısız: {{error}}"
+  }
+}

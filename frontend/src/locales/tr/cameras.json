@@ -1,1 +1,167 @@
-{}
+{
+  "title": "Kameralar",
+  "addCamera": "+ Kamera ekle",
+  "status": {
+    "online": "çevrim içi",
+    "offline": "çevrim dışı",
+    "error": "hata"
+  },
+  "empty": {
+    "title": "Henüz kamera yapılandırılmadı",
+    "addFirst": "İlk kameranızı ekleyin"
+  },
+  "snapshot": {
+    "loading": "Anlık görüntü yükleniyor…",
+    "unavailable": "Anlık görüntü yok",
+    "unavailableWithError": "Anlık görüntü yok ({{error}})",
+    "loadFailed": "Görüntü yüklenemedi"
+  },
+  "capture": {
+    "none": "Henüz kayıt yok",
+    "last": "Son kayıt {{time}}",
+    "stale": "Eski kayıt — son kaydedilen {{time}}"
+  },
+  "card": {
+    "openLive": "Canlı görüntüyü aç",
+    "connectionError": "Bağlantı hatası",
+    "offline": "Çevrim dışı",
+    "dhcpTip": "İpucu: kamera DHCP kullanıyorsa IP adresi değişmiş olabilir — DHCP rezervasyonu veya sabit IP verin, sonra adresi burada güncelleyin.",
+    "livePtz": "Canlı / PTZ",
+    "live": "Canlı",
+    "capturing": "Kaydediliyor…",
+    "captureNow": "Şimdi kaydet",
+    "history": "Geçmiş",
+    "testing": "Test ediliyor…",
+    "test": "Test et"
+  },
+  "toast": {
+    "loadFailed": "Kameralar alınamadı (HTTP {{status}})",
+    "snapshotsFailed": "Kayıtlı anlık görüntüler yüklenemedi",
+    "snapshotsFailedWithError": "Kayıtlı anlık görüntüler yüklenemedi: {{error}}",
+    "historyFailed": "Anlık görüntü geçmişi yüklenemedi",
+    "historyFailedWithError": "Anlık görüntü geçmişi yüklenemedi: {{error}}",
+    "captureFailed": "Kayıt başarısız",
+    "captured": "{{name}} için anlık görüntü kaydedildi",
+    "addFailed": "Kamera eklenemedi",
+    "added": "Kamera eklendi",
+    "updateFailed": "Kamera güncellenemedi",
+    "updated": "Kamera güncellendi",
+    "deleteFailed": "Kamera silinemedi",
+    "deleted": "Kamera silindi",
+    "testFailed": "Bağlantı testi başarısız"
+  },
+  "form": {
+    "addTitle": "Kamera Ekle",
+    "editTitle": "Kamerayı Düzenle",
+    "adding": "Ekleniyor…",
+    "addSubmit": "Kamera Ekle",
+    "saveChanges": "Değişiklikleri Kaydet",
+    "name": "Ad",
+    "ip": "IP adresi",
+    "description": "Açıklama",
+    "rtspPort": "RTSP portu",
+    "httpPort": "HTTP portu",
+    "manufacturer": "Üretici",
+    "model": "Model",
+    "username": "Kullanıcı adı",
+    "password": "Parola",
+    "passwordUnchanged": "(boş bırakılırsa değişmez)",
+    "passwordNotSaved": "Kayıtlı değil — PTZ için girin",
+    "noPasswordHelp": "Bu kamera için kayıtlı parola yok. PTZ, go2rtc akış parolasını kullanıyor; çalışmaya devam etmesi için parolayı buraya kaydedin.",
+    "streamPath": "RTSP akış yolu",
+    "streamPathHelp": "Hikvision varsayılanı: /Streaming/Channels/101 (ana) veya /102 (alt)",
+    "enabled": "Etkin"
+  },
+  "delete": {
+    "title": "Bu kamera silinsin mi?",
+    "body": "Kamera kaydı ve go2rtc'deki akışı kaldırılır. Kayıtlı anlık görüntüler diskte kalır.",
+    "confirm": "Kamerayı sil"
+  },
+  "history": {
+    "title": "{{name}} — Anlık Görüntü Geçmişi",
+    "count_one": "{{count}} anlık görüntü (4 saatte bir kaydedilir)",
+    "count_other": "{{count}} anlık görüntü (4 saatte bir kaydedilir)",
+    "empty": "Henüz anlık görüntü yok. İlk kayıt açılıştan 1 dakika sonra, ardından 4 saatte bir yapılır."
+  },
+  "live": {
+    "dialogLabel": "{{name}} canlı görüntü",
+    "close": "Canlı görüntüyü kapat",
+    "authRejected": "Kamera akış kimlik bilgilerini reddetti — kayıtlı parolayı kontrol edin",
+    "unreachableLastSeen": "Kameraya ulaşılamıyor — son görülme {{time}}",
+    "unreachableNoSnapshot": "Kameraya ulaşılamıyor — kayıtlı anlık görüntü yok",
+    "connecting": "{{name}} kamerasına bağlanılıyor…",
+    "mjpegMode": "MJPEG yedek modu",
+    "tryMse": "MSE'yi yeniden dene",
+    "mseStream": "MSE canlı akış",
+    "unavailable": "Canlı akış kullanılamıyor",
+    "switchMjpeg": "MJPEG'e geç",
+    "fail": {
+      "streamFailed": "Akış başarısız",
+      "noVideo": "Görüntü alınamadı",
+      "wsFailed": "WebSocket bağlantısı başarısız",
+      "streamError": "Akış hatası",
+      "closedEarly": "Görüntü gelmeden akış kapandı",
+      "mjpegFailed": "MJPEG akışı başarısız"
+    }
+  },
+  "ptz": {
+    "title": "PTZ",
+    "unreachable": "Kameraya ulaşılamıyor",
+    "checkingCamera": "Kamera kontrol ediliyor…",
+    "authRejected": "Kamera parolayı reddetti",
+    "authRejectedWith": "Kamera parolayı reddetti — {{message}}",
+    "error": {
+      "generic": "PTZ hatası",
+      "commandFailed": "PTZ {{path}} başarısız ({{status}})",
+      "saveFailed": "Kaydetme başarısız ({{status}})",
+      "deleteFailed": "Silme başarısız ({{status}})"
+    },
+    "toast": {
+      "moving": "“{{name}}” ön ayarına gidiliyor",
+      "saved": "“{{name}}” ön ayarı #{{id}} olarak kaydedildi",
+      "deleted": "“{{name}}” ön ayarı silindi"
+    },
+    "dir": {
+      "up": "Yukarı eğ",
+      "down": "Aşağı eğ",
+      "left": "Sola çevir",
+      "right": "Sağa çevir",
+      "upleft": "Sol üste çevir",
+      "upright": "Sağ üste çevir",
+      "downleft": "Sol alta çevir",
+      "downright": "Sağ alta çevir"
+    },
+    "groupLabel": "{{name}} için PTZ kontrolleri",
+    "badge": {
+      "checking": "Kontrol ediliyor…",
+      "online": "Çevrim içi",
+      "auth": "Kimlik doğrulama hatası",
+      "error": "Hata"
+    },
+    "padLabel": "Çevirme/eğme pedi. Çevirmek ve eğmek için ok tuşlarını, yakınlaştırmak için + ve - tuşlarını kullanın.",
+    "padHelp": "Hareket için bir yönü basılı tutun, durdurmak için bırakın. Odaklanınca ok tuşları çalışır.",
+    "stopMove": "Hareketi durdur",
+    "zoomIn": "Yakınlaştır",
+    "zoomOut": "Uzaklaştır",
+    "zoomInKey": "Yakınlaştır (+)",
+    "zoomOutKey": "Uzaklaştır (−)",
+    "speed": "Hız {{speed}}",
+    "speedLabel": "PTZ hızı",
+    "preset": "Ön ayar",
+    "presets": "Ön ayarlar",
+    "selectPreset": "Ön ayar seçin…",
+    "noPresets": "Ön ayar yok",
+    "go": "Git",
+    "goTitle": "Ön ayara git",
+    "saveAs": "Farklı kaydet",
+    "saveAsTitle": "Mevcut konumu ön ayar olarak kaydet",
+    "deleteTitle": "Seçili ön ayarı sil",
+    "overwritePlaceholder": "#{{id}} ön ayarının üzerine yaz…",
+    "newPresetPlaceholder": "Yeni ön ayar adı",
+    "presetName": "Ön ayar adı",
+    "deleteConfirm": {
+      "title": "Ön ayarı sil",
+      "body": "<b>{{name}}</b> ön ayarı kameradan silinsin mi? Bu işlem geri alınamaz."
+    }
+  }
+}

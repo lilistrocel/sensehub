@@ -1,11 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 /**
  * 404 Not Found page component
  * Displays a user-friendly message when users navigate to invalid routes
  */
 export default function NotFound() {
+  const { t } = useTranslation('notFound');
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center">
@@ -31,13 +33,12 @@ export default function NotFound() {
 
         {/* Error Title */}
         <h2 className="text-2xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
-          Page Not Found
+          {t('title')}
         </h2>
 
         {/* Helpful Message */}
         <p className="text-gray-500 dark:text-gray-400 mb-8">
-          Oops! The page you're looking for doesn't exist or has been moved.
-          Please check the URL or navigate back to the dashboard.
+          {t('body')}
         </p>
 
         {/* Action Buttons */}
@@ -48,10 +49,11 @@ export default function NotFound() {
             className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
           >
             <svg
-              className="h-5 w-5 mr-2"
+              className="h-5 w-5 me-2"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -60,7 +62,7 @@ export default function NotFound() {
                 d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
               />
             </svg>
-            Go to Dashboard
+            {t('goDashboard')}
           </Link>
 
           {/* Go Back Button */}
@@ -69,10 +71,11 @@ export default function NotFound() {
             className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 dark:border-gray-600 text-base font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
           >
             <svg
-              className="h-5 w-5 mr-2"
+              className="h-5 w-5 me-2 rtl:-scale-x-100"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -81,14 +84,14 @@ export default function NotFound() {
                 d="M10 19l-7-7m0 0l7-7m-7 7h18"
               />
             </svg>
-            Go Back
+            {t('goBack')}
           </button>
         </div>
 
         {/* SenseHub Branding */}
         <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
           <p className="text-sm text-gray-400">
-            A20Core - SenseHub - Edge Computing Platform for Industrial IoT
+            <span lang="en">A20Core</span> - <span lang="en">SenseHub</span> - {t('tagline')}
           </p>
         </div>
       </div>

@@ -1,21 +1,27 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Button, StatusPill } from '../../ui';
 
 /**
  * Turn the raw error text of a failed plan into one operator-readable line.
- * Returns { reason, kind } where kind is 'credits' | 'auth' | 'other'.
+ * Returns { reason, kind, key } where kind is 'credits' | 'auth' | 'other'.
+ * `key` (planner:failure.reason.<key>) is set when the line is ours to
+ * translate; `reason` keeps the English text (tests/logs) and, for an
+ * unclassified provider error, the raw error itself (never translated).
+ * The patterns match the AI provider's raw English error text, not a
+ * localized SenseHub message.
  */
 export function classifyPlanError(text) {
   const s = String(text || '').trim();
-  if (!s) return { reason: 'No error detail recorded', kind: 'other' };
+  if (!s) return { reason: 'No error detail recorded', kind: 'other', key: 'none' };
   if (/credit balance/i.test(s)) {
-    return { reason: 'Anthropic API credits exhausted — top up at Plans & Billing', kind: 'credits' };
+    return { reason: 'Anthropic API credits exhausted — top up at Plans & Billing', kind: 'credits', key: 'credits' };
   }
   if (/\b40[13]\b|unauthori[sz]ed|forbidden|invalid (api[ _-]?key|x-api-key)|authentication_error/i.test(s)) {
-    return { reason: 'API key rejected', kind: 'auth' };
+    return { reason: 'API key rejected', kind: 'auth', key: 'auth' };
   }
   const oneLine = s.replace(/\s+/g, ' ');
-  return { reason: oneLine.length > 120 ? `${oneLine.slice(0, 120)}…` : oneLine, kind: 'other' };
+  return { reason: oneLine.length > 120 ? `${oneLine.slice(0, 120)}…` : oneLine, kind: 'other', key: null };
 }
 
 /**
@@ -42,22 +48,22 @@ export function leadingFailureRun(plans) {
  * reason, raw text behind a disclosure, and a Retry that re-runs generation.
  */
 export default function FailureBanner({ run, sinceLabel, onRetry, retrying = false, canRetry = true }) {
+  const { t } = useTranslation('planner');
   const [showRaw, setShowRaw] = useState(false);
   if (!run) return null;
-  const { reason } = classifyPlanError(run.error);
+  const { reason, key } = classifyPlanError(run.error);
   const n = run.count;
   return (
     <Card rail="alarm" padding="md" className="mb-4" role="alert" data-testid="planner-failure-banner">
       <div className="flex flex-col sm:flex-row sm:items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1">
-            <StatusPill state="alarm" filled>Generation failing</StatusPill>
+            <StatusPill state="alarm" filled>{t('failure.pill')}</StatusPill>
           </div>
           <p className="font-display text-base font-semibold text-ink">
-            Plan generation has failed {n} day{n === 1 ? '' : 's'} in a row since{' '}
-            <span className="font-mono tabular">{sinceLabel || run.since}</span>
+            {t('failure.headline', { count: n, since: sinceLabel || run.since })}
           </p>
-          <p className="text-sm text-ink mt-1" data-testid="planner-failure-reason">{reason}</p>
+          <p className="text-sm text-ink mt-1" data-testid="planner-failure-reason" dir={key ? undefined : 'auto'}>{key ? t(`failure.reason.${key}`) : reason}</p>
           {run.error && (
             <div className="mt-2">
               <button
@@ -65,10 +71,10 @@ export default function FailureBanner({ run, sinceLabel, onRetry, retrying = fal
                 onClick={() => setShowRaw((v) => !v)}
                 className="text-xs font-semibold text-muted hover:text-ink underline"
               >
-                {showRaw ? 'Hide raw error' : 'Show raw error'}
+                {showRaw ? t('failure.hideRaw') : t('failure.showRaw')}
               </button>
               {showRaw && (
-                <pre className="mt-1 text-xs font-mono whitespace-pre-wrap break-words bg-field border border-line rounded-md p-2 max-h-40 overflow-y-auto text-muted">
+                <pre dir="ltr" className="text-start mt-1 text-xs font-mono whitespace-pre-wrap break-words bg-field border border-line rounded-md p-2 max-h-40 overflow-y-auto text-muted">
                   {run.error}
                 </pre>
               )}
@@ -82,10 +88,10 @@ export default function FailureBanner({ run, sinceLabel, onRetry, retrying = fal
             className="w-full sm:w-auto"
             onClick={onRetry}
             disabled={!canRetry || retrying}
-            title={!canRetry ? 'Operators and admins can retry generation' : 'Run plan generation again now'}
+            title={!canRetry ? t('failure.retryNotAllowed') : t('failure.retryTitle')}
             data-testid="planner-retry"
           >
-            {retrying ? 'Retrying…' : 'Retry'}
+            {retrying ? t('failure.retrying') : t('common:actions.retry')}
           </Button>
         </div>
       </div>

@@ -1,1 +1,190 @@
-{}
+{
+  "title": "Logs",
+  "subtitle": "Who changed or pressed what, and what the system did — newest first.",
+  "forbidden": "The activity log is visible to operators and admins.",
+  "exportCsv": "Export CSV",
+  "exporting": "Exporting…",
+  "quickFilters": "Quick filters",
+  "timeRange": "Time range",
+  "preset": {
+    "irrigation-today": "Who changed irrigation today",
+    "stops": "Stop All / emergency presses",
+    "settings": "Settings changes",
+    "failed-logins": "Failed sign-ins"
+  },
+  "range": {
+    "today": "Today",
+    "24h": "24 h",
+    "7d": "7 days",
+    "30d": "30 days",
+    "custom": "Custom"
+  },
+  "filters": {
+    "from": "From",
+    "to": "To (empty = now)",
+    "searchPlaceholder": "Zone 4, Stop All, fan…",
+    "toggle": "Filters",
+    "toggleCount": "Filters ({{n}})",
+    "who": "Who",
+    "everyone": "Everyone",
+    "people": "People",
+    "system": "System",
+    "user": "User",
+    "anyUser": "Any user",
+    "category": "Category",
+    "allCategories": "All categories",
+    "target": "Equipment / automation",
+    "anything": "Anything",
+    "equipmentGroup": "Equipment",
+    "automationsGroup": "Automations",
+    "actionChip": "action:",
+    "severityChip": "severity:",
+    "clear": "Clear filters"
+  },
+  "summary": {
+    "shown": "{{n}} shown",
+    "people": "{{n}} by people",
+    "system": "{{n}} system",
+    "problems": "{{n}} failed / refused / critical",
+    "live": "live"
+  },
+  "legend": {
+    "title": "Legend",
+    "done": "Done",
+    "info": "Info",
+    "notable": "Notable / refused",
+    "failed": "Failed / critical",
+    "unconfirmed": "Unconfirmed"
+  },
+  "auditStart": {
+    "from": "People's actions are fully recorded from {{time}}. Earlier entries marked “Unknown user” come from the request log (device and path only).",
+    "none": "People's actions are recorded from the next change on; earlier entries marked “Unknown user” come from the request log (device and path only)."
+  },
+  "errors": {
+    "loadFailed": "Could not load the log: {{error}}"
+  },
+  "empty": {
+    "any": "Nothing matches these filters.",
+    "today": "Nothing matches these filters today.",
+    "lookBack": "Look further back"
+  },
+  "footer": {
+    "loaded_one": "{{count}} entry loaded",
+    "loaded_other": "{{count}} entries loaded",
+    "loadOlder": "Load older"
+  },
+  "toast": {
+    "loadOlderFailed": "Could not load older entries",
+    "exportFailed": "CSV export failed"
+  },
+  "category": {
+    "irrigation": "Irrigation",
+    "dosing": "Dosing",
+    "climate": "Climate",
+    "automations": "Automations",
+    "equipment": "Equipment",
+    "settings": "Settings",
+    "users": "Users",
+    "auth": "Sign-in",
+    "alerts": "Alerts",
+    "ai": "AI",
+    "cameras": "Cameras",
+    "lab": "Lab",
+    "crops": "Crops",
+    "tasks": "Tasks",
+    "system": "System"
+  },
+  "mark": {
+    "unknown": "Unknown",
+    "failed": "Failed",
+    "failedCode": "Failed {{code}}",
+    "critical": "Critical",
+    "refused": "Refused",
+    "refusedCode": "Refused {{code}}",
+    "unconfirmed": "Unconfirmed",
+    "notable": "Notable",
+    "done": "Done",
+    "info": "Info"
+  },
+  "actor": {
+    "unknownUser": "Unknown user",
+    "system": "System"
+  },
+  "day": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "row": {
+    "writes_one": "{{count}} write",
+    "writes_other": "{{count}} writes"
+  },
+  "drawer": {
+    "closeDetails": "Close details",
+    "when": "When",
+    "lasted": "lasted {{duration}}",
+    "who": "Who",
+    "device": "Device",
+    "ip": "IP address",
+    "target": "Target",
+    "result": "Result",
+    "recordedIn": "Recorded in",
+    "repeated": "Repeated",
+    "repeatedUntil_one": "{{count}} time until {{time}}",
+    "repeatedUntil_other": "{{count}} times until {{time}}",
+    "allActivityFor": "All activity for this {{type}}",
+    "everythingBy": "Everything by {{name}}",
+    "loading": "Loading details…",
+    "loadFailed": "Could not load details: {{error}}",
+    "requestLogNote": "Recorded before the audit log existed: only the device and a router-relative path were kept — not the user or what was changed.",
+    "possibleRoutes": "Possible routes:",
+    "whatChanged": "What changed",
+    "requests": "Requests ({{n}})",
+    "relayWrites": "Relay writes ({{n}})",
+    "readBackConfirmed": "read-back confirmed",
+    "readBackNotConfirmed": "read-back did NOT confirm",
+    "noReadBack": "no read-back",
+    "fieldChanges": "Field changes ({{n}})",
+    "added": "added",
+    "removed": "removed",
+    "secret": "secret",
+    "before": "Before",
+    "after": "After",
+    "json": {
+      "body": "Request body (secrets removed)",
+      "response": "Response",
+      "raw": "Raw record",
+      "request": "Request"
+    },
+    "open": {
+      "equipment": "Open equipment",
+      "automations": "Open automations",
+      "fertigation": "Open fertigation",
+      "alerts": "Open alerts",
+      "cameras": "Open cameras"
+    },
+    "targetType": {
+      "equipment": "equipment",
+      "automation": "automation",
+      "tank": "tank",
+      "dose_program": "dose program",
+      "alert": "alert",
+      "camera": "camera",
+      "zone": "zone",
+      "user": "user",
+      "task": "task"
+    },
+    "source": {
+      "audit": "Audit log (API request)",
+      "relay": "Relay events",
+      "automation": "Automation run log",
+      "alert": "Alerts",
+      "alert_ack": "Alerts (acknowledgement)",
+      "flow": "Flow watch episodes",
+      "irrigation_run": "Irrigation runs",
+      "dose_run": "Dose controller runs",
+      "dose_cycle": "Dose cycle log",
+      "drift": "Relay drift log",
+      "request": "Request log (before the audit log existed)"
+    }
+  }
+}

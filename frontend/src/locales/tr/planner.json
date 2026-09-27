@@ -1,1 +1,271 @@
-{}
+{
+  "title": "Operasyon Planlayıcı",
+  "subtitle": "Ertesi gün için yapay zekâ ile oluşturulan otomasyon planı; önceki günün hedeflerine göre kapalı döngü puanlama yapılır. Planların uygulanması için operatör onayı gerekir.",
+  "header": {
+    "generate": "Yarın için plan oluştur",
+    "generating": "Oluşturuluyor…",
+    "generateNotAllowed": "Planları operatörler ve yöneticiler oluşturabilir",
+    "settings": "Ayarlar"
+  },
+  "scheduler": {
+    "on": "Zamanlayıcı açık · her gün <time>{{time}}</time> saatinde çalışır",
+    "off": "Zamanlayıcı kapalı · planları her gece otomatik oluşturmak için Ayarlar'dan etkinleştirin",
+    "apiKeyMissing": "ANTHROPIC_API_KEY tanımlı değil"
+  },
+  "statusLabel": {
+    "pending": "Karar bekliyor",
+    "confirmed": "Onaylandı ve uygulandı",
+    "rejected": "Reddedildi",
+    "failure": "Oluşturma başarısız",
+    "success": "Oluşturuldu (eski)"
+  },
+  "statusShort": {
+    "pending": "bekliyor",
+    "confirmed": "onaylandı",
+    "rejected": "reddedildi",
+    "failure": "başarısız",
+    "success": "oluşturuldu"
+  },
+  "verdict": {
+    "pass": "geçti",
+    "partial": "kısmi",
+    "fail": "başarısız",
+    "uncomputable": "hesaplanamadı",
+    "no_prior_targets": "önceki hedef yok",
+    "pending": "bekliyor"
+  },
+  "severity": {
+    "low": "düşük",
+    "medium": "orta",
+    "high": "yüksek"
+  },
+  "change": {
+    "add": "ekle",
+    "remove": "kaldır",
+    "modify": "değiştir",
+    "keep": "koru"
+  },
+  "window": {
+    "all_day": "tüm gün",
+    "day": "gündüz",
+    "night": "gece"
+  },
+  "card": {
+    "unknownTrigger": "bilinmiyor",
+    "dailyAt": "Her gün @ {{time}}",
+    "viaTemplate": "şablonla",
+    "rawNoTemplate": "HAM — şablon yok",
+    "parameters": "Parametreler",
+    "actions": "Eylemler",
+    "channel": "kanal {{n}}",
+    "channelNamed": "kanal {{n}} ({{name}})",
+    "allChannels": "(tüm kanallar)",
+    "forMinutes": "{{minutes}} dk süreyle",
+    "afterSeconds": "{{seconds}} sn sonra"
+  },
+  "stats": {
+    "inRange": "aralıkta:",
+    "mean": "ortalama:",
+    "p10p90": "p10/p90:",
+    "excursion": "sapma:",
+    "breaches_one": "ihlal: {{count}} (en uzun {{minutes}} dk)",
+    "breaches_other": "ihlal: {{count}} (en uzun {{minutes}} dk)",
+    "samples_one": "örnek: {{count}}",
+    "samples_other": "örnek: {{count}}"
+  },
+  "review": {
+    "title": "Dünün değerlendirmesi",
+    "hypothesis": "Hipotez:",
+    "cause": "neden:"
+  },
+  "targets": {
+    "title": "Yarının hedefleri ({{count}})",
+    "previewPartial": "bugünün kısmi verisinden karne önizlemesi",
+    "previewFull": "tam günden karne önizlemesi"
+  },
+  "applied": {
+    "title": "Onaylandı ve uygulandı",
+    "titleAt": "Onaylandı ve uygulandı: {{time}}",
+    "counts": "eklenen: {{added}} · değiştirilen: {{modified}} · devre dışı bırakılan: {{disabled}} · korunan: {{kept}}",
+    "errors_one": "hata: {{count}}",
+    "errors_other": "hata: {{count}}"
+  },
+  "consistency": {
+    "title_one": "Tutarlılık uyarısı ({{count}}) — ajanın metni yapılandırılmış verisiyle çelişiyor",
+    "title_other": "Tutarlılık uyarıları ({{count}}) — ajanın metni yapılandırılmış verisiyle çelişiyor",
+    "countMismatch": "<mono>{{field}}</mono>: metin <b>{{claims}}</b> diyor, veri <b>{{data}}</b> diyor",
+    "unknownAutomation": "Metin <mono>{{context}}</mono> öğesine atıf yapıyor, ancak {{id}} kimlikli canlı otomasyon yok.",
+    "untrackedAutomation": "Metin <mono>{{context}}</mono> öğesini tartışıyor, ancak hiçbir fark kaydı #{{id}} otomasyonunu değiştirmiyor.",
+    "timeRange": "<mono>{{subject}}</mono> zaman aralığı: metin <b>{{claimed}}</b> diyor, gerçek program <b>{{actual}}</b> aralığını kapsıyor",
+    "footer": "Onay için esas alınan, yapılandırılmış veridir (proposed_automations + changes_from_today). Metin bilgi amaçlıdır ve sapabilir."
+  },
+  "rejection": {
+    "title": "Reddedildi — operatör geri bildirimi",
+    "footer": "Bu geri bildirimi dikkate alan yeni bir plan sürümü oluşturuldu."
+  },
+  "discussion": {
+    "title": "Tartışma",
+    "help": "Planlayıcıdan bir kararı açıklamasını isteyin veya gözden kaçırmış olabileceği bir şeyi vurgulayın. Yalnızca konuşmadır — yeniden oluşturmaya dönüştürmedikçe planı değiştirmez.",
+    "loadFailed": "Plan tartışması yüklenemedi",
+    "loadFailedWithError": "Plan tartışması yüklenemedi: {{error}}",
+    "sendFailed": "Açıklama gönderilemedi",
+    "confirmRegenerate_one": "{{count}} açık açıklama ret geri bildirimine dönüştürülüp plan yeniden oluşturulsun mu?",
+    "confirmRegenerate_other": "{{count}} açık açıklama ret geri bildirimine dönüştürülüp plan yeniden oluşturulsun mu?",
+    "regenerateFailed": "Yeniden oluşturulamadı",
+    "toastRegenerated": "Plan reddedildi ve açıklamalardan yeniden oluşturuldu",
+    "applyOpenTitle": "Tüm açık açıklamaları ret geri bildirimi olarak birleştir ve planı yeniden oluştur",
+    "regenerating": "Yeniden oluşturuluyor…",
+    "applyOpen_one": "{{count}} açık öğeyle yeniden oluştur",
+    "applyOpen_other": "{{count}} açık öğeyle yeniden oluştur",
+    "empty": "Bu planda henüz açıklama yok.",
+    "role": {
+      "question": "Soru",
+      "highlight": "Vurgu"
+    },
+    "operator": "operatör",
+    "addressed": "yanıtlandı",
+    "addressedByPlan": "yanıtlandı (→ plan #{{id}})",
+    "plannerBadge": "Planlayıcı",
+    "verdict": {
+      "plan_correct": "Plan doğru",
+      "concern_valid": "Endişe haklı",
+      "need_more_data": "Daha fazla veri gerekli"
+    },
+    "waiting": "planlayıcı bekleniyor…",
+    "typeLabel": "Tür:",
+    "highlightHelp": "Planın bir şeyi atladığını düşünüyorsunuz — planlayıcı bunu kabul edip düzeltmeler önerecek.",
+    "questionHelp": "Planlayıcının gerekçesini açıklamasını istiyorsunuz — plan değişmez.",
+    "highlightPlaceholder": "ör. \"Sensör 1'de VWC 3 sulamanın hepsinde %60'a çıkıyor — fazla agresif mi?\"",
+    "questionPlaceholder": "ör. \"Neden 2 yerine 3 fertigasyon döngüsü? 12:00 zamanlamasının gerekçesi ne?\"",
+    "sending": "Gönderiliyor…",
+    "send": "Planlayıcıya gönder"
+  },
+  "toast": {
+    "loadPlansFailed": "Planlar yüklenemedi: {{error}}",
+    "loadPlanFailed": "Plan yüklenemedi: {{error}}",
+    "configSaved": "Planlayıcı ayarları kaydedildi",
+    "configSaveFailed": "Ayarlar kaydedilemedi",
+    "generated": "Yarın için plan oluşturuldu",
+    "generateFailed": "Oluşturma başarısız",
+    "confirmedWithOverrides": "Plan koruma kuralı geçersiz kılmalarıyla onaylandı — denetim için kaydedildi.",
+    "confirmed": "Plan onaylandı — otomasyonlar güncellendi.",
+    "changesFailed_one": "{{count}} değişiklik başarısız — ayrıntılar planda.",
+    "changesFailed_other": "{{count}} değişiklik başarısız — ayrıntılar planda.",
+    "overrideForbidden": "Geçersiz kılmaya izin verilmiyor: {{error}}",
+    "confirmFailed": "Onay başarısız",
+    "feedbackRequired": "Planlayıcının endişelerinizi dikkate alarak yeniden oluşturabilmesi için geri bildirim yazın.",
+    "rejected": "Plan reddedildi — geri bildirimle yeniden oluşturuluyor.",
+    "rejectFailed": "Reddetme başarısız",
+    "deleted": "Plan silindi"
+  },
+  "confirm": {
+    "replacePending": "Yarın için bekleyen bir plan zaten var. Yeniden oluşturulsun mu (mevcut planın yerini alır)?",
+    "deletePlan": "Bu plan silinsin mi? Onaylanmış planlar normalde SİLİNMEMELİDİR; bu yalnızca kaydı siler, uygulanmış otomasyonları değil."
+  },
+  "manifest": {
+    "insert": "EKLE",
+    "update": "GÜNCELLE",
+    "disable": "DEVRE DIŞI BIRAK",
+    "automation": "otomasyon",
+    "item": "{{verb}} · {{target}}",
+    "itemWithId": "{{verb}} · {{target}} [id {{id}}]"
+  },
+  "list": {
+    "title": "Planlar",
+    "empty": "Henüz plan yok."
+  },
+  "detail": {
+    "selectPrompt": "Bir plan seçin veya yarın için yeni bir plan oluşturun.",
+    "notGenerated": "Plan oluşturulamadı: {{date}}",
+    "rawError": "Ham hata",
+    "planFor": "Plan: {{date}}",
+    "generated": "Oluşturuldu: {{time}}",
+    "tokens": "token: giriş {{input}} · çıkış {{output}}",
+    "cacheHit": "önbellek isabeti {{n}}"
+  },
+  "guardrails": {
+    "wouldBlock_one": "{{count}} koruma kuralı onayı engelleyecek",
+    "wouldBlock_other": "{{count}} koruma kuralı onayı engelleyecek",
+    "latestLine": "Son {{element}}: {{value}} ({{comparison}}) — {{element}} tankı dozlama oranı ≥ {{duty}} olmalı",
+    "noRecentSample": "yakın tarihli numune yok",
+    "triggeredBy": "Tetikleyen: {{list}}",
+    "triggerItem": "\"{{name}}\" (program {{program}}, tank oranı {{duty}})",
+    "overrideRole": "Geçersiz kılma için gereken rol:",
+    "informational_one": "{{count}} bilgilendirici uyarı (onayı engellemez)",
+    "informational_other": "{{count}} bilgilendirici uyarı (onayı engellemez)",
+    "flush": "yıkama",
+    "fertigationOffset": "fertigasyon, {{minutes}} dk",
+    "program": "program {{name}}"
+  },
+  "actions": {
+    "applying": "Uygulanıyor…",
+    "confirmApply": "Onayla ve uygula",
+    "reject": "Reddet…",
+    "changeCounts": "{{add}} ekle · {{modify}} güncelle · {{remove}} devre dışı · {{keep}} koru",
+    "deletePlan": "Bu plan kaydını sil"
+  },
+  "sections": {
+    "templateRequests": "Planlayıcının şablon istekleri ({{count}})",
+    "templateParameters": "Parametreler:",
+    "example": "ör.",
+    "risks": "Operatör için işaretlenen riskler",
+    "changes": "Bugünkü işleyişe göre değişiklikler (uygulama listesi)",
+    "idTag": "[id {{id}}]",
+    "proposedTag": "[→ önerilen #{{n}}]",
+    "proposed": "Önerilen otomasyonlar ({{count}})",
+    "noneProposed": "Önerilen otomasyon yok."
+  },
+  "raw": {
+    "show": "Ham girdi anlık görüntüsünü ve plan JSON'unu göster",
+    "hide": "Ham girdi anlık görüntüsünü ve plan JSON'unu gizle",
+    "inputSnapshot": "Girdi anlık görüntüsü (planlayıcıya verilen)",
+    "planJson": "Tam plan JSON'u"
+  },
+  "confirmDialog": {
+    "title": "Bu plan canlı otomasyonlara uygulansın mı?",
+    "body_one": "{{date}} planı onaylanırsa {{add}} otomasyon EKLENİR, {{modify}} otomasyon GÜNCELLENİR ve {{remove}} otomasyon DEVRE DIŞI BIRAKILIR ({{keep}} otomasyon değişmeden kalır). Koruma kuralları uygulama sırasında değerlendirilir.",
+    "body_other": "{{date}} planı onaylanırsa {{add}} otomasyon EKLENİR, {{modify}} otomasyon GÜNCELLENİR ve {{remove}} otomasyon DEVRE DIŞI BIRAKILIR ({{keep}} otomasyon değişmeden kalır). Koruma kuralları uygulama sırasında değerlendirilir."
+  },
+  "reject": {
+    "title": "Planı geri bildirimle reddet",
+    "help": "Neyin değişmesi gerektiğini anlatın. Planlayıcı geri bildiriminizi dikkate alarak yeniden oluşturacak. Örnek: <i>\"Sulamayı çok erkene aldın — sabah kuruması sorun değil. Bunun yerine öğleden sonraki düşüşe odaklan.\"</i>",
+    "placeholder": "Plan neyi atladı veya neyi yanlış yaptı?",
+    "regenerating": "Yeniden oluşturuluyor…",
+    "submit": "Reddet ve Yeniden Oluştur"
+  },
+  "override": {
+    "title": "Koruma kuralını geçersiz kılma gerekli",
+    "help": "Bu plan normalde engellenirdi. Yine de uygulamak için aşağıdaki her koruma kuralı için yazılı bir gerekçe girin. Gerekçeler planın denetim kaydına yazılır.",
+    "adminRequired": "Bir veya daha fazla kural yönetici rolüyle geçersiz kılma gerektiriyor.",
+    "ruleLine": "{{element}}: {{value}} ({{comparison}}) · gereken oran ≥ {{duty}}",
+    "reason": "Geçersiz kılma gerekçesi",
+    "reasonPlaceholder": "ör. Yeni AMIC ölçümü Ca'yı 195 mg/L olarak doğruladı — numune kuyruğu eski; yarının planı tasarlandığı gibi uygulanıyor.",
+    "missingReasons_one": "Uygulamadan önce {{count}} koruma kuralı için gerekçe girin",
+    "missingReasons_other": "Uygulamadan önce {{count}} koruma kuralı için gerekçe girin",
+    "apply": "Geçersiz kılarak uygula"
+  },
+  "settings": {
+    "title": "Planlayıcı ayarları",
+    "enabled": "Zamanlayıcı etkin (her akşam otomatik plan oluştur)",
+    "firesAt": "Çalışma saati",
+    "hour": "Saat",
+    "minute": "Dakika",
+    "localTime": "(yerel saat, 24 saat)",
+    "pendingNote": "Zamanlanmış planlar <mono>pending</mono> (bekliyor) olarak kaydedilir. Bir operatörün onaylaması veya reddetmesi gerekir — zamanlayıcı canlı otomasyonlara hiçbir zaman kendiliğinden değişiklik uygulamaz."
+  },
+  "failure": {
+    "pill": "Oluşturma başarısız oluyor",
+    "headline_one": "Plan oluşturma {{since}} tarihinden beri {{count}} gündür art arda başarısız",
+    "headline_other": "Plan oluşturma {{since}} tarihinden beri {{count}} gündür art arda başarısız",
+    "reason": {
+      "none": "Hata ayrıntısı kaydedilmedi",
+      "credits": "Anthropic API kredileri tükendi — Plans & Billing sayfasından yükleyin",
+      "auth": "API anahtarı reddedildi"
+    },
+    "showRaw": "Ham hatayı göster",
+    "hideRaw": "Ham hatayı gizle",
+    "retryNotAllowed": "Oluşturmayı operatörler ve yöneticiler yeniden deneyebilir",
+    "retryTitle": "Plan oluşturmayı şimdi yeniden çalıştır",
+    "retrying": "Yeniden deneniyor…"
+  }
+}

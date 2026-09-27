@@ -1,1 +1,60 @@
-{}
+{
+  "title": "Laboratuvar Analizi",
+  "subtitle": "Manuel besin ölçümleri ve laboratuvar sonuçları",
+  "noZone": "Bölge yok",
+  "confirmDelete": "Bu laboratuvar okuması silinsin mi?",
+  "fields": {
+    "date": "Tarih",
+    "nutrient": "Besin elementi",
+    "value": "Değer",
+    "unit": "Birim",
+    "zone": "Bölge",
+    "zoneOptional": "Bölge (isteğe bağlı)",
+    "notes": "Notlar"
+  },
+  "add": {
+    "button": "Laboratuvar Okuması Ekle",
+    "title": "Yeni Laboratuvar Analizi Kaydı",
+    "sampleDate": "Numune Tarihi",
+    "selectNutrient": "Besin elementi seçin…",
+    "notesPlaceholder": "İsteğe bağlı notlar",
+    "removeRow": "Satırı kaldır",
+    "addAnother": "+ Başka bir besin elementi ekle",
+    "save_one": "{{count}} Okumayı Kaydet",
+    "save_other": "{{count}} Okumayı Kaydet",
+    "saved_one": "{{count}} okuma başarıyla kaydedildi",
+    "saved_other": "{{count}} okuma başarıyla kaydedildi"
+  },
+  "stats": {
+    "readings_one": "{{count}} okuma",
+    "readings_other": "{{count}} okuma"
+  },
+  "filters": {
+    "allNutrients": "Tüm besin elementleri",
+    "allZones": "Tüm bölgeler",
+    "from": "Başlangıç",
+    "to": "Bitiş",
+    "clear": "Filtreleri temizle"
+  },
+  "history": {
+    "title": "Geçmiş",
+    "total": "(toplam {{total}})",
+    "empty": "Laboratuvar okuması bulunamadı. İlk analizinizi girmek için \"{{button}}\" düğmesine tıklayın."
+  },
+  "table": {
+    "actions": "İşlemler"
+  },
+  "pagination": {
+    "showing": "{{total}} kayıttan {{range}} gösteriliyor"
+  },
+  "toast": {
+    "deleted": "Laboratuvar okuması silindi",
+    "updated": "Laboratuvar okuması güncellendi"
+  },
+  "errors": {
+    "saveFailed": "Kaydedilemedi",
+    "deleteFailed": "Okuma silinemedi",
+    "update": "Güncellenemedi",
+    "updateFailed": "Okuma güncellenemedi"
+  }
+}

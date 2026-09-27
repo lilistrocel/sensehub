@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useReportTextProps } from './reportText';
 
 /**
  * Small markdown renderer for agronomist reports, built as React elements
@@ -97,7 +99,7 @@ export function parseBlocks(md) {
 
     if (isTableStart(lines, i)) {
       const header = splitRow(line);
-      const align = splitRow(lines[i + 1]).map(c => (c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : null));
+      const align = splitRow(lines[i + 1]).map(c => (c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'end' : null));
       const rows = [];
       i += 2;
       while (i < lines.length && lines[i].trim() && lines[i].includes('|')) { rows.push(splitRow(lines[i])); i += 1; }
@@ -193,10 +195,10 @@ function ListNode({ list, depth = 0, keyBase }) {
   return (
     <Tag
       start={list.ordered && list.start !== 1 ? list.start : undefined}
-      className={`${marker} pl-5 space-y-1.5 marker:text-muted ${depth === 0 ? 'my-3' : 'mt-1.5'}`}
+      className={`${marker} ps-5 space-y-1.5 marker:text-muted ${depth === 0 ? 'my-3' : 'mt-1.5'}`}
     >
       {list.items.map((item, i) => (
-        <li key={i} className="pl-1">
+        <li key={i} className="ps-1">
           {renderInline(item.text, `${keyBase}-${i}`)}
           {item.children.map((child, c) => (
             <ListNode key={c} list={child} depth={depth + 1} keyBase={`${keyBase}-${i}-${c}`} />
@@ -215,6 +217,7 @@ const HEADING_CLASS = {
 };
 
 function Block({ block, k }) {
+  const { t } = useTranslation('agronomist');
   switch (block.type) {
     case 'heading': {
       const level = Math.min(block.level + 1, 6); // page and card own h1/h2
@@ -226,10 +229,10 @@ function Block({ block, k }) {
     case 'list':
       return <ListNode list={block.list} keyBase={k} />;
     case 'code':
-      return <pre className="my-3 p-3 bg-field border border-line rounded-md overflow-x-auto text-xs font-mono whitespace-pre"><code>{block.text}</code></pre>;
+      return <pre dir="ltr" className="text-start my-3 p-3 bg-field border border-line rounded-md overflow-x-auto text-xs font-mono whitespace-pre"><code>{block.text}</code></pre>;
     case 'quote':
       return (
-        <blockquote className="my-3 pl-3 border-l-[3px] border-line text-muted">
+        <blockquote className="my-3 ps-3 border-s-[3px] border-line text-muted">
           {block.blocks.map((b, i) => <Block key={i} block={b} k={`${k}-${i}`} />)}
         </blockquote>
       );
@@ -238,12 +241,12 @@ function Block({ block, k }) {
     case 'table':
       return (
         // The table scrolls inside its own box so a wide table never widens the page.
-        <div className="my-4 max-w-full overflow-x-auto border border-line rounded-md" role="region" aria-label="Table" tabIndex={0}>
+        <div className="my-4 max-w-full overflow-x-auto border border-line rounded-md" role="region" aria-label={t('report.table')} tabIndex={0}>
           <table className="min-w-full text-sm border-collapse [overflow-wrap:normal]">
             <thead className="bg-field">
               <tr>
                 {block.header.map((c, i) => (
-                  <th key={i} scope="col" className="px-3 py-2 text-left whitespace-nowrap border-b border-line" style={block.align[i] ? { textAlign: block.align[i] } : undefined}>
+                  <th key={i} scope="col" className="px-3 py-2 text-start whitespace-nowrap border-b border-line" style={block.align[i] ? { textAlign: block.align[i] } : undefined}>
                     {renderInline(c, `${k}-h${i}`)}
                   </th>
                 ))}
@@ -274,9 +277,10 @@ function Block({ block, k }) {
  */
 export default function ReportMarkdown({ markdown, className = '' }) {
   const blocks = useMemo(() => parseBlocks(markdown), [markdown]);
+  const textProps = useReportTextProps();
   if (!blocks.length) return null;
   return (
-    <div className={`max-w-prose text-[15px] leading-7 text-ink tabular break-words [overflow-wrap:anywhere] ${className}`.trim()}>
+    <div {...textProps} className={`max-w-prose text-[15px] leading-7 text-ink tabular break-words [overflow-wrap:anywhere] ${className}`.trim()}>
       {blocks.map((b, i) => <Block key={i} block={b} k={`b${i}`} />)}
     </div>
   );

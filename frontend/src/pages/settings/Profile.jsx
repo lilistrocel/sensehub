@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
+import { useFormat } from '../../i18n/useFormat';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
 
 const API_BASE = '/api';
 
 export default function Profile() {
   const { user, token } = useAuth();
-  const { t } = useTranslation('common');
+  const { t } = useTranslation('settings');
+  const fmt = useFormat();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -70,16 +72,16 @@ export default function Profile() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save preferences');
+        throw new Error(`HTTP ${response.status}`);
       }
 
       // Store preference in localStorage for immediate use
       localStorage.setItem('soundAlertsEnabled', soundAlertsEnabled);
       localStorage.setItem('soundVolume', soundVolume);
 
-      setPrefsSuccess('Notification preferences saved successfully');
+      setPrefsSuccess(t('profile.sound.saved'));
     } catch (err) {
-      setPrefsError(err.message || 'Failed to save preferences');
+      setPrefsError(t('profile.sound.saveFailed', { error: err.message || '' }));
     } finally {
       setPrefsSaving(false);
     }
@@ -112,13 +114,13 @@ export default function Profile() {
 
     // Validate passwords match
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
+      setError(t('profile.password.mismatch'));
       return;
     }
 
     // Validate password length
     if (newPassword.length < 8) {
-      setError('New password must be at least 8 characters');
+      setError(t('profile.password.tooShort'));
       return;
     }
 
@@ -140,15 +142,15 @@ export default function Profile() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to change password');
+        throw new Error(data.message || t('profile.password.failed'));
       }
 
-      setSuccess('Password changed successfully');
+      setSuccess(t('profile.password.changed'));
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setError(err.message || 'Failed to change password');
+      setError(err.message || t('profile.password.failed'));
     } finally {
       setLoading(false);
     }
@@ -156,37 +158,37 @@ export default function Profile() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile Settings</h2>
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">{t('profile.title')}</h2>
 
       {/* User Info Card */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-md font-medium text-gray-900 mb-4">Your Account</h3>
+        <h3 className="text-md font-medium text-gray-900 mb-4">{t('profile.account.title')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-500">Name</label>
+            <label className="block text-sm font-medium text-gray-500">{t('profile.account.name')}</label>
             <p className="text-gray-900">{user?.name}</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-500">Email</label>
-            <p className="text-gray-900">{user?.email}</p>
+            <label className="block text-sm font-medium text-gray-500">{t('profile.account.email')}</label>
+            <p className="text-gray-900"><bdi dir="ltr">{user?.email}</bdi></p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-500">Role</label>
-            <p className="text-gray-900 capitalize">{user?.role}</p>
+            <label className="block text-sm font-medium text-gray-500">{t('profile.account.role')}</label>
+            <p className="text-gray-900 capitalize">{user?.role ? t(`common:role.${user.role}`, { defaultValue: user.role }) : ''}</p>
           </div>
         </div>
       </div>
 
       {/* Language (per user; stored with the preferences) */}
       <div className="bg-white rounded-lg shadow p-6 mb-6" data-testid="profile-language">
-        <h3 className="text-md font-medium text-gray-900 mb-1">{t('language.title')}</h3>
-        <p className="text-sm text-gray-500 mb-4">{t('language.settingHelp')}</p>
+        <h3 className="text-md font-medium text-gray-900 mb-1">{t('common:language.title')}</h3>
+        <p className="text-sm text-gray-500 mb-4">{t('common:language.settingHelp')}</p>
         <LanguageSwitcher variant="list" />
       </div>
 
       {/* Change Password Card */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-md font-medium text-gray-900 mb-4">Change Password</h3>
+        <h3 className="text-md font-medium text-gray-900 mb-4">{t('profile.password.title')}</h3>
 
         {error && (
           <div role="alert" aria-live="assertive" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -203,7 +205,7 @@ export default function Profile() {
         <form onSubmit={handleChangePassword} className="space-y-4">
           <div>
             <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
-              Current Password
+              {t('profile.password.current')}
             </label>
             <input
               type="password"
@@ -217,7 +219,7 @@ export default function Profile() {
 
           <div>
             <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
-              New Password
+              {t('profile.password.new')}
             </label>
             <input
               type="password"
@@ -227,12 +229,12 @@ export default function Profile() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900 dark:bg-gray-700 dark:text-white"
               required
             />
-            <p className="mt-1 text-xs text-gray-500">Minimum 8 characters</p>
+            <p className="mt-1 text-xs text-gray-500">{t('profile.password.minLength')}</p>
           </div>
 
           <div>
             <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-              Confirm New Password
+              {t('profile.password.confirm')}
             </label>
             <input
               type="password"
@@ -250,7 +252,7 @@ export default function Profile() {
               disabled={loading}
               className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Changing Password...' : 'Change Password'}
+              {loading ? t('profile.password.submitting') : t('profile.password.submit')}
             </button>
           </div>
         </form>
@@ -259,10 +261,10 @@ export default function Profile() {
       {/* Notification Settings Card */}
       <div className="bg-white rounded-lg shadow p-6 mt-6">
         <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
-          <svg className="w-5 h-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 me-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
           </svg>
-          Notification Settings
+          {t('profile.sound.title')}
         </h3>
 
         {prefsLoading ? (
@@ -288,10 +290,10 @@ export default function Profile() {
               <div className="flex items-center justify-between">
                 <div>
                   <label htmlFor="soundAlerts" className="block text-sm font-medium text-gray-700">
-                    Enable Sound Alerts
+                    {t('profile.sound.enable')}
                   </label>
                   <p className="text-sm text-gray-500">
-                    Play an audio notification when new alerts arrive
+                    {t('profile.sound.help')}
                   </p>
                 </div>
                 <button
@@ -307,7 +309,7 @@ export default function Profile() {
                   <span
                     aria-hidden="true"
                     className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      soundAlertsEnabled ? 'translate-x-5' : 'translate-x-0'
+                      soundAlertsEnabled ? 'translate-x-5 rtl:-translate-x-5' : 'translate-x-0'
                     }`}
                   />
                 </button>
@@ -318,9 +320,9 @@ export default function Profile() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label htmlFor="volume" className="block text-sm font-medium text-gray-700">
-                      Alert Volume
+                      {t('profile.sound.volume')}
                     </label>
-                    <span className="text-sm text-gray-500">{Math.round(soundVolume * 100)}%</span>
+                    <span className="text-sm text-gray-500">{fmt.percent(Math.round(soundVolume * 100), { decimals: 0 })}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -351,11 +353,11 @@ export default function Profile() {
                     onClick={playTestSound}
                     className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
-                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4 me-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Test Sound
+                    {t('profile.sound.test')}
                   </button>
                 </div>
               )}
@@ -368,7 +370,7 @@ export default function Profile() {
                   disabled={prefsSaving}
                   className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {prefsSaving ? 'Saving...' : 'Save Preferences'}
+                  {prefsSaving ? t('common:actions.saving') : t('profile.sound.save')}
                 </button>
               </div>
             </div>
