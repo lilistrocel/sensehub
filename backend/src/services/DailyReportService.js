@@ -660,11 +660,31 @@ function buildMeasuredDay(db, ctx, fromMs, toMs, nowMs) {
     }
   }
 
+  // Runs: the cycles grouped with the relay events (automated / manual app / manual panel).
+  // Same builder as /api/irrigation/runs, computed read-only for the day.
+  let runs = [];
+  let dropped = [];
+  let runsSummary = null;
+  try {
+    const B = require('./IrrigationRunBuilder'); // lazy: the builder requires this module
+    const built = B.buildRuns(db, { fromMs, toMs, nowMs });
+    runs = built.runs.map(r => ({ ...r, cycles: r.cycles.map(({ tanks: _t, ...c }) => c) }));
+    dropped = built.dropped.map(({ tanks: _t, ...d }) => d);
+    runsSummary = B.summariseRuns(built.runs, built.dropped);
+    water.runs_liters = runsSummary.water_l;
+    water.dropped_blips_liters = runsSummary.dropped_water_l;
+  } catch (e) {
+    runsSummary = { error: e.message };
+  }
+
   return {
     available: true,
     reason: null,
     coverage: cov,
     water,
+    runs,
+    runs_summary: runsSummary,
+    dropped_blips: dropped,
     fertigation_liters: r2(fertMeasured),
     tanks,
     cycles,
@@ -720,6 +740,8 @@ function summariseMeasured(days) {
     water: { measured_liters: r1(wM), estimated_liters: r1(wE), deviation_pct: deviationPct(wM, wE) },
     fertigation: { measured_liters: r2(fM), estimated_liters: r2(fE), deviation_pct: deviationPct(fM, fE) },
     cycles: sum(d => d.measured.cycles.length),
+    runs: sum(d => (d.measured.runs ? d.measured.runs.length : 0)),
+    manual_runs: sum(d => (d.measured.runs ? d.measured.runs.filter(r => r.type !== 'automated').length : 0)),
     flags: sum(d => d.measured.comparison.flags.length),
     threshold_pct: DEVIATION_THRESHOLD_PCT,
   };
@@ -888,6 +910,10 @@ module.exports = {
   localDateStr,
   tzOffsetMs,
   clippedSeconds,
+  // shared with IrrigationRunBuilder (same local-day / tank-map rules)
+  getTimezone,
+  loadTankMap,
+  addDays,
   FERTIGATION_RELAY_REMAP_AT,
   DEVIATION_THRESHOLD_PCT,
 };

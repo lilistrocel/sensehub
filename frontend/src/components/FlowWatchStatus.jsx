@@ -17,6 +17,8 @@ const STATE = {
   caution: { mark: 'caution', rail: 'caution', text: 'Caution' },
   checking: { mark: 'caution', rail: 'caution', text: 'Checking' },
   ok: { mark: 'ok', rail: 'ok', text: 'OK' },
+  // manual irrigation at the panel (info): water with no SenseHub pump / zone relay ON
+  manual: { mark: 'unknown', rail: 'idle', text: 'Manual (panel)' },
   idle: { mark: 'idle', rail: 'idle', text: 'Idle' },
   unknown: { mark: 'unknown', rail: 'stale', text: 'Unknown' },
   disabled: { mark: 'unknown', rail: 'idle', text: 'Off' },
@@ -30,6 +32,7 @@ const KIND = {
   water_without_valve: 'Flow, no zone open',
   flow_after_pump_off: 'Flow, pump off',
   monitor_blind: 'Flow not verifiable',
+  manual_panel: 'Manual irrigation (panel)',
 };
 
 const TEXT = {
@@ -129,8 +132,8 @@ export default function FlowWatchStatus({ formatDateTime }) {
         <ul className="mt-2 space-y-1.5">
           {active.map(a => (
             <li key={a.key} className="flex items-start gap-2 text-sm">
-              <span className="mt-1"><Mark state={a.level === 'alarm' ? 'alarm' : 'caution'} /></span>
-              <span className={TEXT[a.level === 'alarm' ? 'alarm' : 'caution']}>{a.message || KIND[a.rule]}</span>
+              <span className="mt-1"><Mark state={a.level === 'alarm' ? 'alarm' : a.level === 'info' ? 'unknown' : 'caution'} /></span>
+              <span className={TEXT[a.level === 'alarm' ? 'alarm' : a.level === 'info' ? 'ok' : 'caution']}>{a.message || KIND[a.rule]}</span>
             </li>
           ))}
         </ul>

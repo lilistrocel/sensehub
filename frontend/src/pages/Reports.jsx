@@ -271,6 +271,12 @@ export default function Reports() {
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
+                      {Array.isArray(day.measured?.runs) && day.measured.runs.length > 0 && (
+                        <span className="text-xs text-muted font-mono tabular" data-testid="day-runs-count">
+                          {day.measured.runs.length} run{day.measured.runs.length === 1 ? '' : 's'}
+                          {day.measured.runs.some(r => r.type !== 'automated') && `, ${day.measured.runs.filter(r => r.type !== 'automated').length} manual`}
+                        </span>
+                      )}
                       {fig.flags > 0 && (
                         <StatusPill state="caution" filled>{fig.flags} flag{fig.flags === 1 ? '' : 's'}</StatusPill>
                       )}

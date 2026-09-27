@@ -101,6 +101,17 @@ class MqttIngestService {
     };
     this._stmts = null;
     this._liveListeners = new Set();
+    this._cycleListeners = new Set();
+  }
+
+  /**
+   * Subscribe to stored cycle reports (a new or changed irrigation_cycles row).
+   * Used by IrrigationRunsService to regroup runs. Listener errors are caught.
+   * Returns an unsubscribe function. Event: the formatted cycle (formatCycle).
+   */
+  onCycle(fn) {
+    this._cycleListeners.add(fn);
+    return () => this._cycleListeners.delete(fn);
   }
 
   /**
@@ -572,7 +583,11 @@ class MqttIngestService {
     if (info.changes > 0) outcome = row && row.updated_at ? 'updated' : 'inserted';
     if (outcome !== 'unchanged') {
       this.log.log(`[MQTT] farm/${m.farmId} irrigation cycle ${r.cycle_id} ${outcome} (${r.duration_s}s, water ${r.water_m3 ?? 'n/a'} m³)`);
-      this._emit('irrigation_cycle', this.formatCycle(row));
+      const formatted = this.formatCycle(row);
+      this._emit('irrigation_cycle', formatted);
+      for (const fn of this._cycleListeners) {
+        try { fn(formatted); } catch (e) { this._logLimited('cycle-listener', `[MQTT] cycle listener failed: ${e.message}`, 'error'); }
+      }
     }
     return { ok: true, kind: 'irrigation_report', outcome, cycle_id: r.cycle_id };
   }

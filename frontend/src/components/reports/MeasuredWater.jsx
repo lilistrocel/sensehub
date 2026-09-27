@@ -1,6 +1,8 @@
 import React from 'react';
 import { Card, Label, Reading } from '../../ui';
 import { StatusMark } from '../agronomist/SectionStatus';
+import LastCycleZones from '../LastCycleZones';
+import { RunTypeTag, RunStatus } from '../irrigation/RunType';
 
 /**
  * Measured (irrigation monitor) vs estimated (relay ON-time x flow) water and
@@ -233,6 +235,91 @@ export function CyclesTable({ cycles, tz, tankCols }) {
   );
 }
 
+const tankLetter = (name, id) => {
+  const m = /Tank\s+([A-Z])\b/i.exec(String(name || ''));
+  return m ? m[1].toUpperCase() : `#${id}`;
+};
+const mS = (us) => (us === null || us === undefined || !(Number(us) > 0) ? '—' : (Number(us) / 1000).toFixed(2));
+
+/**
+ * The day's irrigation RUNS (cycles grouped with the relay events): scheduled,
+ * manual in the app (operator) or manual at the panel. A row expands to the
+ * run's per-zone table. Read-only.
+ */
+export function RunsTable({ runs, tz }) {
+  const [open, setOpen] = React.useState(null);
+  if (!runs.length) return <p className="text-sm text-muted">No irrigation run on this day.</p>;
+  const tankCols = (runs.find(r => (r.tanks || []).length)?.tanks || []).map(t => ({ tank_id: t.tank_id, letter: tankLetter(t.name, t.tank_id), name: t.name }));
+  const cols = 9 + tankCols.length;
+  return (
+    <div className="relative overflow-x-auto -mx-4 sm:mx-0" data-testid="measured-runs">
+      <table className="min-w-full text-sm">
+        <thead className="bg-field">
+          <tr>
+            <th className={th}>Time</th>
+            <th className={th}>Run</th>
+            <th className={th}>Zones</th>
+            <th className={`${th} text-right`}>Duration</th>
+            <th className={`${th} text-right`}>Water</th>
+            {tankCols.map(t => <th key={t.tank_id} className={`${th} text-right`} title={`${t.name} (L)`}>{t.letter}</th>)}
+            <th className={`${th} text-right`}>1:ratio</th>
+            <th className={`${th} text-right`}>EC mS/cm</th>
+            <th className={`${th} text-right`}>pH</th>
+            <th className={th}>Status</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line">
+          {runs.map((r) => {
+            const id = r.id ?? r.key;
+            const isOpen = open === id;
+            const zones = (r.zone_visits || []).filter(v => !v.not_run);
+            const zoneText = zones.some(v => v.zone_unknown)
+              ? `unknown${zones[0].zone_hint ? ` · ${zones[0].zone_hint}` : ''}`
+              : zones.map(v => (/Zone\s*(\d+)/i.exec(v.name || '') || [])[1] || v.channel).join(', ');
+            return (
+              <React.Fragment key={id}>
+                <tr data-run-type={r.type} data-run-status={r.status}>
+                  <td className={`${td} font-mono tabular text-ink`}>
+                    <button type="button" className="inline-flex items-center gap-1.5 min-h-[32px] underline decoration-dotted underline-offset-2" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : id)}>
+                      <svg aria-hidden="true" viewBox="0 0 10 10" className={`w-2.5 h-2.5 text-muted transition-transform ${isOpen ? 'rotate-90' : ''}`}><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+                      {timeIn(tz, r.started_at)}–{timeIn(tz, r.ended_at)}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2 align-top min-w-[11rem]">
+                    <RunTypeTag run={r} />
+                    {r.automation_name && <span className="block text-xs text-muted truncate max-w-[16rem]" title={r.automation_name}>{r.automation_name}</span>}
+                    {r.uncontrolled_dosing && (
+                      <span className="mt-0.5 flex items-center gap-1 text-xs text-caution-700 dark:text-caution-300"><StatusMark status="caution" />dosing outside SenseHub</span>
+                    )}
+                  </td>
+                  <td className={`${td} text-muted`}>{zoneText || '—'}</td>
+                  <td className={`${td} text-right font-mono tabular text-muted`}>{fmtDur(r.duration_s)}</td>
+                  <td className={`${td} text-right font-mono tabular text-ink font-semibold`}>{fmtL(r.water_l)}</td>
+                  {tankCols.map(c => {
+                    const t = (r.tanks || []).find(x => x.tank_id === c.tank_id);
+                    return <td key={c.tank_id} className={`${td} text-right font-mono tabular text-ink`}>{t && t.dosed_l !== null ? Number(t.dosed_l).toFixed(2) : '—'}</td>;
+                  })}
+                  <td className={`${td} text-right font-mono tabular text-ink`}>{r.achieved_ratio ? `1:${r.achieved_ratio}` : '—'}</td>
+                  <td className={`${td} text-right font-mono tabular text-ink`}>{r.ec_ms && r.ec_ms.avg !== null ? Number(r.ec_ms.avg).toFixed(2) : mS(r.zone_totals?.ec_avg_us)}</td>
+                  <td className={`${td} text-right font-mono tabular text-ink`}>{r.ph && r.ph.avg !== null && r.ph.avg !== undefined ? Number(r.ph.avg).toFixed(2) : '—'}</td>
+                  <td className={td}><RunStatus status={r.status} /></td>
+                </tr>
+                {isOpen && (
+                  <tr>
+                    <td colSpan={cols} className="px-3 pb-3 bg-field/40">
+                      <LastCycleZones run={r} formatTime={(iso) => timeIn(tz, iso)} compact />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** Coverage line: when the monitor had data for this day and whether it was complete. */
 export function CoverageLine({ cov, tz }) {
   const s = cov.complete ? 'ok' : 'caution';
@@ -287,10 +374,40 @@ export function MeasuredDaySection({ day, data }) {
         <ComparisonTable cmp={m.comparison} tz={tz} />
       </div>
 
-      <div>
-        <Label className="mb-2">Measured cycles</Label>
-        <CyclesTable cycles={m.cycles} tz={tz} tankCols={tankCols} />
-      </div>
+      {Array.isArray(m.runs) ? (
+        <div>
+          <Label className="mb-2">Irrigation runs</Label>
+          <RunsTable runs={m.runs} tz={tz} />
+          {m.runs_summary && !m.runs_summary.error && (
+            <p className="mt-2 text-xs text-muted" data-testid="measured-runs-reconcile">
+              {m.runs_summary.runs} run{m.runs_summary.runs === 1 ? '' : 's'} <span className="font-mono tabular text-ink">{fmtL(m.runs_summary.water_l)}</span>
+              {m.runs_summary.dropped_blips > 0 && <> + {m.runs_summary.dropped_blips} drain-back blip{m.runs_summary.dropped_blips === 1 ? '' : 's'} <span className="font-mono tabular text-ink">{fmtL(m.runs_summary.dropped_water_l)}</span></>}
+              {' '}= <span className="font-mono tabular text-ink">{fmtL(m.runs_summary.cycles_water_l)}</span> in {m.runs_summary.cycles} monitor cycle report{m.runs_summary.cycles === 1 ? '' : 's'}
+              {m.water.counter_liters !== null && <> · flow-meter counter <span className="font-mono tabular text-ink">{fmtL(m.water.counter_liters)}</span></>}
+              {Object.entries(m.runs_summary.by_type || {}).length > 0 && (
+                <> · {Object.entries(m.runs_summary.by_type).map(([k, v]) => `${({ automated: 'scheduled', manual_app: 'manual app', manual_panel: 'manual panel' })[k] || k} ${v.count} (${fmtL(v.water_l)})`).join(', ')}</>
+              )}
+            </p>
+          )}
+          <details className="mt-3 group" data-testid="measured-cycles-disclosure">
+            <summary className="cursor-pointer select-none text-sm text-muted min-h-touch inline-flex items-center gap-1.5">
+              <svg aria-hidden="true" viewBox="0 0 10 10" className="w-2.5 h-2.5 transition-transform group-open:rotate-90"><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
+              Monitor cycles ({m.cycles.length}) — raw reports, one per water stop
+            </summary>
+            <div className="mt-2">
+              <CyclesTable cycles={m.cycles} tz={tz} tankCols={tankCols} />
+              {(m.dropped_blips || []).length > 0 && (
+                <p className="mt-2 text-xs text-muted">Dropped as drain-back (&lt; 10 s or &lt; 5 L, outside any run): {m.dropped_blips.map(d => `${timeIn(tz, d.start)} ${fmtL(d.water_l)}`).join(', ')}.</p>
+              )}
+            </div>
+          </details>
+        </div>
+      ) : (
+        <div>
+          <Label className="mb-2">Measured cycles</Label>
+          <CyclesTable cycles={m.cycles} tz={tz} tankCols={tankCols} />
+        </div>
+      )}
 
       <Caveats day={day} data={data} />
     </div>

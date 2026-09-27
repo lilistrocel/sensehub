@@ -143,6 +143,27 @@ function buildPhotoLine(sel, { date, tz }) {
   return parts.join(' ');
 }
 
+/**
+ * One line per manual irrigation run for the daily snapshot, e.g.
+ * "08:07-08:19 manual (panel) 1787 L, A 9 B 9 C 9.25 D 5.75 L (1:217), EC 1.75 pH 5.25,
+ *  zone unknown (one zone's flow), dosing outside SenseHub control".
+ */
+function manualRunLine(r) {
+  if (!r || !r.started_at) return null;
+  const hm = (iso) => {
+    if (!iso) return '?';
+    try { return new Date(iso).toLocaleTimeString('en-GB', { timeZone: process.env.TZ || undefined, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }); } catch (_) { return iso.slice(11, 16); }
+  };
+  const kind = r.type === 'manual_panel' ? 'manual (panel)' : `manual (app${r.operators && r.operators.length ? `, ${r.operators.join(', ')}` : ''})`;
+  const tanks = (r.tanks || []).filter(t => t.dosed_l > 0).map(t => `${String(t.name || '').replace(/^Tank\s+([A-Z]).*$/, '$1')} ${t.dosed_l}`).join(' ');
+  const zones = (r.zone_visits || []).map(v => (v.zone_unknown ? `zone unknown${v.zone_hint ? ` (${v.zone_hint})` : ''}` : v.name)).join(', ');
+  const q = [r.ec_ms && r.ec_ms.avg !== null && r.ec_ms.avg !== undefined ? `EC ${r.ec_ms.avg}` : null, r.ph && r.ph.avg !== null && r.ph.avg !== undefined ? `pH ${r.ph.avg}` : null].filter(Boolean).join(' ');
+  return `${hm(r.started_at)}-${hm(r.ended_at)} ${kind} ${Math.round(r.water_l || 0)} L`
+    + (tanks ? `, ${tanks} L${r.achieved_ratio ? ` (1:${r.achieved_ratio})` : ''}` : ', no dosing')
+    + (q ? `, ${q}` : '') + (zones ? `, ${zones}` : '')
+    + (r.uncontrolled_dosing ? ', dosing outside SenseHub control' : '');
+}
+
 class AgronomistService {
   constructor() {
     this._client = null;
@@ -640,6 +661,16 @@ class AgronomistService {
     //     raw hourly averages alone. ---
     const substrateDiagnostics = this._computeSubstrateDiagnostics(dateStr, dayStart, dayEnd);
 
+    // --- Manual irrigation runs (irrigation_runs, IrrigationRunsService): one compact
+    //     line per run done outside the schedule — panel runs dose outside SenseHub
+    //     control, so the agronomist must know they happened. Omitted when none. ---
+    let manualIrrigation = [];
+    try {
+      manualIrrigation = db.prepare(`
+        SELECT detail_json FROM irrigation_runs WHERE local_date = ? AND type <> 'automated' ORDER BY started_at
+      `).all(dateStr).map(r => manualRunLine(JSON.parse(r.detail_json))).filter(Boolean).slice(0, 10);
+    } catch (_) { manualIrrigation = []; }
+
     // Disabled sources are omitted entirely (no null placeholders — they invite the
     // model to speculate about "missing" data); excluded equipment rows are dropped.
     return applyToAgronomistSnapshot({
@@ -669,6 +700,7 @@ class AgronomistService {
         zone: a.zone_name,
         acknowledged: !!a.acknowledged,
       })),
+      ...(manualIrrigation.length ? { manual_irrigation: manualIrrigation } : {}),
       automations: {
         total_runs: autoStats.total_runs || 0,
         failures: autoStats.failures || 0,
@@ -1705,4 +1737,4 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
 
 const agronomistService = new AgronomistService();
 
-module.exports = { agronomistService, AgronomistService };
+module.exports = { agronomistService, AgronomistService, manualRunLine };

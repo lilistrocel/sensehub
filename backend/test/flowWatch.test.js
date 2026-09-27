@@ -1162,3 +1162,113 @@ test('pump protection: automation DISABLED during the retry pause -> no restart,
     sim.dispose();
   }
 });
+
+// ─── manual irrigation at the panel (requirement 2026-09-27) ────────────────
+
+/**
+ * The 2026-09-27 08:07 panel run: water 8,934 L/h for 12 min with NO SenseHub
+ * pump or zone relay ON (the panel bypasses the boards), all four tanks dosing
+ * (A 9 / B 9 / C 9.25 / D 5.75 L), a few seconds of app toggles at 08:16. The
+ * dose scheduler is not running and no dosing valve is commanded by SenseHub.
+ */
+function panelSim(config = {}) {
+  const base = Date.parse('2026-09-27T04:06:30Z'); // 08:06:30 Dubai
+  const sim = new Sim({ base, doseRunning: false, config });
+  // the panel doses on its own: counters move with the rates, whatever the scheduler does
+  sim.dosing = function dosing(rates, dtS) {
+    const tanks = [1, 2, 3, 4].map((id, i) => {
+      const rate = rates ? rates[i] : 0;
+      if (rate > 0) this.consumed[id] += (rate / 3600) * dtS;
+      return { id, consumed_l: Math.floor(this.consumed[id] * 4) / 4, rate_lph: rate };
+    });
+    tanks.push({ id: 5, consumed_l: 0, rate_lph: null });
+    this.svc.ingest({ kind: 'dosing', farmId: '1021', equipmentId: 19, receivedMs: this.t, live: true, tanks });
+  };
+  return sim;
+}
+const PANEL_RATES = [45.2, 45.2, 46.5, 29]; // -> 9 / 9 / 9.25 / 5.75 L over 12 min (0.25 L counter steps)
+const panelAlerts = (sim) => sim.alerts();
+
+test('manual PANEL run (08:07 replay): ONE info alert "Manual irrigation detected (panel)" instead of water_without_valve + flow_after_pump_off; resolved with the summary', async () => {
+  const sim = panelSim();
+  const water = (rel) => (rel >= 30 && rel < 750 ? 8934 : 0);
+  const dose = (rel) => (rel >= 30 && rel < 750 ? PANEL_RATES : [0, 0, 0, 0]);
+  const toggles = {
+    590: s => s.setRelay(2, true, 'manual'), 591: s => s.setRelay(2, false, 'manual'),
+    593: s => { s.setRelay(1, true, 'manual'); s.setRelay(1, false, 'manual'); },
+    607: s => s.setRelay(3, true, 'manual'), 614: s => s.setRelay(3, false, 'manual'),
+  };
+  await sim.run({ from: 0, to: 700, flowAt: water, dosingAt: dose, activeAt: () => true, actions: toggles });
+  let a = panelAlerts(sim);
+  assert.deepEqual(a.map(x => x.fingerprint), [`flow_watch:manual_panel:${sim.irr}`]);
+  assert.equal(a[0].severity, 'info');
+  assert.match(a[0].message, /^Manual irrigation detected \(panel\) — water 8,934 L\/h, started \d\d:\d\d\. No SenseHub pump or zone relay is ON, so the zone is unknown \(≈ one zone's flow\) and dosing is outside SenseHub control\.$/);
+  const t = sim.firedAt[`manual_panel:${sim.irr}`];
+  assert.ok(t >= 50 && t <= 51, `fired at ${t}`);
+  assert.equal(sim.svc.getStatus(sim.t).state, 'manual');
+
+  await sim.run({ from: 700.5, to: 800, flowAt: water, dosingAt: dose, activeAt: (rel) => rel < 760 });
+  a = panelAlerts(sim);
+  assert.equal(a.length, 1, a.map(x => `${x.fingerprint}: ${x.message}`).join('\n'));
+  assert.equal(a[0].severity, 'info');
+  assert.match(a[0].message, /^Manual irrigation \(panel\) ended: \d\d:\d\d–\d\d:\d\d, 12 min, 1,7\d\d L water, Tank A 9 L, Tank B 9 L, Tank C 9\.25 L, Tank D 5\.75 L \(1:\d{3}\)\.$/);
+  const ep = sim.episodes().filter(e => e.kind === 'manual_panel');
+  assert.equal(ep.length, 1);
+  const d = JSON.parse(ep[0].detail_json);
+  assert.ok(d.water_l > 1700 && d.water_l < 1850, `water ${d.water_l}`);
+  assert.deepEqual(d.tanks.slice(0, 4).map(x => x.litres), [9, 9, 9.25, 5.75]);
+  assert.equal(d.escalated, null);
+  assert.ok(!sim.svc.instances.size, [...sim.svc.instances.keys()].join(','));
+  sim.dispose();
+});
+
+test('manual PANEL run longer than manual_panel_max_minutes -> escalates through water_without_valve (caution, panel wording); both alerts carry the summary at the end', async () => {
+  const sim = panelSim({ manual_panel_max_minutes: 2 });
+  const water = (rel) => (rel >= 10 && rel < 190 ? 8934 : 0);
+  await sim.run({ from: 0, to: 240, flowAt: water, dosingAt: (rel) => (water(rel) ? PANEL_RATES : [0, 0, 0, 0]), activeAt: () => true });
+  const a = panelAlerts(sim);
+  assert.deepEqual(a.map(x => x.fingerprint), [`flow_watch:manual_panel:${sim.irr}`, `flow_watch:water_without_valve:${sim.irr}`]);
+  const t = sim.firedAt[`water_without_valve:${sim.irr}`];
+  assert.ok(t >= 130 && t <= 131, `escalated at ${t}`);
+  assert.equal(a[1].severity, 'warning');
+  assert.match(a[1].message, /^Manual irrigation \(panel\) that needed attention ended at .*Escalated because running 2 min/);
+  assert.match(a[0].message, /Escalated to caution: running 2 min/);
+  assert.equal(a[0].severity, 'info');
+  assert.ok(!a.some(x => /flow_after_pump_off/.test(x.fingerprint)));
+  sim.dispose();
+});
+
+test('manual PANEL run dosing stronger than 1:80 -> caution "tanks dosing stronger than 1:80"', async () => {
+  const sim = panelSim();
+  const water = (rel) => (rel >= 10 && rel < 200 ? 8934 : 0);
+  await sim.run({ from: 0, to: 150, flowAt: water, dosingAt: (rel) => (water(rel) ? [200, 200, 200, 200] : [0, 0, 0, 0]), activeAt: () => true });
+  const a = panelAlerts(sim);
+  assert.equal(a.length, 2, a.map(x => x.message).join('\n'));
+  assert.equal(a[1].fingerprint, `flow_watch:water_without_valve:${sim.irr}`);
+  assert.equal(a[1].severity, 'warning');
+  assert.match(a[1].message, /^Manual irrigation \(panel\) needs attention: tanks dosing stronger than 1:80 \(1:\d\d\)\./);
+  sim.dispose();
+});
+
+test('manual PANEL run: tanks keep dosing after the water stops (< 500 L/h) -> caution; dosing_without_water (SenseHub valves only) stays silent', async () => {
+  const sim = panelSim();
+  const water = (rel) => (rel >= 10 && rel < 100 ? 8934 : 0);
+  await sim.run({ from: 0, to: 170, flowAt: water, dosingAt: (rel) => (rel >= 12 && rel < 150 ? [60, 55, 65, 50] : [0, 0, 0, 0]), activeAt: () => true });
+  const a = panelAlerts(sim);
+  assert.equal(a.length, 2, a.map(x => `${x.fingerprint}: ${x.message}`).join('\n'));
+  assert.equal(a[1].fingerprint, `flow_watch:water_without_valve:${sim.irr}`);
+  assert.match(a[1].message, /tanks still dosing \([\d.]+ L in \d+ s\) with water below 500 L\/h/);
+  assert.ok(!a.some(x => /dosing_without_water/.test(x.fingerprint)));
+  sim.dispose();
+});
+
+test('manual panel config: validated and can be switched off (then the legacy cautions fire as before)', async () => {
+  assert.deepEqual(validateConfigUpdate({ manual_panel_max_minutes: 30, manual_panel_max_ratio: 100, manual_panel_seconds: 15, manual_panel_enabled: false }).value,
+    { manual_panel_max_minutes: 30, manual_panel_max_ratio: 100, manual_panel_seconds: 15, manual_panel_enabled: false });
+  assert.match(validateConfigUpdate({ manual_panel_max_minutes: 0 }).error, /manual_panel_max_minutes/);
+  const sim = panelSim({ manual_panel_enabled: false });
+  await sim.run({ from: 0, to: 60, flowAt: () => 8934, activeAt: () => true });
+  assert.deepEqual(panelAlerts(sim).map(x => x.fingerprint).sort(),
+    [`flow_watch:flow_after_pump_off:${sim.irr}:1`, `flow_watch:water_without_valve:${sim.irr}`].sort());
+  sim.dispose();
+});

@@ -56,6 +56,7 @@ const { dataRetentionService } = require('./services/DataRetentionService');
 const { getMqttIngestService } = require('./services/MqttIngestService');
 const { getFlowWatchService } = require('./services/IrrigationFlowWatchService');
 const { getDoseController } = require('./services/DoseController');
+const { getIrrigationRunsService } = require('./services/IrrigationRunsService');
 
 const app = express();
 const server = http.createServer(app);
@@ -226,6 +227,7 @@ app.use('/api/relay-events', authMiddleware, require('./routes/relayEvents'));
 app.use('/api/mqtt', authMiddleware, require('./routes/mqtt'));
 app.use('/api/flow-watch', authMiddleware, require('./routes/flowWatch'));
 app.use('/api/dose-controller', authMiddleware, require('./routes/doseController'));
+app.use('/api/irrigation', authMiddleware, require('./routes/irrigationRuns'));
 
 // Error handling middleware
 app.use(errorHandler);
@@ -395,6 +397,15 @@ server.listen(PORT, async () => {
   } catch (error) {
     console.error('Dose controller: Failed to start -', error.message);
   }
+
+  // Irrigation runs: groups monitor cycles + relay events into automated / manual
+  // runs (irrigation_runs, derived data). Read-only for the plant: no relay writes.
+  try {
+    getIrrigationRunsService().start();
+    console.log('Irrigation runs: Started');
+  } catch (error) {
+    console.error('Irrigation runs: Failed to start -', error.message);
+  }
 });
 
 // Graceful shutdown handler
@@ -410,6 +421,7 @@ process.on('SIGINT', async () => {
   try { getMqttIngestService().stop(); } catch (_) {}
   try { getFlowWatchService().stop(); } catch (_) {}
   try { getDoseController().stop(); } catch (_) {}
+  try { getIrrigationRunsService().stop(); } catch (_) {}
   await modbusPollingService.stop();
   process.exit(0);
 });
@@ -426,6 +438,7 @@ process.on('SIGTERM', async () => {
   try { getMqttIngestService().stop(); } catch (_) {}
   try { getFlowWatchService().stop(); } catch (_) {}
   try { getDoseController().stop(); } catch (_) {}
+  try { getIrrigationRunsService().stop(); } catch (_) {}
   await modbusPollingService.stop();
   process.exit(0);
 });

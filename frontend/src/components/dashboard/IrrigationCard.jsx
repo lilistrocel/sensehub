@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { Card, Label, Reading, SectionHeader, StatusPill } from '../../ui';
 import { useIrrigationLive } from './useIrrigationLive';
 import LastCycleZones from '../LastCycleZones';
+import RunList from '../irrigation/RunList';
+import { RunTypeTag } from '../irrigation/RunType';
 import {
   IRRIGATION,
   deriveIrrigationView,
@@ -160,6 +162,9 @@ export default function IrrigationCard({ token, subscribe, board, formatClock })
   const { zoneOpenS } = view;
   const t = view.today;
   const lc = view.lastCycle;
+  const runsToday = live.todayRuns && Array.isArray(live.todayRuns.runs) ? live.todayRuns : null;
+  const manualToday = runsToday ? runsToday.runs.filter((r) => r.type !== 'automated').length : 0;
+  const lastRunIsRun = !!(live.lastRun && live.lastRun.type);
 
   return (
     <section aria-label="Irrigation" data-testid="irrigation-card">
@@ -315,13 +320,35 @@ export default function IrrigationCard({ token, subscribe, board, formatClock })
             <p className="text-[11px] text-muted">{t.available ? (t.coverageFrom ? `measured since ${clock(Date.parse(t.coverageFrom))}` : 'measured') : (t.reason || '—')}</p>
           </div>
           <div className="min-w-0">
-            <Label>Cycles today</Label>
-            <Reading size="md" value={t.cycles === null ? null : String(t.cycles)} unknown={t.cycles === null} />
-            <p className="text-[11px] text-muted">{t.fertL !== null ? `${formatNum(t.fertL, 1)} L dosed (A–D)` : ' '}</p>
+            {runsToday ? (
+              <>
+                <Label>Runs today</Label>
+                <Reading size="md" value={String(runsToday.total)} />
+                <p className="text-[11px] text-muted" data-testid="irrigation-runs-today-sub">
+                  {manualToday > 0 ? `${manualToday} manual · ` : ''}{t.fertL !== null ? `${formatNum(t.fertL, 1)} L dosed` : (t.cycles !== null ? `${t.cycles} monitor cycles` : ' ')}
+                </p>
+              </>
+            ) : (
+              <>
+                <Label>Cycles today</Label>
+                <Reading size="md" value={t.cycles === null ? null : String(t.cycles)} unknown={t.cycles === null} />
+                <p className="text-[11px] text-muted">{t.fertL !== null ? `${formatNum(t.fertL, 1)} L dosed (A–D)` : ' '}</p>
+              </>
+            )}
           </div>
           <div className="col-span-2 min-w-0">
-            <Label>Last cycle</Label>
-            {lc ? (
+            <Label>{lastRunIsRun ? 'Last run' : 'Last cycle'}</Label>
+            {lastRunIsRun ? (
+              <>
+                <p className="font-mono tabular text-sm text-ink mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>{clock(Date.parse(live.lastRun.started_at))} · {formatDuration(live.lastRun.duration_s)} · {live.lastRun.water_l !== null ? (live.lastRun.water_l >= 1000 ? `${formatNum(live.lastRun.water_l / 1000, 2)} m³` : `${formatNum(live.lastRun.water_l, 1)} L`) : '—'}</span>
+                  <RunTypeTag run={live.lastRun} short />
+                </p>
+                <p className="font-mono tabular text-xs text-muted mt-0.5">
+                  {(live.lastRun.tanks || []).length ? live.lastRun.tanks.map((x) => `${(/Tank\s+([A-Z])/.exec(x.name || '') || [])[1] || x.tank_id} ${formatNum(x.dosed_l, 1)}`).join(' · ') + ' L' : 'no dosing reported'}
+                </p>
+              </>
+            ) : lc ? (
               <>
                 <p className="font-mono tabular text-sm text-ink mt-1">
                   {clock(lc.startMs)} · {formatDuration(lc.durationS)} · {lc.waterL !== null ? (lc.waterL >= 1000 ? `${formatNum(lc.waterL / 1000, 2)} m³` : `${formatNum(lc.waterL, 1)} L`) : '—'}
@@ -340,8 +367,17 @@ export default function IrrigationCard({ token, subscribe, board, formatClock })
               {live.lastRun ? (
                 <LastCycleZones run={live.lastRun} formatTime={(iso) => clock(Date.parse(iso))} className="mt-1" />
               ) : (
-                <p className="text-sm text-muted mt-1">No dose-controller run recorded yet.</p>
+                <p className="text-sm text-muted mt-1">No irrigation run recorded yet.</p>
               )}
+            </div>
+          )}
+          {runsToday && (
+            <div className="col-span-2 sm:col-span-4 min-w-0" data-testid="irrigation-runs-today">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label>Today's runs</Label>
+                <span className="font-mono tabular text-xs text-muted">{runsToday.total} · {formatNum((runsToday.water_l || 0) / 1000, 2)} m³</span>
+              </div>
+              <RunList runs={runsToday.runs} formatTime={(iso) => clock(Date.parse(iso))} highlightId={lastRunIsRun ? live.lastRun.id : null} className="mt-1" />
             </div>
           )}
           <div className="col-span-2 sm:col-span-4 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-sm">

@@ -354,7 +354,7 @@ function applyToAgronomistSnapshot(snapshot, eff) {
   if (!eff.isEnabled('amic') && !eff.isEnabled('lab')) delete out.lab;
 
   // dispensing — fertigation
-  if (!eff.isEnabled('fertigation')) delete out.dispensing;
+  if (!eff.isEnabled('fertigation')) { delete out.dispensing; delete out.manual_irrigation; }
   else if (Array.isArray(out.dispensing)) out.dispensing = out.dispensing.filter(d => !excluded(d.equipment_id));
 
   // alerts

@@ -38,6 +38,20 @@
  *                                (source 'flow_watch') — closing injector valves only.
  *   water_without_valve  caution flow > 1,000 L/h for 30 s with no zone relay ON.
  *   flow_after_pump_off  caution flow > 1,000 L/h for 20 s with the pump relay OFF.
+ *   manual_panel         info    MANUAL IRRIGATION AT THE PANEL (requirement 2026-09-27, after
+ *                                the 08:07 panel run raised flow_after_pump_off + water_without_valve
+ *                                for 12 min): flow > water_without_valve_lph for manual_panel_seconds
+ *                                with NO SenseHub pump relay and NO zone relay ON. ONE info alert
+ *                                "Manual irrigation detected (panel) — water X L/h, started HH:MM";
+ *                                water_without_valve / flow_after_pump_off are held while it lasts.
+ *                                Escalation (water_without_valve is the escalation path: it fires as
+ *                                a caution with the panel wording) when (a) it runs longer than
+ *                                manual_panel_max_minutes (default 20), (b) the tanks dose stronger
+ *                                than 1:manual_panel_max_ratio (default 1:80), or (c) the dosing
+ *                                counters keep moving with flow < dosing_max_flow_lph for
+ *                                dosing_seconds (dosing_without_water itself only covers valves
+ *                                SenseHub opened and stays an alarm). Resolved with a summary
+ *                                (duration, water, litres per tank, ratio). Read-only: no actuation.
  *   monitor_blind        caution pump ON but no fresh flowmeter data for 60 s, or the
  *                                meter unhealthy (signal < 60 / error_flags != 0) for 30 s.
  *   pump_no_flow_shutdown alarm  PUMP PROTECTION (operator request 2026-09-26, after the
@@ -92,6 +106,7 @@ const RULES = {
   water_without_valve: { severity: 'warning', level: 'caution', title: 'Irrigation: flow with no zone open' },
   flow_after_pump_off: { severity: 'warning', level: 'caution', title: 'Irrigation: flow with pump OFF' },
   monitor_blind: { severity: 'warning', level: 'caution', title: 'Irrigation: flow not verifiable' },
+  manual_panel: { severity: 'info', level: 'info', title: 'Manual irrigation detected (panel)' },
   pump_no_flow_shutdown: { severity: 'critical', level: 'alarm', title: 'Irrigation stopped: no water flow' },
 };
 // Guard phases of the pump no-flow protection while it is acting on a run.
@@ -138,6 +153,11 @@ const DEFAULT_CONFIG = {
   water_without_valve_seconds: 30,
   flow_after_pump_off_lph: 1000,
   flow_after_pump_off_seconds: 20,
+  // manual irrigation at the panel (no SenseHub pump / zone relay ON)
+  manual_panel_enabled: true,
+  manual_panel_seconds: 20,       // flow this long with no SenseHub relay -> one info alert
+  manual_panel_max_minutes: 20,   // longer -> caution (water_without_valve, panel wording)
+  manual_panel_max_ratio: 80,     // dosing stronger than 1:80 -> caution
   blind_stale_seconds: 60,
   blind_unhealthy_seconds: 30,
   min_signal_quality: 60,
@@ -191,6 +211,10 @@ const CONFIG_SCHEMA = {
   water_without_valve_seconds: NUM(1, 3600),
   flow_after_pump_off_lph: NUM(1, 100000),
   flow_after_pump_off_seconds: NUM(1, 3600),
+  manual_panel_enabled: { type: 'bool' },
+  manual_panel_seconds: NUM(5, 600),
+  manual_panel_max_minutes: NUM(1, 600),
+  manual_panel_max_ratio: NUM(10, 1000),
   blind_stale_seconds: NUM(10, 3600),
   blind_unhealthy_seconds: NUM(1, 3600),
   min_signal_quality: NUM(0, 100),
@@ -276,6 +300,9 @@ function fmtClock(ms) {
     return new Date(ms).toISOString().slice(11, 19);
   }
 }
+function fmtHm(ms) { return fmtClock(ms).slice(0, 5); }
+const fmtL2 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? '?' : (Math.round(x * 100) / 100).toString());
+const TANK_MOVED_L = 0.5;
 function median(arr) {
   if (!arr.length) return null;
   const s = [...arr].sort((a, b) => a - b);
@@ -915,18 +942,31 @@ class IrrigationFlowWatchService {
       });
     }
 
+    // ── manual irrigation at the panel (no SenseHub pump / zone relay ON) ──
+    const panel = this._evalManualPanel(cfg, nowMs, relays, meter, st, onZones);
+
     // ── water without a zone valve ──
     {
       const key = `water_without_valve:${cfg.irrigation_equipment_id}`;
       let verdict = null;
       let reason = 'recovered';
-      if (relays.known && meter.known) {
+      let holdMs = cfg.water_without_valve_seconds * 1000;
+      const ctx = { eqName: st.eqName, eqId: cfg.irrigation_equipment_id };
+      if (panel.active) {
+        // panel run: held while benign; fires at once (caution, panel wording) when escalated
+        verdict = relays.known && meter.known ? !!panel.escalated : null;
+        reason = panel.escalated ? 'recovered' : 'manual_panel';
+        holdMs = 0;
+        ctx.panel = panel.inst.ctx;
+      } else if (this.instances.has(key) && this.instances.get(key).ctx.panel) {
+        // the panel run this escalation belonged to is over: close it (a new episode may follow)
+        verdict = relays.known && meter.known ? false : null;
+      } else if (relays.known && meter.known) {
         verdict = onZones.length === 0 && flow > cfg.water_without_valve_lph;
         if (!verdict && onZones.length > 0) reason = 'ended';
       }
       this._step(key, 'water_without_valve', nowMs, verdict, {
-        holdMs: cfg.water_without_valve_seconds * 1000, gapMs: gap, clearMs: 10000, falseReason: reason, flow,
-        ctx: { eqName: st.eqName, eqId: cfg.irrigation_equipment_id },
+        holdMs, gapMs: gap, clearMs: 10000, falseReason: reason, flow, ctx,
       });
     }
 
@@ -935,7 +975,10 @@ class IrrigationFlowWatchService {
       const key = `flow_after_pump_off:${cfg.irrigation_equipment_id}:${cfg.pump_channel}`;
       let verdict = null;
       let reason = 'recovered';
-      if (relays.known && meter.known) {
+      if (panel.active || panel.now) {
+        verdict = relays.known && meter.known ? false : null; // the panel run owns this (one alert, not two)
+        reason = 'manual_panel';
+      } else if (relays.known && meter.known) {
         verdict = !relays.pump.on && flow > cfg.flow_after_pump_off_lph;
         if (!verdict && relays.pump.on) reason = 'ended';
       }
@@ -972,6 +1015,150 @@ class IrrigationFlowWatchService {
 
     this.lastEvaluation = { at: nowMs, enabled: true, relays, meter, dosing, current, onZones, settleEnd, cfg };
     return this.lastEvaluation;
+  }
+
+  // ─── manual irrigation at the panel ───────────────────────────────────────
+
+  /**
+   * Track a run started at the panel: water with the SenseHub pump relay OFF and
+   * no zone relay ON. Keeps water / tank litres since the start (flow-meter net
+   * total or integrated flow; dosing counters) and decides escalation.
+   * Returns { now, active, escalated, inst }.
+   */
+  _evalManualPanel(cfg, nowMs, relays, meter, st, onZones) {
+    const key = `manual_panel:${cfg.irrigation_equipment_id}`;
+    if (!cfg.manual_panel_enabled) {
+      const stale = this.instances.get(key);
+      if (stale) { this.instances.delete(key); this._onEnd(stale, nowMs); }
+      return { now: false, active: false, escalated: false, inst: null };
+    }
+    const flow = meter.flow;
+    const relaysPanel = relays.known && !relays.pump.on && onZones.length === 0;
+    let inst = this.instances.get(key);
+    const tanks = this.dosing && nowMs - this.dosing.receivedMs <= cfg.dosing_fresh_seconds * 1000 ? this.dosing.tanks : null;
+    const consumedSum = (m) => Object.values(m || {}).reduce((a, v) => a + (typeof v === 'number' ? v : 0), 0);
+    // keep the episode alive while the dosing counters still move after the water stopped (escalation c)
+    const ratesOn = !!tanks && tanks.some(t => typeof t.rate_lph === 'number' && t.rate_lph > cfg.dosing_rate_lph);
+    const dosingMoving = !!inst && inst.fired && ratesOn && inst.ctx.lastDoseMoveMs !== undefined && nowMs - inst.ctx.lastDoseMoveMs <= 15000;
+    const now = relaysPanel && meter.known && flow > cfg.water_without_valve_lph;
+    let verdict = null;
+    let reason = 'recovered';
+    if (relays.known && meter.known) {
+      verdict = now || (relaysPanel && dosingMoving);
+      if (!verdict && !relaysPanel) reason = 'ended'; // SenseHub took over (pump / zone relay ON)
+    }
+    inst = this._step(key, 'manual_panel', nowMs, verdict, {
+      holdMs: cfg.manual_panel_seconds * 1000, gapMs: cfg.gap_seconds * 1000, clearMs: 10000, falseReason: reason, flow,
+      ctx: { eqName: st.eqName, eqId: cfg.irrigation_equipment_id },
+    });
+    if (!inst) return { now, active: false, escalated: false, inst: null };
+    const c = inst.ctx;
+    if (now) c.lastWaterMs = nowMs;
+    // accumulate water + dosing since the start of the episode
+    const net = this.flow && typeof this.flow.values.net_total_m3 === 'number' ? this.flow.values.net_total_m3 : null;
+    if (c.startMs === undefined) {
+      c.startMs = inst.start;
+      c.startFlow = flow;
+      c.net0 = net;
+      c.waterIntL = 0;
+      c.lastFlowMs = nowMs;
+      c.lastFlow = flow;
+      c.consumedStart = tanks ? Object.fromEntries(tanks.map(t => [t.id, t.consumed_l])) : null;
+      c.tankNames = st.tankNames;
+    }
+    if (typeof flow === 'number' && meter.fresh) {
+      const dt = Math.max(0, Math.min(nowMs - c.lastFlowMs, 30000)) / 1000;
+      c.waterIntL += ((c.lastFlow || 0) * dt) / 3600;
+      c.lastFlow = flow;
+      c.lastFlowMs = nowMs;
+      c.maxFlow = Math.max(c.maxFlow || 0, flow);
+    }
+    const netL = net !== null && c.net0 !== null && net >= c.net0 ? (net - c.net0) * 1000 : null;
+    c.waterL = netL !== null && netL > 0 ? netL : c.waterIntL;
+    if (tanks) {
+      if (!c.consumedStart) c.consumedStart = Object.fromEntries(tanks.map(t => [t.id, t.consumed_l]));
+      const nowMap = Object.fromEntries(tanks.map(t => [t.id, t.consumed_l]));
+      if (c.consumedNow && consumedSum(nowMap) > consumedSum(c.consumedNow) + 1e-9) c.lastDoseMoveMs = nowMs;
+      c.consumedNow = nowMap;
+    }
+    // (c) dosing with (almost) no water: counters moving while flow < dosing_max_flow_lph
+    const lowFlow = typeof flow === 'number' && meter.known && flow < cfg.dosing_max_flow_lph;
+    if (lowFlow) {
+      if (c.lowFlowSince === undefined || c.lowFlowSince === null) { c.lowFlowSince = nowMs; c.lowFlowConsumed = consumedSum(c.consumedNow); }
+    } else { c.lowFlowSince = null; }
+    if (inst.fired && !c.escalated) {
+      const dosed = this._panelDosed(c);
+      const nutrient = dosed.filter(d => d.nutrient);
+      const mean = nutrient.length ? nutrient.reduce((a, d) => a + d.litres, 0) / nutrient.length : 0;
+      const ratio = mean > 0 && c.waterL > 0 ? c.waterL / mean : null;
+      let why = null;
+      if (nowMs - inst.start > cfg.manual_panel_max_minutes * 60000) why = { kind: 'long' };
+      else if (ratio !== null && c.waterL >= 200 && Math.max(...nutrient.map(d => d.litres)) >= 1 && ratio < cfg.manual_panel_max_ratio) why = { kind: 'ratio', ratio };
+      else if (lowFlow && c.lowFlowSince !== null && nowMs - c.lowFlowSince >= cfg.dosing_seconds * 1000
+        && consumedSum(c.consumedNow) - c.lowFlowConsumed >= TANK_MOVED_L) why = { kind: 'dosing_low_flow', litres: consumedSum(c.consumedNow) - c.lowFlowConsumed, forMs: nowMs - c.lowFlowSince };
+      if (why) {
+        c.escalated = { ...why, at: nowMs };
+        this.log.warn(`[FlowWatch] manual panel run escalated: ${why.kind}`);
+        const base = inst.message || this._fireMessage(inst, inst.firedAt || nowMs);
+        inst.message = `${base} Escalated to caution: ${this._panelWhy(c, nowMs)}.`;
+        this._updateOpenAlert(this._fingerprint(inst), { message: inst.message, severity: 'info' });
+        if (inst.episodeId) {
+          try { this.db.prepare('UPDATE irrigation_flow_episodes SET severity = ?, updated_at = ? WHERE id = ?').run('warning', iso(nowMs), inst.episodeId); } catch (_) { /* best-effort */ }
+        }
+      }
+    }
+    return { now, active: true, escalated: !!c.escalated, inst };
+  }
+
+  /** Litres per tank since the start of a panel run: [{ id, name, litres, nutrient }]. */
+  /** End of a panel run = when the water stopped (not when a dosing tail stopped), unless that tail escalated it. */
+  _panelEndAt(inst, fallback) {
+    const c = inst.ctx || {};
+    if (c.escalated && c.escalated.kind === 'dosing_low_flow') return fallback;
+    return c.lastWaterMs !== undefined && c.lastWaterMs < fallback ? c.lastWaterMs : fallback;
+  }
+
+  _panelDosed(c) {
+    const out = [];
+    const s = c.consumedStart || {};
+    const n = c.consumedNow || {};
+    for (const [id, v0] of Object.entries(s)) {
+      const v1 = n[id];
+      if (typeof v0 !== 'number' || typeof v1 !== 'number') continue;
+      const name = (c.tankNames || {})[id] || `Tank ${id}`;
+      out.push({ id: Number(id), name, litres: Math.max(0, v1 - v0), nutrient: !/ph/i.test(name) });
+    }
+    return out;
+  }
+
+  _panelSummary(c) {
+    const dosed = this._panelDosed(c).filter(d => d.litres > 0 || d.nutrient);
+    const nutrient = dosed.filter(d => d.nutrient);
+    const mean = nutrient.length ? nutrient.reduce((a, d) => a + d.litres, 0) / nutrient.length : 0;
+    const ratio = mean > 0 && c.waterL > 0 ? Math.round(c.waterL / mean) : null;
+    const tanks = dosed.filter(d => d.litres > 0).map(d => `${shortTankName(d.name, d.id)} ${fmtL2(d.litres)} L`).join(', ');
+    return { tanks: tanks || 'no dosing measured', ratio, water: fmtLph(c.waterL) };
+  }
+
+  _panelWhy(c, nowMs) {
+    const cfg = this.getConfig();
+    const e = c.escalated || {};
+    if (e.kind === 'long') return `running ${fmtDur(nowMs - c.startMs)}, longer than ${cfg.manual_panel_max_minutes} min`;
+    if (e.kind === 'ratio') return `tanks dosing stronger than 1:${cfg.manual_panel_max_ratio} (1:${Math.round(e.ratio)})`;
+    if (e.kind === 'dosing_low_flow') return `tanks still dosing (${fmtL2(e.litres)} L in ${fmtDur(e.forMs)}) with water below ${fmtLph(cfg.dosing_max_flow_lph)} L/h`;
+    return 'needs attention';
+  }
+
+  _panelZoneHint(c) {
+    const st = this._static;
+    const exp = st ? Object.values(st.expected || {}).filter(v => v > 0) : [];
+    const one = median(exp) || 8820;
+    const f = c.startFlow;
+    if (typeof f !== 'number' || !(f > 0)) return '';
+    const k = f / one;
+    if (Math.abs(k - 1) <= 0.15) return " (≈ one zone's flow)";
+    if (Math.abs(k - 2) <= 0.3) return " (≈ two zones' flow)";
+    return '';
   }
 
   // ─── pump no-flow protection: shutdown / cold-restart retry ──────────────
@@ -1538,7 +1725,14 @@ class IrrigationFlowWatchService {
         return `Fertiliser is dosing into a line with no water flow: ${tanks} (water ${fmtLph(flow)} L/h, below ${fmtLph(cfg.dosing_max_flow_lph)} L/h for ${dur}).`;
       }
       case 'water_without_valve':
+        if (c.panel) {
+          const p = c.panel;
+          const sum = this._panelSummary(p);
+          return `Manual irrigation (panel) needs attention: ${this._panelWhy(p, nowMs)}. Water ${fmtLph(flow)} L/h, started ${fmtHm(p.startMs)}, ${sum.water} L so far; ${sum.tanks}${sum.ratio ? ` (1:${sum.ratio})` : ''}. No SenseHub pump or zone relay is ON — check at the panel.`;
+        }
         return `Water is flowing (${fmtLph(flow)} L/h for ${dur}) but no irrigation zone relay on ${c.eqName} is ON — stuck-open valve, leak or a manual valve?`;
+      case 'manual_panel':
+        return `Manual irrigation detected (panel) — water ${fmtLph(c.startFlow ?? flow)} L/h, started ${fmtHm(inst.start)}. No SenseHub pump or zone relay is ON, so the zone is unknown${this._panelZoneHint(c)} and dosing is outside SenseHub control.`;
       case 'flow_after_pump_off':
         return `Water is flowing (${fmtLph(flow)} L/h for ${dur}) while the irrigation pump relay (${c.eqName} relay ${c.pumpChannel}) is OFF — pump run by hand at the panel, or siphoning?`;
       case 'monitor_blind': {
@@ -1595,11 +1789,26 @@ class IrrigationFlowWatchService {
         break;
       }
       case 'water_without_valve':
+        if (c.panel) {
+          const p = c.panel;
+          const sum = this._panelSummary(p);
+          message = `Manual irrigation (panel) that needed attention ended at ${fmtClock(endAt)}: ${fmtDur(endAt - p.startMs)}, ${sum.water} L, ${sum.tanks}${sum.ratio ? ` (1:${sum.ratio})` : ''}. Escalated because ${this._panelWhy(p, (p.escalated && p.escalated.at) || endAt)}.`;
+          severity = 'warning';
+          break;
+        }
         message = recovered
           ? `Resolved: water flow with no zone open stopped after ${dur}.`
           : `Water flowed with no zone open for ${dur} until a zone opened at ${fmtClock(endAt)} (highest ${fmtLph(inst.maxFlow)} L/h).`;
         if (!recovered) severity = 'info';
         break;
+      case 'manual_panel': {
+        const sum = this._panelSummary(c);
+        const endAt = this._panelEndAt(inst, inst.falseSince || nowMs);
+        const taken = inst.falseReason === 'ended' ? ' SenseHub relays took over.' : '';
+        message = `Manual irrigation (panel) ended: ${fmtHm(inst.start)}–${fmtHm(endAt)}, ${fmtDur(endAt - inst.start)}, ${sum.water} L water, ${sum.tanks}${sum.ratio ? ` (1:${sum.ratio})` : ''}.${taken}${c.escalated ? ` Escalated to caution: ${this._panelWhy(c, c.escalated.at)}.` : ''}`;
+        severity = 'info';
+        break;
+      }
       case 'flow_after_pump_off':
         message = recovered
           ? `Resolved: water flow with the pump relay OFF stopped after ${dur}.`
@@ -1719,7 +1928,7 @@ class IrrigationFlowWatchService {
     if (inst.rule === 'pump_no_flow_shutdown') return; // its alert/episode are owned by the guard
     const cfg = this.getConfig();
     const def = RULES[inst.rule];
-    const endAt = inst.falseSince || nowMs;
+    const endAt = inst.rule === 'manual_panel' ? this._panelEndAt(inst, inst.falseSince || nowMs) : (inst.falseSince || nowMs);
     inst.ended = true;
     inst.endedAt = nowMs;
     if (inst.fired) {
@@ -1771,6 +1980,13 @@ class IrrigationFlowWatchService {
       detail.litres_dosed = this._litresDosed(inst.ctx);
       detail.abort = inst.ctx.abort ? inst.ctx.abort.outcome : null;
       detail.tanks = (inst.ctx.dosing && inst.ctx.dosing.active || []).map(t => ({ id: t.id, name: t.name, rate_lph: t.rate_lph }));
+    }
+    if (inst.rule === 'manual_panel') {
+      const c = inst.ctx;
+      detail.water_l = c.waterL !== undefined ? Math.round(c.waterL * 10) / 10 : null;
+      detail.tanks = this._panelDosed(c).map(d => ({ id: d.id, name: d.name, litres: Math.round(d.litres * 100) / 100 }));
+      detail.escalated = c.escalated ? { kind: c.escalated.kind, at: iso(c.escalated.at) } : null;
+      detail.start_flow_lph = round(c.startFlow);
     }
     if (inst.rule === 'flow_above_expected' && inst.ctx.above) {
       detail.baseline_lph = round(inst.ctx.above.base);
@@ -1843,7 +2059,8 @@ class IrrigationFlowWatchService {
     const g = this.guard;
     if (g && GUARD_RETRY.has(g.phase)) state = 'alarm';
     else if (active.some(a => a.fired && a.level === 'alarm')) state = 'alarm';
-    else if (active.some(a => a.fired)) state = 'caution';
+    else if (active.some(a => a.fired && a.level === 'caution')) state = 'caution';
+    else if (active.some(a => a.fired && a.level === 'info')) state = 'manual';
     else if (active.length) state = 'checking';
     else if (!relays.known) state = 'unknown';
     else if (relays.pump.on && !meter.known) state = 'unknown';
