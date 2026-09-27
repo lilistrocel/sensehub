@@ -26,6 +26,7 @@
  *     watchdog_events_retention_days: 90,
  *     agronomist_captures_retention_days: 30, // noon canopy JPEGs + rows
  *     irrigation_cycles_retention_days: 730, // MQTT irrigation-monitor cycle reports (a few rows/day)
+ *     audit_log_retention_days: 365,         // action audit trail (who did what); small
  *     prune_expired_sessions: true,          // sessions past expires_at
  *     dry_run: false,                        // when true, logs what would be done without modifying anything
  *   }
@@ -65,6 +66,9 @@ const DEFAULT_CONFIG = {
   // day, kept for season-over-season water/dosing comparisons. The monitors'
   // live readings go to `readings` and follow readings_retention_days above.
   irrigation_cycles_retention_days: 730,
+  // Action audit trail (audit_log: who changed / pressed what). A few hundred
+  // rows a day at most; kept a year for incident reviews.
+  audit_log_retention_days: 365,
   // Sessions past expires_at are dead weight (auth already ignores them).
   prune_expired_sessions: true,
   dry_run: false,
@@ -229,6 +233,15 @@ class DataRetentionService {
       summary.irrigation_cycles = { error: err.message, rows_dropped: 0 };
     }
 
+    // ----- audit_log (action audit trail): simple prune by created_at -----
+    try {
+      summary.audit_log = this._pruneByAge(
+        'audit_log', 'created_at', cfg.audit_log_retention_days, cfg.dry_run,
+      );
+    } catch (err) {
+      summary.audit_log = { error: err.message, rows_dropped: 0 };
+    }
+
     // ----- VACUUM after big deletes (only if we actually deleted something) -----
     const droppedRows =
       (summary.readings.rows_dropped || 0) +
@@ -241,7 +254,8 @@ class DataRetentionService {
       (summary.watchdog_events.rows_dropped || 0) +
       (summary.sessions.rows_dropped || 0) +
       (summary.info_alerts.rows_dropped || 0) +
-      (summary.irrigation_cycles.rows_dropped || 0);
+      (summary.irrigation_cycles.rows_dropped || 0) +
+      (summary.audit_log.rows_dropped || 0);
     if (!cfg.dry_run && droppedRows > 10000) {
       // VACUUM rebuilds the DB into a temp copy and can transiently need free
       // space up to the current DB size. On a disk-constrained host that could

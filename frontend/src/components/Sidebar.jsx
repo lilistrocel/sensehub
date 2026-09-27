@@ -100,6 +100,12 @@ const RelayEventsIcon = () => (
   </svg>
 );
 
+const LogsIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 7h6m-6 4h4" />
+  </svg>
+);
+
 const SettingsIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -169,6 +175,8 @@ const navSections = [
       { name: 'Calibration', path: '/calibration', icon: CalibrationIcon },
       { name: 'Agronomist', path: '/agronomist', icon: AgronomistIcon },
       { name: 'Relay Events', path: '/relay-events', icon: RelayEventsIcon },
+      // Activity / audit log: operators and admins (the API refuses viewers).
+      { name: 'Logs', path: '/logs', icon: LogsIcon, visible: (user) => user?.role === 'admin' || user?.role === 'operator' },
     ],
   },
   {

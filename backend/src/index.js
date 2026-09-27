@@ -153,6 +153,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Action audit trail: records every non-GET /api request (user, role, IP,
+// device, target, before/after diff) after the response finishes. Mounted
+// before the routers so new routes are covered automatically; never blocks.
+app.use(require('./middleware/auditLog').auditMiddleware);
+
 // Health check endpoint (no auth required)
 app.get('/api/health', (req, res) => {
   const dbStatus = db.isConnected() ? 'connected' : 'disconnected';
@@ -228,6 +233,8 @@ app.use('/api/mqtt', authMiddleware, require('./routes/mqtt'));
 app.use('/api/flow-watch', authMiddleware, require('./routes/flowWatch'));
 app.use('/api/dose-controller', authMiddleware, require('./routes/doseController'));
 app.use('/api/irrigation', authMiddleware, require('./routes/irrigationRuns'));
+app.use('/api/irrigation', authMiddleware, require('./routes/irrigationStop')); // POST /stop (admin + operator)
+app.use('/api/logs', authMiddleware, require('./routes/logs')); // unified activity log (admin + operator, read-only)
 
 // Error handling middleware
 app.use(errorHandler);

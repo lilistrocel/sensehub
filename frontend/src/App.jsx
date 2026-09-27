@@ -30,6 +30,7 @@ import Planner from './pages/Planner';
 import Templates from './pages/Templates';
 import Analytics from './pages/Analytics';
 import RelayEvents from './pages/RelayEvents';
+import Logs from './pages/Logs';
 import NotFound from './pages/NotFound';
 
 // Loading spinner component
@@ -306,6 +307,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <RelayEvents />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/logs"
+        element={
+          <ProtectedRoute>
+            <Logs />
           </ProtectedRoute>
         }
       />

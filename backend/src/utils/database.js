@@ -977,6 +977,13 @@ const initSchema = () => {
     console.error('irrigation runs schema migration failed:', err.message);
   }
 
+  // Action audit trail (audit_log) + time indexes for the unified Logs API.
+  try {
+    require('./auditLogSchema').ensureAuditLogSchema(db);
+  } catch (err) {
+    console.error('audit log schema migration failed:', err.message);
+  }
+
   // SEKO Kontrol 800 EC register auto-ranges (x10 below 2000 µS, x1 above): decode it.
   try {
     require('./sekoEcAutoRange').ensureSekoEcAutoRange(db);
