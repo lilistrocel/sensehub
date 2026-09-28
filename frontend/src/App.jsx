@@ -29,6 +29,7 @@ import Reports from './pages/Reports';
 import Tasks from './pages/Tasks';
 import Amic from './pages/Amic';
 import Agronomist from './pages/Agronomist';
+import Nutrition from './pages/Nutrition';
 import Planner from './pages/Planner';
 import Templates from './pages/Templates';
 import Analytics from './pages/Analytics';
@@ -279,6 +280,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Templates />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/nutrition"
+        element={
+          <ProtectedRoute>
+            <Nutrition />
           </ProtectedRoute>
         }
       />

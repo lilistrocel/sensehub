@@ -506,51 +506,10 @@ function calculateConsumption(from, to, groupBy) {
 // ingredients) recorded via refill events; the pump doses from it into the irrigation
 // line. The stock level depletes as the pump runs.
 
-const ELEMENTS = ['N','P','K','Ca','Mg','S','Fe','Cu','Mn','Mo','Zn','B','Cl','Na'];
-
-function loadMixtureItems(mixtureId) {
-  if (!mixtureId) return [];
-  return db.prepare(`
-    SELECT mi.ingredient_id, mi.parts, mi.amount, mi.unit,
-           fi.name, fi.form, fi.density_kg_per_l, fi.compatibility_group, fi.composition
-    FROM fertigation_mixture_items mi
-    JOIN fertigation_ingredients fi ON mi.ingredient_id = fi.id
-    WHERE mi.mixture_id = ?
-  `).all(mixtureId);
-}
-
-// Compute milligrams of each element delivered by 1 L of finished stock solution.
-// For solids: amount_kg * (composition_pct / 100) * 1e6 mg / water_base_liters
-// For liquids: amount_L * density_kg_per_l * (composition_g_per_L equivalent / 100) * 1e6 / water_base_liters
-// (We treat composition values uniformly as % by weight; for liquids the operator's reported
-//  amount in L is converted to kg via density. This is a simplification — refine if a liquid
-//  supplier label gives g/L directly.)
-function stockElementalMgPerL(items, waterBaseLiters) {
-  const out = {};
-  if (!waterBaseLiters || waterBaseLiters <= 0) return out;
-  for (const it of items) {
-    if (!it.amount || it.amount <= 0) continue;
-    const massKg = (it.unit === 'L' || it.unit === 'mL')
-      ? (it.unit === 'mL' ? it.amount / 1000 : it.amount) * (it.density_kg_per_l || 1)
-      : (it.unit === 'g' ? it.amount / 1000 : it.amount); // assume kg if not specified
-    let comp = {};
-    try { comp = it.composition ? JSON.parse(it.composition) : {}; } catch (_) {}
-    for (const [el, pct] of Object.entries(comp)) {
-      if (!ELEMENTS.includes(el)) continue;
-      const mg = massKg * (pct / 100) * 1e6; // total mg of element in the whole tank
-      out[el] = (out[el] || 0) + mg / waterBaseLiters;
-    }
-  }
-  return out;
-}
-
-// Round all values in an object to N decimal places.
-function round(obj, dp = 2) {
-  const f = Math.pow(10, dp);
-  const r = {};
-  for (const [k, v] of Object.entries(obj)) r[k] = Math.round(v * f) / f;
-  return r;
-}
+// Stock / ppm math shared with the crop nutrition feed calculator.
+const fertigationMath = require('../services/fertigationMath');
+const { stockElementalMgPerL, round } = fertigationMath;
+const loadMixtureItems = (mixtureId) => fertigationMath.loadMixtureItems(db, mixtureId);
 
 function attachTankComputed(tank) {
   const items = loadMixtureItems(tank.mixture_id);

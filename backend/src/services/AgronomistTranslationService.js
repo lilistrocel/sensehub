@@ -74,12 +74,19 @@ const GLOSSARY = [
   ['Stop All', 'Tümünü Durdur', 'إيقاف الكل'],
   ['Stop irrigation', 'Sulamayı Durdur', 'إيقاف الري'],
   ['emergency stop', 'acil durdurma', 'إيقاف الطوارئ'],
+  ['second opinion', 'ikinci görüş', 'رأي ثانٍ'],
+  ['agronomist protocol', 'agronomistin protokolü', 'بروتوكول المهندس الزراعي'],
+  ['stock solution', 'stok çözelti', 'المحلول المركّز'],
+  ['dripper', 'damlatıcı', 'النقاط'],
+  ['source water', 'kaynak suyu', 'مياه المصدر'],
 ];
 
-function systemPrompt(lang) {
+const REPORT_SUBJECT = 'a daily agronomist report for a hydroponic greenhouse in the UAE';
+
+function systemPrompt(lang, subject = REPORT_SUBJECT) {
   const col = lang === 'tr' ? 1 : 2;
   const glossary = GLOSSARY.map(g => `- ${g[0]} → ${g[col]}`).join('\n');
-  return `You are a professional agronomy translator for greenhouse and farm operators. You translate a daily agronomist report for a hydroponic greenhouse in the UAE from English into ${LANG_NAMES[lang]}.
+  return `You are a professional agronomy translator for greenhouse and farm operators. You translate ${subject} from English into ${LANG_NAMES[lang]}.
 
 Rules:
 - Translate every string value faithfully and completely. Add nothing, omit nothing, do not summarise, do not comment, do not answer questions in the text.
@@ -235,6 +242,89 @@ function validateTranslation(payload, out) {
   if (got !== want) problems.push('tasks ids differ');
   else payload.tasks.forEach((t, i) => need(t.title, out.tasks[i].title, `tasks[${i}].title`));
   return problems.length ? { ok: false, message: problems.slice(0, 6).join('; ') } : { ok: true, fields: westernDigits(out) };
+}
+
+// ---------------------------------------------------------------------------
+// Generic payload translation (used by the fertilizer advisor): any JSON of
+// strings / arrays / objects is translated value by value, same shape back.
+// ---------------------------------------------------------------------------
+
+/** Strict JSON schema mirroring an arbitrary payload (arrays typed by their first item). */
+function genericSchema(v) {
+  if (Array.isArray(v)) return { type: 'array', items: v.length ? genericSchema(v[0]) : { type: 'string' } };
+  if (v && typeof v === 'object') {
+    const props = {};
+    for (const [k, x] of Object.entries(v)) props[k] = genericSchema(x);
+    return { type: 'object', properties: props, required: Object.keys(props), additionalProperties: false };
+  }
+  if (typeof v === 'number') return { type: Number.isInteger(v) ? 'integer' : 'number' };
+  return { type: 'string' };
+}
+
+/** Same keys, same array lengths, no empty string where the English has text. */
+function validateGenericTranslation(payload, out) {
+  const problems = [];
+  const walk = (src, dst, path) => {
+    if (Array.isArray(src)) {
+      if (!Array.isArray(dst) || dst.length !== src.length) { problems.push(`${path} length`); return; }
+      src.forEach((x, i) => walk(x, dst[i], `${path}[${i}]`));
+    } else if (src && typeof src === 'object') {
+      if (!dst || typeof dst !== 'object') { problems.push(`${path} missing`); return; }
+      for (const k of Object.keys(src)) walk(src[k], dst[k], path ? `${path}.${k}` : k);
+    } else if (typeof src === 'string') {
+      if (src.trim() && !str(dst).trim()) problems.push(`${path} empty`);
+    }
+  };
+  walk(payload, out, '');
+  return problems.length ? { ok: false, message: problems.slice(0, 6).join('; ') } : { ok: true, fields: westernDigits(out) };
+}
+
+function buildGenericRequest({ lang, payload, model, maxTokens, subject }) {
+  const req = buildRequest({ lang, payload, model, maxTokens });
+  req.system = systemPrompt(lang, subject);
+  req.output_config = { ...req.output_config, format: { type: 'json_schema', schema: genericSchema(payload) } };
+  return req;
+}
+
+/**
+ * Translate a payload into `lang` (sync with the API; never throws).
+ * @returns {Promise<{status:'ready'|'failed', fields?, error?, input, output, cost, attempts, model}>}
+ */
+async function translatePayload({ client, lang, payload, model, subject, log = console }) {
+  const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  let maxTokens = maxTokensFor(payload);
+  let lastError = null;
+  let attempts = 0;
+  let usedModel = model;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    attempts = attempt;
+    let response;
+    try {
+      response = await client.messages.create(buildGenericRequest({ lang, payload, model, maxTokens, subject }));
+    } catch (e) {
+      lastError = String(e && e.message || e);
+      const status = e && (e.status || e.statusCode);
+      if (status === 401 || status === 403 || /credit balance/i.test(lastError)) break;
+      continue;
+    }
+    const u = response.usage || {};
+    totals.input += u.input_tokens || 0;
+    totals.output += u.output_tokens || 0;
+    totals.cacheRead += u.cache_read_input_tokens || 0;
+    totals.cacheWrite += u.cache_creation_input_tokens || 0;
+    usedModel = response.model || model;
+    if (response.stop_reason === 'max_tokens') { lastError = `output hit max_tokens (${maxTokens})`; maxTokens = Math.min(RETRY_MAX_TOKENS, maxTokens * 2); continue; }
+    if (response.stop_reason !== 'end_turn') { lastError = `unexpected stop_reason '${response.stop_reason}'`; continue; }
+    const text = (response.content || []).find(b => b.type === 'text');
+    let parsed;
+    try { parsed = JSON.parse(text && text.text); } catch (e) { lastError = `invalid JSON: ${e.message}`; continue; }
+    const v = validateGenericTranslation(payload, parsed);
+    if (!v.ok) { lastError = `invalid translation: ${v.message}`; continue; }
+    const cost = estimateCost(usedModel, totals);
+    return { status: 'ready', fields: v.fields, input: totals.input + totals.cacheRead + totals.cacheWrite, output: totals.output, cost, attempts, model: usedModel };
+  }
+  if (log && log.error) log.error(`[Translation] ${lang} failed after ${attempts} attempt(s): ${lastError}`);
+  return { status: 'failed', error: lastError || 'unknown error', input: totals.input + totals.cacheRead + totals.cacheWrite, output: totals.output, cost: estimateCost(usedModel, totals), attempts, model: usedModel };
 }
 
 class AgronomistTranslationService {
@@ -614,4 +704,9 @@ module.exports = {
   systemPrompt,
   westernDigits,
   PRICING,
+  LANG_NAMES,
+  genericSchema,
+  validateGenericTranslation,
+  buildGenericRequest,
+  translatePayload,
 };

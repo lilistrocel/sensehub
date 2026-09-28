@@ -1,0 +1,6 @@
+{
+  "_comment": "FertilizerAdvisorService: provider / output failure alert and translation notes. Labels reuse agronomist_jobs.label.*; the provider error text is passed through as-is.",
+  "provider_alert": "[Fertilizer advisor] {label} — the fertilizer advice run failed. Last error: {error}",
+  "provider_alert_paused": "[Fertilizer advisor] {label} — {count} consecutive failed runs; scheduled and automatic runs paused until the advisor settings are saved or a manual run succeeds. Last error: {error}",
+  "translation_pending_note": "The translation of this advice is being prepared — showing the original English text for now."
+}

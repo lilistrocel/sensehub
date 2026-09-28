@@ -660,6 +660,9 @@ class OperationalPlannerService {
       try { opt = c.optimal_ranges ? JSON.parse(c.optimal_ranges) : null; } catch {}
       return { ...c, optimal_ranges: opt };
     });
+    // Crop profile facts (variety, days after transplant, effective stage, plants, stage targets).
+    let activeCropsOut = activeCrops;
+    try { activeCropsOut = require('./CropProfileService').cropProfileService.enrichCropRows(activeCrops); } catch (_) { activeCropsOut = activeCrops; }
 
     // Available automation templates — the PRIMARY way the agent composes automations.
     const templates = db.prepare(`
@@ -852,7 +855,7 @@ class OperationalPlannerService {
       current_automations: currentAutomations.map(a => compactAutomation(a, equipmentIndexFromInventory(equipmentInventory))),
       equipment: equipmentInventory,
       zones,
-      active_crops: activeCrops,
+      active_crops: activeCropsOut,
       templates,
       fertigation_tanks: fertigationTanks,
       water_pump_lpm: waterPumpFlow,

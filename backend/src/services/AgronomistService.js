@@ -392,6 +392,13 @@ class AgronomistService {
       try { optimal = c.optimal_ranges ? JSON.parse(c.optimal_ranges) : null; } catch {}
       return { ...c, optimal_ranges: optimal };
     });
+    // Crop profile (variety, days after transplant, effective stage, plants, stage targets):
+    // crops[].profile; current_stage follows the profile's stage (days after transplant / override).
+    let cropsOut = crops;
+    try { cropsOut = require('./CropProfileService').cropProfileService.enrichCropRows(crops); } catch (_) { cropsOut = crops; }
+    // Latest AI fertilizer advice (compact, <= 14 days old); omitted when none.
+    let fertilizerAdvice = null;
+    try { fertilizerAdvice = require('./FertilizerAdvisorService').getFertilizerAdvisor().compactForAgronomist(); } catch (_) { fertilizerAdvice = null; }
 
     // --- Fertigation & water (per equipment, per channel, with liters) ---
     const fertEquipment = db.prepare(
@@ -684,7 +691,8 @@ class AgronomistService {
     return applyToAgronomistSnapshot({
       date: dateStr,
       timezone: process.env.TZ || 'UTC',
-      crops,
+      crops: cropsOut,
+      ...(fertilizerAdvice ? { fertilizer_advice: fertilizerAdvice } : {}),
       dispensing,
       reference_sensors,
       sensors: sensorReadings,

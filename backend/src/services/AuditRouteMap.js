@@ -661,6 +661,20 @@ const ROUTES = [
   simple('POST', '/api/crops/:id/complete', 'crop.complete', 'crops', (ctx) => `Completed crop #${ctx.params.id}`, { target: (ctx) => ({ type: 'crop', id: ctx.params.id, name: null }) }),
   ...crud('crops', { noun: 'crop', table: 'crop_assignments', category: 'crops', actionPrefix: 'crop', remove: false, nameCol: 'crop_name' }),
 
+  // ----- crop profile + fertilizer advisor (advisory only) ----------------
+  simple('POST', '/api/nutrition/profiles', 'crop_profile.create', 'crops', (ctx) => `Started a new crop profile ${quote(ctx.body && ctx.body.crop) || ''}`.trim(), { target: (ctx) => ({ type: 'crop_profile', id: ctx.resBody && ctx.resBody.id, name: ctx.body && ctx.body.crop }) }),
+  {
+    method: 'PUT', pattern: '/api/nutrition/profiles/:id', action: 'crop_profile.update', category: 'crops',
+    before: (ctx) => snap.row('crop_profiles', ctx.params.id), after: true,
+    target: (ctx) => ({ type: 'crop_profile', id: ctx.params.id, name: (ctx.after && ctx.after.crop) || null }),
+    summary: editSummary('crop profile', (ctx) => (ctx.after && ctx.after.crop) || `crop profile #${ctx.params.id}`),
+  },
+  simple('PUT', '/api/nutrition/profiles/:id/targets', 'crop_profile.targets', 'crops', (ctx) => `Edited the stage / element targets of crop profile #${ctx.params.id}`, { target: (ctx) => ({ type: 'crop_profile', id: ctx.params.id, name: null }) }),
+  simple('POST', '/api/nutrition/profiles/:id/targets/reset', 'crop_profile.targets_reset', 'crops', (ctx) => `Reset the targets of crop profile #${ctx.params.id} to the human agronomist protocol`, { target: (ctx) => ({ type: 'crop_profile', id: ctx.params.id, name: null }) }),
+  simple('POST', '/api/nutrition/advice/run', 'fertilizer_advisor.run', 'ai', 'Started a fertilizer advisor run (AI, advisory only)', { tags: ['crops'] }),
+  simple('POST', '/api/nutrition/advice/:id/translate', 'fertilizer_advisor.translate', 'ai', (ctx) => `Requested ${(ctx.body && ctx.body.lang) || ''} translation of fertilizer advice #${ctx.params.id}`.replace('  ', ' ')),
+  settingsDef('PUT', '/api/nutrition/advisor/config', 'fertilizer_advisor.config', 'ai', ['fertilizer_advisor_config'], 'fertilizer advisor settings'),
+
   // ----- AI: agronomist / planner / data sources ------------------------
   simple('POST', '/api/agronomist/capture-now', 'agronomist.capture', 'ai', 'Captured canopy images for the agronomist now'),
   simple('POST', '/api/agronomist/retry-now', 'agronomist.retry', 'ai', 'Retried the agronomist report now'),
@@ -691,7 +705,7 @@ const PREFIX_CATEGORY = [
   ['/api/cloud', 'system'], ['/api/settings', 'settings'], ['/api/system', 'system'], ['/api/modbus', 'equipment'],
   ['/api/templates', 'equipment'], ['/api/notifications', 'settings'], ['/api/cameras', 'cameras'],
   ['/api/lab-readings', 'lab'], ['/api/fertigation', 'dosing'], ['/api/calibration', 'equipment'],
-  ['/api/retention', 'system'], ['/api/crops', 'crops'], ['/api/amic', 'lab'], ['/api/agronomist', 'ai'],
+  ['/api/retention', 'system'], ['/api/crops', 'crops'], ['/api/nutrition', 'crops'], ['/api/amic', 'lab'], ['/api/agronomist', 'ai'],
   ['/api/planner', 'ai'], ['/api/ai', 'ai'], ['/api/operator-tasks', 'tasks'], ['/api/baselines', 'equipment'],
   ['/api/relay-events', 'equipment'], ['/api/mqtt', 'irrigation'], ['/api/flow-watch', 'irrigation'],
   ['/api/dose-controller', 'dosing'], ['/api/irrigation', 'irrigation'], ['/api/logs', 'system'],

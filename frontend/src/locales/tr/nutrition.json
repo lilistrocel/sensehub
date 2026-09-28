@@ -1,0 +1,434 @@
+{
+  "title": "Ürün ve Besleme",
+  "subtitle": "Ürün profili, bitkilerin ne aldığı ve gübre programı için yapay zekâdan ikinci görüş.",
+  "views": {
+    "label": "Ürün ve Besleme görünümleri",
+    "profile": "Ürün",
+    "feed": "Besleme",
+    "advisor": "Danışman"
+  },
+  "header": {
+    "stageDay_one": "{{stage}} · {{count}}. gün",
+    "stageDay_other": "{{stage}} · {{count}}. gün",
+    "next": "sonraki: {{date}} tarihinde {{stage}}"
+  },
+  "stage": {
+    "seedling": "Fide",
+    "vegetative": "Vejetatif",
+    "flowering": "Çiçeklenme / meyve tutumu",
+    "fruiting": "Meyve dönemi",
+    "ripening": "Olgunlaşma",
+    "harvested": "Hasat edildi",
+    "none": "Evre yok"
+  },
+  "recipe": {
+    "vegetative": "vejetatif",
+    "fruiting": "meyve dönemi"
+  },
+  "plantingType": {
+    "transplant": "Fide dikimi"
+  },
+  "source": {
+    "live": "Canlı sistemden",
+    "operator": "Operatör girdi",
+    "notMeasured": "SenseHub ölçmüyor",
+    "protocol": "Agronomistin protokolü",
+    "ai": "Yapay zekâ ikinci görüşü"
+  },
+  "fields": {
+    "crop": "Ürün",
+    "variety": "Çeşit",
+    "breeder": "Islahçı firma",
+    "planting_type": "Dikim şekli",
+    "transplant_date": "Fide dikim tarihi",
+    "plants_per_m2": "Bitki yoğunluğu (bitki/m²)",
+    "plants_per_section": "Bölge başına bitki",
+    "area_m2": "Yetiştirme alanı",
+    "dripper_flow_lph": "Damlatıcı debisi",
+    "drippers_per_plant": "Bitki başına damlatıcı",
+    "buffer_tank_l": "Tampon tank hacmi",
+    "substrate_type": "Substrat",
+    "substrate_volume_l": "Slab / torba hacmi",
+    "substrate_notes": "Substrat notları",
+    "source_water_ec": "Kaynak suyu EC",
+    "source_water_ph": "Kaynak suyu pH"
+  },
+  "profile": {
+    "none": "Henüz ürün profili yok. Profil etkin üründen oluşturulur; bir yöneticiden birincil ürün bölgesini ayarlamasını isteyin.",
+    "crop": {
+      "title": "Ürün"
+    },
+    "notMeasured": {
+      "title": "SenseHub'ın ölçemediği bilgiler",
+      "subtitle": "Yalnızca sensörlerin ve dozlama kayıtlarının söyleyemediği bilgiler. Aşağıdaki fertigasyon sistemi bilgilerinin tamamı canlı sistemden okunur."
+    },
+    "plants": {
+      "title": "Bitkiler",
+      "total": "{{total}} bitki · bölge başına {{perSection}} × {{sections}}",
+      "unknown": "bilinmiyor — bölge başına bitki sayısını ya da yoğunluk ve alanı girin",
+      "source": {
+        "entered": "operatör girdi",
+        "density_area": "yoğunluk × alan",
+        "estimated_from_flow": "tahmini: ölçülen debi {{flow}} ÷ damlatıcı {{dripper}}"
+      }
+    },
+    "stage": {
+      "title": "Gelişim evresi ve zaman çizelgesi",
+      "day_one": "dikimden sonra {{count}}. gün",
+      "day_other": "dikimden sonra {{count}}. gün",
+      "beforeTransplant": "henüz dikilmedi",
+      "noTransplant": "dikim tarihi yok",
+      "sourceAuto": "dikimden bu yana geçen günlere göre otomatik",
+      "sourceOverride": "elle ayarlandı",
+      "overrideNote": "Elle ayarlanan evre: {{note}}",
+      "next_one": "Sonraki: {{date}} tarihinde {{stage}} ({{count}} gün sonra)",
+      "next_other": "Sonraki: {{date}} tarihinde {{stage}} ({{count}} gün sonra)",
+      "override": "Evre",
+      "overrideAuto": "Otomatik (zaman çizelgesinden)",
+      "overrideNoteLabel": "Elle ayarlanan evrenin nedeni",
+      "timeline": "Evre zaman çizelgesi",
+      "stageCol": "Evre",
+      "fromDay": "Başlangıç günü",
+      "dateCol": "Tarih",
+      "note": "Not",
+      "addRow": "Evre ekle",
+      "removeRow": "Evreyi kaldır"
+    }
+  },
+  "system": {
+    "title": "Fertigasyon sistemi",
+    "subtitle": "SenseHub'ın kendi yapılandırmasından ve kayıtlarından okunur — tankları, programları ve zamanlamaları kendi sayfalarında değiştirin.",
+    "injection_one": "{{count}} tank için solenoid vanalı venturi enjeksiyonu",
+    "injection_other": "Her tank için solenoid vanalı venturi enjeksiyonu ({{count}} tank)",
+    "buffer": "tampon tank {{volume}}",
+    "bufferUnknown": "tampon tank hacmi girilmedi",
+    "tanks": "Tanklar",
+    "perLiters": "{{liters}} L stok çözelti başına",
+    "acidLine": "asit hattı",
+    "drawHint": "Çekiş: son 7 günün ölçülen ortancası / yapılandırılan (L/min). Venturi çekişi su debisine göre değişir.",
+    "col": {
+      "tank": "Tank",
+      "contents": "İçerik",
+      "relay": "Vana rölesi",
+      "ratio": "Hedef",
+      "draw": "Çekiş",
+      "refill": "Son dolum",
+      "section": "Bölge",
+      "flow": "Ölçülen debi",
+      "minPerDay": "dk/gün",
+      "time": "Saat",
+      "minPerSection": "dk/bölge",
+      "softSwitch": "Vana önce / sonra",
+      "ratioShort": "Oran"
+    },
+    "phLine": "pH düşürücü hattı",
+    "phSetpoint": "Ayar noktası pH {{setpoint}} ± {{deadband}}, alt sınır {{floor}}",
+    "acidCaps": "Asit sınırları: çalışma başına {{cycle}} sn, günde {{day}} sn",
+    "acidNotMetered": "Asit ölçülmüyor (tahmini {{lpm}} L/min).",
+    "dosing": "Dozlama kontrolü",
+    "controllerOn": "Kapalı döngü denetleyici açık",
+    "controllerOff": "Kapalı döngü denetleyici kapalı",
+    "mode": {
+      "per_zone_target": "bölge başına litre hedefi",
+      "tracking": "sürekli izleme"
+    },
+    "controlMode": {
+      "closed_loop": "kapalı döngü",
+      "open_loop": "sabit program"
+    },
+    "ecTrimOn": "EC düzeltme açık",
+    "ecTrimOff": "EC düzeltme kapalı",
+    "sections": "Bölgeler",
+    "schedule": "Günlük sulama programı",
+    "scheduleTotal": "{{runs}} çalışma · bölge başına günde {{minutes}} dk",
+    "mlFromDripper": "≈ bitki başına günde {{ml}} mL",
+    "mlFromDripperHint": "(girilen damlatıcı debisinden)",
+    "softSwitchHint": "Dakika = her bölge vanası açıkken pompanın çalıştığı süre; vana pompadan önce açılır, sonra kapanır.",
+    "protection": "Debi izleme ve pompa koruması (7 gün)",
+    "flowWatchOn": "Debi izleme açık",
+    "flowWatchOff": "Debi izleme kapalı",
+    "episodes_one": "{{count}} olay",
+    "episodes_other": "{{count}} olay",
+    "episodeKind": {
+      "valve_no_flow": "debi yok",
+      "run_shutdown": "çalışma kapatıldı",
+      "dosing_without_water": "susuz dozlama",
+      "flow_above_expected": "beklenenden yüksek debi",
+      "flow_after_pump_off": "pompa kapandıktan sonra debi",
+      "water_without_valve": "vana açık değilken su",
+      "retry_recovered": "yeniden denemeyle düzeldi",
+      "low_flow": "düşük debi",
+      "other": "diğer"
+    },
+    "feedTrend": "Çalışma başına besleme EC / pH",
+    "noRuns": "Son 7 günde sulama çalışması yok."
+  },
+  "targets": {
+    "title": "Evre başına hedefler",
+    "subtitle": "Agronomistin protokolünden önceden dolduruldu; düzenlenebilir. Element hedefleri planlayıcıyla ortaktır.",
+    "none": "Henüz hedef yok.",
+    "current": "şimdi",
+    "stagesLabel": "Evreler",
+    "stageTable": "Evre hedefleri",
+    "elementTable": "Element hedefleri",
+    "reset": "Protokole sıfırla",
+    "resetTitle": "Hedefler protokole sıfırlansın mı?",
+    "resetBody": "\"{{name}}\" kapsamındaki tüm evre ve element hedefleri protokol değeriyle değiştirilir. Bu evrelerdeki düzenlemeleriniz kaybolur.",
+    "tripleHint": "min · hedef · maks",
+    "protocolPpmHint": "Protokol {{recipe}} reçetesi tank başına 1:{{ratio}} seyreltildiğinde yalnızca gübrelerden ≈ EC {{ec}} mS/cm (kaynak suyu dahil değil).",
+    "col": {
+      "target": "Hedef",
+      "profile": "Bu ürün (min · hedef · maks)",
+      "element": "Element",
+      "profilePpm": "Hedef ppm (min · hedef · maks)",
+      "protocolPpm": "Protokol reçetesi 1:{{ratio}}",
+      "min": "min",
+      "targetShort": "hedef",
+      "max": "maks"
+    },
+    "row": {
+      "inputEc": "Giriş EC",
+      "inputPh": "Giriş pH",
+      "drainPct": "Drenaj",
+      "drainEcDelta": "Drenaj EC'nin girişten fazlası",
+      "drainPh": "Drenaj pH alarm sınırları",
+      "mlPerPlant": "Bitki başına günlük su"
+    },
+    "field": {
+      "ec_min": "Giriş EC min",
+      "ec_target": "Giriş EC hedef",
+      "ec_max": "Giriş EC maks",
+      "ph_min": "Giriş pH min",
+      "ph_max": "Giriş pH maks",
+      "drain_pct_min": "Drenaj min",
+      "drain_pct_target": "Drenaj hedef",
+      "drain_pct_max": "Drenaj maks",
+      "drain_ec_delta_max": "Drenaj EC'nin girişten fazlası",
+      "drain_ph_min": "Drenaj pH min",
+      "drain_ph_max": "Drenaj pH maks",
+      "ml_min": "Bitki başına su min",
+      "ml_target": "Bitki başına su hedef",
+      "ml_max": "Bitki başına su maks"
+    }
+  },
+  "protocol": {
+    "title": "Agronomistin protokolü",
+    "authoritative": "Salt okunur başlangıç değeri. Yetkili olan agronomisttir; yapay zekâ danışmanı yalnızca ikinci görüş verir.",
+    "dailyProgram": "Günlük program (bölge başına dakika)",
+    "programTotal": "Bölge başına {{minutes}} dk ≈ bitki başına günde {{ml}} mL",
+    "climate": "İklim",
+    "climateDay": "Gündüz {{min}}-{{max}} °C ({{alarm}} °C üstünde alarm)",
+    "climateNight": "Gece {{min}}-{{max}} °C ({{alarm}} °C altında alarm)",
+    "climateRh": "Bağıl nem {{min}}-{{max}} % ({{low}} % altında / {{high}} % üstünde alarm)",
+    "timeline": "Zaman çizelgesi (dikimden sonraki günler)",
+    "readOnly": "salt okunur"
+  },
+  "history": {
+    "title": "Ürün dönemleri",
+    "newCycle": "Yeni ürün dönemi",
+    "none": "Daha önceki ürün dönemi yok.",
+    "ended": "bitiş {{date}}",
+    "useProtocol": "Hedefleri \"{{name}}\" ile önceden doldur",
+    "create": "Ürün dönemini başlat",
+    "confirmTitle": "Yeni ürün dönemi başlatılsın mı?",
+    "confirmBody": "Mevcut {{crop}} profili kapatılır ve geçmişte saklanır. Yeni dönem kendi evre zaman çizelgesi ve hedefleriyle başlar. Fertigasyon sisteminde hiçbir şey değişmez."
+  },
+  "cmp": {
+    "ok": "Normal",
+    "low": "düşük",
+    "high": "yüksek",
+    "unknown": "bilinmiyor",
+    "reason": {
+      "partial_day": "gün bitmedi",
+      "single_run": "yalnızca bir çalışma",
+      "not_measured": "ölçülmüyor",
+      "no_target": "hedef yok",
+      "no_value": "okuma yok"
+    }
+  },
+  "feed": {
+    "periodLabel": "Dönem",
+    "period": {
+      "last_run": "Son çalışma",
+      "today": "Bugün",
+      "7d": "Son 7 gün"
+    },
+    "basis": {
+      "measured": "Ölçülen",
+      "configured": "Yapılandırılan oran",
+      "configuredHint": "Bu dönemde ölçülmüş çalışma yok — yapılandırılan dozlama oranından hesaplandı."
+    },
+    "runsWater_one": "{{count}} çalışma, {{water}} su",
+    "runsWater_other": "{{count}} çalışma, {{water}} su",
+    "lastRun": "son çalışma {{time}}",
+    "stageTargets": "hedefler: {{stage}}",
+    "kpi": {
+      "ec": "Besleme EC (ölçülen)",
+      "ecHint": "yalnızca reçete ≈ {{calc}} mS/cm",
+      "ph": "Besleme pH (ölçülen)",
+      "waterDay": "Bitki başına günlük su",
+      "waterRun": "Bitki başına su, son çalışma",
+      "drain": "Drenaj"
+    },
+    "mlPerPlant": "mL",
+    "plantsSource": {
+      "entered": "bitki sayısını operatör girdi",
+      "density_area": "bitki sayısı yoğunluk × alandan",
+      "estimated_from_flow": "bitki sayısı debi ÷ damlatıcıdan tahmin edildi"
+    },
+    "plantsUnknown": "bitki sayısı bilinmiyor",
+    "drainNotMeasured": "Ölçülmüyor — SenseHub'da drenaj %, EC ya da pH yok.",
+    "elements": {
+      "title": "Element başına verilen",
+      "delivered": "Verilen",
+      "target": "Hedef (min · hedef · maks)",
+      "status": "Durum",
+      "protocol": "Protokol 1:{{ratio}}",
+      "hint": "Verilen = her tankın mevcut reçetesi (gübre analizleri) × ölçülen konsantre litresi ÷ ölçülen su litresi. Kaynak suyu ve asit dahil değildir."
+    },
+    "ratios": {
+      "title": "Oranlar",
+      "ratio": "Oran",
+      "delivered": "Verilen",
+      "protocol": "Protokol",
+      "nh4Share": "N içindeki NH4 payı"
+    },
+    "ec": {
+      "title": "EC: reçete ve ölçülen",
+      "calc": "Reçete (hesaplanan)",
+      "sourceWater": "Kaynak suyu",
+      "notEntered": "girilmedi",
+      "calcPlusWater": "Reçete + kaynak suyu",
+      "measured": "Ölçülen (SEKO)",
+      "difference": "Ölçülen − reçete",
+      "hint": "Fark = kaynak suyu + asit + analiz hatası; SenseHub kaynak suyunu ölçmez.",
+      "method": "Reçete EC = katyonlar toplamı {{cations}} meq/L ÷ 10 (anyonlar {{anions}} meq/L)."
+    },
+    "acid": "Asit: {{seconds}} sn vana süresi ≈ {{liters}} L (tahmini, ölçülmüyor).",
+    "tanks": {
+      "title": "Tank başına dozlanan",
+      "dosed": "Dozlanan",
+      "achieved": "Gerçekleşen",
+      "configured": "Yapılandırılan"
+    },
+    "vsProtocol": {
+      "title": "Hazırlanan tanklar ve protokol reçetesi",
+      "subtitle": "1000 L stok çözelti başına; mevcut evre için protokolün {{recipe}} reçetesi.",
+      "ingredient": "Gübre",
+      "current": "Şimdi (kg)",
+      "protocol": "Protokol (kg)",
+      "diff": "Δ kg",
+      "hint": "Protokol reçetesi 1:{{ratio}} oranında ≈ EC {{protoEc}} mS/cm, yapılandırılan oranda ≈ {{protoEcCfg}} mS/cm (yalnızca gübreler)."
+    },
+    "assumptions": "Hesaplama varsayımları"
+  },
+  "advisor": {
+    "advisoryOnly": "Yalnızca tavsiye niteliğindedir. SenseHub bu tavsiyeye göre reçeteleri, dozlama programlarını, dozlama oranlarını, tankları ya da otomasyonları asla değiştirmez. Yetkili olan agronomistin protokolüdür; yapay zekâ ikinci görüş verir.",
+    "advisoryOnlyShort": "Yalnızca tavsiye — hiçbir şey otomatik uygulanmaz.",
+    "run": "Danışmanı çalıştır",
+    "running": "Çalışıyor…",
+    "runningHelp": "Danışman yeni bir ikinci görüş hazırlıyor; bitince bu sayfa güncellenir (yaklaşık 1-2 dakika).",
+    "noKey": "Arka uçta Anthropic API anahtarı ayarlı değil, bu yüzden danışman çalışamaz.",
+    "weekly": "Haftalık: {{day}} {{time}}",
+    "weeklyOff": "Haftalık çalışma kapalı",
+    "autoOn": "Değişikliklerde otomatik",
+    "autoOff": "Otomatik çalışmalar kapalı",
+    "none": "Henüz tavsiye yok. Gübre programı için ikinci görüş almak üzere danışmanı çalıştırın.",
+    "stale": "bir haftadan eski",
+    "generated": "{{time}} · {{trigger}}",
+    "lastRunFailed": "Son çalışma başarısız",
+    "failedAt": "{{time}} çalışması başarısız oldu: {{reason}}.",
+    "keptGood": "Son geçerli tavsiye aşağıda gösteriliyor.",
+    "backToLatest": "En son tavsiyeye dön",
+    "warnings": "Uyarılar",
+    "recommendations": "Öneriler",
+    "when": "Ne zaman",
+    "vsReason": "protokole göre",
+    "perElement": "Element başına",
+    "questions": "Operatöre sorular",
+    "analysis": "Ayrıntılı analiz",
+    "history": "Geçmiş",
+    "confirmTitle": "Gübre danışmanı çalıştırılsın mı?",
+    "confirmBody": "Bu işlem ürün profilini, hesaplanan beslemeyi ve canlı fertigasyon verilerini yapay zekâ modeline gönderir ve Anthropic API kredisi kullanır.",
+    "estimate": "Tahmini maliyet ≈ ${{usd}} (en fazla ${{high}}), {{model}} ile, Türkçe ve Arapça çeviriler dahil.",
+    "estimateFailed": "Maliyet tahmini alınamadı.",
+    "health": {
+      "failing": "Başarısız",
+      "paused": "Duraklatıldı",
+      "failures_one": "art arda {{count}} başarısız çalışma",
+      "failures_other": "art arda {{count}} başarısız çalışma",
+      "pausedHelp": "Bir yönetici danışman ayarlarını kaydedene veya manuel bir çalışma başarılı olana kadar haftalık ve otomatik çalışmalar duraklatıldı."
+    },
+    "errorClass": {
+      "billing": "Anthropic kredi bakiyesi tükendi",
+      "auth": "Anthropic API anahtarı reddedildi",
+      "rate_limit": "Anthropic istek sınırına ulaşıldı",
+      "truncated_output": "Çıktı kesildi veya geçersiz",
+      "max_tokens": "Çıktı token sınırına ulaştı",
+      "refusal": "Model tarafından reddedildi",
+      "other": "Anthropic API hatası"
+    },
+    "trigger": {
+      "manual": "manuel çalışma",
+      "weekly": "haftalık çalışma",
+      "stage_change": "evre değişikliğinden sonra",
+      "tank_change": "tank değişikliğinden sonra",
+      "ratio_change": "dozlama oranı değişikliğinden sonra"
+    },
+    "vs": {
+      "agrees": "protokolle aynı",
+      "extends": "protokolü genişletiyor",
+      "differs": "protokolden farklı"
+    },
+    "priority": {
+      "high": "yüksek",
+      "medium": "orta",
+      "low": "düşük"
+    },
+    "severity": {
+      "info": "Bilgi",
+      "warning": "Uyarı",
+      "critical": "Kritik"
+    },
+    "day": {
+      "0": "Pazar",
+      "1": "Pazartesi",
+      "2": "Salı",
+      "3": "Çarşamba",
+      "4": "Perşembe",
+      "5": "Cuma",
+      "6": "Cumartesi"
+    },
+    "translation": {
+      "auto": "İngilizceden otomatik çevrildi.",
+      "showOriginal": "Orijinali göster (İngilizce)",
+      "showTranslation": "Çeviriyi göster",
+      "showingOriginal": "Orijinal İngilizce metin gösteriliyor.",
+      "pending": "Çevriliyor",
+      "pendingHelp": "Çeviri hazırlanıyor — şimdilik İngilizce.",
+      "failed": "Çeviri başarısız",
+      "failedHelp": "İngilizce metin gösteriliyor.",
+      "englishOnly": "Yalnızca İngilizce mevcut."
+    },
+    "settings": {
+      "title": "Danışman programı",
+      "enabled": "Danışman açık (haftalık ve otomatik çalışmalar)",
+      "weekly": "Haftalık çalışma",
+      "day": "Gün",
+      "time": "Saat",
+      "auto": "Evre değişikliği, tank karışımı / dolum değişikliği ya da dozlama oranı değişikliğinden sonra otomatik çalıştır",
+      "autoHelp": "Değişikliklerin oturması için {{minutes}} dk bekler, en fazla {{hours}} saatte bir, sulama çalışması sırasında asla.",
+      "adminOnly": "Programı yalnızca bir yönetici değiştirebilir."
+    }
+  },
+  "errors": {
+    "loadFailed": "Yüklenemedi: {{error}}",
+    "saveFailed": "Kaydedilemedi: {{error}}",
+    "notANumber": "{{field}} bir sayı değil.",
+    "cropRequired": "Ürün gerekli.",
+    "timelineDay": "Her evre için tam sayı bir gün gerekir (0 veya daha fazla)."
+  },
+  "toast": {
+    "saved": "Ürün profili kaydedildi"
+  }
+}

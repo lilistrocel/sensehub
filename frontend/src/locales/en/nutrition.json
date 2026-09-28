@@ -1,0 +1,434 @@
+{
+  "title": "Crop & Nutrition",
+  "subtitle": "Crop profile, what the plants are getting, and an AI second opinion on the fertilizer program.",
+  "views": {
+    "label": "Crop & Nutrition views",
+    "profile": "Crop",
+    "feed": "Feed",
+    "advisor": "Advisor"
+  },
+  "header": {
+    "stageDay_one": "{{stage}} · day {{count}}",
+    "stageDay_other": "{{stage}} · day {{count}}",
+    "next": "next: {{stage}} on {{date}}"
+  },
+  "stage": {
+    "seedling": "Seedling",
+    "vegetative": "Vegetative",
+    "flowering": "Flowering / fruit set",
+    "fruiting": "Fruiting",
+    "ripening": "Ripening",
+    "harvested": "Harvested",
+    "none": "No stage"
+  },
+  "recipe": {
+    "vegetative": "vegetative",
+    "fruiting": "fruiting"
+  },
+  "plantingType": {
+    "transplant": "Transplant"
+  },
+  "source": {
+    "live": "From live system",
+    "operator": "Entered by operator",
+    "notMeasured": "Not measured by SenseHub",
+    "protocol": "Human agronomist protocol",
+    "ai": "AI second opinion"
+  },
+  "fields": {
+    "crop": "Crop",
+    "variety": "Variety",
+    "breeder": "Breeder",
+    "planting_type": "Planting type",
+    "transplant_date": "Transplant date",
+    "plants_per_m2": "Plant density (plants/m²)",
+    "plants_per_section": "Plants per section",
+    "area_m2": "Growing area",
+    "dripper_flow_lph": "Dripper flow",
+    "drippers_per_plant": "Drippers per plant",
+    "buffer_tank_l": "Buffer tank volume",
+    "substrate_type": "Substrate",
+    "substrate_volume_l": "Slab / bag volume",
+    "substrate_notes": "Substrate notes",
+    "source_water_ec": "Source water EC",
+    "source_water_ph": "Source water pH"
+  },
+  "profile": {
+    "none": "No crop profile yet. A profile is created from the active crop; ask an admin to set a primary crop zone.",
+    "crop": {
+      "title": "Crop"
+    },
+    "notMeasured": {
+      "title": "Facts SenseHub cannot measure",
+      "subtitle": "Only what the sensors and the dosing records cannot tell. Everything about the fertigation system below is read from the live system."
+    },
+    "plants": {
+      "title": "Plants",
+      "total": "{{total}} plants · {{perSection}} per section × {{sections}}",
+      "unknown": "unknown — enter plants per section, or density and area",
+      "source": {
+        "entered": "entered by operator",
+        "density_area": "from density × area",
+        "estimated_from_flow": "estimated: measured flow {{flow}} ÷ dripper {{dripper}}"
+      }
+    },
+    "stage": {
+      "title": "Growth stage & timeline",
+      "day_one": "day {{count}} after transplant",
+      "day_other": "day {{count}} after transplant",
+      "beforeTransplant": "not transplanted yet",
+      "noTransplant": "no transplant date",
+      "sourceAuto": "automatic from days after transplant",
+      "sourceOverride": "set manually",
+      "overrideNote": "Manual stage: {{note}}",
+      "next_one": "Next: {{stage}} on {{date}} (in {{count}} day)",
+      "next_other": "Next: {{stage}} on {{date}} (in {{count}} days)",
+      "override": "Stage",
+      "overrideAuto": "Automatic (from the timeline)",
+      "overrideNoteLabel": "Reason for the manual stage",
+      "timeline": "Stage timeline",
+      "stageCol": "Stage",
+      "fromDay": "From day",
+      "dateCol": "Date",
+      "note": "Note",
+      "addRow": "Add stage",
+      "removeRow": "Remove stage"
+    }
+  },
+  "system": {
+    "title": "Fertigation system",
+    "subtitle": "Read from SenseHub's own configuration and records — change tanks, programs and schedules on their own pages.",
+    "injection_one": "Venturi injection on a solenoid valve for {{count}} tank",
+    "injection_other": "Venturi injection on a solenoid valve per tank ({{count}} tanks)",
+    "buffer": "buffer tank {{volume}}",
+    "bufferUnknown": "buffer tank volume not entered",
+    "tanks": "Tanks",
+    "perLiters": "per {{liters}} L stock",
+    "acidLine": "acid line",
+    "drawHint": "Draw: measured median of the last 7 days / configured (L/min). Venturi draw varies with the water flow.",
+    "col": {
+      "tank": "Tank",
+      "contents": "Contents",
+      "relay": "Valve relay",
+      "ratio": "Target",
+      "draw": "Draw",
+      "refill": "Last refill",
+      "section": "Section",
+      "flow": "Measured flow",
+      "minPerDay": "min/day",
+      "time": "Time",
+      "minPerSection": "min/section",
+      "softSwitch": "Valve lead / lag",
+      "ratioShort": "Ratio"
+    },
+    "phLine": "pH Down line",
+    "phSetpoint": "Setpoint pH {{setpoint}} ± {{deadband}}, floor {{floor}}",
+    "acidCaps": "Acid limits: {{cycle}} s per run, {{day}} s per day",
+    "acidNotMetered": "Acid is not metered (estimate {{lpm}} L/min).",
+    "dosing": "Dosing control",
+    "controllerOn": "Closed-loop controller on",
+    "controllerOff": "Closed-loop controller off",
+    "mode": {
+      "per_zone_target": "per-zone litre targets",
+      "tracking": "continuous tracking"
+    },
+    "controlMode": {
+      "closed_loop": "closed loop",
+      "open_loop": "fixed schedule"
+    },
+    "ecTrimOn": "EC trim on",
+    "ecTrimOff": "EC trim off",
+    "sections": "Sections",
+    "schedule": "Daily irrigation schedule",
+    "scheduleTotal": "{{runs}} runs · {{minutes}} min per section per day",
+    "mlFromDripper": "≈ {{ml}} mL per plant per day",
+    "mlFromDripperHint": "(from the entered dripper flow)",
+    "softSwitchHint": "Minutes = pump running inside each zone valve window; the valve opens before and closes after the pump.",
+    "protection": "Flow watch & pump protection (7 days)",
+    "flowWatchOn": "Flow watch on",
+    "flowWatchOff": "Flow watch off",
+    "episodes_one": "{{count}} event",
+    "episodes_other": "{{count}} events",
+    "episodeKind": {
+      "valve_no_flow": "no flow",
+      "run_shutdown": "run shut down",
+      "dosing_without_water": "dosing without water",
+      "flow_above_expected": "flow above expected",
+      "flow_after_pump_off": "flow after pump off",
+      "water_without_valve": "water with no valve open",
+      "retry_recovered": "recovered by retry",
+      "low_flow": "low flow",
+      "other": "other"
+    },
+    "feedTrend": "Feed EC / pH per run",
+    "noRuns": "No irrigation run in the last 7 days."
+  },
+  "targets": {
+    "title": "Targets per stage",
+    "subtitle": "Prefilled from the human agronomist protocol; editable. Element targets are shared with the planner.",
+    "none": "No targets yet.",
+    "current": "now",
+    "stagesLabel": "Stages",
+    "stageTable": "Stage targets",
+    "elementTable": "Element targets",
+    "reset": "Reset to protocol",
+    "resetTitle": "Reset the targets to the protocol?",
+    "resetBody": "Every stage target and element target covered by \"{{name}}\" is replaced with the protocol value. Your edits to those stages are lost.",
+    "tripleHint": "min · target · max",
+    "protocolPpmHint": "Protocol {{recipe}} recipe diluted 1:{{ratio}} per tank ≈ EC {{ec}} mS/cm from the fertilizers alone (source water not included).",
+    "col": {
+      "target": "Target",
+      "profile": "This crop (min · target · max)",
+      "element": "Element",
+      "profilePpm": "Target ppm (min · target · max)",
+      "protocolPpm": "Protocol recipe 1:{{ratio}}",
+      "min": "min",
+      "targetShort": "target",
+      "max": "max"
+    },
+    "row": {
+      "inputEc": "Input EC",
+      "inputPh": "Input pH",
+      "drainPct": "Drain",
+      "drainEcDelta": "Drain EC above input",
+      "drainPh": "Drain pH alarm limits",
+      "mlPerPlant": "Water per plant per day"
+    },
+    "field": {
+      "ec_min": "Input EC min",
+      "ec_target": "Input EC target",
+      "ec_max": "Input EC max",
+      "ph_min": "Input pH min",
+      "ph_max": "Input pH max",
+      "drain_pct_min": "Drain min",
+      "drain_pct_target": "Drain target",
+      "drain_pct_max": "Drain max",
+      "drain_ec_delta_max": "Drain EC above input",
+      "drain_ph_min": "Drain pH min",
+      "drain_ph_max": "Drain pH max",
+      "ml_min": "Water per plant min",
+      "ml_target": "Water per plant target",
+      "ml_max": "Water per plant max"
+    }
+  },
+  "protocol": {
+    "title": "Human agronomist protocol",
+    "authoritative": "Read-only baseline. The human agronomist stays authoritative; the AI advisor only gives a second opinion.",
+    "dailyProgram": "Daily program (minutes per section)",
+    "programTotal": "{{minutes}} min per section ≈ {{ml}} mL per plant per day",
+    "climate": "Climate",
+    "climateDay": "Day {{min}}-{{max}} °C (alarm above {{alarm}} °C)",
+    "climateNight": "Night {{min}}-{{max}} °C (alarm below {{alarm}} °C)",
+    "climateRh": "RH {{min}}-{{max}} % (alarm below {{low}} % / above {{high}} %)",
+    "timeline": "Timeline (days after transplant)",
+    "readOnly": "read-only"
+  },
+  "history": {
+    "title": "Crop cycles",
+    "newCycle": "New crop cycle",
+    "none": "No earlier crop cycle.",
+    "ended": "ended {{date}}",
+    "useProtocol": "Prefill the targets from \"{{name}}\"",
+    "create": "Start crop cycle",
+    "confirmTitle": "Start a new crop cycle?",
+    "confirmBody": "The current {{crop}} profile is closed and kept in the history. The new cycle starts with its own stage timeline and targets. Nothing in the fertigation system changes."
+  },
+  "cmp": {
+    "ok": "OK",
+    "low": "low",
+    "high": "high",
+    "unknown": "unknown",
+    "reason": {
+      "partial_day": "day not finished",
+      "single_run": "one run only",
+      "not_measured": "not measured",
+      "no_target": "no target",
+      "no_value": "no reading"
+    }
+  },
+  "feed": {
+    "periodLabel": "Period",
+    "period": {
+      "last_run": "Last run",
+      "today": "Today",
+      "7d": "Last 7 days"
+    },
+    "basis": {
+      "measured": "Measured",
+      "configured": "Configured ratio",
+      "configuredHint": "No measured run in this period — calculated from the configured dosing ratio."
+    },
+    "runsWater_one": "{{count}} run, {{water}} of water",
+    "runsWater_other": "{{count}} runs, {{water}} of water",
+    "lastRun": "last run {{time}}",
+    "stageTargets": "targets: {{stage}}",
+    "kpi": {
+      "ec": "Feed EC (measured)",
+      "ecHint": "recipe alone ≈ {{calc}} mS/cm",
+      "ph": "Feed pH (measured)",
+      "waterDay": "Water per plant per day",
+      "waterRun": "Water per plant, last run",
+      "drain": "Drain"
+    },
+    "mlPerPlant": "mL",
+    "plantsSource": {
+      "entered": "plants entered by operator",
+      "density_area": "plants from density × area",
+      "estimated_from_flow": "plants estimated from flow ÷ dripper"
+    },
+    "plantsUnknown": "plant count unknown",
+    "drainNotMeasured": "Not measured — no drain %, EC or pH in SenseHub.",
+    "elements": {
+      "title": "Delivered per element",
+      "delivered": "Delivered",
+      "target": "Target (min · target · max)",
+      "status": "Status",
+      "protocol": "Protocol 1:{{ratio}}",
+      "hint": "Delivered = each tank's current recipe (ingredient analyses) × measured concentrate litres ÷ measured water litres. Source water and acid are not included."
+    },
+    "ratios": {
+      "title": "Ratios",
+      "ratio": "Ratio",
+      "delivered": "Delivered",
+      "protocol": "Protocol",
+      "nh4Share": "NH4 share of N"
+    },
+    "ec": {
+      "title": "EC: recipe vs measured",
+      "calc": "Recipe (calculated)",
+      "sourceWater": "Source water",
+      "notEntered": "not entered",
+      "calcPlusWater": "Recipe + source water",
+      "measured": "Measured (SEKO)",
+      "difference": "Measured − recipe",
+      "hint": "The difference is source water + acid + analysis error; SenseHub does not measure the source water.",
+      "method": "Recipe EC = sum of cations {{cations}} meq/L ÷ 10 (anions {{anions}} meq/L)."
+    },
+    "acid": "Acid: {{seconds}} s valve time ≈ {{liters}} L (estimate, not metered).",
+    "tanks": {
+      "title": "Dosed per tank",
+      "dosed": "Dosed",
+      "achieved": "Achieved",
+      "configured": "Configured"
+    },
+    "vsProtocol": {
+      "title": "Tanks as mixed vs protocol recipe",
+      "subtitle": "Per 1000 L of stock; protocol {{recipe}} recipe for the current stage.",
+      "ingredient": "Ingredient",
+      "current": "Now (kg)",
+      "protocol": "Protocol (kg)",
+      "diff": "Δ kg",
+      "hint": "Protocol recipe ≈ EC {{protoEc}} mS/cm at 1:{{ratio}} and ≈ {{protoEcCfg}} mS/cm at the configured ratio (fertilizers only)."
+    },
+    "assumptions": "Calculation assumptions"
+  },
+  "advisor": {
+    "advisoryOnly": "Advisory only. SenseHub never changes recipes, dose programs, dosing ratios, tanks or automations from this advice. The human agronomist's protocol stays authoritative; the AI gives a second opinion.",
+    "advisoryOnlyShort": "Advisory only — nothing is applied automatically.",
+    "run": "Run advisor",
+    "running": "Running…",
+    "runningHelp": "The advisor is working on a new second opinion; this page updates when it is done (about 1-2 minutes).",
+    "noKey": "The Anthropic API key is not set in the backend, so the advisor cannot run.",
+    "weekly": "Weekly: {{day}} {{time}}",
+    "weeklyOff": "Weekly run off",
+    "autoOn": "Automatic on changes",
+    "autoOff": "Automatic runs off",
+    "none": "No advice yet. Run the advisor to get a second opinion on the fertilizer program.",
+    "stale": "older than a week",
+    "generated": "{{time}} · {{trigger}}",
+    "lastRunFailed": "Last run failed",
+    "failedAt": "Run of {{time}} failed: {{reason}}.",
+    "keptGood": "The last good advice is shown below.",
+    "backToLatest": "Back to the latest advice",
+    "warnings": "Warnings",
+    "recommendations": "Recommendations",
+    "when": "When",
+    "vsReason": "vs protocol",
+    "perElement": "Per element",
+    "questions": "Questions for the operator",
+    "analysis": "Full analysis",
+    "history": "History",
+    "confirmTitle": "Run the fertilizer advisor?",
+    "confirmBody": "This sends the crop profile, the calculated feed and the live fertigation data to the AI model and uses Anthropic API credits.",
+    "estimate": "Estimated cost ≈ ${{usd}} (up to ${{high}}) with {{model}}, incl. Turkish and Arabic translations.",
+    "estimateFailed": "The cost estimate is not available.",
+    "health": {
+      "failing": "Failing",
+      "paused": "Paused",
+      "failures_one": "{{count}} failed run in a row",
+      "failures_other": "{{count}} failed runs in a row",
+      "pausedHelp": "Weekly and automatic runs are paused until an admin saves the advisor settings or a manual run succeeds."
+    },
+    "errorClass": {
+      "billing": "Anthropic credit balance exhausted",
+      "auth": "Anthropic API key rejected",
+      "rate_limit": "Anthropic rate limit hit",
+      "truncated_output": "Output cut off or invalid",
+      "max_tokens": "Output hit the token limit",
+      "refusal": "Declined by the model",
+      "other": "Anthropic API error"
+    },
+    "trigger": {
+      "manual": "manual run",
+      "weekly": "weekly run",
+      "stage_change": "after a stage change",
+      "tank_change": "after a tank change",
+      "ratio_change": "after a dosing ratio change"
+    },
+    "vs": {
+      "agrees": "agrees with protocol",
+      "extends": "extends protocol",
+      "differs": "differs from protocol"
+    },
+    "priority": {
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warning",
+      "critical": "Critical"
+    },
+    "day": {
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
+    },
+    "translation": {
+      "auto": "Translated automatically from English.",
+      "showOriginal": "Show original (English)",
+      "showTranslation": "Show translation",
+      "showingOriginal": "Showing the original English text.",
+      "pending": "Translating",
+      "pendingHelp": "The translation is being prepared — English for now.",
+      "failed": "Translation failed",
+      "failedHelp": "Showing the English text.",
+      "englishOnly": "Available in English only."
+    },
+    "settings": {
+      "title": "Advisor schedule",
+      "enabled": "Advisor on (weekly and automatic runs)",
+      "weekly": "Weekly run",
+      "day": "Day",
+      "time": "Time",
+      "auto": "Run automatically after a stage change, a tank mixture / refill change or a dosing ratio change",
+      "autoHelp": "Waits {{minutes}} min for changes to settle, at most once every {{hours}} h, never during an irrigation run.",
+      "adminOnly": "Only an admin can change the schedule."
+    }
+  },
+  "errors": {
+    "loadFailed": "Could not load: {{error}}",
+    "saveFailed": "Could not save: {{error}}",
+    "notANumber": "{{field}} is not a number.",
+    "cropRequired": "Crop is required.",
+    "timelineDay": "Each stage needs a whole day number (0 or more)."
+  },
+  "toast": {
+    "saved": "Crop profile saved"
+  }
+}

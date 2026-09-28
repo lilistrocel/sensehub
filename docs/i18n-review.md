@@ -348,3 +348,14 @@ To decide:
 - ☐ PTZ centre button "Stop moving" (tr "Hareketi durdur", ar "إيقاف الحركة") — camera movement only, not a relay stop.
 - ☐ Reports row letters W / F → tr S / F, ar م / س: clear enough, or spell "Su / Fert"?
 - ☐ The numeric tables in Reports (comparison, runs, cycles, calibration, power, measured dosing) stay left-to-right in Arabic like the last-cycle table; the PTZ pad stays left-to-right (pan-left is the camera's left).
+
+### Crop & Nutrition + fertilizer advisor (2026-09-28)
+
+Machine-translated, pending native review: `frontend/src/locales/{tr,ar}/nutrition.json`, `nav:items.nutrition`, backend `src/i18n/{tr,ar}/fertilizer_advisor.json`. New glossary rows: crop profile, crop cycle, variety / breeder, transplant, growth stages, dripper, buffer tank, source water, fertilizer advisor, second opinion, agronomist protocol, agrees / extends / differs, advisory only.
+
+To decide:
+- ☐ tr "Islahçı firma" / ar "شركة الإنتاج" for *breeder* (seed company, e.g. Sakata).
+- ☐ ar "النقاط" for *dripper* (alternative "المنقط").
+- ☐ Stage *flowering* is shown as "flowering / fruit set" (tr "Çiçeklenme / meyve tutumu", ar "الإزهار / عقد الثمار") because the cucumber protocol's day 25-32 phase is first fruit set.
+- ☐ The AI advice text itself is translated by the model (AgronomistTranslationService helpers, same glossary); only the UI chrome is in these files.
+

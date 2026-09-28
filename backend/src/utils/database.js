@@ -991,6 +991,13 @@ const initSchema = () => {
     console.error('i18n schema migration failed:', err.message);
   }
 
+  // Crop profiles + human agronomist protocol baseline + fertilizer advisor (2026-09-28).
+  try {
+    require('./cropNutritionSchema').ensureCropNutritionSchema(db);
+  } catch (err) {
+    console.error('crop nutrition schema failed:', err.message);
+  }
+
   // SEKO Kontrol 800 EC register auto-ranges (x10 below 2000 µS, x1 above): decode it.
   try {
     require('./sekoEcAutoRange').ensureSekoEcAutoRange(db);

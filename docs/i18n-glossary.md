@@ -102,6 +102,19 @@ Aligned with the backend agent's term list (2026-09-27). Where the two differed,
 | sensor | sensör | الحساس |
 | equipment | ekipman | المعدات |
 | agronomist | agronomist | المهندس الزراعي |
+| crop profile | ürün profili | ملف المحصول |
+| crop cycle | ürün dönemi | دورة المحصول |
+| variety / breeder | çeşit / ıslahçı firma | الصنف / شركة الإنتاج |
+| transplant (date), days after transplant | fide dikimi (tarihi), dikimden sonraki gün | الشتل (تاريخ)، أيام بعد الشتل |
+| growth stage: vegetative / flowering (fruit set) / fruiting | gelişim evresi: vejetatif / çiçeklenme (meyve tutumu) / meyve dönemi | مرحلة النمو: النمو الخضري / الإزهار (عقد الثمار) / الإثمار |
+| dripper | damlatıcı | النقاط |
+| buffer tank | tampon tank | الخزان الوسيط |
+| source water | kaynak suyu | مياه المصدر |
+| fertilizer advisor | gübre danışmanı | مستشار التسميد |
+| second opinion | ikinci görüş | رأي ثانٍ |
+| (human) agronomist protocol | agronomistin protokolü | بروتوكول المهندس الزراعي |
+| agrees with / extends / differs from the protocol | protokolle aynı / protokolü genişletiyor / protokolden farklı | يتفق مع / يوسّع / يختلف عن البروتوكول |
+| advisory only | yalnızca tavsiye | للاستشارة فقط |
 | crop | ürün | المحصول |
 | dashboard | gösterge paneli | لوحة المتابعة |
 | status board | durum panosu | لوحة الحالة |

@@ -49,6 +49,7 @@ const { watchdogService } = require('./services/WatchdogService');
 const { networkUsageService } = require('./services/NetworkUsageService');
 const { snapshotService } = require('./services/SnapshotService');
 const { agronomistSchedulerService } = require('./services/AgronomistSchedulerService');
+const { fertilizerAdvisorSchedulerService } = require('./services/FertilizerAdvisorSchedulerService');
 const { relaySafetyWatchdogService } = require('./services/RelaySafetyWatchdogService');
 const { amicSchedulerService } = require('./services/AmicSchedulerService');
 const { operationalPlannerSchedulerService } = require('./services/OperationalPlannerSchedulerService');
@@ -226,6 +227,7 @@ app.use('/api/retention', authMiddleware, retentionRoutes);
 app.use('/api/crops', authMiddleware, cropRoutes);
 app.use('/api/amic', authMiddleware, amicRoutes);
 app.use('/api/agronomist', authMiddleware, agronomistRoutes);
+app.use('/api/nutrition', authMiddleware, require('./routes/nutrition')); // crop profile + feed calculator + fertilizer advisor (advisory only)
 app.use('/api/planner', authMiddleware, plannerRoutes);
 app.use('/api/ai/data-sources', authMiddleware, require('./routes/aiDataSources'));
 app.use('/api/operator-tasks', authMiddleware, operatorTasksRoutes);
@@ -362,6 +364,15 @@ server.listen(PORT, async () => {
     console.error('Agronomist scheduler: Failed to start -', error.message);
   }
 
+  // Crop profile stage sync + fertilizer advisor (weekly / debounced automatic runs).
+  // Advisory only: never changes recipes, dose programs, ratios, tanks or automations.
+  try {
+    fertilizerAdvisorSchedulerService.start();
+    console.log('Fertilizer advisor scheduler: Started');
+  } catch (error) {
+    console.error('Fertilizer advisor scheduler: Failed to start -', error.message);
+  }
+
   // Start operational planner scheduler (fires daily at configured time, default 18:00)
   try {
     operationalPlannerSchedulerService.start();
@@ -421,6 +432,7 @@ server.listen(PORT, async () => {
 process.on('SIGINT', async () => {
   console.log('\\nGraceful shutdown initiated...');
   agronomistSchedulerService.stop();
+  fertilizerAdvisorSchedulerService.stop();
   snapshotService.stop();
   networkUsageService.stop();
   watchdogService.stop();
@@ -438,6 +450,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\\nGraceful shutdown initiated...');
   agronomistSchedulerService.stop();
+  fertilizerAdvisorSchedulerService.stop();
   snapshotService.stop();
   networkUsageService.stop();
   watchdogService.stop();

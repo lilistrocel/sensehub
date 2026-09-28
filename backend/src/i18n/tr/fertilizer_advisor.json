@@ -1,0 +1,5 @@
+{
+  "provider_alert": "[Gübre danışmanı] {label} — gübre tavsiyesi çalışması başarısız oldu. Son hata: {error}",
+  "provider_alert_paused": "[Gübre danışmanı] {label} — art arda {count} başarısız çalışma; danışman ayarları kaydedilene veya manuel bir çalışma başarılı olana kadar planlı ve otomatik çalışmalar duraklatıldı. Son hata: {error}",
+  "translation_pending_note": "Bu tavsiyenin çevirisi hazırlanıyor — şimdilik orijinal İngilizce metin gösteriliyor."
+}

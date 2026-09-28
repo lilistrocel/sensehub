@@ -22,6 +22,7 @@ const routeConfig = {
   '/lab-analysis': 'labAnalysis',
   '/calibration': 'calibration',
   '/agronomist': 'agronomist',
+  '/nutrition': 'nutrition',
   '/relay-events': 'relayEvents',
   '/logs': 'logs',
   '/debug': 'debug',
