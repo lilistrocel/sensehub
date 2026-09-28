@@ -203,7 +203,12 @@ test('controller (15:30 replay): per-zone EC/pH stored live; switch-over dip and
   assert.deepEqual(z.map(r => r.ec_avg_us), [2300, 1990, 1820, 1600]);
   assert.deepEqual(z.map(r => r.ph_avg), [6.05, 6.32, 6.39, 6.45]);
   assert.ok(z.every(r => r.stats_source === 'live'));
-  assert.ok(z[0].samples >= 13 && z[1].samples >= 13, `samples ${z.map(r => r.samples)}`);
+  // Zone 1: the first 40 s after the run's first pump start (here: water established, no pump
+  // relay events in this replay) are the line flush -> reported as flush_*, not in the average
+  assert.ok(z[0].samples >= 10 && z[1].samples >= 13, `samples ${z.map(r => r.samples)}`);
+  assert.equal(z[0].flush_samples, 4, 'SEKO samples at +5/15/25/35 s are the start flush');
+  assert.equal(z[0].flush_s, 40);
+  assert.ok(z.slice(1).every(r => !r.flush_samples), 'only the first pump start of the run is a flush');
   assert.ok(z[1].skipped_samples + z[2].skipped_samples >= 1, 'the sample in the 3 s Zone 2 -> 3 switch-over dip is skipped');
   assert.equal(z[3].samples, 1, 'only the Zone 4 sample while water still flowed counts');
   assert.ok(z[3].skipped_samples >= 1, 'stagnant-cup samples after the water stopped are skipped');

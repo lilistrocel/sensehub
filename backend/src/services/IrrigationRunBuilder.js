@@ -58,6 +58,7 @@ const CLUSTER_GAP_MS = 10 * 60000;    // automation events further apart = a new
 const MERGE_GAP_MS = 20000;           // cycles closer than this are one group
 const BLIP_MIN_S = 10;
 const BLIP_MIN_L = 5;
+const FLUSH_KEYS = ['flush_samples', 'flush_s', 'flush_ec_avg_us', 'flush_ec_min_us', 'flush_ec_max_us', 'flush_ph_avg', 'flush_ph_min', 'flush_ph_max'];
 const MANUAL_COVERAGE = 0.3;          // app relays ON for >= 30 % of the padded water window
 const TANK_MOVED_L = 0.5;
 const SINGLE_ZONE_SHARE = 0.85;       // a cycle this much inside one zone belongs to it whole
@@ -639,6 +640,8 @@ function buildAutomatedRun(db, ctx, w, cycles, intervals, events, nowMs) {
     let status = sg.open ? 'running' : segmentStatus(ctx, sg);
     if (v) {
       for (const k of ['ec_avg_us', 'ec_min_us', 'ec_max_us', 'ec_samples', 'ph_avg', 'ph_min', 'ph_max', 'samples', 'skipped_samples']) rec[k] = v[k] ?? (k.endsWith('samples') ? 0 : null);
+      // run-start line flush kept out of the averages (DoseRunZoneStats flush_*)
+      if (v.flush_samples > 0) for (const k of FLUSH_KEYS) rec[k] = v[k] ?? null;
       rec.stats_source = 'dose_controller'; // the run's DoseController record (live or history-computed)
       rec.controller_water_l = v.water_l ?? null;
       if (!sg.open && status !== 'shutdown' && v.status && STATUS_RANK[v.status] > (STATUS_RANK[status] || 0)) status = v.status;

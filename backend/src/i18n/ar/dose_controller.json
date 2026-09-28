@@ -68,7 +68,8 @@
     "zone_target_reached": "تم بلوغ هدف المنطقة",
     "filling_zone_target": "جارٍ ملء هدف المنطقة",
     "zone_target_grew": "ازداد هدف المنطقة",
-    "zone_start": "بداية المنطقة"
+    "zone_start": "بداية المنطقة",
+    "pump_start": "بدء المضخة"
   },
   "gate": {
     "no_ph_tank": "لا يوجد خزان خفض pH مربوط بلوحة الحقن",

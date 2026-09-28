@@ -182,7 +182,9 @@
     "notes_many": "{{count}} ملاحظة",
     "notes_other": "{{count}} ملاحظة",
     "ecTitleNoCount": "EC {{min}}–{{max}} mS/cm",
-    "phTitleNoCount": "pH {{min}}–{{max}}"
+    "phTitleNoCount": "pH {{min}}–{{max}}",
+    "flushTitle": "استُبعد شطف الخط: أول {{seconds}} ث بعد أول تشغيل للمضخة في هذا التشغيل (EC {{ec}} mS/cm، pH {{ph}})",
+    "flushNote": "* EC/pH دون شطف الخط (أول {{seconds}} ث بعد أول تشغيل للمضخة في هذا التشغيل)"
   },
   "stop": {
     "button": "إيقاف الري",

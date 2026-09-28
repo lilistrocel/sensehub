@@ -158,7 +158,9 @@
     "notes_one": "{{count}} note",
     "notes_other": "{{count}} notes",
     "ecTitleNoCount": "EC {{min}}–{{max}} mS/cm",
-    "phTitleNoCount": "pH {{min}}–{{max}}"
+    "phTitleNoCount": "pH {{min}}–{{max}}",
+    "flushTitle": "Line flush excluded: first {{seconds}} s after the run's first pump start (EC {{ec}} mS/cm, pH {{ph}})",
+    "flushNote": "* EC/pH without the line flush (first {{seconds}} s after the run's first pump start)"
   },
   "stop": {
     "button": "Stop irrigation",

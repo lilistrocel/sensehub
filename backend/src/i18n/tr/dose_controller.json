@@ -68,7 +68,8 @@
     "zone_target_reached": "bölge hedefine ulaşıldı",
     "filling_zone_target": "bölge hedefi dolduruluyor",
     "zone_target_grew": "bölge hedefi arttı",
-    "zone_start": "bölge başlangıcı"
+    "zone_start": "bölge başlangıcı",
+    "pump_start": "pompa başlangıcı"
   },
   "gate": {
     "no_ph_tank": "dozlama panosuna bağlı pH Düşürücü tankı yok",

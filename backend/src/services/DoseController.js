@@ -53,6 +53,33 @@
  * and daily open-second caps; hard max-on guard per pulse. Acid volume is an
  * ESTIMATE (acid_lpm_estimate, unverified).
  *
+ * PER-ZONE PRECISION (operator approval 2026-09-28, run 10 at 07:30: 1:200,
+ * 3 min zones, ~2.2 L per tank per zone, zones at 1:219 / 1:195 / 1:199):
+ *  - substep_estimate: the 0.25 L counter is interpolated between steps by the
+ *    monitor's rate_lph (smoothed, tau 2 s) — only while the valve is commanded
+ *    OPEN and water moves (the monitor holds its last rate 20-50 s after a valve
+ *    closes). Each new step re-anchors the estimate (at the midpoint of the 1 s
+ *    report gap); the sub-step part is clamped to [0, 0.25 + 0.02] L. The phase of
+ *    the counter at the cycle start (or after a counter reset / glitch) is unknown:
+ *    the first step then re-bases the estimate without a jump, so zone differences
+ *    stay exact. Rate stale/absent -> the zone's (then the run's) measured
+ *    step-to-step rate (scaled by the motive flow) -> plain steps. Per-zone close
+ *    checks run on every 1 s tick (close when est >= target - rate x latency_s).
+ *    A counter re-base with no rate before it is back-filled from the measured
+ *    step rate x flowing time (<= one step). Records keep the
+ *    counter litres (dosed_l, ground truth) and the estimate (dosed_est_l).
+ *  - open_at_pump_start: in soft-switch zones (the zone's pump starts after its
+ *    valve) the nutrient valves open when the pump ON write is confirmed by
+ *    read-back (relay_events), with the zone valve confirmed ON, in closed loop,
+ *    not disarmed / paused. The zone target then assumes the planned pump time x
+ *    the last measured (else expected) flow. The water gate is re-based on the
+ *    pump start: no flow >= min_flow_pct within no_water_s -> all nutrient valves
+ *    closed (trip 'pump_start_no_water'); the flow watch (dosing_without_water,
+ *    pump_no_flow_shutdown + retry) stays the backstop. Continuous-pump runs keep
+ *    opening once the flow registers.
+ *  - stats.flush_seconds: SEKO samples in the first 40 s after the run's first
+ *    pump start are reported as flush_* and kept out of the zone averages.
+ *
  * ACTUATION: every write goes through the scheduler's guarded path
  * (FertigationDoseScheduler._writeValve: guardEnergise/validateWriteSet on ON,
  * RelayEventLogger with source 'dose_controller' / 'ph_controller'). No ON write
@@ -77,6 +104,13 @@ const DRY_EVIDENCE_MS = 30000;
 const ZONE_READ_GAP_MS = 1000;
 const ZONE_TARGET = 'zone target reached';
 const PULSE_OVERRUN_TOLERANCE_MS = 1000; // a later OFF than this is charged to the acid budget
+// Sub-step volume estimate (nutrients.substep_estimate)
+const COUNTER_STEP_L = 0.25;       // resolution of the monitor's consumed_l counters
+const EST_MARGIN_L = 0.02;         // the sub-step part never exceeds one step + this
+const EST_RATE_TAU_S = 2;          // light smoothing of the monitor's rate_lph
+const EST_MOTIVE_FRACTION = 0.25;  // venturis draw only with water moving: integrate only while flow >= 25 % of expected
+const EST_AVG_MIN_S = 5;           // a measured step rate needs >= 5 s of clean (open + flowing) step-to-step time
+const PUMP_START_MAX_AGE_MS = 15000; // a pump ON event first seen later than this is not a "pump start"
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
@@ -112,6 +146,27 @@ const DEFAULT_CONFIG = Object.freeze({
     stop_before_end_s: 0,
     leak_l: 0.75,
     leak_after_s: 15,
+    // Sub-step volume estimate (operator approval 2026-09-28, run 10 at 07:30: the
+    // 0.25 L counter alone swung each ~2.2 L zone dose by +/-10 %): between two
+    // counter steps each tank's litres are the last step + the integral of the
+    // monitor's rate_lph while its valve is commanded OPEN and water moves
+    // (fallback: the zone's / run's measured step rate, then plain steps). Used for
+    // the per-zone close decision and the carry; the counter stays the recorded
+    // ground truth (dosed_l; the estimate is dosed_est_l). false = the previous
+    // behaviour (rate interpolation capped at 0.24 L since the last step).
+    substep_estimate: true,
+    // Soft-switch runs (a zone's pump starts after its valve): open the nutrient
+    // valves the moment the zone's pump ON write is confirmed (relay_events
+    // read-back) instead of waiting for the flow to register. The water gate still
+    // closes them when the flow is not >= min_flow_pct within no_water_s of that
+    // pump start. false = open only once the flow registers (previous behaviour).
+    open_at_pump_start: true,
+    // Water basis of the hard overdose cap (V > max_overdose_factor x W / ratio + overdose_margin_l):
+    // 'delivered'     = water delivered so far (operator decision 2026-09-28: kept for now)
+    // 'zone_expected' = (per-zone mode) water the cycle will have at the end of the CURRENT zone at
+    //                   the measured flow — avoids the false trip ~66 s into zone 1 at high draw
+    //                   (runs 1 + 3: "Tank B: 1.5 L dosed vs 0.73 L target"). Not enabled.
+    overdose_basis: 'delivered',
     // Optional slow outer loop (OFF): scale all ratios together, once per cycle,
     // from the previous run's feed EC toward target_us. Bounded 1:min..1:max.
     ec_trim: Object.freeze({
@@ -165,6 +220,13 @@ const DEFAULT_CONFIG = Object.freeze({
     tau_s: 15,                  // plant model (documentation / window sanity check)
     dead_time_s: 10,
   }),
+  // Per-zone feed EC/pH statistics (DoseRunZoneStats).
+  stats: Object.freeze({
+    // SEKO samples in the first flush_seconds after the run's FIRST pump start are the
+    // stale liquid in the lines, the 20-50 L buffer tank and the sensor cup: kept out of
+    // the zone EC/pH averages and reported separately (flush_*). 0 = off.
+    flush_seconds: 40,
+  }),
 });
 
 // ─── config validation ──────────────────────────────────────────────────────
@@ -203,6 +265,9 @@ const SCHEMA = {
       stop_before_end_s: NUM(0, 600),
       leak_l: NUM(0.25, 20),
       leak_after_s: NUM(5, 300),
+      substep_estimate: { t: 'bool' },
+      open_at_pump_start: { t: 'bool' },
+      overdose_basis: { t: 'enum', values: ['delivered', 'zone_expected'] },
       ec_trim: {
         t: 'obj',
         fields: {
@@ -258,6 +323,12 @@ const SCHEMA = {
       acid_lpm_estimate: NUM(0, 20),
       tau_s: NUM(1, 600),
       dead_time_s: NUM(0, 600),
+    },
+  },
+  stats: {
+    t: 'obj',
+    fields: {
+      flush_seconds: NUM(0, 600),
     },
   },
 };
@@ -319,9 +390,13 @@ function validateSection(updates, schema, path) {
 }
 
 function mergeConfig(base, upd) {
-  const out = { ...base, nutrients: { ...base.nutrients, ratio: { ...base.nutrients.ratio }, ec_trim: { ...base.nutrients.ec_trim } }, ec_check: { ...base.ec_check }, ph: { ...base.ph } };
+  const out = {
+    ...base, nutrients: { ...base.nutrients, ratio: { ...base.nutrients.ratio }, ec_trim: { ...base.nutrients.ec_trim } },
+    ec_check: { ...base.ec_check }, ph: { ...base.ph }, stats: { ...(base.stats || DEFAULT_CONFIG.stats) },
+  };
   if (!upd) return out;
   if (upd.ec_check) Object.assign(out.ec_check, upd.ec_check);
+  if (upd.stats) Object.assign(out.stats, upd.stats);
   if (upd.enabled !== undefined) out.enabled = upd.enabled;
   if (upd.nutrients) {
     const { ratio, ec_trim: trim, ...rest } = upd.nutrients;
@@ -415,6 +490,22 @@ function median(arr) {
 
 const MODES = ['closed_loop', 'fallback', 'hold', 'waiting'];
 
+/**
+ * Sub-step estimator state of one tank. Absolute estimate A = V + offset + extra:
+ *   V       reset-safe counter litres (steps of 0.25 L)
+ *   extra   litres integrated since the last step (clamped [0, step + margin])
+ *   offset  constant re-base chosen at the first step after an unknown counter
+ *           phase (cycle start, reset, glitch) so A never jumps there
+ */
+function newEst() {
+  return {
+    offset: 0, extra: 0, lastMs: null, phaseKnown: false, pre: { flowS: 0, blind: true }, backfill: null,
+    rSm: null, rMs: null, prevSampleMs: null,
+    cleanSinceMs: null, cleanV: null, avg: { v: 0, s: 0 },
+    source: null, A0: null,
+  };
+}
+
 // ─── i18n: alert texts + status reasons (en / tr / ar) ───────────────────────
 // The controller keeps its English reason / why / gate strings internally (some
 // are compared: ZONE_TARGET, closedBy). Alerts are built from catalog specs whose
@@ -460,6 +551,7 @@ const REASON_TEXTS = {
   'filling zone target': M('dose_controller.why.filling_zone_target'),
   'zone target grew': M('dose_controller.why.zone_target_grew'),
   'zone start': M('dose_controller.why.zone_start'),
+  'pump start': M('dose_controller.why.pump_start'),
   'no pH Down tank bound to the dosing board': M('dose_controller.gate.no_ph_tank'),
   'controller switched off': M('dose_controller.gate.controller_off'),
   'pH control switched off': M('dose_controller.gate.ph_off'),
@@ -863,25 +955,170 @@ class DoseController {
       c.monitorMap = this._monitorMap(c.mapFarm);
     }
     const cfg = this.getConfig();
+    const sub = this._substep(cfg);
     for (const mt of tanks) {
       if (!mt) continue;
       const t = c.tankById.get(c.monitorMap[mt.id]);
       if (!t) continue;
       t.rateLph = typeof mt.rate_lph === 'number' && Number.isFinite(mt.rate_lph) ? mt.rate_lph : null;
+      if (sub) {
+        this._estIntegrate(c, t, ms, cfg); // up to this sample, with the previous rate
+        this._estRate(t, ms);
+      }
       const cur = mt.consumed_l;
       if (typeof cur !== 'number' || !Number.isFinite(cur)) continue;
-      if (t.lastConsumed === null) { t.lastConsumed = cur; t.lastConsumedMs = ms; continue; }
+      if (t.lastConsumed === null) { t.lastConsumed = cur; t.lastConsumedMs = ms; t.est.prevSampleMs = ms; continue; }
       const dt = Math.max(0, (ms - t.lastConsumedMs) / 1000);
       const bound = 0.5 + (5 * dt) / 60; // 5 L/min: > 2x any venturi here
       let d = cur - t.lastConsumed;
-      if (d < 0) { d = cur <= bound ? cur : 0; t.counterResets++; }
-      else if (d > bound) { d = 0; t.counterGlitches++; }
+      let odd = false;
+      if (d < 0) { d = cur <= bound ? cur : 0; t.counterResets++; odd = true; }
+      else if (d > bound) { d = 0; t.counterGlitches++; odd = true; }
+      if (odd) {
+        // counter reset / jump: the phase inside the 0.25 L step is unknown again; keep A
+        // continuous and start the sub-step part from 0 (it must not saturate before the next step)
+        t.est.offset += t.est.extra - d;
+        t.est.extra = 0;
+        t.est.phaseKnown = false;
+        t.est.pre = { flowS: 0, blind: true };
+        t.est.cleanSinceMs = null;
+      }
       t.V += d;
       if (d > 0) t.lastIncMs = ms;
+      if (d > 0 && !odd) this._estStep(c, t, ms, d, cfg);
       t.lastConsumed = cur;
       t.lastConsumedMs = ms;
+      t.est.prevSampleMs = ms;
       if (!t.open && t.closedAt !== null && ms - t.closedAt >= cfg.nutrients.leak_after_s * 1000) t.vLeak += d;
     }
+  }
+
+  // ─── sub-step volume estimate (nutrients.substep_estimate) ─────────────────
+
+  _substep(cfg) {
+    return cfg.nutrients.substep_estimate === true && cfg.nutrients.mode !== 'tracking';
+  }
+
+  /** Absolute estimate (litres, same base as t.V): counter + re-base + sub-step part. */
+  _estAbs(t) {
+    return t.V + t.est.offset + t.est.extra;
+  }
+
+  /** Water moving through the venturis (fresh + healthy meter, flow >= 25 % of expected). No side effects. */
+  _estFlowing(cfg, now) {
+    return this._estMotive(cfg, now) > 0;
+  }
+
+  /** Motive flow fraction (flow / expected, <= 1) while water moves, else 0. No side effects. */
+  _estMotive(cfg, now) {
+    const f = this.flow;
+    if (!f || now - f.receivedMs > cfg.nutrients.stale_s * 1000 || now < f.receivedMs - 1000) return 0;
+    const v = f.values || {};
+    if (typeof v.signal_quality === 'number' && v.signal_quality < cfg.nutrients.min_signal_quality) return 0;
+    if (typeof v.error_flags === 'number' && v.error_flags !== 0) return 0;
+    if (typeof v.flow_lph !== 'number' || !Number.isFinite(v.flow_lph)) return 0;
+    const frac = v.flow_lph / this._expectedFlow(cfg);
+    return frac >= EST_MOTIVE_FRACTION ? Math.min(1, frac) : 0;
+  }
+
+  /**
+   * Light smoothing of the monitor's rate (sample noise only: a change of more
+   * than 20 % — valve opening, ramp — is followed at once, so the smoothing adds
+   * no lag there). An explicit null rate is "absent" at once.
+   */
+  _estRate(t, ms) {
+    const e = t.est;
+    const r = t.rateLph;
+    if (r === null || r < 0) { e.rSm = null; e.rMs = null; return; }
+    const jump = e.rSm !== null && Math.abs(r - e.rSm) > 0.2 * Math.max(r, e.rSm, 1);
+    if (e.rSm === null || e.rMs === null || jump || ms - e.rMs > 10000 || ms < e.rMs) e.rSm = r;
+    else e.rSm += (r - e.rSm) * (1 - Math.exp(-((ms - e.rMs) / 1000) / EST_RATE_TAU_S));
+    e.rMs = ms;
+  }
+
+  /**
+   * Rate used to interpolate: the monitor's (smoothed, fresh), else the zone's
+   * measured step-to-step rate, else the run's, else 0 (plain 0.25 L steps).
+   */
+  _estRateLps(c, t, now, cfg) {
+    const e = t.est;
+    if (e.rSm !== null && e.rMs !== null && now - e.rMs <= cfg.nutrients.stale_s * 1000 && now >= e.rMs - 1000) {
+      return { lps: Math.max(0, e.rSm) / 3600, source: 'rate' };
+    }
+    const st = c.seg ? c.seg.tanks[t.tank_id] : null;
+    if (st && st.avg && st.avg.s >= EST_AVG_MIN_S && st.avg.v > 0) return { lps: st.avg.v / st.avg.s, source: 'zone_avg' };
+    if (e.avg.s >= EST_AVG_MIN_S && e.avg.v > 0) return { lps: e.avg.v / e.avg.s, source: 'run_avg' };
+    return { lps: 0, source: 'quantised' };
+  }
+
+  /**
+   * Integrate the sub-step part up to `now` — only while the valve is commanded
+   * OPEN and water moves (never the rate the monitor holds after a close).
+   */
+  _estIntegrate(c, t, now, cfg) {
+    const e = t.est;
+    if (e.lastMs === null || now < e.lastMs) { e.lastMs = now; return; }
+    const dt = (now - e.lastMs) / 1000;
+    e.lastMs = now;
+    if (dt <= 0) return;
+    const motive = t.open ? this._estMotive(cfg, now) : 0;
+    if (!motive) {
+      e.cleanSinceMs = null;
+      e.source = t.open ? 'no_water' : 'closed';
+      return;
+    }
+    const r = this._estRateLps(c, t, now, cfg);
+    e.source = r.source;
+    // a measured (full-flow) step rate is scaled by the motive flow (venturi draw follows it);
+    // the monitor's own rate already is the actual draw
+    const w = r.source === 'rate' ? 1 : motive;
+    if (!e.phaseKnown && e.pre) { e.pre.flowS += dt * motive; if (r.source !== 'quantised') e.pre.blind = false; }
+    if (r.lps > 0) e.extra = clamp(e.extra + r.lps * w * dt, 0, COUNTER_STEP_L + EST_MARGIN_L);
+  }
+
+  /** A new counter step (d litres) arrived at ms: measured step rate + re-anchor. */
+  _estStep(c, t, ms, d, cfg) {
+    const e = t.est;
+    const flowing = t.open && this._estFlowing(cfg, ms);
+    // measured rate from clean step-to-step intervals (valve open + water moving throughout)
+    if (flowing && e.cleanSinceMs !== null && e.cleanV !== null && ms > e.cleanSinceMs) {
+      const dv = t.V - e.cleanV;
+      const ds = (ms - e.cleanSinceMs) / 1000;
+      if (dv > 0 && ds > 0) {
+        e.avg.v += dv; e.avg.s += ds;
+        const st = c.seg ? c.seg.tanks[t.tank_id] : null;
+        if (st && st.avg) { st.avg.v += dv; st.avg.s += ds; }
+      }
+    }
+    // No rate at all before the first step after an unknown phase (monitor rate absent):
+    // once a step rate is measured, back-fill that first stretch as rate x flowing time
+    // (<= one step) — otherwise up to 0.25 L of it would be lost to the re-base.
+    if (e.backfill && e.avg.s >= EST_AVG_MIN_S && e.avg.v > 0) {
+      const add = clamp((e.avg.v / e.avg.s) * e.backfill.flowS, 0, COUNTER_STEP_L) - e.backfill.integrated;
+      if (add > 0) e.offset += add;
+      e.backfill = null;
+    }
+    e.cleanSinceMs = flowing ? ms : null;
+    e.cleanV = t.V;
+    // the step was crossed somewhere in the last report gap: assume its midpoint
+    const gapMs = e.prevSampleMs !== null && ms - e.prevSampleMs <= 2500 && ms >= e.prevSampleMs ? ms - e.prevSampleMs : 0;
+    const lps = flowing ? this._estRateLps(c, t, ms, cfg).lps : 0;
+    const extraNew = clamp((lps * gapMs) / 2000, 0, COUNTER_STEP_L / 2);
+    if (!e.phaseKnown) {
+      // unknown phase before this step: re-base so A does not jump (differences stay exact)
+      e.offset = (t.V - d + e.offset + e.extra) - (t.V + extraNew);
+      e.phaseKnown = true;
+      e.backfill = e.pre && e.pre.blind && e.pre.flowS > 0 ? { flowS: e.pre.flowS, integrated: e.extra } : null;
+      e.pre = null;
+    }
+    e.extra = extraNew;
+  }
+
+  /** Legacy interpolation (substep_estimate false): rate x time since the last step, capped at 0.24 L. */
+  _vEstLegacy(t, now, ws) {
+    if (!t.open || t.lastIncMs === null) return t.V;
+    const rate = this._rateLps(t, ws);
+    return t.V + Math.min(0.24, Math.max(0, rate * (now - t.lastIncMs) / 1000));
   }
 
   _waterState(c, cfg, now) {
@@ -1021,6 +1258,7 @@ class DoseController {
       V: 0, lastConsumed: null, lastConsumedMs: null, lastIncMs: null, rateLph: null, counterResets: 0, counterGlitches: 0,
       vLeak: 0, leakFlagged: false, target: 0, err: null, limited: false, limitedSince: null, limitedMs: 0,
       overdoseTrips: 0, overdoseActive: false, chain: null, writes: 0, writeErrors: 0, offRewritten: false, lastWhy: null,
+      est: newEst(),
     }));
     const phTank = this._resolvePhTank(schedTanks);
     const token = ++this._token;
@@ -1051,12 +1289,14 @@ class DoseController {
       trim,
       seg: null, zoneRecords: [], carry: {}, zoneRead: { at: -Infinity, zone: null },
       zonePlan: this._loadZonePlan(cfg, ctx.automationId), zoneNames: this._zoneNames(cfg),
+      pumpRead: { at: -Infinity, ev: null }, pumpStart: null, pumpArmed: false, firstPumpMs: null, lastGoodFlowLph: null,
     };
 
     // Baseline from the latest idle samples (the monitor reports every 10 s when idle),
     // so water/concentrate between pump start and the first live sample is counted.
     if (this.flow && now - this.flow.receivedMs <= 30000) this._accumulateWater(c, this.flow.values, this.flow.receivedMs);
     if (this.dosing && now - this.dosing.receivedMs <= 30000) this._accumulateDosing(c, this.dosing.tanks, this.dosing.receivedMs);
+    for (const t of tanks) { t.est.lastMs = now; t.est.A0 = this._estAbs(t); }
 
     try {
       const info = this.db.prepare(`
@@ -1117,6 +1357,8 @@ class DoseController {
     if (c.timer) { clearInterval(c.timer); c.timer = null; }
     if (c.acidTimer) { clearTimeout(c.acidTimer); c.acidTimer = null; }
     this._accountTime(c, now);
+    const endCfg = this.getConfig();
+    if (this._substep(endCfg)) for (const t of c.tanks) this._estIntegrate(c, t, now, endCfg);
     if (c.seg) {
       try { this._finishSegment(c, this.getConfig(), now, this._waterState(c, this.getConfig(), now)); } catch (e) { this.log.error(`[DoseController] segment close failed: ${e.message}`); }
     }
@@ -1188,7 +1430,7 @@ class DoseController {
     if (!c || c.ended) return;
     const cfg = this.getConfig();
     const n = cfg.nutrients;
-    const ws = this._waterState(c, cfg, now);
+    let ws = this._waterState(c, cfg, now);
     const disarmed = this._disarmed(now);
 
     let mode;
@@ -1213,19 +1455,29 @@ class DoseController {
     }
     this._accountTime(c, now);
     this._setMode(c, mode, reason, now);
+    const sub = this._substep(cfg);
+    if (sub) for (const t of c.tanks) this._estIntegrate(c, t, now, cfg);
+    let justArmed = false;
+    if (n.mode !== 'tracking') {
+      justArmed = this._trackPumpStart(c, cfg, now, ws, mode, disarmed);
+      if (justArmed) ws = this._waterState(c, cfg, now); // the water gate was re-based on the pump start
+    }
     if (mode === 'closed_loop' && !c.waterEstablishedAt && ws.ok) c.waterEstablishedAt = now;
+    if (ws.ok) c.lastGoodFlowLph = this._smoothedFlowLph(now, n.flow_smooth_s, ws);
     // pH start delay restarts after every water stop: the cup is flushed again.
     if (ws.stopped || !ws.known) c.phFlowSince = null;
     else if (ws.ok && c.phFlowSince === null && c.waterEstablishedAt) c.phFlowSince = now;
-    if (n.mode !== 'tracking' && c.waterEstablishedAt) {
+    if (n.mode !== 'tracking' && (c.waterEstablishedAt || c.pumpArmed)) {
       this._updateSegment(c, cfg, now, ws);
       this._sampleZoneQuality(c, cfg, now, ws);
     }
 
     const due = now - c.lastEvalMs >= n.eval_s * 1000 - 1;
-    if (due || mode === 'hold' || ws.stopped) {
+    if (due || justArmed || mode === 'hold' || ws.stopped) {
       this._evalNutrients(c, cfg, now, ws, mode);
       c.lastEvalMs = now;
+    } else if (sub && mode === 'closed_loop') {
+      this._perZoneCloseCheck(c, cfg, now, ws); // close decisions on every 1 s tick (open decisions keep eval_s)
     }
     this._processPh(c, cfg, now, ws);
     this._evalAcid(c, cfg, now, ws, disarmed);
@@ -1319,6 +1571,10 @@ class DoseController {
         if (ws.known && !ws.ok && !c.waterEstablishedAt) { want = false; why = 'waiting for water'; }
         else if (ws.known && !ws.ok) { want = want && true; why = 'low flow'; } // dip: hold, never open
         else { want = this._scheduleState(t, elapsedS); why = 'fixed schedule'; }
+      } else if (c.pumpArmed && t.ratio && n.mode !== 'tracking' && !ws.ok) {
+        // soft-switch zone, pump ON confirmed, flow still ramping: open now (water gate re-based on the pump start)
+        const d = this._perZoneWant(c, cfg, t, now, ws);
+        want = d.want; why = d.why === 'zone start' ? 'pump start' : d.why;
       } else if (!c.waterEstablishedAt) { want = false; why = 'waiting for water'; reason = 'waiting for water flow'; }
       else if (!ws.ok) { want = t.open; why = 'low flow'; } // short dip: hold, never open below min flow
       else if (!t.ratio) { want = this._scheduleState(t, elapsedS); why = 'fixed schedule (no ratio set)'; }
@@ -1342,18 +1598,21 @@ class DoseController {
 
       if (endStop && want) { want = false; why = 'end of cycle'; }
 
-      // Hard overdose cap (needs measured water + concentrate).
-      if (t.ratio && ws.dosingFresh && t.V > n.max_overdose_factor * (c.W / t.ratio) + n.overdose_margin_l) {
+      // Hard overdose cap (needs measured water + concentrate). Basis: nutrients.overdose_basis
+      // ('delivered' = water so far, default; 'zone_expected' = water by the end of the current
+      // zone — per-zone mode doses each zone's target ahead of its water, see _overdoseBasisW).
+      const capW = this._overdoseBasisW(c, n);
+      if (t.ratio && ws.dosingFresh && t.V > n.max_overdose_factor * (capW / t.ratio) + n.overdose_margin_l) {
         if (!t.overdoseActive) {
           t.overdoseActive = true;
           t.overdoseTrips++;
-          const detail = `${t.name}: ${r2(t.V)} L dosed vs ${r2(c.W / t.ratio)} L target (> ${n.max_overdose_factor}x)`;
+          const detail = `${t.name}: ${r2(t.V)} L dosed vs ${r2(capW / t.ratio)} L target (> ${n.max_overdose_factor}x)`;
           this._trip(c, 'overdose', now, detail);
-          this._alert(c, `overdose:${t.tank_id}`, 'warning', ALERT_SPECS.overdose(t.name, r2(t.V), r2(c.W / t.ratio), n.max_overdose_factor, r1(c.W)),
+          this._alert(c, `overdose:${t.tank_id}`, 'warning', ALERT_SPECS.overdose(t.name, r2(t.V), r2(capW / t.ratio), n.max_overdose_factor, r1(capW)),
             { equipment_id: t.equipment_id });
         }
         want = false; force = true; why = 'overdose cap';
-      } else if (t.overdoseActive && t.ratio && t.V <= (c.W / t.ratio)) {
+      } else if (t.overdoseActive && t.ratio && t.V <= (capW / t.ratio)) {
         t.overdoseActive = false;
       }
 
@@ -1367,10 +1626,21 @@ class DoseController {
         this._command(c, t, false, 'dose_controller');
       }
 
-      this._applyValve(c, t, want, { force, why, now, cfg });
+      const switched = this._applyValve(c, t, want, { force, why, now, cfg });
+      if (switched && want && why === 'pump start' && c.seg) c.seg.pumpStartOpen = true;
     }
     if (initial) c.initialOpened = true;
     c.lastReason = reason;
+  }
+
+  /**
+   * Water basis of the overdose cap (see _evalNutrients): nutrients.overdose_basis
+   * 'delivered' (default) = water so far; 'zone_expected' (per-zone mode only) =
+   * water by the end of the current zone at the measured flow (no flow -> so far).
+   */
+  _overdoseBasisW(c, n) {
+    if (n.overdose_basis !== 'zone_expected' || n.mode === 'tracking' || !c.seg || !(c.seg.expectedW > 0)) return c.W;
+    return Math.max(c.W, c.seg.W0 + c.seg.expectedW);
   }
 
   // ─── per-zone litre targets (default nutrient mode) ───────────────────────
@@ -1385,11 +1655,14 @@ class DoseController {
     return n ? sum / n : (ws.flow || 0);
   }
 
-  /** Dosed volume with the 0.25 L counter interpolated by the reported rate (never a full quantum). */
+  /**
+   * Dosed volume used for the per-zone decisions: the sub-step estimate (already
+   * integrated up to this tick by step()) or, with substep_estimate off, the
+   * legacy interpolation.
+   */
   _vEst(t, now, ws) {
-    if (!t.open || t.lastIncMs === null) return t.V;
-    const rate = this._rateLps(t, ws);
-    return t.V + Math.min(0.24, Math.max(0, rate * (now - t.lastIncMs) / 1000));
+    const cfg = this.getConfig();
+    return this._substep(cfg) ? this._estAbs(t) : this._vEstLegacy(t, now, ws);
   }
 
   /**
@@ -1473,6 +1746,7 @@ class DoseController {
         let best = null;
         for (const o of options) if (!best || Math.abs(o.delay - at) < Math.abs(best.delay - at)) best = o;
         zone.plannedDurS = best ? best.duration : null;
+        zone.softSwitch = !!(best && best.flowStart > 0); // the zone's pump starts after its valve
         if (best) {
           // Planned flow window, anchored on the relay ON time; a zone re-opened well
           // after its planned start (flow-watch retry) keeps the plan's absolute times.
@@ -1519,7 +1793,10 @@ class DoseController {
     seg.plannedEndMs = plannedEndMs;
     const water = c.W - seg.W0;
     const remainingS = Math.max(0, (plannedEndMs - now) / 1000);
-    const flowLps = ws.ok ? this._smoothedFlowLph(now, n.flow_smooth_s, ws) / 3600 : 0;
+    // pump just started in a soft-switch zone (flow still ramping): the zone's water will arrive —
+    // assume the last measured flow (else the expected flow) over the planned pump time
+    const flowLps = ws.ok ? this._smoothedFlowLph(now, n.flow_smooth_s, ws) / 3600
+      : (c.pumpArmed ? (c.lastGoodFlowLph || this._expectedFlow(cfg)) / 3600 : 0);
     seg.water = water;
     seg.remainingS = remainingS;
     seg.expectedW = water + remainingS * flowLps;
@@ -1544,7 +1821,7 @@ class DoseController {
     };
     for (const t of c.tanks) {
       seg.tanks[t.tank_id] = {
-        V0: this._vEst(t, now, ws), carryIn: c.carry[t.tank_id] || 0, base: 0, target: 0, dosed: 0,
+        V0: this._vEst(t, now, ws), V0q: t.V, avg: { v: 0, s: 0 }, carryIn: c.carry[t.tank_id] || 0, base: 0, target: 0, dosed: 0,
         closedAt: null, closedBy: null, targetAtClose: null, reopens: 0, limited: false, openedAt: t.open ? now : null,
       };
     }
@@ -1556,23 +1833,28 @@ class DoseController {
     if (!seg) return;
     const n = cfg.nutrients;
     const water = c.W - seg.W0;
+    const sub = this._substep(cfg);
     const rec = {
       zone: seg.idx, channel: seg.channel, name: seg.name, slot: seg.slot,
       started_at: iso(seg.startMs), ended_at: iso(now), planned_s: seg.plannedDurS, water_l: r1(water), tanks: [],
     };
+    if (seg.pumpStartOpen) rec.opened_at_pump_start = true;
     for (const t of c.tanks) {
       const st = seg.tanks[t.tank_id];
       if (!st || !t.ratio) continue;
       const base = water / t.ratio;
       const target = base + st.carryIn;
+      // decisions + carry: the estimate (sub-step, or legacy); record: the counter (ground truth) + the estimate
       const dosed = this._vEst(t, now, ws) - st.V0;
+      const dosedCounter = t.V - st.V0q;
       const short = target - dosed;
       const cantReach = st.closedBy !== 'target' && short > n.deadband_l && water > 0;
       const lim = (n.carry_clamp_pct / 100) * base;
       const carryOut = clamp(short, -lim, lim);
       c.carry[t.tank_id] = carryOut;
       rec.tanks.push({
-        tank_id: t.tank_id, name: t.name, target_l: r2(target), dosed_l: r2(dosed),
+        tank_id: t.tank_id, name: t.name, target_l: r2(target), dosed_l: r2(dosedCounter),
+        ...(sub ? { dosed_est_l: r2(dosed) } : {}),
         carry_in_l: r2(st.carryIn), carry_out_l: r2(carryOut),
         opened_at_s: st.openedAt !== null ? r1((st.openedAt - seg.startMs) / 1000) : null,
         closed_at_s: st.closedAt !== null && st.closedBy ? r1((st.closedAt - seg.startMs) / 1000) : null,
@@ -1609,9 +1891,13 @@ class DoseController {
       if (ms <= s.tsMs + 500) { flow = s.tsMs - ms <= 5000 ? v : null; break; }
     }
     if (flow === null && ws.known && Math.abs(now - s.tsMs) <= 2000) flow = ws.flow;
+    // line flush: the first flush_seconds after the run's FIRST pump start (fallback: when water was first established)
+    const fs = cfg.stats ? cfg.stats.flush_seconds : 0;
+    const anchor = c.firstPumpMs !== null ? c.firstPumpMs : c.waterEstablishedAt;
+    const flush = fs > 0 && anchor !== null && anchor !== undefined && s.tsMs < anchor + fs * 1000;
     zoneStats.addSample(target, {
       ph: s.value, ec: s.ec, flowLph: flow, expectedLph: ws.expected,
-      phMin: cfg.ph.plausible_min, phMax: cfg.ph.plausible_max,
+      phMin: cfg.ph.plausible_min, phMax: cfg.ph.plausible_max, flush, flushSeconds: fs,
     });
     if (target === (c.prevSeg && c.prevSeg.q)) Object.assign(c.prevSeg.rec, zoneStats.accFields(target));
   }
@@ -1620,7 +1906,8 @@ class DoseController {
     const n = cfg.nutrients;
     const st = c.seg ? c.seg.tanks[t.tank_id] : null;
     if (!st) return { want: false, why: 'waiting for a zone' };
-    const rate = this._rateLps(t, ws);
+    // latency_s covers the OFF write + half a 1 s tick (the estimate removes the monitor's report delay)
+    const rate = this._substep(cfg) ? this._estRateLps(c, t, now, cfg).lps : this._rateLps(t, ws);
     const dosed = st.dosed;
     if (t.open) {
       return dosed >= st.target - rate * n.latency_s ? { want: false, why: ZONE_TARGET } : { want: true, why: 'filling zone target' };
@@ -1633,6 +1920,93 @@ class DoseController {
     return st.target - dosed > n.deadband_l ? { want: true, why: 'zone start' } : { want: false, why: ZONE_TARGET };
   }
 
+  /** Per-zone close decisions between the eval_s evaluations (substep_estimate: every tick). */
+  _perZoneCloseCheck(c, cfg, now, ws) {
+    if (!c.seg || !ws.ok || ws.stopped || c.paused) return;
+    for (const t of c.tanks) {
+      if (!t.open || !t.ratio) continue;
+      const d = this._perZoneWant(c, cfg, t, now, ws);
+      if (!d.want) this._applyValve(c, t, false, { why: d.why, now, cfg });
+    }
+  }
+
+  /**
+   * Pump + zone relay events of this cycle (irrigation board), cached ~1 s.
+   * { pump: { on, ms, confirmed } | null, zoneConfirmed: { [ch]: bool } };
+   * also records the run's FIRST pump ON (c.firstPumpMs, flush window).
+   * "Confirmed" = the ON write's read-back agreed (relay_events.confirmed = 1).
+   */
+  _pumpEvents(c, cfg, now) {
+    if (now - c.pumpRead.at < ZONE_READ_GAP_MS && now >= c.pumpRead.at) return c.pumpRead.ev;
+    c.pumpRead.at = now;
+    const n = cfg.nutrients;
+    let ev = null;
+    try {
+      const since = new Date(c.startedAt - 15000).toISOString().replace('T', ' ').slice(0, 19);
+      const chans = [n.pump_channel, ...n.zone_channels.filter(ch => ch !== n.pump_channel)];
+      const rows = this.db.prepare(`SELECT * FROM relay_events WHERE equipment_id = ? AND channel IN (${chans.map(() => '?').join(',')}) AND created_at >= ? ORDER BY id`)
+        .all(n.irrigation_equipment_id, ...chans, since);
+      const latest = new Map();
+      for (const r of rows) {
+        const ms = parseTs(r.created_at);
+        if (ms === null || ms > now + 2000) continue;
+        const on = r.state === 1;
+        latest.set(r.channel, { on, ms, confirmed: on && r.confirmed === 1 });
+        // the run's FIRST pump start: never a later zone's pump start (flush window anchor)
+        if (r.channel === n.pump_channel && on && c.firstPumpMs === null && (c.waterEstablishedAt === null || ms <= c.waterEstablishedAt + 1000)) c.firstPumpMs = ms;
+      }
+      const zoneConfirmed = {};
+      for (const ch of n.zone_channels) { const z = latest.get(ch); zoneConfirmed[ch] = !!(z && z.on && z.confirmed); }
+      ev = { pump: latest.get(n.pump_channel) || null, zoneConfirmed };
+    } catch (_) { ev = null; }
+    c.pumpRead.ev = ev;
+    return ev;
+  }
+
+  /**
+   * open_at_pump_start: arm the current soft-switch zone when its pump ON write
+   * is confirmed (zone valve confirmed ON, event <= 15 s old, after the valve).
+   * Arming re-bases the water gate (c.lowFlowSince) on the pump start, so
+   * ws.stopped closes every nutrient valve when the flow is not >= min_flow_pct
+   * within no_water_s. Disarmed once the flow is established (normal rules) or
+   * the gate tripped. c.pumpArmed additionally needs closed loop, not disarmed,
+   * not paused and a known flow. Returns true on the tick a pump start arms.
+   */
+  _trackPumpStart(c, cfg, now, ws, mode, disarmed) {
+    const n = cfg.nutrients;
+    // look for the first pump ON until 5 s after water was established (then the flush anchor stays waterEstablishedAt)
+    const flushOpen = c.firstPumpMs === null && cfg.stats && cfg.stats.flush_seconds > 0
+      && (c.waterEstablishedAt === null || now - c.waterEstablishedAt < 5000);
+    if (!n.open_at_pump_start) {
+      c.pumpArmed = false;
+      if (flushOpen) this._pumpEvents(c, cfg, now);
+      return false;
+    }
+    const ev = this._pumpEvents(c, cfg, now);
+    const p = ev ? ev.pump : null;
+    let justArmed = false;
+    if (p && p.on && (!c.pumpStart || c.pumpStart.eventMs !== p.ms)) {
+      const z = this._currentZone(c, cfg, now);
+      const eligible = !!(p.confirmed && z && z.softSwitch && ev.zoneConfirmed[z.channel] === true
+        && p.ms >= z.openedAt - 1000 && now - p.ms <= PUMP_START_MAX_AGE_MS);
+      c.pumpStart = { eventMs: p.ms, seenMs: now, channel: z ? z.channel : null, eligible, active: eligible, established: false, failed: false };
+      if (eligible && !ws.ok) c.lowFlowSince = now; // water gate: no_water_s counted from this pump start
+      justArmed = eligible;
+    } else if (c.pumpStart && c.pumpStart.active && (!p || !p.on)) {
+      c.pumpStart.active = false; // pump OFF again
+    }
+    const ps = c.pumpStart;
+    if (ps && ps.active && !justArmed) {
+      if (ws.ok) { ps.active = false; ps.established = true; } else if (ws.stopped) {
+        ps.active = false; ps.failed = true;
+        const zn = ps.channel !== null ? (c.zoneNames[ps.channel] || `Zone relay ${ps.channel}`) : 'zone';
+        this._trip(c, 'pump_start_no_water', now, `${zn}: flow not >= ${n.min_flow_pct} % within ${n.no_water_s} s of the pump start — nutrient valves closed`);
+      }
+    }
+    c.pumpArmed = !!(ps && ps.active && mode === 'closed_loop' && !disarmed && !c.paused && ws.known);
+    return justArmed && c.pumpArmed;
+  }
+
   _applyValve(c, t, want, { force = false, why = null, now, cfg }) {
     if (want === t.open) return false;
     if (want && this._disarmed(now)) return false;
@@ -1641,6 +2015,7 @@ class DoseController {
       const minMs = (t.open ? n.min_on_s : n.min_off_s) * 1000;
       if (now - t.lastSwitchMs < minMs) return false;
     }
+    if (t.est && this._substep(cfg)) this._estIntegrate(c, t, now, cfg); // close the books on the old valve state
     const st = c.seg && t.kind === 'nutrient' ? c.seg.tanks[t.tank_id] : null;
     if (t.open) {
       t.openMs += now - t.openSince;
@@ -2099,6 +2474,7 @@ class DoseController {
         physics_limited: !!(t.ratio && targetL > 1 && t.V < targetL * 0.95 && openPct !== null && openPct >= 90),
         overdose_trips: t.overdoseTrips, counter_resets: t.counterResets, write_errors: t.writeErrors,
         cant_reach_zones: t.cantReachZones || 0,
+        ...(this._substep(c.cfgAtStart) && t.est.A0 !== null ? { dosed_est_l: r2(this._estAbs(t) - t.est.A0) } : {}),
       };
     });
     const a = c.acid;
@@ -2110,6 +2486,12 @@ class DoseController {
         closed_loop_s: r1(c.modeMs.closed_loop / 1000), fallback_s: r1(c.modeMs.fallback / 1000),
         hold_s: r1(c.modeMs.hold / 1000), waiting_s: r1(c.modeMs.waiting / 1000),
         fallback_periods: c.fallbackPeriods, water_integrated_l: r1(c.waterByFlow), water_glitches: c.waterGlitches,
+        options: {
+          substep_estimate: !!c.cfgAtStart.nutrients.substep_estimate,
+          open_at_pump_start: !!c.cfgAtStart.nutrients.open_at_pump_start,
+          flush_seconds: c.cfgAtStart.stats ? c.cfgAtStart.stats.flush_seconds : 0,
+          first_pump_at: iso(c.firstPumpMs),
+        },
       },
       ph: {
         min: a.stats.min, max: a.stats.max, avg: a.stats.n ? r2(a.stats.sum / a.stats.n) : null, last: a.stats.last, samples: a.stats.n,
@@ -2332,6 +2714,10 @@ class DoseController {
         planned_pump_stop: iso(c.seg.pumpStopMs),
       } : null,
       zones_done: c.zoneRecords.length,
+      pump_start: c.pumpStart ? {
+        at: iso(c.pumpStart.eventMs), seen_at: iso(c.pumpStart.seenMs), channel: c.pumpStart.channel,
+        eligible: c.pumpStart.eligible, armed: !!c.pumpArmed, established: c.pumpStart.established, failed: c.pumpStart.failed,
+      } : null,
       paused: c.paused ? { reason: c.paused.reason, since: iso(c.paused.since) } : null,
       tanks: s.tanks.map((st, i) => {
         const t = c.tanks[i];
@@ -2340,6 +2726,8 @@ class DoseController {
           ...st, valve: t.open ? 'open' : 'closed', actual: actualOf(t), error_l: r2(t.err),
           limited: !!(t.limited || (zs && zs.limited)),
           zone_target_l: zs ? r2(zs.target) : null, zone_dosed_l: zs ? r2(zs.dosed) : null, zone_closed_by: zs ? zs.closedBy : null,
+          zone_dosed_counter_l: zs && zs.V0q !== undefined ? r2(t.V - zs.V0q) : null,
+          est_source: this._substep(cfg) ? t.est.source : null,
           rate_lph: ws.dosingFresh ? t.rateLph : null, why: t.lastWhy,
         };
       }),

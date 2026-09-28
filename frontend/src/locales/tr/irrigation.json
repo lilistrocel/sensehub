@@ -158,7 +158,9 @@
     "notes_one": "{{count}} not",
     "notes_other": "{{count}} not",
     "ecTitleNoCount": "EC {{min}}–{{max}} mS/cm",
-    "phTitleNoCount": "pH {{min}}–{{max}}"
+    "phTitleNoCount": "pH {{min}}–{{max}}",
+    "flushTitle": "Hat yıkaması hariç tutuldu: çalışmanın ilk pompa başlatmasından sonraki ilk {{seconds}} sn (EC {{ec}} mS/cm, pH {{ph}})",
+    "flushNote": "* EC/pH hat yıkaması hariç (çalışmanın ilk pompa başlatmasından sonraki ilk {{seconds}} sn)"
   },
   "stop": {
     "button": "Sulamayı Durdur",

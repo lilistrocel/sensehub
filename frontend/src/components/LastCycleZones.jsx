@@ -18,6 +18,11 @@ import { formatClock, formatNumber } from '../i18n/format';
  * one "Zone unknown" row. Unknown values render "—" (muted), never 0. On a
  * phone the table scrolls sideways inside the card with the zone column pinned.
  *
+ * Line flush (DoseRunZoneStats flush_*, 2026-09-28): SEKO samples in the first
+ * ~40 s after the run's first pump start are stale line / buffer / cup liquid and
+ * are kept out of that zone's EC/pH; the cells get a "*" marker, a title with the
+ * flush values, and a footnote. Litres stay the counter (ground truth).
+ *
  * i18n: texts in irrigation:lastCycle.* / irrigation:zoneStatus.*. The table is
  * a numeric table and stays left-to-right in Arabic (dir="ltr"); zone names
  * and status words inside it are still translated.
@@ -173,8 +178,16 @@ export default function LastCycleZones({ run, formatTime, compact = false, class
                 const range = (k, min, max, n) => (isNum(n)
                   ? t(`lastCycle.${k}`, { min, max, count: Number(n) })
                   : t(`lastCycle.${k}NoCount`, { min, max }));
-                const ecTitle = isNum(r.ec_avg_us) ? range('ecTitle', mS(r.ec_min_us), mS(r.ec_max_us), r.ec_samples) : t('lastCycle.noEcSample');
-                const phTitle = isNum(r.ph_avg) ? range('phTitle', num(r.ph_min, 2), num(r.ph_max, 2), r.samples) : t('lastCycle.noPhSample');
+                const flush = r.flush_samples > 0;
+                const flushTitle = flush ? t('lastCycle.flushTitle', {
+                  seconds: isNum(r.flush_s) ? Math.round(r.flush_s) : '—',
+                  ec: isNum(r.flush_ec_avg_us) && Number(r.flush_ec_avg_us) > 0 ? formatNumber(Number(r.flush_ec_avg_us) / 1000, { decimals: 2 }) : '—',
+                  ph: isNum(r.flush_ph_avg) ? formatNumber(r.flush_ph_avg, { decimals: 2 }) : '—',
+                }) : null;
+                const withFlush = (title) => (flush ? `${title} — ${flushTitle}` : title);
+                const ecTitle = withFlush(isNum(r.ec_avg_us) ? range('ecTitle', mS(r.ec_min_us), mS(r.ec_max_us), r.ec_samples) : t('lastCycle.noEcSample'));
+                const phTitle = withFlush(isNum(r.ph_avg) ? range('phTitle', num(r.ph_min, 2), num(r.ph_max, 2), r.samples) : t('lastCycle.noPhSample'));
+                const flushMark = flush ? <span className="text-muted" aria-hidden="true" data-testid="last-cycle-flush">*</span> : null;
                 return (
                   <tr key={`${r.channel}-${i}`} className={`border-b border-line ${dim ? 'text-muted' : 'text-ink'}`} data-testid="last-cycle-row" data-status={r.status || 'unknown'}>
                     <th scope="row" className={`${pin} pl-3 pr-1.5 py-1 text-left font-sans font-normal whitespace-nowrap`}>
@@ -199,8 +212,8 @@ export default function LastCycleZones({ run, formatTime, compact = false, class
                       return <td key={tc.tank_id} className={td}>{x ? num(x.dosed_l, 2) : <Dash />}</td>;
                     })}
                     <td className={`${td} ${ratioCls(r.achieved_ratio, r.status)}`}>{isNum(r.achieved_ratio) ? `1:${r.achieved_ratio}` : <Dash />}</td>
-                    <td className={td} title={ecTitle}>{mS(r.ec_avg_us)}</td>
-                    <td className={`${td} pr-3`} title={phTitle}>{num(r.ph_avg, 2)}</td>
+                    <td className={td} title={ecTitle}>{mS(r.ec_avg_us)}{flushMark}{flush && <span className="sr-only">{flushTitle}</span>}</td>
+                    <td className={`${td} pr-3`} title={phTitle}>{num(r.ph_avg, 2)}{flushMark}</td>
                   </tr>
                 );
               })}
@@ -230,6 +243,9 @@ export default function LastCycleZones({ run, formatTime, compact = false, class
           <span className="inline-flex items-center gap-1"><ZoneMark status="no_water" /> {t('lastCycle.legendNoWater')}</span>
           {rows.some(r => r.status === 'manual') && <span className="inline-flex items-center gap-1"><ZoneMark status="manual" /> {t('zoneStatus.manual')}</span>}
           <span>{t('lastCycle.legendSamples')}</span>
+          {rows.some(r => r.flush_samples > 0) && (
+            <span data-testid="last-cycle-flush-note">{t('lastCycle.flushNote', { seconds: Math.round(Number(rows.find(r => r.flush_samples > 0).flush_s) || 40) })}</span>
+          )}
           {notOk.length === 0 && <span className="sr-only">{t('lastCycle.allOk')}</span>}
         </p>
       )}

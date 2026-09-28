@@ -11,6 +11,12 @@
  *   status        'ok' | 'no_water' | 'cut_short' | 'shutdown' | 'not_run'
  *   achieved_ratio  water_l / mean litres of the nutrient tanks (1:N), null if nothing dosed
  *   stats_source  'live' (sampled by the controller) | 'history' (computed on read from readings)
+ *   flush_samples, flush_s, flush_ec_avg_us, flush_ec_min_us, flush_ec_max_us, flush_ph_avg,
+ *   flush_ph_min, flush_ph_max   (only when > 0 samples) SEKO samples taken in the first
+ *                 flush_seconds after the run's FIRST pump start (DoseController
+ *                 stats.flush_seconds, default 40 s): the stale liquid in the lines, the
+ *                 20-50 L buffer tank and the sensor cup (operator 2026-09-28). Kept OUT
+ *                 of the zone averages/min/max above and reported here instead.
  *
  * A SEKO sample counts for a zone only when it was taken inside the zone
  * window AND the flow at that moment was >= 50 % of the expected flow (the
@@ -59,6 +65,7 @@ function newAcc() {
     ph: { min: null, max: null, sum: 0, n: 0 },
     ec: { min: null, max: null, sum: 0, n: 0 },
     skipped: 0,
+    flush: { ph: { min: null, max: null, sum: 0, n: 0 }, ec: { min: null, max: null, sum: 0, n: 0 }, n: 0, s: null },
   };
 }
 
@@ -69,16 +76,23 @@ function addTo(s, v) {
 }
 
 /**
- * Add one SEKO sample. flowLph null = unknown -> skipped.
- * @returns {boolean} true when the sample was used
+ * Add one SEKO sample. flowLph null = unknown -> skipped. flush = true: a
+ * valid sample of the run's start flush -> counted in acc.flush, not in the
+ * zone statistics.
+ * @returns {boolean} true when the sample was used for the zone statistics
  */
-function addSample(acc, { ph = null, ec = null, flowLph = null, expectedLph = null, phMin = 3, phMax = 9 } = {}) {
+function addSample(acc, { ph = null, ec = null, flowLph = null, expectedLph = null, phMin = 3, phMax = 9, flush = false, flushSeconds = null } = {}) {
   const flowOk = flowLph !== null && flowLph !== undefined && Number.isFinite(flowLph)
     && expectedLph > 0 && flowLph >= expectedLph * MIN_FLOW_FRACTION;
   if (!flowOk) { acc.skipped++; return false; }
+  const into = flush ? (acc.flush || (acc.flush = newAcc().flush)) : acc;
   let used = false;
-  if (ph !== null && ph !== undefined && Number.isFinite(ph) && ph >= phMin && ph <= phMax) { addTo(acc.ph, ph); used = true; }
-  if (ec !== null && ec !== undefined && Number.isFinite(ec) && ec > 0) { addTo(acc.ec, ec); used = true; }
+  if (ph !== null && ph !== undefined && Number.isFinite(ph) && ph >= phMin && ph <= phMax) { addTo(into.ph, ph); used = true; }
+  if (ec !== null && ec !== undefined && Number.isFinite(ec) && ec > 0) { addTo(into.ec, ec); used = true; }
+  if (flush) {
+    if (used) { into.n++; if (flushSeconds !== null) into.s = flushSeconds; } else acc.skipped++;
+    return false;
+  }
   if (!used) acc.skipped++;
   return used;
 }
@@ -95,6 +109,22 @@ function accFields(acc) {
     ph_max: a.ph.max,
     samples: a.ph.n,
     skipped_samples: a.skipped,
+    ...flushFields(a.flush),
+  };
+}
+
+/** flush_* fields (only when the zone had flush samples). */
+function flushFields(f) {
+  if (!f || !(f.n > 0)) return {};
+  return {
+    flush_samples: f.n,
+    flush_s: f.s,
+    flush_ec_avg_us: f.ec.n ? r1(f.ec.sum / f.ec.n) : null,
+    flush_ec_min_us: f.ec.min,
+    flush_ec_max_us: f.ec.max,
+    flush_ph_avg: f.ph.n ? r2(f.ph.sum / f.ph.n) : null,
+    flush_ph_min: f.ph.min,
+    flush_ph_max: f.ph.max,
   };
 }
 
@@ -170,6 +200,7 @@ function mergeZoneVisits(records, { expectedLph = null } = {}) { // eslint-disab
         if (!m) { const { achieved_ratio, ...rest } = t; tanks.set(t.tank_id, { ...rest }); continue; }
         m.target_l = r2((m.target_l || 0) + (t.target_l || 0));
         m.dosed_l = r2((m.dosed_l || 0) + (t.dosed_l || 0));
+        if (m.dosed_est_l !== undefined || t.dosed_est_l !== undefined) m.dosed_est_l = r2((m.dosed_est_l || 0) + (t.dosed_est_l || 0));
         m.carry_out_l = t.carry_out_l; m.closed_by = t.closed_by; m.closed_at_s = null;
         m.reopens = (m.reopens || 0) + (t.reopens || 0);
         m.cant_reach = !!(m.cant_reach || t.cant_reach);
@@ -186,9 +217,20 @@ function mergeZoneVisits(records, { expectedLph = null } = {}) { // eslint-disab
       ...mergeStat(parts, 'ec_avg_us', 'ec_samples', 'ec_min_us', 'ec_max_us', 1),
       ...mergeStat(parts, 'ph_avg', 'samples', 'ph_min', 'ph_max', 2),
       skipped_samples: parts.reduce((s, p) => s + (p.skipped_samples || 0), 0),
+      ...mergeFlush(parts),
       parts: parts.length,
     };
   });
+}
+
+/** flush_* of merged segments (sample-weighted), or nothing when none had flush samples. */
+function mergeFlush(parts) {
+  const f = parts.filter(p => p.flush_samples > 0);
+  if (!f.length) return {};
+  const ec = mergeStat(f.map(p => ({ ...p, _n: p.flush_samples })), 'flush_ec_avg_us', '_n', 'flush_ec_min_us', 'flush_ec_max_us', 1);
+  const ph = mergeStat(f.map(p => ({ ...p, _n: p.flush_samples })), 'flush_ph_avg', '_n', 'flush_ph_min', 'flush_ph_max', 2);
+  delete ec._n; delete ph._n;
+  return { flush_samples: f.reduce((s, p) => s + p.flush_samples, 0), flush_s: f[0].flush_s ?? null, ...ec, ...ph };
 }
 
 const withRatios = (rec) => {
@@ -390,6 +432,7 @@ module.exports = {
   newAcc,
   addSample,
   accFields,
+  flushFields,
   zoneStatus,
   zoneAchievedRatio,
   analyseZones,

@@ -68,7 +68,8 @@
     "zone_target_reached": "zone target reached",
     "filling_zone_target": "filling zone target",
     "zone_target_grew": "zone target grew",
-    "zone_start": "zone start"
+    "zone_start": "zone start",
+    "pump_start": "pump start"
   },
   "gate": {
     "no_ph_tank": "no pH Down tank bound to the dosing board",

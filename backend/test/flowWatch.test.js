@@ -1272,3 +1272,123 @@ test('manual panel config: validated and can be switched off (then the legacy ca
     [`flow_watch:flow_after_pump_off:${sim.irr}:1`, `flow_watch:water_without_valve:${sim.irr}`].sort());
   sim.dispose();
 });
+
+// ─── coupled: flow watch + the real DoseController (requirement 2026-09-28) ────
+// open_at_pump_start opens the nutrient valves when a soft-switch zone's pump ON
+// is confirmed, before the flow registers. With a valve stuck shut (Zone 4) the
+// pump protection must behave EXACTLY as without it (retry, then shutdown), the
+// DoseController's water gate must close the valves within no_water_s of each
+// pump start, and dosing_without_water must stay silent (no concentrate moves
+// without water). Nothing reaches Modbus: the dosing valve writer is a stub.
+async function coupledStuckZone4({ openAtPumpStart }) {
+  const { DoseController } = require(path.join(__dirname, '..', 'src', 'services', 'DoseController.js'));
+  const D = 120; const LEAD = 3; const LAG = 5; const GAP = 1;
+  const base = Date.parse('2026-09-28T07:30:00Z');
+  const sim = new Sim({ base, config: { shutdown_enabled: true } });
+  const actions = [];
+  for (let k = 0; k < 4; k++) {
+    const t0 = k * (LEAD + D + LAG + GAP);
+    actions.push({ type: 'control', action: 'on', equipment_id: sim.irr, channel: 3 + k, delay_seconds: t0, duration_seconds: D + LEAD + LAG });
+    for (const ch of [1, 2]) actions.push({ type: 'control', action: 'on', equipment_id: sim.irr, channel: ch, delay_seconds: t0 + LEAD, duration_seconds: D });
+  }
+  const aid = Number(db.prepare("INSERT INTO automations (name, enabled, trigger_config, actions) VALUES ('Fertigation soft switch (coupled sim)', 1, '{}', ?)").run(JSON.stringify(actions)).lastInsertRowid);
+  for (const a of actions) { sim.timer(a.delay_seconds, a.channel, true, aid); sim.timer(a.delay_seconds + a.duration_seconds, a.channel, false, aid); }
+  const total = Math.max(...actions.map(a => a.delay_seconds + a.duration_seconds));
+  const plant = hydraulicPlant(sim, { alwaysStuck: [6] });
+
+  const ctlAlerts = [];
+  const valves = {}; const valveLog = [];
+  const ctl = new DoseController({
+    db, now: () => sim.t, autoTick: false, logger: quiet, arming: { isDisarmed: () => sim.act.disarmed },
+    createAlert: (a) => { ctlAlerts.push(a); return null; }, updateOpenAlert: () => null,
+    config: {
+      ph: { enabled: false },
+      nutrients: { irrigation_equipment_id: sim.irr, expected_flow_lph: 8850, pump_channel: 1, zone_channels: [3, 4, 5, 6], ratio: { 1: 200, 2: 200, 3: 200, 4: 200 }, open_at_pump_start: openAtPumpStart },
+    },
+  });
+  ctl.beginCycle({
+    cycleLogId: 1, programId: null, automationId: aid, durationSeconds: total, tanks: sim.tanks, schedule: { tanks: sim.tanks }, valveStates: {},
+    write: async (target, state) => { valves[target.channel] = state; valveLog.push({ rel: (sim.t - base) / 1000, ch: target.channel, state }); return true; },
+    abort: async () => {},
+  });
+  // the scheduler's pause / resume / abort also drive the controller
+  const { pauseDosing, resumeDosing, abortCycle } = sim.sched;
+  sim.sched.pauseDosing = function (r) { const ok = pauseDosing.call(this, r); ctl.pauseDosing(r); return ok; };
+  sim.sched.resumeDosing = function (r) { const ok = resumeDosing.call(this, r); ctl.resumeDosing(r); return ok; };
+  sim.sched.abortCycle = async function (r, o = {}) { const ok = await abortCycle.call(this, r, o); await ctl.endCycle({ status: 'aborted', reason: r, source: o.source || null }); return ok; };
+  const ingest = sim.svc.ingest.bind(sim.svc);
+  sim.svc.ingest = (evt) => { ingest(evt); ctl.ingest(evt); };
+
+  let lastFlow = 0; let lastRel = 0; let net = 70100; // litres on the meter's accumulator
+  const heldUntil = {}; const heldRate = {};
+  const seko = Number(db.prepare("INSERT INTO equipment (name, type, protocol, address, status) VALUES ('SEKO (coupled sim)', 'sensor', 'modbus', '192.0.2.7:502', 'online')").run().lastInsertRowid);
+  ctl.configOverride.ph.sensor_equipment_id = seko; ctl._config = null;
+  const flowAt = (rel) => {
+    const f = plant.flowAt(rel);
+    net += (Math.max(0, f) / 3600) * Math.max(0, rel - lastRel);
+    lastRel = rel; lastFlow = f;
+    if (Math.abs(rel % 10) < 1e-9) {
+      db.prepare('UPDATE equipment SET last_reading = ?, last_communication = ? WHERE id = ?')
+        .run(JSON.stringify({ values: { pH: { value: f > 1000 ? 6.1 : 7.3 }, 'Water EC': { value: f > 1000 ? 1850 : 700 } } }), new Date(sim.t).toISOString(), seko);
+    }
+    if (Math.abs(rel - Math.round(rel)) < 1e-9 && ctl.cycle) ctl.step(sim.t);
+    return f;
+  };
+  // venturis draw only with water; the meter holds the last rate ~40 s after a valve closes
+  const dosingAt = (rel) => sim.tanks.map((tk, i) => {
+    const r = [68, 63, 66, 52][i];
+    if (valves[tk.channel] && lastFlow >= 0.2 * 8850) { heldRate[i] = r; heldUntil[i] = rel + 40; return r; }
+    return heldUntil[i] !== undefined && rel < heldUntil[i] ? heldRate[i] : 0;
+  });
+  await sim.run({ from: 0, to: total + 20, flowAt, dosingAt, flowExtra: () => ({ net_total_m3: Math.floor(net * 10) / 10000 }), actions: { [total]: s => { if (s.sched.running) { s.sched.running = false; ctl.endCycle({ status: 'completed' }); } } } });
+  await ctl.flush();
+  const out = {
+    calls: sim.act.calls.map(c => `${c.op}:${(c.channels || []).join(',')}:${c.source || ''}:${Math.round((c.at - base) / 1000)}`),
+    // rule + severity of this sim's own flow-watch alerts (fingerprints embed board / automation ids)
+    alerts: db.prepare("SELECT fingerprint, severity FROM alerts WHERE source = 'flow_watch' AND (fingerprint LIKE ? OR fingerprint = ? OR fingerprint = ?) ORDER BY id")
+      .all(`flow_watch:%:${sim.irr}:%`, `flow_watch:water_without_valve:${sim.irr}`, `flow_watch:dosing_without_water:${sim.dos}`)
+      .map(a => `${a.fingerprint.split(':')[1]}:${a.severity}`),
+    aborts: sim.sched.aborts.map(a => `${a.source}:${Math.round((a.at - base) / 1000)}`),
+    pauses: sim.sched.pauses.length, resumes: sim.sched.resumes.length,
+    valveLog, ctlAlerts, run: ctl.getRun(db.prepare('SELECT MAX(id) AS id FROM dose_controller_runs').get().id),
+    zone4: [3 * (LEAD + D + LAG + GAP), 3 * (LEAD + D + LAG + GAP) + LEAD],
+    pumpOns: db.prepare('SELECT created_at, source FROM relay_events WHERE equipment_id = ? AND channel = 1 AND state = 1 ORDER BY id').all(sim.irr)
+      .map(r => ({ rel: (Date.parse(`${r.created_at.replace(' ', 'T')}Z`) - base) / 1000, source: r.source })),
+  };
+  sim.dispose();
+  return out;
+}
+
+test('coupled soft-switch run, Zone 4 stuck shut: open_at_pump_start changes nothing in the flow watch (same retry + shutdown, no dosing_without_water); the water gate closes the valves within no_water_s of each pump start', async () => {
+  const on = await coupledStuckZone4({ openAtPumpStart: true });
+  const off = await coupledStuckZone4({ openAtPumpStart: false });
+  assert.deepEqual(on.calls, off.calls, 'identical pump-protection actions');
+  assert.deepEqual(on.alerts, off.alerts, 'identical flow-watch alerts');
+  assert.deepEqual(on.aborts, off.aborts);
+  assert.ok(on.calls.some(c => c.startsWith('off:1,2:flow_watch_retry')), `retry happened: ${on.calls}`);
+  assert.ok(on.calls.some(c => c.startsWith('off:1,2,3,4,5,6:flow_watch_shutdown')), `shutdown happened: ${on.calls}`);
+  assert.ok(!on.alerts.some(a => a.startsWith('dosing_without_water')), `no dosing_without_water: ${on.alerts}`);
+  assert.ok(on.alerts.includes('pump_no_flow:critical'), `the shutdown alarm: ${on.alerts}`);
+  assert.equal(on.run.status, 'aborted');
+  assert.equal(on.run.zone_visits.find(v => v.channel === 6).status, 'shutdown');
+  // zones 1-3: opened at the confirmed pump start; zone 4 (stuck): opened at each pump start, closed by the water gate
+  const z4Pumps = on.pumpOns.filter(p => p.rel >= on.zone4[0]);
+  assert.equal(z4Pumps.length, 2, `zone 4 pump starts (plan + cold restart): ${JSON.stringify(z4Pumps)}`);
+  for (const p of z4Pumps) {
+    const opened = on.valveLog.filter(v => v.state && v.rel >= p.rel && v.rel < p.rel + 3);
+    assert.equal(opened.length, 4, `opened at the pump start +${p.rel}: ${JSON.stringify(on.valveLog.filter(v => v.rel >= p.rel - 2 && v.rel < p.rel + 20))}`);
+    const closed = on.valveLog.filter(v => !v.state && v.rel > p.rel && v.rel <= p.rel + 5 + 1.5);
+    assert.equal(closed.length, 4, `closed by the water gate within no_water_s of +${p.rel}`);
+  }
+  assert.equal(on.run.trips.filter(t => t.kind === 'pump_start_no_water').length, 2);
+  // the controller raises nothing about the missing water; with the default overdose_basis 'delivered'
+  // (operator decision 2026-09-28) zone 1 may show the known early-zone false overdose trip (runs 1 + 3)
+  assert.deepEqual(on.ctlAlerts.map(a => a.fingerprint).filter(f => !/^dose_controller:overdose:\d+$/.test(f)), [], 'no other controller alert');
+  assert.deepEqual(on.run.trips.filter(t => !['pump_start_no_water', 'dosing_paused', 'dosing_resumed', 'overdose'].includes(t.kind)), [], 'no other trips');
+  assert.deepEqual(on.run.zones.map(z => !!z.opened_at_pump_start), [true, true, true, true]);
+  // zones 1-3 dosed to their targets (precision itself: doseControllerPrecision.test.js — this Sim's
+  // counter also integrates the meter's held rate, so its per-zone ratios are not meaningful)
+  for (const z of on.run.zones.slice(0, 3)) for (const tk of z.tanks) assert.equal(tk.closed_by, 'target', `${z.name} ${tk.name}`);
+  // without the option the valves never open in zone 4 (no water ever registers)
+  assert.equal(off.valveLog.filter(v => v.state && v.rel >= off.zone4[0]).length, 0);
+});
