@@ -4,12 +4,18 @@ import { Button } from '../../ui';
 import ConfirmDialog from '../ConfirmDialog';
 import ReportTabs, { tabPanelProps } from '../agronomist/ReportTabs';
 import { useFormat } from '../../i18n/useFormat';
+import { StatusMark } from '../agronomist/SectionStatus';
 import { Section, NumInput, TableWrap, SourceBadge } from './parts';
-import { ELEMENTS, ppmDecimals, parseNum, targetStages } from './nutritionUtil';
+import ScaleToEcDialog from './ScaleToEcDialog';
+import { ELEMENTS, ppmDecimals, parseNum, targetStages, ecCorrespondenceState } from './nutritionUtil';
 
 /**
  * Targets per stage, editable (admin / operator), next to the human agronomist's
  * protocol values (read-only). Element targets live in crop_element_targets.
+ *
+ * Element targets follow the input EC target (2026-09-29): the header says which
+ * EC the ppm currently correspond to; saving a changed EC target (or "Scale to
+ * EC") opens a confirmation listing every element old → new with the factor.
  */
 
 // [key, [min field, target field, max field] (null = not applicable), unit, decimals, protocol getter]
@@ -40,6 +46,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [scaleOpen, setScaleOpen] = useState(false);
 
   useEffect(() => { if (!stages.includes(stage)) setStage(stages[0]); }, [stages, stage]);
 
@@ -47,6 +54,8 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
   const els = (profile.element_targets || {})[stage] || [];
   const protoStage = profile.protocol?.data?.stage_targets?.[stage] || null;
   const protoPpm = profile.protocol_ppm?.by_stage?.[stage] || null;
+  const corr = profile.element_targets_ec?.[stage] || null;
+  const corrState = ecCorrespondenceState(corr, st.ec_target);
 
   const begin = () => {
     const d = { stage: {}, el: {} };
@@ -82,6 +91,9 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
       const p = await api.send('PUT', `/nutrition/profiles/${profile.id}/targets`, { stage_targets: [stageBody], element_targets: elBody });
       onSaved(p);
       setEditing(false);
+      // A changed input EC target: offer to scale the element targets (nothing changes without "Apply").
+      const ecChanged = (st.ec_target ?? null) !== (stageBody.ec_target ?? null);
+      if (ecChanged && stageBody.ec_target !== null && p.protocol_ppm?.by_stage?.[stage]) setScaleOpen(true);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -127,7 +139,10 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
       onSave={save}
       saving={saving}
       actions={canEdit && !editing && profile.protocol ? (
-        <Button variant="ghost" size="sm" onClick={() => setConfirmReset(true)}>{t('targets.reset')}</Button>
+        <>
+          {protoPpm && <Button variant="secondary" size="sm" onClick={() => setScaleOpen(true)} data-testid="targets-scale">{t('targets.scale.button')}</Button>}
+          <Button variant="ghost" size="sm" onClick={() => setConfirmReset(true)}>{t('targets.reset')}</Button>
+        </>
       ) : null}
     >
       <ReportTabs tabs={tabs} active={stage} onChange={(s) => { if (!editing) setStage(s); }} idBase={idBase} label={t('targets.stagesLabel')} />
@@ -164,8 +179,23 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
         </TableWrap>
         <p className="text-xs text-muted mt-1">{t('targets.tripleHint')}</p>
 
+        {corr && (
+          <p className="mt-4 flex items-start gap-2 text-sm" data-testid="targets-ec-correspondence" data-state={corrState}>
+            <span className="mt-0.5"><StatusMark status={corrState} /></span>
+            <span className="min-w-0">
+              {corr.source_water_ec !== null && corr.source_water_ec !== undefined
+                ? t('targets.ecCorrespond', { fert: fmt.number(corr.fertilizer_ec_ms_cm, { decimals: 2 }), water: fmt.number(corr.source_water_ec, { decimals: 2 }), total: fmt.number(corr.total_ec_ms_cm, { decimals: 2 }) })
+                : t('targets.ecCorrespondNoWater', { fert: fmt.number(corr.fertilizer_ec_ms_cm, { decimals: 2 }) })}
+              {st.ec_target !== null && st.ec_target !== undefined && (
+                <span className={corrState === 'ok' ? 'text-muted' : 'font-semibold'}>
+                  {' · '}{corrState === 'ok' ? t('targets.ecMatch', { ec: fmt.number(st.ec_target, { decimals: 2 }) }) : t('targets.ecMismatch', { ec: fmt.number(st.ec_target, { decimals: 2 }) })}
+                </span>
+              )}
+            </span>
+          </p>
+        )}
         <TableWrap label={t('targets.elementTable')}>
-          <table className="w-full text-sm mt-4">
+          <table className={`w-full text-sm ${corr ? 'mt-2' : 'mt-4'}`}>
             <thead>
               <tr className="text-label uppercase text-muted">
                 <th className="py-1 pe-3 text-start font-semibold">{t('targets.col.element')}</th>
@@ -188,7 +218,10 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
                           ))}
                         </span>
                       ) : (
-                        <Triple values={r ? [r.hard_min, r.soft_target, r.hard_max] : null} decimals={dec} fmt={fmt} />
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          <Triple values={r ? [r.hard_min, r.soft_target, r.hard_max] : null} decimals={dec} fmt={fmt} />
+                          {r && r.manual && <span className="rounded border border-caution-300 px-1 text-[11px] font-semibold text-caution-700 dark:border-caution-700 dark:text-caution-300" data-testid="target-manual" title={t('targets.manualHint')}>{t('targets.manualBadge')}</span>}
+                        </span>
                       )}
                     </td>
                     <td className="py-1.5 text-end font-mono">{protoPpm && protoPpm.ppm[el] != null ? fmt.number(protoPpm.ppm[el], { decimals: dec }) : '—'}</td>
@@ -198,6 +231,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
             </tbody>
           </table>
         </TableWrap>
+        {els.some(e => e.manual) && <p className="text-xs text-muted mt-1">{t('targets.manualHint')}</p>}
         {protoPpm && (
           <p className="text-xs text-muted mt-1">{t('targets.protocolPpmHint', { recipe: t(`recipe.${protoPpm.recipe}`, { defaultValue: protoPpm.recipe }), ratio: profile.protocol_ppm.design_dilution, ec: fmt.number(protoPpm.ec_ms_cm, { decimals: 2 }) })}</p>
         )}
@@ -211,6 +245,14 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
         busy={saving}
         onConfirm={reset}
         onCancel={() => setConfirmReset(false)}
+      />
+      <ScaleToEcDialog
+        open={scaleOpen}
+        profile={profile}
+        stage={stage}
+        api={api}
+        onApplied={(p) => { setScaleOpen(false); onSaved(p); }}
+        onClose={() => setScaleOpen(false)}
       />
     </Section>
   );

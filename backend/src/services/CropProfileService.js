@@ -13,6 +13,7 @@
 
 const { db: defaultDb } = require('../utils/database');
 const { getSystemTimezone, localDateStr } = require('../utils/systemTimezone');
+const ScaleMath = require('./elementTargetScaling');
 
 const VALID_STAGES = ['seedling', 'vegetative', 'flowering', 'fruiting', 'ripening', 'harvested'];
 const TARGET_ELEMENTS = ['N', 'P', 'K', 'Ca', 'Mg', 'S', 'Fe', 'Mn', 'Zn', 'B', 'Cu', 'Mo'];
@@ -167,19 +168,29 @@ class CropProfileService {
     return out;
   }
 
+  /**
+   * Element targets per stage. Each row carries its basis (the last value SenseHub
+   * wrote: protocol prefill or scale-to-EC) and `manual` = hand-edited since.
+   */
   elementTargets(cropAssignmentId) {
     const out = {};
     if (!cropAssignmentId) return out;
     const rows = this.db.prepare(`
-      SELECT id, growth_stage, element, hard_min, soft_target, hard_max, priority, notes, updated_at
+      SELECT id, growth_stage, element, hard_min, soft_target, hard_max, priority, notes, updated_at,
+        basis_hard_min, basis_soft_target, basis_hard_max, basis_source, basis_ec, basis_factor
       FROM crop_element_targets WHERE crop_assignment_id = ? AND growth_stage IS NOT NULL
       ORDER BY growth_stage, element
     `).all(cropAssignmentId);
     for (const r of rows) {
       if (!TARGET_ELEMENTS.includes(r.element)) continue;
-      (out[r.growth_stage] = out[r.growth_stage] || []).push(r);
+      (out[r.growth_stage] = out[r.growth_stage] || []).push({ ...r, manual: ScaleMath.isManuallyEdited(r) });
     }
     return out;
+  }
+
+  _library() {
+    const lib = this.db.prepare('SELECT composition FROM fertigation_ingredients WHERE name = ?');
+    return (n) => { try { return lib.get(n) || null; } catch (_) { return null; } };
   }
 
   /** Irrigation sections (zone valves) from the dose-controller config. */
@@ -273,25 +284,34 @@ class CropProfileService {
     const protocol = this.protocolRow(row.protocol_id);
     // The protocol's recipe per stage as feed ppm at its design dilution (same analyses as the calculator).
     let protocolPpm = null;
+    const stagePpm = {};
     if (protocol && protocol.data && protocol.data.stage_recipe) {
       try {
-        const P = require('./cropProtocol');
         const FC = require('./FeedCalculator');
-        const lib = this.db.prepare('SELECT composition FROM fertigation_ingredients WHERE name = ?');
-        const design = Number(protocol.data.senseHub_design_dilution) || 150;
-        protocolPpm = { design_dilution: design, by_stage: {} };
-        for (const [stage, recipeKey] of Object.entries(protocol.data.stage_recipe)) {
-          const tanks = P.recipeTanks(protocol.data, recipeKey, (n) => lib.get(n) || null);
-          const { ppm } = FC.mixPpm(tanks.map(t => ({ tank: t, fraction: 1 / design })));
-          protocolPpm.by_stage[stage] = { recipe: recipeKey, ppm, ec_ms_cm: FC.ecEstimate(ppm).ec_ms_cm };
+        const library = this._library();
+        protocolPpm = { design_dilution: Number(protocol.data.senseHub_design_dilution) || 150, by_stage: {} };
+        for (const stage of Object.keys(protocol.data.stage_recipe)) {
+          const sp = ScaleMath.protocolStagePpm(protocol.data, stage, library);
+          if (!sp) continue;
+          stagePpm[stage] = sp;
+          protocolPpm.by_stage[stage] = { recipe: sp.recipe, ppm: sp.ppm, ec_ms_cm: FC.ecEstimate(sp.ppm).ec_ms_cm };
         }
       } catch (_) { protocolPpm = null; }
+    }
+    const stageTargets = this.stageTargets(row.id);
+    const elementTargets = this.elementTargets(row.crop_assignment_id);
+    // Which input EC the stored ppm correspond to (fertilizers + source water), per stage.
+    const elementTargetsEc = {};
+    for (const [stage, rows] of Object.entries(elementTargets)) {
+      const c = ScaleMath.targetsCorrespondence({ rows, stagePpm: stagePpm[stage] || null, sourceWaterEc: row.source_water_ec, ecTarget: stageTargets[stage] ? stageTargets[stage].ec_target : null });
+      if (c) elementTargetsEc[stage] = { ...c, manual_elements: rows.filter(r => r.manual).map(r => r.element) };
     }
     return {
       ...base,
       plants: this.plants(row, nowMs),
-      stage_targets: this.stageTargets(row.id),
-      element_targets: this.elementTargets(row.crop_assignment_id),
+      stage_targets: stageTargets,
+      element_targets: elementTargets,
+      element_targets_ec: elementTargetsEc,
       protocol: protocol ? { id: protocol.id, name: protocol.name, source: protocol.source, source_date: protocol.source_date, author: protocol.author, crop: protocol.crop, variety: protocol.variety, breeder: protocol.breeder, data: protocol.data } : null,
       protocol_ppm: protocolPpm,
     };
@@ -537,6 +557,66 @@ class CropProfileService {
     });
     tx();
     return this.getProfile(id);
+  }
+
+  /**
+   * Scale a stage's element targets to its input EC target (protocol ratios kept).
+   * Preview (default) writes nothing. Apply writes every row whose action is
+   * update / insert and records the new basis; hand-edited rows are kept unless
+   * named in `include` (element list, or true for all).
+   * @returns {{ stage, ok, reason?, factor, math, rows, kept_manual, applied, written, profile? }}
+   */
+  scaleTargetsToEc(id, { stage, preview = true, include = [] } = {}, { userId = null } = {}) {
+    const row = this.getRow(id);
+    if (!row) { const e = new Error('Crop profile not found'); e.status = 404; throw e; }
+    if (!VALID_STAGES.includes(stage)) throw new ValidationError(`stage must be one of ${VALID_STAGES.join(', ')}`, 'stage');
+    if (!row.crop_assignment_id) throw new ValidationError('profile has no crop link for element targets');
+    if (include !== true && (!Array.isArray(include) || include.some(el => !TARGET_ELEMENTS.includes(el)))) {
+      throw new ValidationError(`include must be true or a list of ${TARGET_ELEMENTS.join(', ')}`, 'include');
+    }
+    const protocol = this.protocolRow(row.protocol_id);
+    const stagePpm = protocol ? ScaleMath.protocolStagePpm(protocol.data, stage, this._library()) : null;
+    const st = this.stageTargets(id)[stage] || null;
+    const current = (this.elementTargets(row.crop_assignment_id)[stage]) || [];
+    const r = ScaleMath.scaleElementTargets({
+      stagePpm, ecTarget: st ? st.ec_target : null, sourceWaterEc: row.source_water_ec, current, include,
+    });
+    const reason = !protocol ? 'no_protocol' : r.reason;
+    const out = { stage, ok: r.ok, ...(r.ok ? {} : { reason }), factor: r.ok ? r.math.factor : null, math: r.math, rows: r.rows, kept_manual: r.kept_manual, applied: false, written: 0 };
+    if (preview) return out;
+    if (!r.ok) {
+      const e = new ValidationError(`element targets not scaled: ${reason}`, 'stage');
+      e.status = 409; e.code = 'SCALE_NOT_POSSIBLE'; e.reason = reason;
+      throw e;
+    }
+    const byEl = new Map(current.map(c => [c.element, c]));
+    const upd = this.db.prepare(`
+      UPDATE crop_element_targets SET hard_min = ?, soft_target = ?, hard_max = ?, priority = ?, notes = ?,
+        basis_hard_min = ?, basis_soft_target = ?, basis_hard_max = ?, basis_source = 'scaled', basis_ec = ?, basis_factor = ?,
+        updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    `);
+    const ins = this.db.prepare(`
+      INSERT INTO crop_element_targets (crop_assignment_id, growth_stage, element, hard_min, soft_target, hard_max, priority, notes,
+        basis_hard_min, basis_soft_target, basis_hard_max, basis_source, basis_ec, basis_factor)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scaled', ?, ?)
+    `);
+    let written = 0;
+    const tx = this.db.transaction(() => {
+      for (const x of r.rows) {
+        if (x.action === 'kept_manual') continue;
+        const n = x.new;
+        if (x.action === 'insert') {
+          ins.run(row.crop_assignment_id, stage, x.element, n.hard_min, n.soft_target, n.hard_max, x.priority, x.notes, n.hard_min, n.soft_target, n.hard_max, r.math.ec_target, r.math.factor);
+        } else {
+          // 'unchanged' rows are re-based too, so they follow the next EC change
+          upd.run(n.hard_min, n.soft_target, n.hard_max, x.priority, x.notes, n.hard_min, n.soft_target, n.hard_max, r.math.ec_target, r.math.factor, byEl.get(x.element).id);
+        }
+        if (x.action !== 'unchanged') written++;
+      }
+      this.db.prepare("UPDATE crop_profiles SET updated_by = ?, updated_at = datetime('now') WHERE id = ?").run(userId, id);
+    });
+    tx();
+    return { ...out, applied: true, written, profile: this.getProfile(id) };
   }
 
   // ---------- AI readers ----------

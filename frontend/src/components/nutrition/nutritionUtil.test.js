@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shapeOf, railOf, targetStages, stageDate, parseNum, diffFields, invalidField, isStaleAdvice, ppmDecimals, warningState } from './nutritionUtil';
+import { shapeOf, railOf, targetStages, stageDate, parseNum, diffFields, invalidField, isStaleAdvice, ppmDecimals, warningState, ecCorrespondenceState } from './nutritionUtil';
 
 describe('nutritionUtil', () => {
   it('status → shape: unknown never renders as ok, severity picks triangle vs square', () => {
@@ -40,5 +40,16 @@ describe('nutritionUtil', () => {
     expect(ppmDecimals('N')).toBe(1);
     expect(ppmDecimals('Fe')).toBe(2);
     expect(ppmDecimals('Mo')).toBe(3);
+  });
+});
+
+describe('ecCorrespondenceState (element targets vs the input EC target)', () => {
+  it('ok within ±0.05 mS/cm, caution outside, unknown when a side is missing', () => {
+    expect(ecCorrespondenceState({ total_ec_ms_cm: 1.9 }, 1.9)).toBe('ok');
+    expect(ecCorrespondenceState({ total_ec_ms_cm: 1.86 }, 1.9)).toBe('ok');
+    expect(ecCorrespondenceState({ total_ec_ms_cm: 1.45 }, 1.9)).toBe('caution');
+    expect(ecCorrespondenceState({ total_ec_ms_cm: 1.45 }, null)).toBe('unknown');
+    expect(ecCorrespondenceState(null, 1.9)).toBe('unknown');
+    expect(ecCorrespondenceState({ total_ec_ms_cm: null }, 1.9)).toBe('unknown');
   });
 });

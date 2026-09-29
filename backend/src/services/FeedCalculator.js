@@ -77,6 +77,16 @@ function mixPpm(parts) {
   return { ppm: M.round(ppm, 3), per_tank: perTank, assumptions: [...assumptions] };
 }
 
+/**
+ * Unrounded fertilizer-only EC (mS/cm) = Σ cations (meq/L) ÷ 10 — the same sum as
+ * ecEstimate(). Linear in ppm: scaling every element by f scales this EC by f.
+ */
+function cationEc(ppm) {
+  const p = ppm || {};
+  const meq = (p.Ca || 0) / EQ.Ca + (p.Mg || 0) / EQ.Mg + (p.K || 0) / EQ.K + (p.NH4_N || 0) / EQ.NH4_N + (p.Na || 0) / EQ.Na;
+  return meq / 10;
+}
+
 /** EC estimate from the recipe ions (mS/cm) + ion balance. */
 function ecEstimate(ppm) {
   const p = ppm || {};
@@ -478,6 +488,7 @@ module.exports = {
   tankLetter,
   tankStock,
   mixPpm,
+  cationEc,
   ecEstimate,
   elementRatios,
   compareBand,

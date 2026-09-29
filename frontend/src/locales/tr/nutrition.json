@@ -210,6 +210,39 @@
       "ml_min": "Bitki başına su min",
       "ml_target": "Bitki başına su hedef",
       "ml_max": "Bitki başına su maks"
+    },
+    "ecCorrespond": "Bu ppm değerleri ≈ gübrelerden EC {{fert}} mS/cm + kaynak suyu {{water}} = {{total}} mS/cm",
+    "ecCorrespondNoWater": "Bu ppm değerleri ≈ gübrelerden EC {{fert}} mS/cm (kaynak suyu EC girilmedi)",
+    "ecMatch": "giriş EC hedefi {{ec}} ile uyumlu",
+    "ecMismatch": "giriş EC hedefi {{ec}} ile uyumlu değil",
+    "manualBadge": "düzenlendi",
+    "manualHint": "düzenlendi = elle değiştirildi; hedefler EC hedefine göre ölçeklenirken, işaretlemediğiniz sürece korunur.",
+    "scale": {
+      "button": "EC’ye ölçekle",
+      "title": "Element hedefleri EC {{ec}} değerine ölçeklensin mi?",
+      "notPossibleTitle": "Element hedefleri EC hedefini izleyemiyor",
+      "factorLine": "Her element ×{{factor}}: protokolün {{recipe}} reçetesi 1:{{design}} yerine ≈ 1:{{equiv}} olur.",
+      "mathLine": "Gübre EC {{fert}} = giriş EC hedefi {{ec}} − kaynak suyu {{water}} mS/cm; protokol reçetesi 1:{{design}} oranında EC {{protocol}} verir.",
+      "mathLineNoWater": "Gübre EC {{fert}} = giriş EC hedefi {{ec}} mS/cm (kaynak suyu EC girilmedi, 0 sayıldı); protokol reçetesi 1:{{design}} oranında EC {{protocol}} verir.",
+      "tableLabel": "Element hedefleri, şimdi ve ölçeklemeden sonra",
+      "colNow": "Şimdi",
+      "colNew": "Yeni",
+      "overwrite": "üzerine yaz",
+      "overwriteAria": "Elle düzenlenen {{el}} hedefinin de üzerine yaz",
+      "keptManual": "elle düzenlendi, korunuyor",
+      "unchanged": "değişmedi",
+      "manualHelp": "Elle düzenlenip korunanlar: {{elements}}. Bunları da ölçeklemek için “üzerine yaz” kutusunu işaretleyin.",
+      "ratiosNote": "Hedef ppm (kalın) ve min – maks aralığı. Element oranları protokoldeki gibi kalır; Uygula’ya basana kadar hiçbir şey değişmez.",
+      "apply": "Uygula",
+      "keep": "Mevcut kalsın",
+      "reason": {
+        "no_ec_target": "{{stage}} evresinin giriş EC hedefi yok. Önce bir hedef girin.",
+        "no_protocol": "Bu ürün profilinde ölçeklenecek bir insan agronomist protokolü yok.",
+        "no_protocol_recipe": "Protokolde {{stage}} evresi için reçete yok.",
+        "protocol_ec_unknown": "Protokol reçetesinin EC değeri hesaplanamıyor (girdi analizleri eksik).",
+        "source_water_exceeds_target": "Kaynak suyu EC ({{water}}) giriş EC hedefine ({{ec}}) eşit veya üzerinde: gübrelere pay kalmıyor.",
+        "factor_out_of_range": "Katsayı ×{{factor}} olur; ×{{min}} – ×{{max}} aralığının dışında. EC hedefini ve kaynak suyu EC’sini kontrol edin."
+      }
     }
   },
   "protocol": {
@@ -420,6 +453,16 @@
       "auto": "Evre değişikliği, tank karışımı / dolum değişikliği ya da dozlama oranı değişikliğinden sonra otomatik çalıştır",
       "autoHelp": "Değişikliklerin oturması için {{minutes}} dk bekler, en fazla {{hours}} saatte bir, sulama çalışması sırasında asla.",
       "adminOnly": "Programı yalnızca bir yönetici değiştirebilir."
+    },
+    "notes": {
+      "label": "Bu çalıştırma için notlar (isteğe bağlı)",
+      "placeholder": "Ekibin gördüğü veya yanıt istediği konular, ör. pazardan beri 3-5. sıralarda alt yapraklar soluk.",
+      "help": "Yapay zekâya talimat olarak değil, verilerle karşılaştırılacak bağlam olarak gönderilir. Yalnızca öneri niteliğindedir.",
+      "count": "{{count}} / {{max}}",
+      "confirm": "Bu çalıştırmayla gönderilen notlar:",
+      "title": "Bu çalıştırma için operatör notları",
+      "response": "Notlara yanıt",
+      "history": "Notlar: {{notes}}"
     }
   },
   "errors": {

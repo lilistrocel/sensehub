@@ -16,6 +16,12 @@
  * own row: a failure never replaces a good advice) → tr / ar translation in
  * the background (AgronomistTranslationService helpers).
  *
+ * Operator notes (2026-09-29): a manual run may carry notes from the farm team
+ * (≤ MAX_NOTES_CHARS). They are stored on the advice row (operator_notes), sent
+ * as clearly-labelled context (observations to verify, never instructions) and
+ * the model must answer them in operator_notes_response. Notes never change the
+ * advisory-only nature.
+ *
  * Triggers: manual (admin / operator), weekly (default Sunday 19:30, before the
  * agronomist weekly rollup) and automatic — debounced, at most once per 24 h —
  * when the crop stage changes, a tank mixture / refill changes or the dosing
@@ -42,6 +48,17 @@ const ALERT_FINGERPRINT = 'fertilizer_advisor_provider_error';
 const TRANSLATION_SUBJECT = 'a fertilizer advice (second opinion on a cucumber fertigation program) for a soilless greenhouse in the UAE';
 const DAY_MS = 86400000;
 const AGRONOMIST_ADVICE_MAX_AGE_DAYS = 14;
+const MAX_NOTES_CHARS = 1000;
+
+/** Operator notes → trimmed text or null; too long → 400. */
+function cleanNotes(notes) {
+  if (notes === undefined || notes === null) return null;
+  if (typeof notes !== 'string') { const e = new Error('notes must be text'); e.status = 400; e.field = 'notes'; throw e; }
+  const n = notes.replace(/\r\n?/g, '\n').trim();
+  if (!n) return null;
+  if (n.length > MAX_NOTES_CHARS) { const e = new Error(`notes must be at most ${MAX_NOTES_CHARS} characters`); e.status = 400; e.field = 'notes'; throw e; }
+  return n;
+}
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
@@ -403,6 +420,23 @@ class FertilizerAdvisorService {
       const rows = (s && profile.element_targets[s]) || [];
       return rows.length ? Object.fromEntries(rows.map(r => [r.element, [r.hard_min, r.soft_target, r.hard_max]])) : null;
     };
+    // Which input EC the element ppm targets correspond to (fertilizers + source water) and how they were set.
+    const elEc = (s) => {
+      const c = s && (profile.element_targets_ec || {})[s];
+      if (!c) return null;
+      const rows = profile.element_targets[s] || [];
+      const scaled = rows.find(r => r.basis_source === 'scaled' && !r.manual);
+      return {
+        fertilizer_ec_ms_cm: c.fertilizer_ec_ms_cm,
+        source_water_ec_ms_cm: c.source_water_ec,
+        total_input_ec_ms_cm: c.total_ec_ms_cm,
+        stage_input_ec_target: c.ec_target,
+        times_protocol_at_design_dilution: c.factor_vs_protocol,
+        basis: scaled ? `scaled to input EC ${scaled.basis_ec} (x${scaled.basis_factor} of the protocol recipe at the design dilution)` : 'protocol recipe at the design dilution',
+        hand_edited_elements: c.manual_elements,
+        note: 'EC = sum of cations of the target ppm / 10 (NH4 share as in the protocol) + source water EC when entered',
+      };
+    };
     const nextStage = stage.next ? stage.next.stage : null;
 
     // Human protocol (facts as written) + its recipe ppm computed with the same analyses
@@ -487,8 +521,8 @@ class FertilizerAdvisorService {
       human_protocol: humanProtocol,
       profile_targets: {
         note: 'Operator-editable targets in SenseHub (prefilled from the human protocol).',
-        current_stage: { stage: stage.effective, ...st(stage.effective), elements_ppm_min_target_max: els(stage.effective) },
-        ...(nextStage ? { next_stage: { stage: nextStage, ...st(nextStage), elements_ppm_min_target_max: els(nextStage) } } : {}),
+        current_stage: { stage: stage.effective, ...st(stage.effective), elements_ppm_min_target_max: els(stage.effective), elements_correspond_to_ec: elEc(stage.effective) },
+        ...(nextStage ? { next_stage: { stage: nextStage, ...st(nextStage), elements_ppm_min_target_max: els(nextStage), elements_correspond_to_ec: elEc(nextStage) } } : {}),
       },
       fertigation_system: {
         source: 'derived live from SenseHub config and records',
@@ -539,13 +573,14 @@ class FertilizerAdvisorService {
     return { snapshot, calc, profile, dataSources: ds };
   }
 
-  buildRequest({ snapshot, dataSources }) {
+  buildRequest({ snapshot, dataSources, notes = null }) {
     const ds = dataSources || this._dataSources();
     const model = this.model();
     const effort = this.effort(model);
     const system = `${F.SYSTEM_PROMPT}\n\n${AiDS.SYSTEM_PROMPT_LINE}`;
     let outOfService = null;
     try { outOfService = new AiDS.AiDataSources(this.db).outOfServiceNote({ effective: ds, audience: 'agronomist' }); } catch (_) { outOfService = null; }
+    const notesBlock = F.operatorNotesBlock(notes);
     const userText = [
       `Today is ${snapshot.today} (timezone: ${snapshot.farm_timezone}). Crop: ${snapshot.crop_profile.crop}, day ${snapshot.crop_profile.days_after_transplant} after transplant, stage ${snapshot.crop_profile.stage}.`,
       '',
@@ -556,16 +591,17 @@ class FertilizerAdvisorService {
       '```',
       '',
       'Give your second opinion on the fertilizer program: analysis, per-element verdicts, warnings, recommendations (each with vs_protocol) and questions. Base every number on the snapshot; say what is missing.',
+      ...(notesBlock ? ['', notesBlock] : []),
       ...(outOfService ? ['', outOfService] : []),
     ].join('\n');
     const requestBody = {
       model,
       max_tokens: MAX_TOKENS,
       system: [{ type: 'text', text: system }],
-      output_config: { ...(effort ? { effort } : {}), format: { type: 'json_schema', schema: F.OUTPUT_SCHEMA } },
+      output_config: { ...(effort ? { effort } : {}), format: { type: 'json_schema', schema: F.outputSchema({ withNotes: !!notesBlock }) } },
       messages: [{ role: 'user', content: [{ type: 'text', text: userText }] }],
     };
-    return { requestBody, stats: { system_chars: system.length, user_chars: userText.length, snapshot_chars: JSON.stringify(snapshot).length, model, effort } };
+    return { requestBody, stats: { system_chars: system.length, user_chars: userText.length, snapshot_chars: JSON.stringify(snapshot).length, model, effort, with_notes: !!notesBlock } };
   }
 
   /**
@@ -612,7 +648,7 @@ class FertilizerAdvisorService {
     return client.messages.create(body);
   }
 
-  _check(response) {
+  _check(response, { requireNotesResponse = false } = {}) {
     const stop = response && response.stop_reason;
     if (stop === 'max_tokens') return { ok: false, errorClass: 'max_tokens', message: `output hit max_tokens (${(response.usage || {}).output_tokens ?? '?'} tokens)` };
     if (stop === 'refusal') {
@@ -624,7 +660,7 @@ class FertilizerAdvisorService {
     if (!tb || !tb.text) return { ok: false, errorClass: 'truncated_output', message: 'no text block in the response' };
     let parsed;
     try { parsed = JSON.parse(tb.text); } catch (e) { return { ok: false, errorClass: 'truncated_output', message: `invalid JSON: ${e.message}` }; }
-    const v = F.validateAdviceOutput(parsed);
+    const v = F.validateAdviceOutput(parsed, { requireNotesResponse });
     if (!v.ok) return { ok: false, errorClass: 'truncated_output', message: v.problems.slice(0, 6).join('; ') };
     return { ok: true, parsed: F.normaliseAdvice(parsed), warnings: v.warnings };
   }
@@ -653,16 +689,18 @@ class FertilizerAdvisorService {
    * Start a run: inserts the 'running' row and generates in the background.
    * @returns {{ id, promise }}  promise resolves to the final advice (never rejects)
    */
-  start({ trigger = 'manual', triggerDetail = null, userId = null, profileId = null } = {}) {
+  start({ trigger = 'manual', triggerDetail = null, userId = null, profileId = null, notes = null } = {}) {
+    const operatorNotes = cleanNotes(notes);
     if (this._running !== null) { const e = new Error('An advisor run is already in progress'); e.status = 409; e.code = 'RUNNING'; e.running_id = this._running; throw e; }
     // Build the snapshot synchronously so data problems are reported to the caller at once.
     const nowMs = this.now();
     const built = this.buildSnapshot({ profileId, nowMs });
     const r = this.db.prepare(`
-      INSERT INTO fertilizer_advice (profile_id, trigger, trigger_detail, status, snapshot, calc, model, created_by, created_at)
-      VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?)
+      INSERT INTO fertilizer_advice (profile_id, trigger, trigger_detail, status, snapshot, calc, model, operator_notes, created_by, created_at)
+      VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?, ?)
     `).run(built.profile.id, trigger, triggerDetail ? JSON.stringify(triggerDetail) : null, JSON.stringify(built.snapshot),
-      JSON.stringify({ today: built.calc.today, week: built.calc.week }), this.model(), userId, this._isoNow());
+      JSON.stringify({ today: built.calc.today, week: built.calc.week }), this.model(), operatorNotes, userId, this._isoNow());
+    built.notes = operatorNotes;
     const id = Number(r.lastInsertRowid);
     this._running = id;
     const p = this._generate(id, built)
@@ -679,7 +717,7 @@ class FertilizerAdvisorService {
   }
 
   async _generate(id, built) {
-    const { requestBody, stats } = this.buildRequest({ snapshot: built.snapshot, dataSources: built.dataSources });
+    const { requestBody, stats } = this.buildRequest({ snapshot: built.snapshot, dataSources: built.dataSources, notes: built.notes || null });
     const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
     const model = requestBody.model;
     const fail = (errorClass, message, stopReason, attempts) => {
@@ -712,7 +750,7 @@ class FertilizerAdvisorService {
       totals.cacheRead += u.cache_read_input_tokens || 0;
       totals.cacheWrite += u.cache_creation_input_tokens || 0;
       this.log.log(`[FertilizerAdvisor] run ${id} attempt ${attempt}/${MAX_ATTEMPTS}: stop_reason=${response.stop_reason} in=${u.input_tokens || 0} out=${u.output_tokens || 0}/${requestBody.max_tokens} snapshot=${stats.snapshot_chars} chars`);
-      const check = this._check(response);
+      const check = this._check(response, { requireNotesResponse: stats.with_notes });
       if (check.ok) {
         const cost = T.estimateCost(response.model || model, totals);
         this.db.prepare(`
@@ -816,6 +854,7 @@ class FertilizerAdvisorService {
       status: row.status, model: row.model, stop_reason: row.stop_reason, attempts: row.attempts,
       input_tokens: row.input_tokens, output_tokens: row.output_tokens, cost_estimate: row.cost_estimate,
       error: row.error, error_class: row.error_class, created_by: row.created_by, created_at: row.created_at, completed_at: row.completed_at,
+      operator_notes: row.operator_notes || null,
       advice: parseJson(row.output, null),
     };
     if (full) {
@@ -830,7 +869,7 @@ class FertilizerAdvisorService {
   }
 
   list({ limit = 30, offset = 0 } = {}) {
-    const rows = this.db.prepare('SELECT id, profile_id, trigger, trigger_detail, status, model, stop_reason, attempts, input_tokens, output_tokens, cost_estimate, error, error_class, created_by, created_at, completed_at, output FROM fertilizer_advice ORDER BY id DESC LIMIT ? OFFSET ?')
+    const rows = this.db.prepare('SELECT id, profile_id, trigger, trigger_detail, status, model, stop_reason, attempts, input_tokens, output_tokens, cost_estimate, error, error_class, operator_notes, created_by, created_at, completed_at, output FROM fertilizer_advice ORDER BY id DESC LIMIT ? OFFSET ?')
       .all(Math.min(Math.max(parseInt(limit, 10) || 30, 1), 200), Math.max(parseInt(offset, 10) || 0, 0));
     const total = this.db.prepare('SELECT COUNT(*) AS n FROM fertilizer_advice').get().n;
     return {
@@ -1040,5 +1079,7 @@ module.exports = {
   STATE_KEY,
   MAX_TOKENS,
   TRANSLATION_SUBJECT,
+  MAX_NOTES_CHARS,
+  cleanNotes,
   localParts,
 };

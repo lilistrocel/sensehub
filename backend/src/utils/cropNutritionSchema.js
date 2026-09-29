@@ -20,6 +20,16 @@
  *                     row, the UI keeps showing the last success). ADVISORY ONLY.
  * fertilizer_advice_translations  tr / ar text of an advice (AgronomistTranslationService helpers).
  *
+ * 2026-09-29 (operator request "element targets follow input EC target; notes on
+ * advisor regeneration"), additive:
+ *   crop_element_targets.basis_hard_min / basis_soft_target / basis_hard_max  the
+ *     last values SenseHub wrote (protocol prefill or a scale-to-EC); a row whose
+ *     values differ from its basis was edited by hand and is never overwritten
+ *     silently. basis_source 'protocol' | 'scaled', basis_ec (input EC target the
+ *     scaled values follow), basis_factor (× protocol at the design dilution).
+ *     Existing rows are backfilled once with the protocol prefill of their stage.
+ *   fertilizer_advice.operator_notes  the operator's notes for that run.
+ *
  * Seed (first run only, code-only): the human agronomist protocol row, and — when no
  * profile exists yet — one profile per zone with an active crop_assignments row; a
  * cucumber crop gets the protocol defaults (variety, density, dripper, stage
@@ -116,6 +126,7 @@ const CROP_NUTRITION_SQL = `
     attempts INTEGER NOT NULL DEFAULT 0,
     error TEXT,
     error_class TEXT,
+    operator_notes TEXT,
     created_by INTEGER,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     completed_at TEXT,
@@ -143,13 +154,9 @@ const CROP_NUTRITION_SQL = `
   );
 `;
 
-// Element-target band around the protocol prefill (SenseHub default, operator-editable).
-const MACRO_BAND = { lo: 0.85, hi: 1.15 };
-const MICRO_BAND = { lo: 0.7, hi: 1.5 };
-// Never priority 1 here: the planner turns every priority-1 target into an automatic guardrail.
-const ELEMENT_PRIORITY = { N: 2, K: 2, Ca: 2, P: 3, Mg: 3, S: 4, Fe: 3, Mn: 4, Zn: 4, B: 4, Cu: 5, Mo: 5 };
-
-const round = (v, dp) => { const f = Math.pow(10, dp); return Math.round(v * f) / f; };
+// Element-target band / priorities / rounding: services/elementTargetScaling.js (shared with scale-to-EC).
+const S = require('../services/elementTargetScaling');
+const { MACRO_BAND, MICRO_BAND } = S;
 
 /** Stage-target row from the protocol's stage targets. */
 function stageTargetFromProtocol(t) {
@@ -164,29 +171,11 @@ function stageTargetFromProtocol(t) {
   };
 }
 
+const libraryOf = (db) => (name) => { try { return db.prepare('SELECT composition FROM fertigation_ingredients WHERE name = ?').get(name) || null; } catch (_) { return null; } };
+
 /** Element targets (ppm) prefill for a stage: protocol recipe at the design dilution. */
 function elementTargetsFromProtocol(db, protocolData, stage) {
-  const P = require('../services/cropProtocol');
-  const F = require('../services/FeedCalculator');
-  const recipeKey = (protocolData.stage_recipe || {})[stage];
-  if (!recipeKey) return [];
-  const library = (name) => { try { return db.prepare('SELECT composition FROM fertigation_ingredients WHERE name = ?').get(name) || null; } catch (_) { return null; } };
-  const tanks = P.recipeTanks(protocolData, recipeKey, library);
-  const design = Number(protocolData.senseHub_design_dilution) || 150;
-  const { ppm } = F.mixPpm(tanks.map(t => ({ tank: t, fraction: 1 / design })));
-  return F.TARGET_ELEMENTS.filter(el => ppm[el] > 0).map(el => {
-    const micro = F.MICROS.includes(el);
-    const band = micro ? MICRO_BAND : MACRO_BAND;
-    const dp = micro ? 3 : 1;
-    return {
-      element: el,
-      hard_min: round(ppm[el] * band.lo, dp),
-      soft_target: round(ppm[el], dp),
-      hard_max: round(ppm[el] * band.hi, dp),
-      priority: ELEMENT_PRIORITY[el] || 3,
-      notes: `Prefill: human agronomist protocol ${recipeKey} recipe at 1:${design} (SenseHub design assumption); band ${micro ? '-30/+50' : '±15'} %`,
-    };
-  });
+  return S.protocolElementRows(S.protocolStagePpm(protocolData, stage, libraryOf(db)));
 }
 
 /** INSERT OR IGNORE the protocol defaults for a profile (operator edits survive). */
@@ -199,8 +188,9 @@ function seedProfileTargets(db, profileId, cropAssignmentId, protocolData) {
        @drain_ec_delta_max, @drain_ph_min, @drain_ph_max, @ml_min, @ml_target, @ml_max, 'protocol', @notes)
   `);
   const insEl = db.prepare(`
-    INSERT OR IGNORE INTO crop_element_targets (crop_assignment_id, growth_stage, element, hard_min, soft_target, hard_max, priority, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO crop_element_targets (crop_assignment_id, growth_stage, element, hard_min, soft_target, hard_max, priority, notes,
+      basis_hard_min, basis_soft_target, basis_hard_max, basis_source, basis_ec, basis_factor)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'protocol', NULL, 1)
   `);
   let stages = 0; let elements = 0;
   for (const [stage, t] of Object.entries(protocolData.stage_targets || {})) {
@@ -208,7 +198,7 @@ function seedProfileTargets(db, profileId, cropAssignmentId, protocolData) {
     stages += insStage.run({ profile_id: profileId, stage, ...row, notes: t.ml_per_plant_day?.note || null }).changes;
     if (cropAssignmentId) {
       for (const e of elementTargetsFromProtocol(db, protocolData, stage)) {
-        elements += insEl.run(cropAssignmentId, stage, e.element, e.hard_min, e.soft_target, e.hard_max, e.priority, e.notes).changes;
+        elements += insEl.run(cropAssignmentId, stage, e.element, e.hard_min, e.soft_target, e.hard_max, e.priority, e.notes, e.hard_min, e.soft_target, e.hard_max).changes;
       }
     }
   }
@@ -286,14 +276,69 @@ function seedCropNutrition(db, { log = console } = {}) {
   return { protocol_id: protocol.id, profiles: made };
 }
 
+const BASIS_COLUMNS = [
+  ['basis_hard_min', 'REAL'], ['basis_soft_target', 'REAL'], ['basis_hard_max', 'REAL'],
+  ['basis_source', 'TEXT'], ['basis_ec', 'REAL'], ['basis_factor', 'REAL'],
+];
+
+/** Additive columns of 2026-09-29 (idempotent). */
+function ensureColumns(db) {
+  const cols = (t) => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+  const et = cols('crop_element_targets');
+  for (const [name, type] of BASIS_COLUMNS) if (!et.includes(name)) db.exec(`ALTER TABLE crop_element_targets ADD COLUMN ${name} ${type}`);
+  if (!cols('fertilizer_advice').includes('operator_notes')) db.exec('ALTER TABLE fertilizer_advice ADD COLUMN operator_notes TEXT');
+}
+
+/**
+ * Rows without a basis (written before 2026-09-29) get their stage's protocol
+ * prefill as basis: a row still equal to the prefill can follow the EC target, a
+ * row the operator changed is recognised as hand-edited. Only rows with
+ * basis_source NULL are touched, so this runs once per row.
+ */
+function backfillElementBasis(db) {
+  const pending = db.prepare(`
+    SELECT DISTINCT et.crop_assignment_id, et.growth_stage FROM crop_element_targets et
+    WHERE et.basis_source IS NULL AND et.crop_assignment_id IS NOT NULL AND et.growth_stage IS NOT NULL
+  `).all();
+  if (!pending.length) return 0;
+  const profileOf = db.prepare(`
+    SELECT p.protocol_id, pr.data FROM crop_profiles p JOIN crop_protocols pr ON pr.id = p.protocol_id
+    WHERE p.crop_assignment_id = ? ORDER BY p.active DESC, p.id DESC LIMIT 1
+  `);
+  const upd = db.prepare(`
+    UPDATE crop_element_targets SET basis_hard_min = ?, basis_soft_target = ?, basis_hard_max = ?, basis_source = 'protocol', basis_factor = 1
+    WHERE crop_assignment_id = ? AND growth_stage = ? AND element = ? AND basis_source IS NULL
+  `);
+  let n = 0;
+  const tx = db.transaction(() => {
+    for (const { crop_assignment_id: caId, growth_stage: stage } of pending) {
+      const pr = profileOf.get(caId);
+      if (!pr) continue;
+      let data;
+      try { data = JSON.parse(pr.data); } catch (_) { continue; }
+      for (const e of elementTargetsFromProtocol(db, data, stage)) n += upd.run(e.hard_min, e.soft_target, e.hard_max, caId, stage, e.element).changes;
+    }
+  });
+  tx();
+  return n;
+}
+
 function ensureCropNutritionSchema(db, opts = {}) {
   db.exec(CROP_NUTRITION_SQL);
-  return seedCropNutrition(db, opts);
+  ensureColumns(db);
+  const out = seedCropNutrition(db, opts);
+  try {
+    const n = backfillElementBasis(db);
+    if (n) (opts.log || console).log(`[CropNutrition] element-target basis backfilled for ${n} row(s)`);
+  } catch (e) { (opts.log || console).error(`[CropNutrition] element-target basis backfill failed: ${e.message}`); }
+  return out;
 }
 
 module.exports = {
   CROP_NUTRITION_SQL,
   ensureCropNutritionSchema,
+  ensureColumns,
+  backfillElementBasis,
   seedCropNutrition,
   seedProfileTargets,
   ensureProtocol,

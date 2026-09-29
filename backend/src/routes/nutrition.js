@@ -19,7 +19,11 @@
  *   PUT  /api/nutrition/profiles/:id                admin, operator — editable fields (not the live system)
  *   PUT  /api/nutrition/profiles/:id/targets        admin, operator — stage + element targets
  *   POST /api/nutrition/profiles/:id/targets/reset  admin, operator — back to the linked protocol's defaults
+ *   POST /api/nutrition/profiles/:id/targets/scale-to-ec  admin, operator — { stage, preview = true, include = [] | true }:
+ *        element targets of the stage scaled to its input EC target (protocol ratios kept); preview returns
+ *        the rows (old → new, hand-edited rows kept) + factor + EC math and writes nothing
  *   POST /api/nutrition/advice/run                  admin, operator — start an AI run (uses API credits) → 202
+ *        { profile_id?, notes? } notes = operator context for this run (≤ 1000 chars, stored on the advice)
  *   POST /api/nutrition/advice/:id/translate        admin — (re)translate one advice ({ lang })
  *   PUT  /api/nutrition/advisor/config              admin
  *
@@ -38,6 +42,7 @@ function sendError(res, err) {
   if (err && err.field) body.field = err.field;
   if (err && err.code) body.code = err.code;
   if (err && err.running_id) body.running_id = err.running_id;
+  if (err && err.reason) body.reason = err.reason;
   if (status >= 500) console.error('[nutrition]', err && err.stack ? err.stack : err);
   res.status(status).json(body);
 }
@@ -105,6 +110,14 @@ function createNutritionRouter(deps = {}) {
   router.post('/profiles/:id/targets/reset', requireRole('admin', 'operator'), (req, res) => {
     try {
       res.json(profiles().resetTargetsToProtocol(idParam(req.params.id), { userId: req.user && req.user.id }));
+    } catch (err) { sendError(res, err); }
+  });
+
+  router.post('/profiles/:id/targets/scale-to-ec', requireRole('admin', 'operator'), (req, res) => {
+    try {
+      const b = req.body || {};
+      const preview = b.preview === undefined ? true : !!b.preview;
+      res.json(profiles().scaleTargetsToEc(idParam(req.params.id), { stage: b.stage, preview, include: b.include === undefined ? [] : b.include }, { userId: req.user && req.user.id }));
     } catch (err) { sendError(res, err); }
   });
 
@@ -208,7 +221,11 @@ function createNutritionRouter(deps = {}) {
   router.post('/advice/run', requireRole('admin', 'operator'), (req, res) => {
     try {
       if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'ANTHROPIC_API_KEY is not set in the backend environment', code: 'NO_API_KEY' });
-      const { id } = advisor().start({ trigger: 'manual', userId: req.user && req.user.id, profileId: idParam((req.body || {}).profile_id) });
+      const b = req.body || {};
+      if (b.notes !== undefined && b.notes !== null && typeof b.notes !== 'string') return res.status(400).json({ error: 'notes must be text', field: 'notes' });
+      const { MAX_NOTES_CHARS } = require('../services/FertilizerAdvisorService');
+      if (typeof b.notes === 'string' && b.notes.trim().length > MAX_NOTES_CHARS) return res.status(400).json({ error: `notes must be at most ${MAX_NOTES_CHARS} characters`, field: 'notes' });
+      const { id } = advisor().start({ trigger: 'manual', userId: req.user && req.user.id, profileId: idParam(b.profile_id), notes: b.notes });
       res.status(202).json({ ok: true, id, status: 'running' });
     } catch (err) { sendError(res, err); }
   });

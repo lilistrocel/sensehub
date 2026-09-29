@@ -210,6 +210,39 @@
       "ml_min": "Water per plant min",
       "ml_target": "Water per plant target",
       "ml_max": "Water per plant max"
+    },
+    "ecCorrespond": "These ppm ≈ EC {{fert}} mS/cm from the fertilizers + source water {{water}} = {{total}} mS/cm",
+    "ecCorrespondNoWater": "These ppm ≈ EC {{fert}} mS/cm from the fertilizers (source water EC not entered)",
+    "ecMatch": "matches the input EC target {{ec}}",
+    "ecMismatch": "does not match the input EC target {{ec}}",
+    "manualBadge": "edited",
+    "manualHint": "edited = changed by hand; kept when the targets are scaled to the EC target unless you tick it.",
+    "scale": {
+      "button": "Scale to EC",
+      "title": "Scale element targets to EC {{ec}}?",
+      "notPossibleTitle": "Element targets cannot follow the EC target",
+      "factorLine": "Every element ×{{factor}}: the protocol {{recipe}} recipe at 1:{{design}} becomes ≈ 1:{{equiv}}.",
+      "mathLine": "Fertilizer EC {{fert}} = input EC target {{ec}} − source water {{water}} mS/cm; the protocol recipe at 1:{{design}} gives EC {{protocol}}.",
+      "mathLineNoWater": "Fertilizer EC {{fert}} = input EC target {{ec}} mS/cm (source water EC not entered, counted as 0); the protocol recipe at 1:{{design}} gives EC {{protocol}}.",
+      "tableLabel": "Element targets, now and after scaling",
+      "colNow": "Now",
+      "colNew": "New",
+      "overwrite": "overwrite",
+      "overwriteAria": "Overwrite the hand-edited {{el}} target too",
+      "keptManual": "edited by hand, kept",
+      "unchanged": "unchanged",
+      "manualHelp": "Edited by hand and kept: {{elements}}. Tick “overwrite” to scale them too.",
+      "ratiosNote": "Target ppm (bold) with the min – max band. The element ratios stay the protocol’s; nothing changes until you press Apply.",
+      "apply": "Apply",
+      "keep": "Keep current",
+      "reason": {
+        "no_ec_target": "The {{stage}} stage has no input EC target. Enter one first.",
+        "no_protocol": "This crop profile has no human agronomist protocol to scale from.",
+        "no_protocol_recipe": "The protocol has no recipe for the {{stage}} stage.",
+        "protocol_ec_unknown": "The EC of the protocol recipe cannot be calculated (ingredient analyses missing).",
+        "source_water_exceeds_target": "The source water EC ({{water}}) is at or above the input EC target ({{ec}}): nothing is left for the fertilizers.",
+        "factor_out_of_range": "The factor would be ×{{factor}}, outside ×{{min}} – ×{{max}}. Check the EC target and the source water EC."
+      }
     }
   },
   "protocol": {
@@ -420,6 +453,16 @@
       "auto": "Run automatically after a stage change, a tank mixture / refill change or a dosing ratio change",
       "autoHelp": "Waits {{minutes}} min for changes to settle, at most once every {{hours}} h, never during an irrigation run.",
       "adminOnly": "Only an admin can change the schedule."
+    },
+    "notes": {
+      "label": "Notes for this run (optional)",
+      "placeholder": "What the team has seen or wants answered, e.g. pale lower leaves on rows 3-5 since Sunday.",
+      "help": "Sent to the AI as context to check against the data, not as instructions. Advisory only.",
+      "count": "{{count}} / {{max}}",
+      "confirm": "Notes sent with this run:",
+      "title": "Operator notes for this run",
+      "response": "Answer to the notes",
+      "history": "Notes: {{notes}}"
     }
   },
   "errors": {

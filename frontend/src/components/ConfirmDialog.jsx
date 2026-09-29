@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
  *   confirmLabel   string (default common:actions.confirm)
  *   cancelLabel    string (default common:actions.cancel)
  *   busy           boolean - disables buttons while the action runs
+ *   confirmDisabled boolean - disables only the confirm button (e.g. nothing to apply yet)
  *   onConfirm      () => void
  *   onCancel       () => void
  */
@@ -33,6 +34,7 @@ export default function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   busy = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }) {
@@ -149,7 +151,7 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
             className={`w-full sm:w-auto px-4 py-2.5 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 ${confirmClasses}`}
           >
             {busy ? t('actions.working') : (confirmLabel ?? t('actions.confirm'))}

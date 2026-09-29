@@ -90,3 +90,14 @@ export const isStaleAdvice = (iso, now = Date.now(), maxDays = 8) => {
 export function band(min, target, max) {
   return { min: min ?? null, target: target ?? null, max: max ?? null, empty: min == null && target == null && max == null };
 }
+
+/**
+ * Do the element ppm targets correspond to the stage's input EC target?
+ * corr = profile.element_targets_ec[stage]. ok within ±0.05 mS/cm, caution
+ * otherwise, unknown when either side is missing (never green by default).
+ */
+export function ecCorrespondenceState(corr, ecTarget, tol = 0.05) {
+  if (!corr || corr.total_ec_ms_cm === null || corr.total_ec_ms_cm === undefined) return 'unknown';
+  if (ecTarget === null || ecTarget === undefined || ecTarget === '') return 'unknown';
+  return Math.abs(Number(corr.total_ec_ms_cm) - Number(ecTarget)) <= tol + 1e-9 ? 'ok' : 'caution';
+}

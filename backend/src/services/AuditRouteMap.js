@@ -671,7 +671,23 @@ const ROUTES = [
   },
   simple('PUT', '/api/nutrition/profiles/:id/targets', 'crop_profile.targets', 'crops', (ctx) => `Edited the stage / element targets of crop profile #${ctx.params.id}`, { target: (ctx) => ({ type: 'crop_profile', id: ctx.params.id, name: null }) }),
   simple('POST', '/api/nutrition/profiles/:id/targets/reset', 'crop_profile.targets_reset', 'crops', (ctx) => `Reset the targets of crop profile #${ctx.params.id} to the human agronomist protocol`, { target: (ctx) => ({ type: 'crop_profile', id: ctx.params.id, name: null }) }),
-  simple('POST', '/api/nutrition/advice/run', 'fertilizer_advisor.run', 'ai', 'Started a fertilizer advisor run (AI, advisory only)', { tags: ['crops'] }),
+  {
+    method: 'POST', pattern: '/api/nutrition/profiles/:id/targets/scale-to-ec', category: 'crops',
+    action: (ctx) => (ctx.body && ctx.body.preview === false ? 'crop_profile.targets_scale' : 'crop_profile.targets_scale_preview'),
+    coalesceSeconds: 300,
+    target: (ctx) => ({ type: 'crop_profile', id: ctx.params.id, name: null }),
+    summary: (ctx) => {
+      const r = ctx.resBody || {};
+      // a preview writes nothing
+      if (!(ctx.body && ctx.body.preview === false)) return `Previewed scaling the ${(ctx.body && ctx.body.stage) || ''} element targets of crop profile #${ctx.params.id} to its input EC target (nothing written)`;
+      const kept = Array.isArray(r.kept_manual) && r.kept_manual.length ? `; hand-edited kept: ${r.kept_manual.join(', ')}` : '';
+      return `Scaled the ${(ctx.body && ctx.body.stage) || ''} element targets of crop profile #${ctx.params.id} to input EC ${r.math ? r.math.ec_target : '?'} (×${r.factor ?? '?'}, ${r.written ?? 0} written${kept})`;
+    },
+  },
+  simple('POST', '/api/nutrition/advice/run', 'fertilizer_advisor.run', 'ai', (ctx) => {
+    const n = ctx.body && typeof ctx.body.notes === 'string' ? ctx.body.notes.trim() : '';
+    return `Started a fertilizer advisor run (AI, advisory only)${n ? ` with operator notes (${n.length} chars)` : ''}`;
+  }, { tags: ['crops'] }),
   simple('POST', '/api/nutrition/advice/:id/translate', 'fertilizer_advisor.translate', 'ai', (ctx) => `Requested ${(ctx.body && ctx.body.lang) || ''} translation of fertilizer advice #${ctx.params.id}`.replace('  ', ' ')),
   settingsDef('PUT', '/api/nutrition/advisor/config', 'fertilizer_advisor.config', 'ai', ['fertilizer_advisor_config'], 'fertilizer advisor settings'),
 

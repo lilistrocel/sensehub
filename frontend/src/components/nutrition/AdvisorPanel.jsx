@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, Label, Button, StatusPill } from '../../ui';
 import ConfirmDialog from '../ConfirmDialog';
@@ -15,7 +15,13 @@ import { shapeOf, railOf, warningState, isStaleAdvice, VS_PROTOCOL } from './nut
  * AI fertilizer advisor — a SECOND OPINION on the human agronomist's protocol.
  * Advisory only: nothing is applied automatically. AI text is never translated
  * in the browser; the backend sends tr / ar when ready (translation_status).
+ *
+ * Operator notes (2026-09-29): an optional "Notes for this run" goes with a
+ * manual run as context for the AI (observations to verify, never instructions);
+ * the report shows the notes as written and the AI's answer to them.
  */
+
+export const MAX_NOTES = 1000;
 
 const TRIGGERS = ['manual', 'weekly', 'stage_change', 'tank_change', 'ratio_change'];
 const ERROR_CLASSES = ['billing', 'auth', 'rate_limit', 'truncated_output', 'max_tokens', 'refusal', 'other'];
@@ -57,6 +63,9 @@ export default function AdvisorPanel({ api, canEdit, isAdmin }) {
   const [estimate, setEstimate] = useState(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState(null);
+  const [notes, setNotes] = useState('');
+  const notesId = useId();
+  const trimmedNotes = notes.trim();
 
   const load = useCallback(async () => {
     try {
@@ -85,9 +94,10 @@ export default function AdvisorPanel({ api, canEdit, isAdmin }) {
   const run = async () => {
     setStarting(true);
     try {
-      await api.send('POST', '/nutrition/advice/run', {});
+      await api.send('POST', '/nutrition/advice/run', trimmedNotes ? { notes: trimmedNotes } : {});
       setConfirm(false);
       setSelected(null);
+      setNotes('');
       await load();
     } catch (e) {
       setError(e.message);
@@ -127,6 +137,28 @@ export default function AdvisorPanel({ api, canEdit, isAdmin }) {
           </Button>
         )}
       </div>
+
+      {canEdit && (
+        <div className="rounded-card border border-line bg-panel p-3" data-testid="advisor-notes-input">
+          <label htmlFor={notesId} className="block text-sm font-semibold text-ink">{t('advisor.notes.label')}</label>
+          <textarea
+            id={notesId}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value.slice(0, MAX_NOTES))}
+            maxLength={MAX_NOTES}
+            rows={3}
+            dir="auto"
+            disabled={running || starting}
+            placeholder={t('advisor.notes.placeholder')}
+            aria-describedby={`${notesId}-help`}
+            className="mt-1 w-full min-h-[72px] rounded-md border border-line bg-panel px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          <div className="mt-0.5 flex flex-wrap justify-between gap-2 text-xs text-muted">
+            <span id={`${notesId}-help`}>{t('advisor.notes.help')}</span>
+            <span className="font-mono" dir="ltr">{t('advisor.notes.count', { count: notes.length, max: MAX_NOTES })}</span>
+          </div>
+        </div>
+      )}
 
       {config && !config.api_key_present && <Card rail="caution" padding="sm" className="text-sm">{t('advisor.noKey')}</Card>}
       {error && <Card rail="alarm" padding="sm"><p role="alert" className="text-sm">{t('errors.loadFailed', { error })}</p></Card>}
@@ -172,6 +204,7 @@ export default function AdvisorPanel({ api, canEdit, isAdmin }) {
         <Card rail={adv.status === 'running' ? 'water' : 'caution'} padding="md">
           <p className="text-sm">{adv.status === 'running' ? t('advisor.runningHelp') : t('advisor.failedAt', { time: fmt.dateTime(adv.created_at), reason: t(`advisor.errorClass.${ERROR_CLASSES.includes(adv.error_class) ? adv.error_class : 'other'}`) })}</p>
           {adv.error && <pre dir="ltr" className="mt-2 text-xs font-mono whitespace-pre-wrap break-words bg-field border border-line p-2 rounded max-h-32 overflow-y-auto text-start">{adv.error}</pre>}
+          {adv.operator_notes && <OperatorNotes notes={adv.operator_notes} />}
         </Card>
       )}
 
@@ -190,6 +223,12 @@ export default function AdvisorPanel({ api, canEdit, isAdmin }) {
                 ? t('advisor.estimate', { usd: fmt.number(estimate.usd_est, { decimals: 2 }), high: fmt.number(estimate.usd_high, { decimals: 2 }), model: estimate.model })
                 : estimate && estimate.error ? t('advisor.estimateFailed') : t('common:status.loading')}
             </p>
+            {trimmedNotes && (
+              <div data-testid="advisor-confirm-notes">
+                <p className="text-xs font-semibold">{t('advisor.notes.confirm')}</p>
+                <p className="text-xs whitespace-pre-wrap break-words border-s-2 border-line ps-2 max-h-24 overflow-y-auto" dir="auto">{trimmedNotes}</p>
+              </div>
+            )}
             <p className="text-xs text-muted">{t('advisor.advisoryOnlyShort')}</p>
           </div>
         )}
@@ -234,7 +273,16 @@ function AdviceView({ adv, ui, original, onToggleOriginal }) {
           </div>
         )}
 
+        {adv.operator_notes && <OperatorNotes notes={adv.operator_notes} />}
+
         <p className="mt-3 text-base text-ink" {...textProps} data-testid="advisor-summary">{a.summary}</p>
+
+        {a.operator_notes_response && (
+          <div className="mt-4" data-testid="advisor-notes-response">
+            <Label>{t('advisor.notes.response')}</Label>
+            <div className="mt-1"><ReportMarkdown markdown={a.operator_notes_response} /></div>
+          </div>
+        )}
 
         {a.warnings.length > 0 && (
           <div className="mt-4" data-testid="advisor-warnings">
@@ -300,6 +348,17 @@ function AdviceView({ adv, ui, original, onToggleOriginal }) {
   );
 }
 
+/** The operator's notes for a run, as written (not translated). */
+function OperatorNotes({ notes }) {
+  const { t } = useTranslation('nutrition');
+  return (
+    <div className="mt-3 rounded-md border border-line bg-field p-2.5" data-testid="advisor-operator-notes">
+      <Label>{t('advisor.notes.title')}</Label>
+      <p className="mt-1 text-sm whitespace-pre-wrap break-words" dir="auto">{notes}</p>
+    </div>
+  );
+}
+
 function HistoryList({ history, selectedId, onSelect }) {
   const { t } = useTranslation('nutrition');
   const fmt = useFormat();
@@ -322,6 +381,7 @@ function HistoryList({ history, selectedId, onSelect }) {
                     {h.status !== 'success' && <span className="font-semibold">{h.status === 'running' ? t('advisor.running') : t('advisor.errorClass.' + (ERROR_CLASSES.includes(h.error_class) ? h.error_class : 'other'))}</span>}
                   </span>
                   {h.summary && <span className="block truncate" dir="auto">{h.summary}</span>}
+                  {h.operator_notes && <span className="block truncate text-xs text-muted" dir="auto" data-testid="advisor-history-notes">{t('advisor.notes.history', { notes: h.operator_notes })}</span>}
                 </span>
               </button>
             </li>
