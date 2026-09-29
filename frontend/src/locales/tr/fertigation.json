@@ -413,7 +413,9 @@
       "zone": "bölge <v>{{dosed}}</v> / <m>{{target}}</m> L",
       "run": "çalışma <v>{{dosed}}</v> / <m>{{target}}</m> L",
       "targetRatio": "hedef 1:{{ratio}}",
-      "cantReach": "hedefe ulaşamıyor"
+      "cantReach": "hedefe ulaşamıyor",
+      "notDrawing": "{{duration}} emiş yok",
+      "retrying": "ikinci deneme: vana yeniden açıldı"
     },
     "lastRun": {
       "title": "Son çalışma",
@@ -421,7 +423,9 @@
       "cantReach": "ulaşamıyor: {{tanks}}",
       "phFloorTripped": "pH alt sınırı tetiklendi",
       "ph": "pH <v>{{min}}–{{max}}</v> (ort. <m>{{avg}}</m>, son <m>{{last}}</m>)",
-      "acid": "asit <v>{{seconds}}</v> sn (~<m>{{litres}}</m> L tahmini)"
+      "acid": "asit <v>{{seconds}}</v> sn (~<m>{{litres}}</m> L tahmini)",
+      "deliveredZero": "{{tanks}} 0 L verdi",
+      "redrawOk": "{{tanks}} vana yeniden açılınca emiş yaptı"
     },
     "unavailable": "Dozlama denetleyicisi durumu alınamıyor.",
     "switchedOff": "Kapalı döngü dozlama kapalı — programlar sabit takvimleriyle çalışır.",

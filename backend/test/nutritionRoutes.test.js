@@ -57,7 +57,7 @@ test.before(async () => {
   app.use(express.json());
   app.use('/api', languageMiddleware);
   app.use((req, res, next) => { const role = req.headers['x-role']; if (role) req.user = { id: 5, email: `${role}@farm.test`, role }; next(); });
-  app.use('/api/nutrition', createNutritionRouter({ db, profiles, advisor, systemView }));
+  app.use('/api/nutrition', createNutritionRouter({ db, profiles, advisor, systemView, now: () => new Date(NOW).getTime() }));
   server = app.listen(0, '127.0.0.1');
   await new Promise(r => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}/api/nutrition`;

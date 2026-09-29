@@ -28,6 +28,7 @@
     "flow_watch_retry": "إعادة محاولة مراقبة التدفق",
     "flow_watch_retry_auto_off": "إطفاء تلقائي بعد إعادة محاولة مراقبة التدفق",
     "dose_controller": "وحدة التحكم بالحقن",
+    "dose_controller_retry": "المحاولة الثانية لوحدة التحكم بالحقن",
     "dose_program": "برنامج الحقن",
     "dose_program_end": "نهاية برنامج الحقن",
     "dose_cycle": "دورة الحقن",

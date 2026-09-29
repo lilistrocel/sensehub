@@ -9,6 +9,7 @@ import { MeasuredDosingCard } from '../components/reports/MeasuredWater';
 import FlowWatchStatus from '../components/FlowWatchStatus';
 import DoseControllerStatus from '../components/DoseControllerStatus';
 import StopIrrigationButton from '../components/irrigation/StopIrrigationButton';
+import TankStock from '../components/irrigation/TankStock';
 import { useFormat } from '../i18n/useFormat';
 import { ltr } from '../i18n/format';
 
@@ -1280,15 +1281,22 @@ function TankCard({ tank, expanded, onExpand, canEdit, onRefill, onEdit, headers
         </div>
 
         <div className="mt-3">
-          <div className="flex items-center justify-between text-xs mb-1">
-            <span className="text-gray-500 dark:text-gray-400">{t('tanks.stock')}</span>
-            <span className="text-gray-700 dark:text-gray-200 font-medium tabular-nums" dir="ltr">
-              {t('tanks.stockValue', { current: f.int(tank.current_stock_liters || 0), capacity: tank.capacity_liters ? f.int(tank.capacity_liters) : '—', pct: f.percent(stockPct) })}
-            </span>
-          </div>
-          <div className="h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div className={`h-full ${stockColor} transition-all`} style={{ width: `${stockPct}%` }} />
-          </div>
+          {tank.stock !== undefined ? (
+            // stock countdown (TankStockService): measured / estimated / not metered, days left
+            <TankStock stock={tank.stock} tankLabel={tankName} />
+          ) : (
+            <>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-gray-500 dark:text-gray-400">{t('tanks.stock')}</span>
+                <span className="text-gray-700 dark:text-gray-200 font-medium tabular-nums" dir="ltr">
+                  {t('tanks.stockValue', { current: f.int(tank.current_stock_liters || 0), capacity: tank.capacity_liters ? f.int(tank.capacity_liters) : '—', pct: f.percent(stockPct) })}
+                </span>
+              </div>
+              <div className="h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div className={`h-full ${stockColor} transition-all`} style={{ width: `${stockPct}%` }} />
+              </div>
+            </>
+          )}
         </div>
       </button>
 

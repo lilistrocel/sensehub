@@ -413,7 +413,9 @@
       "zone": "zone <v>{{dosed}}</v> / <m>{{target}}</m> L",
       "run": "run <v>{{dosed}}</v> / <m>{{target}}</m> L",
       "targetRatio": "target 1:{{ratio}}",
-      "cantReach": "can't reach target"
+      "cantReach": "can't reach target",
+      "notDrawing": "not drawing {{duration}}",
+      "retrying": "second try: valve re-opened"
     },
     "lastRun": {
       "title": "Last run",
@@ -421,7 +423,9 @@
       "cantReach": "can't reach: {{tanks}}",
       "phFloorTripped": "pH floor tripped",
       "ph": "pH <v>{{min}}–{{max}}</v> (avg <m>{{avg}}</m>, end <m>{{last}}</m>)",
-      "acid": "acid <v>{{seconds}}</v> s (~<m>{{litres}}</m> L est.)"
+      "acid": "acid <v>{{seconds}}</v> s (~<m>{{litres}}</m> L est.)",
+      "deliveredZero": "{{tanks}} delivered 0 L",
+      "redrawOk": "{{tanks}} drew after a valve re-open"
     },
     "unavailable": "Dose controller status unavailable.",
     "switchedOff": "Closed-loop dosing is switched off — programs run their fixed schedule.",

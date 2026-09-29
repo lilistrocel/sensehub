@@ -99,6 +99,7 @@ function deriveState(s, error) {
   if (!s.enabled) return 'off';
   if (!s.running) return 'idle';
   if (s.ph && s.ph.tripped) return 'alarm';
+  if ((s.tanks || []).some(t => t.drawing && t.drawing.alarm)) return 'alarm'; // a tank is not drawing
   const tankFlag = (s.tanks || []).some(t => t.limited || (t.actual !== null && t.actual !== undefined && t.actual !== (t.valve === 'open')));
   if (s.mode === 'fallback' || s.mode === 'hold' || (s.ph && s.ph.fault) || s.ph?.sample_state === 'stale' || tankFlag) return 'caution';
   if (s.mode === 'waiting') return 'waiting';
@@ -107,7 +108,7 @@ function deriveState(s, error) {
 
 function TankRow({ t, ratioTarget }) {
   const { t: tr } = useTranslation('fertigation');
-  const { fmt, fmtInt } = useNums();
+  const { fmt, fmtInt, fmtDur } = useNums();
   const mono = <span className="font-mono tabular text-ink" />;
   const monoMuted = <span className="font-mono tabular" />;
   const achieved = t.achieved_ratio;
@@ -135,6 +136,16 @@ function TankRow({ t, ratioTarget }) {
             <StatusMark status="caution" /> {tr('doseController.tank.cantReach')}
           </span>
         )}
+        {t.drawing && t.drawing.state === 'not_drawing' && (
+          <span className={`inline-flex items-center gap-1 text-xs font-semibold ${t.drawing.alarm ? 'text-alarm-700 dark:text-alarm-300' : 'text-caution-700 dark:text-caution-300'}`} data-testid="not-drawing">
+            <StatusMark status={t.drawing.alarm ? 'alarm' : 'caution'} /> {tr('doseController.tank.notDrawing', { duration: fmtDur(t.drawing.not_drawing_s) })}
+          </span>
+        )}
+        {t.redraw_retry && (t.redraw_retry.phase === 'off' || t.redraw_retry.phase === 'verify') && (
+          <span className="inline-flex items-center gap-1 text-xs text-caution-700 dark:text-caution-300" data-testid="redraw-retry">
+            <StatusMark status="caution" /> {tr('doseController.tank.retrying')}
+          </span>
+        )}
       </div>
     </li>
   );
@@ -152,6 +163,10 @@ function LastRun({ run, when }) {
   if (limited.length) flags.push(tr('doseController.lastRun.cantReach', { tanks: limited.map(t => t.name).join(', ') }));
   const phTrip = (run.trips || []).find(t => t.kind === 'ph_floor');
   if (phTrip) flags.push(tr('doseController.lastRun.phFloorTripped'));
+  const zero = (run.tanks || []).filter(t => t.delivered_zero);
+  if (zero.length) flags.push(tr('doseController.lastRun.deliveredZero', { tanks: zero.map(t => t.name).join(', ') }));
+  const drew = (run.tanks || []).filter(t => (t.redraw_retries || []).some(x => x.result === 'drew'));
+  if (drew.length) flags.push(tr('doseController.lastRun.redrawOk', { tanks: drew.map(t => t.name).join(', ') }));
   if (run.status !== 'completed') flags.push(tr(`doseController.runStatus.${run.status}`, { defaultValue: run.status }));
   return (
     <div className="mt-3 pt-2 border-t border-line text-xs text-muted" data-testid="dose-last-run">

@@ -213,5 +213,40 @@
     "forbidden": "Your account may not stop irrigation — nothing was switched.",
     "httpFailed": "Stop irrigation failed (HTTP {{status}}) — nothing is confirmed OFF.",
     "unreachable": "Could not reach the controller ({{error}}) — nothing is confirmed OFF."
+  },
+  "stock": {
+    "label": "Stock",
+    "aria": "{{tank}} stock {{pct}}",
+    "source": {
+      "measured": "measured",
+      "estimated": "estimated",
+      "manual": "not metered"
+    },
+    "sourceTitle": {
+      "measured": "Level = the last refill minus the litres the dosing monitor measured in every irrigation cycle since (automated, app and panel runs).",
+      "estimated": "Estimated: the acid line is not metered — pH Down valve open time × the configured L/min.",
+      "manual": "Not metered: the level only changes when a refill or a correction is entered."
+    },
+    "state": {
+      "ok": "enough",
+      "caution": "Low — mix a new batch soon",
+      "alarm": "Almost empty — refill now",
+      "unknown": "level unknown",
+      "notMetered": "not metered"
+    },
+    "daysLeft": "≈ {{days}} days left",
+    "daysShort": "≈ {{days}} d",
+    "useRate": "{{rate}}/day over {{days}} d",
+    "useUnknown": "use rate not known yet",
+    "basis": {
+      "measuredRefill": "{{used}} used since the refill of {{date}}",
+      "measuredSet": "{{used}} used since the level was set on {{date}}",
+      "estimated": "≈ {{used}} used (estimated from the valve time)",
+      "manual": "Level as entered — only a refill or a correction changes it."
+    },
+    "gap_one": "Not metered from {{from}} to {{to}} ({{count}} dosing run): the real level is lower than shown.",
+    "gap_other": "Not metered from {{from}} to {{to}} ({{count}} dosing runs): the real level is lower than shown.",
+    "gapNoCount": "Not metered from {{from}} to {{to}}: the real level may be lower than shown.",
+    "gapShort": "part of the use not metered — real level lower"
   }
 }

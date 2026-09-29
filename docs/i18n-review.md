@@ -359,3 +359,16 @@ To decide:
 - ☐ Stage *flowering* is shown as "flowering / fruit set" (tr "Çiçeklenme / meyve tutumu", ar "الإزهار / عقد الثمار") because the cucumber protocol's day 25-32 phase is first fruit set.
 - ☐ The AI advice text itself is translated by the model (AgronomistTranslationService helpers, same glossary); only the UI chrome is in these files.
 
+
+### Tank not drawing, second try, tank stock countdown (2026-09-29)
+
+Machine-translated, pending native review. Safety wording first: a "not drawing" alarm must read as *no liquid is leaving the tank*, and the stock texts must never make an estimate sound measured.
+- Backend: `src/i18n/{tr,ar}/dose_controller.json` (`alert.not_drawing*`, `alert.none_drawing*`, `alert.run_zero`, `alert.last_draw_unknown`, `why.redraw_retry`, `telegram.*`), `src/i18n/{tr,ar}/tank_stock.json` (low / almost empty / *_estimated / restored), `logs.json actor.tank_stock`.
+- Frontend: `irrigation.json stock.*` (Fertigation tanks tab, dashboard irrigation card, Crop & Nutrition system view), `fertigation.json doseController.tank.notDrawing / retrying, lastRun.deliveredZero / redrawOk`, `nutrition.json system.col.stock`, `relayEvents.json source.dose_controller_retry`.
+
+To decide:
+- ☐ tr "emiş yapmıyor" / ar "لا يسحب" for a tank that is *not drawing* (venturi suction).
+- ☐ tr "emiş filtresi / dip klapesi", ar "فلتر السحب / صمام القدم" for *suction filter / foot valve*.
+- ☐ ar "مشعب الفنتوري" for the *venturi manifold*.
+- ☐ ar "يكفي ≈ N يوم" (days of stock left) with decimals (e.g. 11.2): singular "يوم" kept for fractional numbers.
+- ☐ Stock source tags: measured "ölçülen / مُقاس", estimated "tahmini / تقديري", not metered "ölçülmüyor / غير مُقاس".

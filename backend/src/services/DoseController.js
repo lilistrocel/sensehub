@@ -80,6 +80,21 @@
  *  - stats.flush_seconds: SEKO samples in the first 40 s after the run's first
  *    pump start are reported as flush_* and kept out of the zone averages.
  *
+ * TANK NOT DRAWING (requirement 2026-09-29, incident run 17 at 07:30: Tank D's valve open
+ * 709 s with water, counter never moved, recorded only as 'cant_reach'; Tank B zone 3,
+ * 4x: 0 L until its valve was closed and re-opened) — _drawWatch, every 1 s tick:
+ *  - per metered nutrient tank: open + flowing time (closed loop, water >= min_flow_pct,
+ *    monitor fresh, read-back not contradicting OPEN) since its last draw (a 0.25 L step,
+ *    or rate >= 5 L/h while open);
+ *  - automatic second try (nutrients.redraw_retry): >= redraw_retry_after_s of that in
+ *    the current zone while another open tank draws -> close (source dose_controller_retry),
+ *    min_off_s closed, re-open through the same guarded ON path; drew within
+ *    redraw_verify_s -> note in the run record. One per tank per zone; never acid; not
+ *    when disarmed / paused / without water / < redraw_min_zone_left_s of flow left;
+ *  - >= not_drawing_seconds and another tank drew meanwhile -> ALARM (critical, one row
+ *    per tank per run, Telegram), resolved when it draws again; no tank drawing at all ->
+ *    ONE caution (monitor / venturi manifold); a tank at 0 L for the whole run -> summary.
+ *
  * ACTUATION: every write goes through the scheduler's guarded path
  * (FertigationDoseScheduler._writeValve: guardEnergise/validateWriteSet on ON,
  * RelayEventLogger with source 'dose_controller' / 'ph_controller'). No ON write
@@ -111,6 +126,10 @@ const EST_RATE_TAU_S = 2;          // light smoothing of the monitor's rate_lph
 const EST_MOTIVE_FRACTION = 0.25;  // venturis draw only with water moving: integrate only while flow >= 25 % of expected
 const EST_AVG_MIN_S = 5;           // a measured step rate needs >= 5 s of clean (open + flowing) step-to-step time
 const PUMP_START_MAX_AGE_MS = 15000; // a pump ON event first seen later than this is not a "pump start"
+// Tank not-drawing watch (incident 2026-09-29 07:30: Tank D open 709 s, counter never moved)
+const DRAW_RATE_MIN_LPH = 5;       // a drawing venturi reads ~40-100 L/h; a dry / blocked tank reads 0.0
+const DRAWING_RECENT_MS = 15000;   // "is drawing now": a counter step within 15 s (one 0.25 L step at ~60 L/h) or rate >= 5 L/h
+const MAX_NOT_DRAWING_NOTIFY = 3;  // Telegram messages per tank per run (the alert row is one per tank per run)
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
@@ -167,6 +186,26 @@ const DEFAULT_CONFIG = Object.freeze({
     //                   the measured flow — avoids the false trip ~66 s into zone 1 at high draw
     //                   (runs 1 + 3: "Tank B: 1.5 L dosed vs 0.73 L target"). Not enabled.
     overdose_basis: 'delivered',
+    // Tank not-drawing alarm (incident 2026-09-29 07:30, Tank D): a nutrient valve commanded
+    // OPEN (read-back not contradicting) with water >= min_flow_pct for not_drawing_seconds
+    // (open + flowing time, accumulated until the tank draws) with no 0.25 L counter step and
+    // rate ~0, while ANOTHER tank drew during that time (proves the monitor + water) -> ALARM
+    // per tank per run (+ Telegram). No tank drawing at all -> ONE caution (monitor / venturi
+    // manifold). Resolved when the tank draws again. A tank that delivered 0 L over a whole run
+    // gets a run-summary alert.
+    not_drawing_alarm: true,
+    not_drawing_seconds: 60,
+    not_drawing_telegram: true,
+    // Automatic second try (incident Tank B zone 3, 2026-09-26/28: closing and re-opening the
+    // valve made it draw at once): open + flowing redraw_retry_after_s in this zone with no draw
+    // while another open tank draws -> close (source dose_controller_retry), wait min_off_s,
+    // re-open through the guarded ON path; drawing within redraw_verify_s = recovered (run note).
+    // At most one retry per tank per zone; never the acid tank; skipped when disarmed, paused,
+    // without water, or with < redraw_min_zone_left_s of the zone's flow left.
+    redraw_retry: true,
+    redraw_retry_after_s: 20,
+    redraw_verify_s: 20,
+    redraw_min_zone_left_s: 25,
     // Optional slow outer loop (OFF): scale all ratios together, once per cycle,
     // from the previous run's feed EC toward target_us. Bounded 1:min..1:max.
     ec_trim: Object.freeze({
@@ -268,6 +307,13 @@ const SCHEMA = {
       substep_estimate: { t: 'bool' },
       open_at_pump_start: { t: 'bool' },
       overdose_basis: { t: 'enum', values: ['delivered', 'zone_expected'] },
+      not_drawing_alarm: { t: 'bool' },
+      not_drawing_seconds: NUM(20, 300),
+      not_drawing_telegram: { t: 'bool' },
+      redraw_retry: { t: 'bool' },
+      redraw_retry_after_s: NUM(10, 120),
+      redraw_verify_s: NUM(5, 120),
+      redraw_min_zone_left_s: NUM(10, 300),
       ec_trim: {
         t: 'obj',
         fields: {
@@ -491,6 +537,20 @@ function median(arr) {
 const MODES = ['closed_loop', 'fallback', 'hold', 'waiting'];
 
 /**
+ * Not-drawing watch state of one tank (per run):
+ *   accumS      open + flowing seconds since the tank last drew (the alarm clock)
+ *   zoneAccumS  the same, counted in the current zone only (the retry clock)
+ *   stretchMs   when the current not-drawing stretch started (proof: another tank drew since)
+ */
+function newNd() {
+  return {
+    accumS: 0, zoneAccumS: 0, zoneKey: null, stretchMs: null, lastTickMs: null, lastV: null, lastDrawMs: null,
+    openFlowS: 0, maxAccumS: 0,
+    alarmed: false, alarmOpen: false, alarmAt: null, alarms: 0, notifies: 0, resolvedAt: null,
+  };
+}
+
+/**
  * Sub-step estimator state of one tank. Absolute estimate A = V + offset + extra:
  *   V       reset-safe counter litres (steps of 0.25 L)
  *   extra   litres integrated since the last step (clamped [0, step + margin])
@@ -552,6 +612,7 @@ const REASON_TEXTS = {
   'zone target grew': M('dose_controller.why.zone_target_grew'),
   'zone start': M('dose_controller.why.zone_start'),
   'pump start': M('dose_controller.why.pump_start'),
+  'redraw retry': M('dose_controller.why.redraw_retry'),
   'no pH Down tank bound to the dosing board': M('dose_controller.gate.no_ph_tank'),
   'controller switched off': M('dose_controller.gate.controller_off'),
   'pH control switched off': M('dose_controller.gate.ph_off'),
@@ -637,6 +698,18 @@ const ALERT_SPECS = {
   underdose: (tank, ratio, openPct, achieved, dosed, water) => M('dose_controller.alert.underdose', {
     tank: S(tank), ratio: S(ratio), open_pct: S(openPct), achieved: S(achieved), dosed: S(dosed), water: S(water),
   }),
+  // tank = "Tank D (Fe EDDHA + Fetrilon Combi 2)" (data, never translated); last = clock text or a descriptor
+  notDrawing: (tank, secs, last) => M('dose_controller.alert.not_drawing', { tank: S(tank), secs: S(secs), last }),
+  notDrawingResolved: (tank, secs) => M('dose_controller.alert.not_drawing_resolved', { tank: S(tank), secs: S(secs) }),
+  noneDrawing: (tanks, secs) => M('dose_controller.alert.none_drawing', { tanks: S(tanks), secs: S(secs) }),
+  noneDrawingResolved: () => M('dose_controller.alert.none_drawing_resolved'),
+  runZero: (tank, openS, water) => M('dose_controller.alert.run_zero', { tank: S(tank), open_s: S(openS), water: S(water) }),
+  lastDrawUnknown: () => M('dose_controller.alert.last_draw_unknown'),
+};
+const TELEGRAM_TITLES = {
+  notDrawing: (tank) => M('dose_controller.telegram.not_drawing', { tank: S(tank) }),
+  noneDrawing: () => M('dose_controller.telegram.none_drawing'),
+  runZero: (tank) => M('dose_controller.telegram.run_zero', { tank: S(tank) }),
 };
 
 /**
@@ -691,6 +764,7 @@ class DoseController {
    * @param {boolean}  [deps.autoTick]        false = tests drive step() themselves
    * @param {string}   [deps.tz]
    * @param {object}   [deps.logger]
+   * @param {Function} [deps.notify]          (titleEn, bodyEn, severity, {titleSpec, bodySpec}) — tests; default TelegramService
    */
   constructor(deps = {}) {
     this.db = deps.db;
@@ -705,6 +779,7 @@ class DoseController {
     this.autoTick = deps.autoTick !== false;
     this.tz = deps.tz || null;
     this.log = deps.logger || console;
+    this._notifyFn = deps.notify || null;
 
     this.flow = null;     // { values, receivedMs, farmId }
     this.dosing = null;   // { tanks, receivedMs, farmId }
@@ -906,7 +981,7 @@ class DoseController {
         this._fastWaterGuard(c, ms);
       }
     } else if (evt.kind === 'dosing' && Array.isArray(evt.tanks)) {
-      this.dosing = { tanks: evt.tanks, receivedMs: ms, farmId: evt.farmId };
+      this.dosing = { tanks: evt.tanks, receivedMs: ms, farmId: evt.farmId, equipmentId: evt.equipmentId ?? null };
       const cons = {}; const rates = {};
       for (const t of evt.tanks) {
         if (!t || typeof t.rate_lph !== 'number') continue; // null rate = not metered (pH Down)
@@ -961,6 +1036,8 @@ class DoseController {
       const t = c.tankById.get(c.monitorMap[mt.id]);
       if (!t) continue;
       t.rateLph = typeof mt.rate_lph === 'number' && Number.isFinite(mt.rate_lph) ? mt.rate_lph : null;
+      if (t.rateLph !== null) t.metered = true; // the monitor reports a rate for metered tanks (pH Down: null)
+      t.monitorTank = mt.id;
       if (sub) {
         this._estIntegrate(c, t, ms, cfg); // up to this sample, with the previous rate
         this._estRate(t, ms);
@@ -1248,6 +1325,8 @@ class DoseController {
     }
     const trim = computeEcTrim(cfg.nutrients.ec_trim.enabled ? this._previousRunForTrim(ctx.programId) : null, baseRatios, cfg.nutrients.ec_trim);
     const ratioOf = (id) => (trim.ratios[id] > 0 ? trim.ratios[id] : null);
+    const roles = {};
+    try { for (const r of this.db.prepare('SELECT id, role FROM fertigation_tanks').all()) roles[r.id] = r.role || 'nutrient'; } catch (_) { /* unknown roles: nutrient */ }
     const tanks = schedTanks.map(t => ({
       kind: 'nutrient',
       tank_id: t.tank_id, tank_name: t.tank_name, name: shortName(t.tank_name, t.tank_id),
@@ -1259,6 +1338,8 @@ class DoseController {
       vLeak: 0, leakFlagged: false, target: 0, err: null, limited: false, limitedSince: null, limitedMs: 0,
       overdoseTrips: 0, overdoseActive: false, chain: null, writes: 0, writeErrors: 0, offRewritten: false, lastWhy: null,
       est: newEst(),
+      role: roles[t.tank_id] || 'nutrient', metered: false, monitorTank: null,
+      nd: newNd(), retry: null, retries: [],
     }));
     const phTank = this._resolvePhTank(schedTanks);
     const token = ++this._token;
@@ -1290,6 +1371,7 @@ class DoseController {
       seg: null, zoneRecords: [], carry: {}, zoneRead: { at: -Infinity, zone: null },
       zonePlan: this._loadZonePlan(cfg, ctx.automationId), zoneNames: this._zoneNames(cfg),
       pumpRead: { at: -Infinity, ev: null }, pumpStart: null, pumpArmed: false, firstPumpMs: null, lastGoodFlowLph: null,
+      noneDrawing: { alerted: false, open: false, alertedAt: null }, drawWatchMs: null,
     };
 
     // Baseline from the latest idle samples (the monitor reports every 10 s when idle),
@@ -1479,6 +1561,7 @@ class DoseController {
     } else if (sub && mode === 'closed_loop') {
       this._perZoneCloseCheck(c, cfg, now, ws); // close decisions on every 1 s tick (open decisions keep eval_s)
     }
+    this._drawWatch(c, cfg, now, ws, mode, disarmed);
     this._processPh(c, cfg, now, ws);
     this._evalAcid(c, cfg, now, ws, disarmed);
     this._checkActualStates(c, cfg, now);
@@ -1596,6 +1679,8 @@ class DoseController {
         }
       }
 
+      // automatic second try: the valve stays closed for min_off_s, then _drawWatch re-opens it
+      if (t.retry && t.retry.phase === 'off') { want = false; why = 'redraw retry'; }
       if (endStop && want) { want = false; why = 'end of cycle'; }
 
       // Hard overdose cap (needs measured water + concentrate). Basis: nutrients.overdose_basis
@@ -1834,6 +1919,10 @@ class DoseController {
     const n = cfg.nutrients;
     const water = c.W - seg.W0;
     const sub = this._substep(cfg);
+    // a retry still in progress belongs to this zone: it ends with it
+    for (const t of c.tanks) {
+      if (t.retry && !t.retry.done && t.retry.zoneKey === seg.key) this._retryFinish(c, t, now, 'interrupted', 'zone ended');
+    }
     const rec = {
       zone: seg.idx, channel: seg.channel, name: seg.name, slot: seg.slot,
       started_at: iso(seg.startMs), ended_at: iso(now), planned_s: seg.plannedDurS, water_l: r1(water), tanks: [],
@@ -1859,6 +1948,8 @@ class DoseController {
         opened_at_s: st.openedAt !== null ? r1((st.openedAt - seg.startMs) / 1000) : null,
         closed_at_s: st.closedAt !== null && st.closedBy ? r1((st.closedAt - seg.startMs) / 1000) : null,
         closed_by: st.closedBy, reopens: st.reopens, cant_reach: cantReach,
+        ...(st.redrawRetry ? { redraw_retry: { ...st.redrawRetry } } : {}),
+        ...(t.nd && t.nd.zoneKey === seg.key && t.nd.zoneAccumS >= 1 ? { not_drawing_s: r1(t.nd.zoneAccumS) } : {}),
       });
       if (cantReach) {
         t.cantReachZones = (t.cantReachZones || 0) + 1;
@@ -2007,7 +2098,7 @@ class DoseController {
     return justArmed && c.pumpArmed;
   }
 
-  _applyValve(c, t, want, { force = false, why = null, now, cfg }) {
+  _applyValve(c, t, want, { force = false, why = null, now, cfg, source = 'dose_controller' }) {
     if (want === t.open) return false;
     if (want && this._disarmed(now)) return false;
     if (!force && t.lastSwitchMs !== null) {
@@ -2033,7 +2124,7 @@ class DoseController {
     t.lastSwitchMs = now;
     t.switches++;
     t.lastWhy = why;
-    this._command(c, t, want, 'dose_controller');
+    this._command(c, t, want, source);
     return true;
   }
 
@@ -2068,6 +2159,278 @@ class DoseController {
     target.chain = p;
     this._track(p);
     return p;
+  }
+
+  // ─── tank not-drawing watch + automatic second try ─────────────────────────
+  //
+  // Incident 2026-09-29 07:30 (run 17): Tank D's valve opened at every zone start and
+  // stayed open 709 s with water flowing, but its counter never moved — recorded only as
+  // 'cant_reach' trips, nobody was told; micros delivered 0. Incident Tank B zone 3
+  // (2026-09-26 17:00, 09-28 09:30/12:30/13:45): 0 L with its valve open; closing and
+  // re-opening it in the next zone made it draw at once (~65-70 L/h).
+
+  /** Valve read-back (15 s board poll) does not contradict "open": true / unknown = open. */
+  _actualNotOff(c, t) {
+    const states = c.relayRead.states;
+    if (!states) return true;
+    const a = states[t.channel] ?? states[String(t.channel)];
+    if (a !== false) return true;
+    // an OFF read taken before the valve was (re)opened says nothing
+    return !(c.relayRead.pollMs !== null && t.lastSwitchMs !== null && c.relayRead.pollMs > t.lastSwitchMs + 3000);
+  }
+
+  /** Counter step within DRAWING_RECENT_MS, or (valve open) a fresh monitor rate >= DRAW_RATE_MIN_LPH. */
+  _drawingNow(t, now, ws) {
+    if (t.lastIncMs !== null && now - t.lastIncMs <= DRAWING_RECENT_MS && now >= t.lastIncMs - 1000) return true;
+    return !!(t.open && ws.dosingFresh && typeof t.rateLph === 'number' && t.rateLph >= DRAW_RATE_MIN_LPH);
+  }
+
+  /** "Tank D (Fe EDDHA + Fetrilon Combi 2)" — data, never translated. */
+  _tankLabel(t) {
+    const parts = String(t.tank_name || '').split(' — ');
+    return parts.length > 1 && parts[1].trim() ? `${t.name} (${parts.slice(1).join(' — ').trim()})` : t.name;
+  }
+
+  /** Local "YYYY-MM-DD HH:MM" in the farm zone (language-neutral clock text). */
+  _localClock(ms) {
+    try {
+      const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+        timeZone: this._tz(), year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+      }).formatToParts(new Date(ms)).map(x => [x.type, x.value]));
+      return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+    } catch (_) { return new Date(ms).toISOString().slice(0, 16).replace('T', ' '); }
+  }
+
+  /**
+   * When the tank last drew: in this run (last counter step), else from the monitor's
+   * stored counter history (first sample at the current value after the last lower one).
+   * Returns epoch ms or null.
+   */
+  _lastDrawMs(c, t) {
+    if (t.lastIncMs !== null && t.V > 0) return t.lastIncMs;
+    const eqId = this.dosing ? this.dosing.equipmentId : null;
+    const n = t.monitorTank;
+    const cur = t.lastConsumed;
+    if (!eqId || n === null || n === undefined || typeof cur !== 'number') return null;
+    try {
+      const name = `Tank ${n} Consumed`;
+      const since = new Date(this.now() - 14 * 86400000).toISOString();
+      const lower = this.db.prepare('SELECT MAX(timestamp) AS ts FROM readings WHERE equipment_id = ? AND name = ? AND timestamp >= ? AND value < ?')
+        .get(eqId, name, since, cur - 0.001);
+      if (!lower || !lower.ts) return null;
+      const reached = this.db.prepare('SELECT MIN(timestamp) AS ts FROM readings WHERE equipment_id = ? AND name = ? AND timestamp > ? AND value >= ?')
+        .get(eqId, name, lower.ts, cur - 0.001);
+      return reached && reached.ts ? parseTs(reached.ts) : null;
+    } catch (_) { return null; }
+  }
+
+  /** Remaining planned flow time of the current zone (ms), bounded by the cycle end. */
+  _zoneLeftMs(c, now) {
+    const end = c.seg && c.seg.plannedEndMs ? Math.min(c.seg.plannedEndMs, c.endsAt) : c.endsAt;
+    return end - now;
+  }
+
+  /**
+   * Every 1 s tick: per nutrient tank, the open + flowing time without a draw; the
+   * automatic second try; the not-drawing ALARM / no-tank-drawing caution; resolution.
+   */
+  _drawWatch(c, cfg, now, ws, mode, disarmed) {
+    const n = cfg.nutrients;
+    const flowOk = mode === 'closed_loop' && ws.ok && !ws.stopped && ws.dosingFresh && !c.paused && !disarmed;
+    const segKey = c.seg ? c.seg.key : 'cycle';
+    let drewNow = null;
+    for (const t of c.tanks) {
+      const nd = t.nd;
+      const dt = nd.lastTickMs === null ? 0 : clamp((now - nd.lastTickMs) / 1000, 0, 5);
+      nd.lastTickMs = now;
+      if (nd.zoneKey !== segKey) { nd.zoneKey = segKey; nd.zoneAccumS = 0; }
+      const stepped = nd.lastV !== null && t.V > nd.lastV + 1e-9;
+      nd.lastV = t.V;
+      const rateDraw = t.open && ws.dosingFresh && typeof t.rateLph === 'number' && t.rateLph >= DRAW_RATE_MIN_LPH;
+      if (stepped || rateDraw) {
+        if (nd.accumS > 0 || nd.alarmOpen) this._drawResumed(c, t, now, n);
+        if (!drewNow) drewNow = t;
+        nd.accumS = 0; nd.zoneAccumS = 0; nd.stretchMs = null; nd.lastDrawMs = now;
+      } else if (flowOk && t.open && t.metered && this._actualNotOff(c, t)) {
+        if (nd.stretchMs === null) nd.stretchMs = now - dt * 1000;
+        nd.accumS += dt; nd.zoneAccumS += dt; nd.openFlowS += dt;
+        nd.maxAccumS = Math.max(nd.maxAccumS, nd.accumS);
+      }
+    }
+    if (drewNow && c.noneDrawing.open) {
+      c.noneDrawing.open = false;
+      this._trip(c, 'none_drawing_resolved', now, `${drewNow.name} is drawing`);
+      const spec = ALERT_SPECS.noneDrawingResolved();
+      this._updateOpenAlert(`dose_controller:none_drawing:${c.runId ?? c.token}`, {
+        message: i18n.render('en', spec), messageKey: spec.$k, messageParams: spec.$p, severity: 'info',
+      });
+    }
+    for (const t of c.tanks) this._retryStep(c, cfg, t, now, ws, mode, disarmed);
+    if (!n.not_drawing_alarm) return;
+    // ALARM per tank (another tank drew during this tank's stretch) / ONE caution (none drew)
+    const T = n.not_drawing_seconds;
+    const due = c.tanks.filter(t => t.open && t.metered && !this._isAcid(t) && t.nd.accumS >= T
+      && !(t.retry && !t.retry.done)); // the retry window suspends the alarm, never beyond it
+    if (!due.length) return;
+    const proven = (t) => c.tanks.some(u => u !== t && u.metered && ((u.lastIncMs !== null && t.nd.stretchMs !== null && u.lastIncMs >= t.nd.stretchMs) || this._drawingNow(u, now, ws)));
+    const lone = due.filter(t => !proven(t));
+    for (const t of due) if (proven(t) && !t.nd.alarmOpen) this._notDrawingAlarm(c, t, now, n);
+    if (lone.length && !c.noneDrawing.open && !c.tanks.some(t => this._drawingNow(t, now, ws))) this._noneDrawingCaution(c, lone, now, n);
+  }
+
+  _isAcid(t) {
+    return t.kind === 'acid' || t.role === 'ph_down' || t.role === 'ph_up';
+  }
+
+  _notDrawingAlarm(c, t, now, n) {
+    const nd = t.nd;
+    const secs = Math.round(nd.accumS);
+    const lastMs = this._lastDrawMs(c, t);
+    const last = lastMs !== null ? this._localClock(lastMs) : ALERT_SPECS.lastDrawUnknown();
+    const spec = ALERT_SPECS.notDrawing(this._tankLabel(t), secs, last);
+    nd.alarmOpen = true;
+    nd.alarms++;
+    if (!nd.alarmed) { nd.alarmed = true; nd.alarmAt = now; }
+    nd.resolvedAt = null;
+    this._trip(c, 'not_drawing', now, `${t.name}: valve open ${secs} s with water flowing, counter did not move (last draw ${lastMs !== null ? iso(lastMs) : 'unknown'})`);
+    this._alert(c, this._notDrawingKey(c, t), 'critical', spec, { equipment_id: t.equipment_id });
+    this.log.warn(`[DoseController] ${t.name} NOT DRAWING: open ${secs} s with water, no counter step`);
+    if (n.not_drawing_telegram && nd.notifies < MAX_NOT_DRAWING_NOTIFY) {
+      nd.notifies++;
+      this._notify(TELEGRAM_TITLES.notDrawing(t.name), spec, 'critical');
+    }
+  }
+
+  _notDrawingKey(c, t) {
+    return `not_drawing:${t.tank_id}:${c.runId ?? c.token}`;
+  }
+
+  /** The tank drew again: resolve its open alarm (and the no-tank-drawing caution). */
+  _drawResumed(c, t, now, n) {
+    const nd = t.nd;
+    if (nd.alarmOpen) {
+      const secs = Math.round(nd.accumS);
+      nd.alarmOpen = false;
+      nd.resolvedAt = now;
+      this._trip(c, 'not_drawing_resolved', now, `${t.name} drew again after ${secs} s`);
+      const spec = ALERT_SPECS.notDrawingResolved(t.name, secs);
+      this._updateOpenAlert(`dose_controller:${this._notDrawingKey(c, t)}`, {
+        message: i18n.render('en', spec), messageKey: spec.$k, messageParams: spec.$p, severity: 'info',
+      });
+    }
+  }
+
+  _noneDrawingCaution(c, lone, now, n) {
+    const secs = Math.round(Math.min(...lone.map(t => t.nd.accumS)));
+    const names = lone.map(t => t.name).join(', ');
+    c.noneDrawing.open = true;
+    if (c.noneDrawing.alerted) {
+      // one caution per run: a repeat re-opens the same row without a new Telegram
+      this._trip(c, 'none_drawing', now, `${names}: open ${secs} s with water, no tank drew`);
+      this._alert(c, `none_drawing:${c.runId ?? c.token}`, 'warning', ALERT_SPECS.noneDrawing(names, secs), { equipment_id: this._dosingEq(c) });
+      return;
+    }
+    c.noneDrawing.alerted = true;
+    c.noneDrawing.alertedAt = now;
+    const spec = ALERT_SPECS.noneDrawing(names, secs);
+    this._trip(c, 'none_drawing', now, `${names}: open ${secs} s with water, no tank drew — dosing monitor / venturi manifold`);
+    this._alert(c, `none_drawing:${c.runId ?? c.token}`, 'warning', spec, { equipment_id: this._dosingEq(c) });
+    if (n.not_drawing_telegram) this._notify(TELEGRAM_TITLES.noneDrawing(), spec, 'warning');
+  }
+
+  /**
+   * Automatic second try (nutrients.redraw_retry). Phases: off (closed through the
+   * normal close path, source dose_controller_retry; held closed min_off_s) -> verify
+   * (re-opened through the guarded ON path; drawing within redraw_verify_s = 'drew')
+   * -> done. At most one per tank per zone; never the acid tank.
+   */
+  _retryStep(c, cfg, t, now, ws, mode, disarmed) {
+    const n = cfg.nutrients;
+    const r = t.retry;
+    const zoneKey = c.seg ? c.seg.key : 'cycle';
+    if (r && !r.done) {
+      const blocked = disarmed ? 'disarmed' : c.paused ? 'paused' : mode !== 'closed_loop' ? `mode ${mode}`
+        : (ws.stopped || !ws.ok) ? 'no water' : r.zoneKey !== zoneKey ? 'zone ended'
+          : c.endsAt - now < 5000 ? 'end of cycle' : null;
+      if (r.phase === 'off') {
+        if (blocked) { this._retryFinish(c, t, now, 'skipped', blocked); return; }
+        if (now - r.offAt < n.min_off_s * 1000) return;
+        // re-open: guarded ON path (guardEnergise / validateWriteSet, arming re-checked before the coil write)
+        r.phase = 'verify';
+        r.reopenAt = now;
+        r.v0 = t.V;
+        const ok = this._applyValve(c, t, true, { force: true, why: 'redraw retry', now, cfg, source: 'dose_controller_retry' });
+        if (!ok) this._retryFinish(c, t, now, 'skipped', 'reopen refused');
+        return;
+      }
+      // verify
+      const fresh = this.dosing && this.dosing.receivedMs > r.reopenAt;
+      const drew = t.V > r.v0 + 1e-9 || (fresh && t.open && typeof t.rateLph === 'number' && t.rateLph >= DRAW_RATE_MIN_LPH);
+      if (drew) { this._retryFinish(c, t, now, 'drew'); return; }
+      if (!t.open) { this._retryFinish(c, t, now, 'interrupted', t.lastWhy || 'valve closed'); return; }
+      if (blocked) { this._retryFinish(c, t, now, 'interrupted', blocked); return; }
+      if (now - r.reopenAt >= n.redraw_verify_s * 1000) this._retryFinish(c, t, now, 'no_draw');
+      return;
+    }
+    if (!n.redraw_retry || this._isAcid(t) || !t.metered || !t.open) return;
+    if (t.nd.zoneAccumS < n.redraw_retry_after_s) return;
+    if (mode !== 'closed_loop' || disarmed || c.paused || !ws.ok || ws.stopped || !ws.dosingFresh) return;
+    const st = c.seg ? c.seg.tanks[t.tank_id] : null;
+    const count = st ? (st.redrawRetries || 0) : t.retries.filter(x => x.zoneKey === zoneKey).length;
+    if (count >= 1) return;
+    if (!c.tanks.some(u => u !== t && u.open && u.metered && this._drawingNow(u, now, ws))) return;
+    if (this._zoneLeftMs(c, now) < n.redraw_min_zone_left_s * 1000) {
+      if (st && !st.redrawSkipLogged) {
+        st.redrawSkipLogged = true;
+        st.redrawRetry = { at: iso(now), result: 'skipped', detail: 'zone end' };
+        this._trip(c, 'redraw_retry_skipped', now, `${t.name}: < ${n.redraw_min_zone_left_s} s of the zone left`);
+      }
+      return;
+    }
+    const secs = Math.round(t.nd.zoneAccumS);
+    t.retry = { phase: 'off', at: now, offAt: now, zoneKey, st, secs, done: false, zone: c.seg ? c.seg.name : null };
+    if (st) { st.redrawRetries = (st.redrawRetries || 0) + 1; st.redrawRetry = { at: iso(now), result: 'pending', not_drawing_s: secs }; }
+    this._trip(c, 'redraw_retry', now, `${t.name}: open ${secs} s with water and no draw${c.seg ? ` in ${c.seg.name}` : ''} — valve closed for a re-open`);
+    this.log.warn(`[DoseController] ${t.name} not drawing ${secs} s — automatic second try (close, re-open)`);
+    this._applyValve(c, t, false, { force: true, why: 'redraw retry', now, cfg, source: 'dose_controller_retry' });
+  }
+
+  _retryFinish(c, t, now, result, detail = null) {
+    const r = t.retry;
+    if (!r || r.done) return;
+    r.done = true;
+    r.phase = 'done';
+    r.result = result;
+    const drewAfter = result === 'drew' && r.reopenAt ? r1((now - r.reopenAt) / 1000) : null;
+    const rec = { at: iso(r.at), result, ...(drewAfter !== null ? { drew_after_s: drewAfter } : {}), ...(detail ? { detail } : {}), not_drawing_s: r.secs };
+    if (r.st) r.st.redrawRetry = rec;
+    t.retries.push({ zoneKey: r.zoneKey, zone: r.zone, ...rec });
+    if (result === 'drew') {
+      this._trip(c, 'redraw_retry_ok', now, `${t.name} drew after a valve re-open (${drewAfter} s)`);
+      this.log.log(`[DoseController] ${t.name} drew after a valve re-open (${drewAfter} s)`);
+    } else if (result === 'no_draw') {
+      this._trip(c, 'redraw_retry_failed', now, `${t.name} did not draw after a valve re-open`);
+    } else {
+      this._trip(c, 'redraw_retry_skipped', now, `${t.name}: second try ${result}${detail ? ` (${detail})` : ''}`);
+    }
+  }
+
+  /**
+   * Telegram. `title` / `body` are i18n specs. Tests inject deps.notify (receives the
+   * English render + the specs); production renders in the configured telegram_language.
+   */
+  _notify(title, body, severity) {
+    const clean = (s) => String(s).replace(/[_*`[\]]/g, ' ');
+    if (this._notifyFn) {
+      try { this._notifyFn(clean(i18n.render('en', title)), clean(i18n.render('en', body)), severity, { titleSpec: title, bodySpec: body }); } catch (e) { this.log.error(`[DoseController] notify failed: ${e.message}`); }
+      return;
+    }
+    this._track(Promise.resolve().then(async () => {
+      const { telegramService } = require('./TelegramService');
+      if (!telegramService.isConfigured()) return;
+      const lang = typeof telegramService.getLanguage === 'function' ? telegramService.getLanguage() : 'en';
+      await telegramService.sendAlert(clean(i18n.render(lang, title)), clean(i18n.render(lang, body)), severity);
+    }).catch(e => this.log.error(`[DoseController] Telegram failed: ${e.message}`)));
   }
 
   // ─── pH ───────────────────────────────────────────────────────────────────
@@ -2475,6 +2838,13 @@ class DoseController {
         overdose_trips: t.overdoseTrips, counter_resets: t.counterResets, write_errors: t.writeErrors,
         cant_reach_zones: t.cantReachZones || 0,
         ...(this._substep(c.cfgAtStart) && t.est.A0 !== null ? { dosed_est_l: r2(this._estAbs(t) - t.est.A0) } : {}),
+        ...(t.nd && (t.nd.maxAccumS >= 1 || t.nd.alarmed) ? {
+          not_drawing: {
+            max_s: r1(t.nd.maxAccumS), alarms: t.nd.alarms,
+            alarm_at: iso(t.nd.alarmAt), resolved_at: iso(t.nd.resolvedAt), open: !!t.nd.alarmOpen,
+          },
+        } : {}),
+        ...(t.retries && t.retries.length ? { redraw_retries: t.retries.map(({ zoneKey, ...x }) => x) } : {}),
       };
     });
     const a = c.acid;
@@ -2533,6 +2903,7 @@ class DoseController {
 
   _finalize(c, now, status, reason) {
     const s = this._summary(c, now);
+    this._runZeroCheck(c, now, s);
     for (const t of s.tanks) {
       if (t.physics_limited) {
         this._alert(c, `underdose:${t.tank_id}`, 'warning',
@@ -2555,6 +2926,28 @@ class DoseController {
       }
     }
     return c.runId ? this.getRun(c.runId) : { status, ...s };
+  }
+
+  /**
+   * Run summary: a metered nutrient tank whose counter did not move for the whole run
+   * while its valve was open with water for >= not_drawing_seconds -> "delivered 0 L".
+   * Telegram only when no live not-drawing alarm went out for that tank this run.
+   */
+  _runZeroCheck(c, now, s) {
+    const n = c.cfgAtStart.nutrients;
+    if (!n.not_drawing_alarm || !(c.W > 0)) return;
+    for (const t of c.tanks) {
+      if (!t.metered || this._isAcid(t) || t.V > 1e-9 || !t.nd || t.nd.openFlowS < n.not_drawing_seconds) continue;
+      const openS = Math.round(t.nd.openFlowS);
+      const spec = ALERT_SPECS.runZero(this._tankLabel(t), openS, r1(c.W));
+      this._trip(c, 'run_zero', now, `${t.name} delivered 0 L (valve open ${openS} s with water, ${r1(c.W)} L of water)`);
+      this._alert(c, `run_zero:${t.tank_id}:${c.runId ?? c.token}`, 'warning', spec, { equipment_id: t.equipment_id });
+      // Telegram only when nothing about this tank went out live (its alarm / the no-tank-drawing caution)
+      if (n.not_drawing_telegram && !t.nd.notifies && !c.noneDrawing.alerted) this._notify(TELEGRAM_TITLES.runZero(t.name), spec, 'warning');
+      const row = s.tanks.find(x => x.tank_id === t.tank_id);
+      if (row) row.delivered_zero = true;
+    }
+    s.trips = c.trips;
   }
 
   // ─── read API ─────────────────────────────────────────────────────────────
@@ -2729,6 +3122,13 @@ class DoseController {
           zone_dosed_counter_l: zs && zs.V0q !== undefined ? r2(t.V - zs.V0q) : null,
           est_source: this._substep(cfg) ? t.est.source : null,
           rate_lph: ws.dosingFresh ? t.rateLph : null, why: t.lastWhy,
+          drawing: {
+            state: !t.metered || !ws.dosingFresh ? 'unknown' : this._drawingNow(t, now, ws) ? 'drawing'
+              : (t.open && t.nd.accumS >= 1 ? 'not_drawing' : 'idle'),
+            not_drawing_s: r1(t.nd.accumS), alarm: !!t.nd.alarmOpen,
+            last_draw_at: iso(t.lastIncMs),
+          },
+          redraw_retry: t.retry ? { phase: t.retry.phase, result: t.retry.result || null, at: iso(t.retry.at) } : null,
         };
       }),
       ph: {

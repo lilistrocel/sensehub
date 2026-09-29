@@ -1,0 +1,15 @@
+{
+  "alert": {
+    "low": "{tank} azalıyor: {level} L kaldı ({capacity} L'nin %{pct} kadarı), {days}. Bitmeden yeni bir parti hazırlayın.",
+    "low_estimated": "{tank} azalıyor: {level} L kaldı ({capacity} L'nin %{pct} kadarı), {days}. pH düşürücü vanasının açık kalma süresinden tahmin edildi (asit hattı ölçülmüyor). Bitmeden yeni bir parti hazırlayın.",
+    "empty": "{tank} neredeyse boş: {level} L kaldı ({capacity} L'nin %{pct} kadarı), {days}. Hemen doldurun — bittiğinde bu tanktan hiçbir şey dozlanmaz.",
+    "empty_estimated": "{tank} neredeyse boş: {level} L kaldı ({capacity} L'nin %{pct} kadarı), {days}. pH düşürücü vanasının açık kalma süresinden tahmin edildi (asit hattı ölçülmüyor). Hemen doldurun — bittiğinde bu tanktan hiçbir şey dozlanmaz.",
+    "restored": "{tank} stoku yeniden {level} L (%{pct}).",
+    "days_left": "yaklaşık {days} günlük kullanım kaldı",
+    "days_unknown": "kullanım hızı henüz bilinmiyor"
+  },
+  "telegram": {
+    "low": "{tank} azalıyor",
+    "empty": "{tank} neredeyse boş"
+  }
+}

@@ -213,5 +213,40 @@
     "forbidden": "Hesabınız sulamayı durduramaz — hiçbir şey anahtarlanmadı.",
     "httpFailed": "Sulama durdurulamadı (HTTP {{status}}) — hiçbir şeyin KAPALI olduğu doğrulanmadı.",
     "unreachable": "Denetleyiciye ulaşılamadı ({{error}}) — hiçbir şeyin KAPALI olduğu doğrulanmadı."
+  },
+  "stock": {
+    "label": "Stok",
+    "aria": "{{tank}} stoku {{pct}}",
+    "source": {
+      "measured": "ölçülen",
+      "estimated": "tahmini",
+      "manual": "ölçülmüyor"
+    },
+    "sourceTitle": {
+      "measured": "Seviye = son dolum eksi dozlama izleyicisinin o zamandan beri her sulama döngüsünde ölçtüğü litre (otomatik, uygulama ve pano çalışmaları).",
+      "estimated": "Tahmini: asit hattı ölçülmüyor — pH düşürücü vanasının açık kalma süresi × ayarlı L/min.",
+      "manual": "Ölçülmüyor: seviye yalnızca bir dolum veya düzeltme girildiğinde değişir."
+    },
+    "state": {
+      "ok": "yeterli",
+      "caution": "Az — yakında yeni bir parti hazırlayın",
+      "alarm": "Neredeyse boş — hemen doldurun",
+      "unknown": "seviye bilinmiyor",
+      "notMetered": "ölçülmüyor"
+    },
+    "daysLeft": "≈ {{days}} gün kaldı",
+    "daysShort": "≈ {{days}} gün",
+    "useRate": "{{days}} günde günlük {{rate}}",
+    "useUnknown": "kullanım hızı henüz bilinmiyor",
+    "basis": {
+      "measuredRefill": "{{date}} dolumundan beri {{used}} kullanıldı",
+      "measuredSet": "seviyenin ayarlandığı {{date}} tarihinden beri {{used}} kullanıldı",
+      "estimated": "≈ {{used}} kullanıldı (vana süresinden tahmin)",
+      "manual": "Girilen seviye — yalnızca bir dolum veya düzeltme değiştirir."
+    },
+    "gap_one": "{{from}} ile {{to}} arası ölçülmedi ({{count}} dozlama çalışması): gerçek seviye gösterilenden düşük.",
+    "gap_other": "{{from}} ile {{to}} arası ölçülmedi ({{count}} dozlama çalışması): gerçek seviye gösterilenden düşük.",
+    "gapNoCount": "{{from}} ile {{to}} arası ölçülmedi: gerçek seviye gösterilenden düşük olabilir.",
+    "gapShort": "kullanımın bir kısmı ölçülmedi — gerçek seviye daha düşük"
   }
 }

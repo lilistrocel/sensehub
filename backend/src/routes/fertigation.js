@@ -511,13 +511,24 @@ const fertigationMath = require('../services/fertigationMath');
 const { stockElementalMgPerL, round } = fertigationMath;
 const loadMixtureItems = (mixtureId) => fertigationMath.loadMixtureItems(db, mixtureId);
 
-function attachTankComputed(tank) {
+// Stock countdown (TankStockService): level from the monitor-measured litres per cycle
+// (pH Down: estimated from its valve time), days left, low-stock state. Never breaks a read.
+const tankStock = () => require('../services/TankStockService').getTankStockService();
+function stockViews() {
+  try { return new Map(tankStock().viewAll().map(v => [v.tank_id, v])); } catch (err) {
+    console.error('[fertigation] tank stock view failed:', err.message);
+    return new Map();
+  }
+}
+
+function attachTankComputed(tank, stocks = null) {
   const items = loadMixtureItems(tank.mixture_id);
   const stockMgPerL = stockElementalMgPerL(items, tank.water_base_liters);
   return {
     ...tank,
     items,
     stock_mg_per_l: round(stockMgPerL),
+    ...(stocks ? { stock: stocks.get(tank.id) || null } : {}),
   };
 }
 
@@ -531,7 +542,39 @@ router.get('/tanks', (req, res) => {
       LEFT JOIN fertigation_mixtures m ON t.mixture_id = m.id
       ORDER BY t.id
     `).all();
-    res.json(tanks.map(attachTankComputed));
+    const stocks = stockViews();
+    res.json(tanks.map(t => attachTankComputed(t, stocks)));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fertigation/tanks/stock - stock level, days left and low-stock state of every tank
+// (dashboard irrigation card, Crop & Nutrition system view). Read-only.
+router.get('/tanks/stock', (req, res) => {
+  try {
+    const svc = tankStock();
+    res.json({ tanks: svc.viewAll(), config: svc.getConfig(), last_sync: svc.lastSync });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/fertigation/tank-stock/config ; PUT (admin): { caution_pct, alarm_pct, alarm_days, avg_days,
+// telegram, enabled, per_tank: { <tank_id>: { caution_pct, alarm_pct, alarm_days } | null } }
+router.get('/tank-stock/config', (req, res) => {
+  try { res.json(tankStock().getConfig()); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.put('/tank-stock/config', requireRole('admin'), (req, res) => {
+  try { res.json(tankStock().saveConfig(req.body || {})); } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// GET /api/fertigation/tanks/:id/ledger?limit=50&offset=0 - the stock ledger, newest first (auditable)
+router.get('/tanks/:id/ledger', (req, res) => {
+  try {
+    const tank = db.prepare('SELECT id FROM fertigation_tanks WHERE id = ?').get(req.params.id);
+    if (!tank) return res.status(404).json({ error: 'Tank not found' });
+    res.json(tankStock().ledger(tank.id, { limit: req.query.limit, offset: req.query.offset }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -559,7 +602,7 @@ router.get('/tanks/:id', (req, res) => {
       ...r,
       composition_snapshot: r.composition_snapshot ? JSON.parse(r.composition_snapshot) : null,
     }));
-    res.json({ ...attachTankComputed(tank), refills });
+    res.json({ ...attachTankComputed(tank, stockViews()), refills });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -619,6 +662,13 @@ router.put('/tanks/:id', requireRole('admin', 'operator'), (req, res) => {
       f('notes', cur.notes),
       req.params.id,
     );
+    // A level typed by the operator is a new anchor of the stock countdown (ledger 'adjust').
+    const typed = req.body.current_stock_liters;
+    if (typed !== undefined && typed !== null && Number.isFinite(Number(typed)) && Math.abs(Number(typed) - (cur.current_stock_liters || 0)) >= 0.01) {
+      try { tankStock().recordAdjust(cur.id, Number(typed), { userId: req.user?.id || null, previous: cur.current_stock_liters }); } catch (err) {
+        console.error('[fertigation] stock adjust not recorded:', err.message);
+      }
+    }
     res.json(db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id));
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'A tank is already assigned to that equipment/channel' });
@@ -649,8 +699,10 @@ router.post('/tanks/:id/refill', requireRole('admin', 'operator'), (req, res) =>
     return res.status(400).json({ error: 'water_liters_added must be a positive number' });
   }
   try {
+    if (!db.prepare('SELECT id FROM fertigation_tanks WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'Tank not found' });
+    // the current level comes from the stock ledger (measured draws since the last refill)
+    try { tankStock().recompute(Number(req.params.id)); } catch (err) { console.error('[fertigation] stock recompute failed:', err.message); }
     const tank = db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id);
-    if (!tank) return res.status(404).json({ error: 'Tank not found' });
     // Three sources of recipe at refill time, in priority order:
     //   1. caller explicitly passed mixture_id → use that
     //   2. use_pending_mixture=true → adopt the pending recipe (and clear the pointer)
@@ -701,9 +753,13 @@ router.post('/tanks/:id/refill', requireRole('admin', 'operator'), (req, res) =>
       return result.lastInsertRowid;
     });
     const refillId = tx();
+    // the refill is the new anchor of the stock countdown (ledger 'refill'); resolves a low-stock alert
+    let stock = null;
+    try { stock = tankStock().recordRefill(Number(refillId)); } catch (err) { console.error('[fertigation] refill not recorded in the stock ledger:', err.message); }
     res.json({
       refill_id: refillId,
       tank: db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id),
+      stock,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

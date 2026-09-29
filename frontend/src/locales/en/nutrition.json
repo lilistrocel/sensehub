@@ -112,6 +112,7 @@
       "relay": "Valve relay",
       "ratio": "Target",
       "draw": "Draw",
+      "stock": "Stock",
       "refill": "Last refill",
       "section": "Section",
       "flow": "Measured flow",

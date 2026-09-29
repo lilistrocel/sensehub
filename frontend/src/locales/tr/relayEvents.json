@@ -28,6 +28,7 @@
     "flow_watch_retry": "debi izleme yeniden deneme",
     "flow_watch_retry_auto_off": "debi izleme yeniden deneme otomatik kapatma",
     "dose_controller": "dozlama denetleyicisi",
+    "dose_controller_retry": "dozlama denetleyicisi ikinci deneme",
     "dose_program": "dozlama programı",
     "dose_program_end": "dozlama programı sonu",
     "dose_cycle": "dozlama döngüsü",

@@ -6,6 +6,7 @@
     "interlock": "القفل البيني",
     "dose_controller": "متحكم الجرعات",
     "ph_controller": "متحكم pH",
+    "tank_stock": "مخزون الخزانات",
     "dose_program": "برنامج الحقن",
     "flow_watch": "مراقبة التدفق",
     "watchdog": "المراقب",

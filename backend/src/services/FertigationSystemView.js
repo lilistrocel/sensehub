@@ -122,6 +122,12 @@ class FertigationSystemView {
       }
     } catch (_) { /* table missing */ }
     const ratioCfg = n.ratio || {};
+    // stock countdown (measured / estimated level, days left, low-stock state) — read only
+    let stocks = new Map();
+    try {
+      const { TankStockService } = require('./TankStockService');
+      stocks = new Map(new TankStockService({ db, now: () => nowMs, logger: { log() {}, warn() {}, error() {} } }).viewAll().map(v => [v.tank_id, v]));
+    } catch (_) { stocks = new Map(); }
     const tankView = tanks.map(t => ({
       tank_id: t.tank_id,
       letter: t.letter,
@@ -135,6 +141,7 @@ class FertigationSystemView {
       relay: t.equipment_id ? { equipment_id: t.equipment_id, equipment_name: t.equipment_name, channel: t.channel, label: (dosingLabels[t.equipment_id] || {})[t.channel] || null } : null,
       stock_l: t.current_stock_liters,
       capacity_l: t.capacity_liters,
+      stock: stocks.get(t.tank_id) || null,
       last_refill_at: (lastRefill.find(x => x.tank_id === t.tank_id) || {}).at || null,
       configured_draw_lpm: t.equipment_id ? chanFlow(t.equipment_id, t.channel) : null,
       measured_draw_lpm: draw[t.tank_id] ? r2(median(draw[t.tank_id])) : null,

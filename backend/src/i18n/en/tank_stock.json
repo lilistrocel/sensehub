@@ -1,0 +1,15 @@
+{
+  "alert": {
+    "low": "{tank} is running low: {level} L left ({pct} % of {capacity} L), {days}. Mix a new batch before it runs dry.",
+    "low_estimated": "{tank} is running low: {level} L left ({pct} % of {capacity} L), {days}. Estimated from the pH Down valve open time (the acid line is not metered). Mix a new batch before it runs dry.",
+    "empty": "{tank} is almost empty: {level} L left ({pct} % of {capacity} L), {days}. Refill it now — once it runs dry nothing is dosed from it.",
+    "empty_estimated": "{tank} is almost empty: {level} L left ({pct} % of {capacity} L), {days}. Estimated from the pH Down valve open time (the acid line is not metered). Refill it now — once it runs dry nothing is dosed from it.",
+    "restored": "{tank} stock is back to {level} L ({pct} %).",
+    "days_left": "about {days} days of use left",
+    "days_unknown": "use rate not known yet"
+  },
+  "telegram": {
+    "low": "{tank} running low",
+    "empty": "{tank} almost empty"
+  }
+}

@@ -10,7 +10,13 @@
     "acid_cap_cycle": "Dose controller: acid cap reached ({cap} s per cycle) with feed pH {ph} still above {setpoint} — no more pH Down this cycle.",
     "acid_cap_day": "Dose controller: acid cap reached ({cap} s per day) with feed pH {ph} still above {setpoint} — no more pH Down this day.",
     "valve_mismatch": "Dose controller: {valve} (ch {channel}) reads ON while commanded OFF — OFF re-sent.",
-    "underdose": "Dose controller: {tank} could not reach 1:{ratio} — valve open {open_pct} % of the run, achieved 1:{achieved} ({dosed} L for {water} L water). Venturi draw is below what the ratio needs."
+    "underdose": "Dose controller: {tank} could not reach 1:{ratio} — valve open {open_pct} % of the run, achieved 1:{achieved} ({dosed} L for {water} L water). Venturi draw is below what the ratio needs.",
+    "not_drawing": "{tank} is not drawing: its valve has been open {secs} s with water flowing but no liquid left the tank (last draw: {last}). Check the tank level, the suction filter/foot valve and the venturi.",
+    "not_drawing_resolved": "{tank} is drawing again after {secs} s.",
+    "none_drawing": "No tank is drawing: {tanks} open {secs} s with water flowing, but no liquid left any tank. Check the dosing monitor and the venturi manifold.",
+    "none_drawing_resolved": "Tanks are drawing again (the dosing monitor sees liquid leaving a tank).",
+    "run_zero": "{tank} delivered 0 L in this run: valve open {open_s} s with {water} L of water. Its nutrients did not reach the plants — check the tank level, the suction filter/foot valve and the venturi.",
+    "last_draw_unknown": "none recorded"
   },
   "sensor_kind": {
     "frozen": "frozen",
@@ -69,7 +75,8 @@
     "filling_zone_target": "filling zone target",
     "zone_target_grew": "zone target grew",
     "zone_start": "zone start",
-    "pump_start": "pump start"
+    "pump_start": "pump start",
+    "redraw_retry": "second try (valve re-opened)"
   },
   "gate": {
     "no_ph_tank": "no pH Down tank bound to the dosing board",
@@ -88,5 +95,10 @@
     "cap_cycle": "acid cap reached ({cap} s this cycle)",
     "cap_day": "daily acid cap reached ({cap} s)",
     "below_floor": "pH below floor"
+  },
+  "telegram": {
+    "not_drawing": "{tank} not drawing",
+    "none_drawing": "No dosing tank drawing",
+    "run_zero": "{tank} delivered 0 L"
   }
 }

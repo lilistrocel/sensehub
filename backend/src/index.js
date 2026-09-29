@@ -58,6 +58,7 @@ const { getMqttIngestService } = require('./services/MqttIngestService');
 const { getFlowWatchService } = require('./services/IrrigationFlowWatchService');
 const { getDoseController } = require('./services/DoseController');
 const { getIrrigationRunsService } = require('./services/IrrigationRunsService');
+const { getTankStockService } = require('./services/TankStockService');
 
 const app = express();
 const server = http.createServer(app);
@@ -426,6 +427,15 @@ server.listen(PORT, async () => {
   } catch (error) {
     console.error('Irrigation runs: Failed to start -', error.message);
   }
+
+  // Tank stock countdown: ledger of monitor-measured litres per cycle (every run type),
+  // refills and the estimated pH Down use; low-stock alerts. Read-only for the plant.
+  try {
+    getTankStockService().start();
+    console.log('Tank stock: Started');
+  } catch (error) {
+    console.error('Tank stock: Failed to start -', error.message);
+  }
 });
 
 // Graceful shutdown handler
@@ -443,6 +453,7 @@ process.on('SIGINT', async () => {
   try { getFlowWatchService().stop(); } catch (_) {}
   try { getDoseController().stop(); } catch (_) {}
   try { getIrrigationRunsService().stop(); } catch (_) {}
+  try { getTankStockService().stop(); } catch (_) {}
   await modbusPollingService.stop();
   process.exit(0);
 });
@@ -461,6 +472,7 @@ process.on('SIGTERM', async () => {
   try { getFlowWatchService().stop(); } catch (_) {}
   try { getDoseController().stop(); } catch (_) {}
   try { getIrrigationRunsService().stop(); } catch (_) {}
+  try { getTankStockService().stop(); } catch (_) {}
   await modbusPollingService.stop();
   process.exit(0);
 });

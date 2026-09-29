@@ -421,7 +421,9 @@
       "zone": "المنطقة <v>{{dosed}}</v> / <m>{{target}}</m> L",
       "run": "التشغيل <v>{{dosed}}</v> / <m>{{target}}</m> L",
       "targetRatio": "الهدف 1:{{ratio}}",
-      "cantReach": "لا يمكن بلوغ الهدف"
+      "cantReach": "لا يمكن بلوغ الهدف",
+      "notDrawing": "لا يسحب منذ {{duration}}",
+      "retrying": "محاولة ثانية: أُعيد فتح الصمام"
     },
     "lastRun": {
       "title": "آخر تشغيل",
@@ -429,7 +431,9 @@
       "cantReach": "لا يمكن بلوغ الهدف: {{tanks}}",
       "phFloorTripped": "انطلق حد pH الأدنى",
       "ph": "pH <v>{{min}}–{{max}}</v> (المتوسط <m>{{avg}}</m>، النهاية <m>{{last}}</m>)",
-      "acid": "الحمض <v>{{seconds}}</v> ث (~<m>{{litres}}</m> L تقديرًا)"
+      "acid": "الحمض <v>{{seconds}}</v> ث (~<m>{{litres}}</m> L تقديرًا)",
+      "deliveredZero": "{{tanks}} قدّم 0 L",
+      "redrawOk": "{{tanks}} سحب بعد إعادة فتح الصمام"
     },
     "unavailable": "حالة وحدة التحكم في الحقن غير متاحة.",
     "switchedOff": "الحقن بالحلقة المغلقة مطفأ — تعمل البرامج وفق جدولها الثابت.",

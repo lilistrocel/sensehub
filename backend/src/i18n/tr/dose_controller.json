@@ -10,7 +10,13 @@
     "acid_cap_cycle": "Doz kontrolcüsü: asit sınırına ulaşıldı (döngü başına {cap} sn), besleme pH değeri {ph} hâlâ {setpoint} üzerinde — bu döngüde artık pH Düşürücü verilmeyecek.",
     "acid_cap_day": "Doz kontrolcüsü: asit sınırına ulaşıldı (günlük {cap} sn), besleme pH değeri {ph} hâlâ {setpoint} üzerinde — bugün artık pH Düşürücü verilmeyecek.",
     "valve_mismatch": "Doz kontrolcüsü: {valve} (kanal {channel}) KAPALI komutundayken AÇIK okunuyor — KAPAT yeniden gönderildi.",
-    "underdose": "Doz kontrolcüsü: {tank} 1:{ratio} oranına ulaşamadı — vana çalışmanın %{open_pct} kadarında açıktı, elde edilen 1:{achieved} ({water} L su için {dosed} L). Venturi emişi oranın gerektirdiğinin altında."
+    "underdose": "Doz kontrolcüsü: {tank} 1:{ratio} oranına ulaşamadı — vana çalışmanın %{open_pct} kadarında açıktı, elde edilen 1:{achieved} ({water} L su için {dosed} L). Venturi emişi oranın gerektirdiğinin altında.",
+    "not_drawing": "{tank} emiş yapmıyor: vanası su akarken {secs} sn açık kaldı ancak tanktan hiç sıvı çıkmadı (son emiş: {last}). Tank seviyesini, emiş filtresini/dip klapesini ve venturiyi kontrol edin.",
+    "not_drawing_resolved": "{tank} {secs} sn sonra yeniden emiş yapıyor.",
+    "none_drawing": "Hiçbir tank emiş yapmıyor: {tanks} su akarken {secs} sn açık, ancak hiçbir tanktan sıvı çıkmadı. Dozlama izleyicisini ve venturi manifoldunu kontrol edin.",
+    "none_drawing_resolved": "Tanklar yeniden emiş yapıyor (dozlama izleyicisi bir tanktan sıvı çıktığını görüyor).",
+    "run_zero": "{tank} bu çalışmada 0 L verdi: vana {water} L su ile {open_s} sn açık kaldı. Bu tankın besinleri bitkilere ulaşmadı — tank seviyesini, emiş filtresini/dip klapesini ve venturiyi kontrol edin.",
+    "last_draw_unknown": "kayıt yok"
   },
   "sensor_kind": {
     "frozen": "donmuş",
@@ -69,7 +75,8 @@
     "filling_zone_target": "bölge hedefi dolduruluyor",
     "zone_target_grew": "bölge hedefi arttı",
     "zone_start": "bölge başlangıcı",
-    "pump_start": "pompa başlangıcı"
+    "pump_start": "pompa başlangıcı",
+    "redraw_retry": "ikinci deneme (vana yeniden açıldı)"
   },
   "gate": {
     "no_ph_tank": "dozlama panosuna bağlı pH Düşürücü tankı yok",
@@ -88,5 +95,10 @@
     "cap_cycle": "asit sınırına ulaşıldı (bu döngüde {cap} sn)",
     "cap_day": "günlük asit sınırına ulaşıldı ({cap} sn)",
     "below_floor": "pH alt sınırın altında"
+  },
+  "telegram": {
+    "not_drawing": "{tank} emiş yapmıyor",
+    "none_drawing": "Hiçbir dozlama tankı emiş yapmıyor",
+    "run_zero": "{tank} 0 L verdi"
   }
 }

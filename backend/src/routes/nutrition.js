@@ -145,6 +145,7 @@ function createNutritionRouter(deps = {}) {
       const lib = db().prepare('SELECT name, composition FROM fertigation_ingredients WHERE name = ?');
       res.json(FC.buildFeedReport(db(), {
         profile: p, period, tz: getSystemTimezone(db()),
+        nowMs: deps.now ? deps.now() : Date.now(),
         protocolData: p.protocol ? p.protocol.data : null,
         library: (name) => lib.get(name) || null,
       }));

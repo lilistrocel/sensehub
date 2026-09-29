@@ -28,6 +28,8 @@ import {
  *   GET /api/irrigation/runs/last; older backends: /api/dose-controller/runs/last
  *   (then status.last_run). Today's runs: GET /api/irrigation/runs?date=today.
  *   Both refresh on the `irrigation_runs_updated` WebSocket event.
+ * - Tank stock (level counted down from the measured litres, days left, low-stock
+ *   state): GET /api/fertigation/tanks/stock with the report and after a cycle.
  */
 export function useIrrigationLive({ token, subscribe }) {
   const [monitor, setMonitor] = useState(null);
@@ -37,6 +39,7 @@ export function useIrrigationLive({ token, subscribe }) {
   const [report, setReport] = useState(null);
   const [lastRun, setLastRun] = useState(undefined); // undefined = not loaded, null = none
   const [todayRuns, setTodayRuns] = useState(undefined); // { total, water_l, runs } | null (old backend)
+  const [stock, setStock] = useState(undefined); // { tanks: [...] } | null (old backend / unavailable)
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [firstSeenOnMs, setFirstSeenOnMs] = useState({});
@@ -112,6 +115,18 @@ export function useIrrigationLive({ token, subscribe }) {
     }
   }, [token, auth]);
 
+  const fetchStock = useCallback(async () => {
+    if (!token) return;
+    try {
+      const r = await fetch(`${API_BASE}/fertigation/tanks/stock`, auth());
+      if (r.status === 404) { setStock(null); return; }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setStock(await r.json());
+    } catch (e) {
+      setStock((prev) => (prev === undefined ? null : prev));
+    }
+  }, [token, auth]);
+
   const fetchConfig = useCallback(async () => {
     if (!token) return;
     try {
@@ -171,7 +186,7 @@ export function useIrrigationLive({ token, subscribe }) {
   // refreshed once on resume).
   useEffect(() => { fetchMonitors(); }, [fetchMonitors]);
   usePoll(fetchConfig, IRRIGATION.configPollMs);
-  const fetchReports = useCallback(() => { fetchReport(); fetchLastRun(); fetchTodayRuns(); }, [fetchReport, fetchLastRun, fetchTodayRuns]);
+  const fetchReports = useCallback(() => { fetchReport(); fetchLastRun(); fetchTodayRuns(); fetchStock(); }, [fetchReport, fetchLastRun, fetchTodayRuns, fetchStock]);
   usePoll(fetchReports, IRRIGATION.reportPollMs);
 
   // Runs regrouped by the backend (new cycle report / run closed): refresh both.
@@ -180,10 +195,10 @@ export function useIrrigationLive({ token, subscribe }) {
     let t = null;
     const off = subscribe('irrigation_runs_updated', () => {
       if (t) return;
-      t = setTimeout(() => { t = null; fetchLastRun(); fetchTodayRuns(); }, 1000);
+      t = setTimeout(() => { t = null; fetchLastRun(); fetchTodayRuns(); fetchStock(); }, 1000);
     });
     return () => { if (t) clearTimeout(t); if (typeof off === 'function') off(); };
-  }, [subscribe, fetchLastRun, fetchTodayRuns]);
+  }, [subscribe, fetchLastRun, fetchTodayRuns, fetchStock]);
 
   // Poll when the WebSocket is quiet; always refresh last_cycle every 30 s.
   useEffect(() => {
@@ -249,7 +264,7 @@ export function useIrrigationLive({ token, subscribe }) {
     });
   }, []);
 
-  return { monitor, skewMs, flowBuffer, channelConfig, report, lastRun, todayRuns, error, loading, firstSeenOnMs, noteZoneStates, refresh: fetchMonitors };
+  return { monitor, skewMs, flowBuffer, channelConfig, report, lastRun, todayRuns, stock, error, loading, firstSeenOnMs, noteZoneStates, refresh: fetchMonitors };
 }
 
 export default useIrrigationLive;

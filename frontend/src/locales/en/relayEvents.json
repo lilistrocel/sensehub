@@ -28,6 +28,7 @@
     "flow_watch_retry": "flow watch retry",
     "flow_watch_retry_auto_off": "flow watch retry auto-off",
     "dose_controller": "dose controller",
+    "dose_controller_retry": "dose controller second try",
     "dose_program": "dose program",
     "dose_program_end": "dose program end",
     "dose_cycle": "dose cycle",

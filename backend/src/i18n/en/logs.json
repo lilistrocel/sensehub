@@ -7,6 +7,7 @@
     "interlock": "Interlock",
     "dose_controller": "Dose controller",
     "ph_controller": "pH controller",
+    "tank_stock": "Tank stock",
     "dose_program": "Dose program",
     "flow_watch": "Flow watch",
     "watchdog": "Watchdog",

@@ -4,6 +4,7 @@ import { Card, Label, StatusPill } from '../../ui';
 import { useFormat } from '../../i18n/useFormat';
 import { usePoll } from '../../hooks/usePoll';
 import { SourceBadge, Num, Dash, TableWrap } from './parts';
+import { TankStockCompact } from '../irrigation/TankStock';
 
 /**
  * The fertigation system as SenseHub already knows it — derived live from its
@@ -77,6 +78,7 @@ export default function SystemPanel({ api, profile }) {
               <th className="py-1 pe-3 text-start font-semibold">{t('system.col.relay')}</th>
               <th className="py-1 pe-3 text-end font-semibold">{t('system.col.ratio')}</th>
               <th className="py-1 pe-3 text-end font-semibold">{t('system.col.draw')}</th>
+              <th className="py-1 pe-3 text-start font-semibold">{t('system.col.stock')}</th>
               <th className="py-1 text-start font-semibold">{t('system.col.refill')}</th>
             </tr>
           </thead>
@@ -95,6 +97,9 @@ export default function SystemPanel({ api, profile }) {
                 <td className="py-1.5 pe-3 text-end whitespace-nowrap">
                   <Num value={tk.measured_draw_lpm} decimals={2} fmt={fmt} />
                   <span className="text-xs text-muted"> / <Num value={tk.configured_draw_lpm} decimals={2} fmt={fmt} /> L/min</span>
+                </td>
+                <td className="py-1.5 pe-3 whitespace-nowrap" data-testid="nutrition-tank-stock">
+                  {tk.stock ? <TankStockCompact stock={tk.stock} tankLabel={tk.letter} /> : <Dash />}
                 </td>
                 <td className="py-1.5 whitespace-nowrap font-mono text-xs">{tk.last_refill_at ? fmt.date(tk.last_refill_at) : <Dash />}</td>
               </tr>

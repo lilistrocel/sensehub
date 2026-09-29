@@ -6,6 +6,7 @@
     "interlock": "Kilitleme",
     "dose_controller": "Doz kontrolcüsü",
     "ph_controller": "pH kontrolcüsü",
+    "tank_stock": "Tank stoku",
     "dose_program": "Dozlama programı",
     "flow_watch": "Debi izleme",
     "watchdog": "Bekçi",

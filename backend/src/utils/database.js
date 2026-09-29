@@ -977,6 +977,13 @@ const initSchema = () => {
     console.error('irrigation runs schema migration failed:', err.message);
   }
 
+  // Tank stock countdown ledger (monitor-measured litres per cycle, refills, acid estimate).
+  try {
+    require('./tankStockSchema').ensureTankStockSchema(db);
+  } catch (err) {
+    console.error('tank stock schema migration failed:', err.message);
+  }
+
   // Action audit trail (audit_log) + time indexes for the unified Logs API.
   try {
     require('./auditLogSchema').ensureAuditLogSchema(db);

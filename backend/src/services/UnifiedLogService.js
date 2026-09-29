@@ -303,6 +303,7 @@ const ACTOR_LABEL_SPECS = {
   Interlock: M('logs.actor.interlock'),
   'Dose controller': M('logs.actor.dose_controller'),
   'pH controller': M('logs.actor.ph_controller'),
+  'Tank stock': M('logs.actor.tank_stock'),
   'Dose program': M('logs.actor.dose_program'),
   'Flow watch': M('logs.actor.flow_watch'),
   Watchdog: M('logs.actor.watchdog'),
@@ -402,6 +403,7 @@ const RELAY_ACTORS = {
   watchdog_force_off: { label: 'Relay safety watchdog', action: 'relay.watchdog_force_off', severity: 'warning' },
   interlock: { label: 'Interlock', action: 'relay.interlock', severity: 'warning' },
   dose_controller: { label: 'Dose controller', action: 'relay.dose_controller', domain: 'dosing' },
+  dose_controller_retry: { label: 'Dose controller', action: 'relay.dose_controller', domain: 'dosing', severity: 'warning' },
   ph_controller: { label: 'pH controller', action: 'relay.ph_controller', domain: 'dosing' },
   dose_program: { label: 'Dose program', action: 'relay.dose_program', domain: 'dosing' },
   dose_program_end: { label: 'Dose program', action: 'relay.dose_program_end', domain: 'dosing' },
@@ -540,12 +542,12 @@ function automationLogItem(r, refs) {
 }
 
 const ALERT_SOURCE_LABEL = {
-  flow_watch: 'Flow watch', dose_controller: 'Dose controller', watchdog: 'Watchdog', relay_safety: 'Relay safety watchdog',
+  flow_watch: 'Flow watch', dose_controller: 'Dose controller', tank_stock: 'Tank stock', watchdog: 'Watchdog', relay_safety: 'Relay safety watchdog',
   interlock: 'Interlock', camera: 'Camera monitor', agronomist: 'Agronomist', automation: 'Automation',
 };
 function alertDomain(r, refs) {
   if (r.source === 'flow_watch') return 'irrigation';
-  if (r.source === 'dose_controller') return 'dosing';
+  if (r.source === 'dose_controller' || r.source === 'tank_stock') return 'dosing';
   if (r.source === 'camera') return 'cameras';
   if (r.source === 'agronomist') return 'ai';
   if (r.automation_id != null) return refs.autoDomain(r.automation_id);

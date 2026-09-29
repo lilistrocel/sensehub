@@ -9,6 +9,8 @@ import LastCycleZones from '../LastCycleZones';
 import RunList from '../irrigation/RunList';
 import { RunTypeTag } from '../irrigation/RunType';
 import StopIrrigationButton from '../irrigation/StopIrrigationButton';
+import { TankStockCompact } from '../irrigation/TankStock';
+import { stockById } from '../irrigation/tankStockUtil';
 import { IRRIGATION, deriveIrrigationView } from './irrigationLive';
 
 // deriveIrrigationView hint keys -> irrigation:hint.<camelCase>
@@ -196,6 +198,7 @@ export default function IrrigationCard({ token, subscribe, board, formatClock })
   const runsToday = live.todayRuns && Array.isArray(live.todayRuns.runs) ? live.todayRuns : null;
   const manualToday = runsToday ? runsToday.runs.filter((r) => r.type !== 'automated').length : 0;
   const lastRunIsRun = !!(live.lastRun && live.lastRun.type);
+  const stocks = useMemo(() => stockById(live.stock), [live.stock]);
   // emphasise Stop irrigation while water runs or any irrigation / dosing relay is ON
   const irrigationActive = view.irrigating || view.openZones.length > 0
     || view.pumps.some((p) => p.state === 'on') || view.tanks.some((tk) => tk.relay === 'on');
@@ -337,6 +340,9 @@ export default function IrrigationCard({ token, subscribe, board, formatClock })
                     <span className="inline-flex w-6 h-6 shrink-0 items-center justify-center rounded border border-line font-mono text-xs font-semibold text-ink">{tk.letter}</span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm text-ink" dir="auto" title={tk.name}>{tk.desc}</span>
+                      {live.stock && stocks[tk.tankId] && (
+                        <TankStockCompact stock={stocks[tk.tankId]} tankLabel={tk.letter} className="mt-0.5 max-w-full" />
+                      )}
                       {tk.alarm && (
                         <span className="flex items-center gap-1 text-xs font-semibold text-alarm-700 dark:text-alarm-300">
                           <Glyph level="alarm" /> {t('dosing.noFlow')}
