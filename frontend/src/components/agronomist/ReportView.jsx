@@ -2,7 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormat } from '../../i18n/useFormat';
 import { normalizeLanguage } from '../../i18n/languages';
-import { Button, Card, Kpi, Label, RAIL_CLASSES, StatusPill } from '../../ui';
+import { Button, Card, Kpi, Label, RAIL_CLASSES, StatusPill, ProvenanceBadge } from '../../ui';
 import { FrameStrip } from './CaptureStrip';
 import ClarificationsPanel from './ClarificationsPanel';
 import ReportActions, { RecommendationCard, groupRecommendations } from './ReportActions';
@@ -241,6 +241,7 @@ function ReportHeader({ report, reports, excluded, onSelect, pending, translatio
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {!failed && <ProvenanceBadge kind="ai" data-testid="report-ai-badge" />}
         {failed && (
           <StatusPill state="alarm" filled text={t('header.failedPill', { reason: errorClassLabel(t, report.error_class) })} />
         )}

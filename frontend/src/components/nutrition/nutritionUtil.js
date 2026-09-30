@@ -101,3 +101,50 @@ export function ecCorrespondenceState(corr, ecTarget, tol = 0.05) {
   if (ecTarget === null || ecTarget === undefined || ecTarget === '') return 'unknown';
   return Math.abs(Number(corr.total_ec_ms_cm) - Number(ecTarget)) <= tol + 1e-9 ? 'ok' : 'caution';
 }
+
+// ---------------------------------------------------------------------------
+// Provenance (operator request 2026-09-30): which shared provenance kind
+// (src/ui/Provenance.jsx) a value on the Crop & Nutrition page gets.
+// ---------------------------------------------------------------------------
+
+const sameNum = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && Math.abs(Number(a) - Number(b)) < 1e-9;
+
+/**
+ * A stage-target row ([min, target, max] with nulls) against the protocol's values
+ * for the same row. Every set value equal to the protocol → 'protocol'; any value
+ * that differs, or a row the protocol has no value for → 'operator' (hand-entered).
+ * `edited` = indexes (0 min, 1 target, 2 max) that differ from the protocol.
+ * null when the row has no value at all.
+ */
+export function stageRowProvenance(values, protoValues) {
+  const vals = values || [];
+  const set = [0, 1, 2].filter(i => vals[i] !== null && vals[i] !== undefined && vals[i] !== '');
+  if (!set.length) return null;
+  const proto = protoValues || [];
+  const edited = set.filter(i => !sameNum(vals[i], proto[i]));
+  return { kind: edited.length ? 'operator' : 'protocol', edited };
+}
+
+/**
+ * An element-target row (crop_element_targets with basis_* + manual, 2026-09-29):
+ * hand-edited → 'operator'; protocol prefill (protocol recipe × SenseHub design
+ * dilution + bands) → calculated from protocol; scale-to-EC → calculated from
+ * protocol, scaled. null for no row.
+ */
+export function elementTargetProvenance(row) {
+  if (!row) return null;
+  if (row.manual) return { kind: 'operator', from: null, basis: 'manual' };
+  if (row.basis_source === 'scaled') return { kind: 'calculated', from: 'protocol', basis: 'scaled', ec: row.basis_ec ?? null, factor: row.basis_factor ?? null };
+  if (row.basis_source === 'protocol') return { kind: 'calculated', from: 'protocol', basis: 'protocol' };
+  return { kind: 'operator', from: null, basis: 'manual' };
+}
+
+/** Plant count source (profile.plants.source) → provenance kind. */
+export const plantsProvenance = (source) => ({ entered: 'operator', density_area: 'calculated', estimated_from_flow: 'calculated' }[source] || null);
+
+/** True when at least one verdict / warning / recommendation carries a basis (advices from 2026-09-30 on). */
+export function adviceHasBasis(a) {
+  if (!a) return false;
+  return [...(a.per_element || []), ...(a.warnings || []), ...(a.recommendations || [])]
+    .some(x => x && Array.isArray(x.basis) && x.basis.length > 0);
+}

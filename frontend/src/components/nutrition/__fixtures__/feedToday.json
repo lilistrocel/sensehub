@@ -1,0 +1,829 @@
+{
+ "period": "today",
+ "period_dates": [
+  "2026-09-30"
+ ],
+ "computed_at": "2026-09-30T05:42:36.971Z",
+ "basis": "measured",
+ "measured_source": "irrigation_runs",
+ "runs_count": 2,
+ "days_with_runs": 1,
+ "last_run_at": "2026-09-30T05:30:11.000Z",
+ "water_l": 3655.7,
+ "tanks": [
+  {
+   "tank_id": 1,
+   "letter": "A",
+   "name": "Tank A \u2014 Calcium nitrate",
+   "mixture_id": 14,
+   "mixture_name": "Tank A v2 (2026-09-25) \u2014 Calcium nitrate 100 kg",
+   "water_base_liters": 1000,
+   "items": [
+    {
+     "name": "Calcium Nitrate",
+     "amount": 100,
+     "unit": "kg",
+     "composition": {
+      "N": 15.5,
+      "Ca": 19
+     }
+    }
+   ],
+   "stock_mg_per_l": {
+    "N": 15500,
+    "Ca": 19000
+   },
+   "dosed_l": 18.25,
+   "achieved_ratio": 200,
+   "configured_ratio": 200,
+   "ppm": {
+    "N": 77.379,
+    "Ca": 94.852,
+    "NH4_N": 5.491,
+    "NO3_N": 71.888
+   }
+  },
+  {
+   "tank_id": 2,
+   "letter": "B",
+   "name": "Tank B \u2014 Mg + MKP + K2SO4",
+   "mixture_id": 15,
+   "mixture_name": "Tank B v2 (2026-09-25) \u2014 MgSO4 51 + MKP 20 + K2SO4 15 kg",
+   "water_base_liters": 1000,
+   "items": [
+    {
+     "name": "Magnesium Sulphate (Epsom, MgSO4\u00b77H2O)",
+     "amount": 51,
+     "unit": "kg",
+     "composition": {
+      "Mg": 9.8,
+      "S": 13
+     }
+    },
+    {
+     "name": "MKP",
+     "amount": 20,
+     "unit": "kg",
+     "composition": {
+      "P": 22.7,
+      "K": 28.2
+     }
+    },
+    {
+     "name": "Potassium Sulphate",
+     "amount": 15,
+     "unit": "kg",
+     "composition": {
+      "K": 41.5,
+      "S": 18
+     }
+    }
+   ],
+   "stock_mg_per_l": {
+    "Mg": 4998,
+    "S": 9330,
+    "P": 4540,
+    "K": 11865
+   },
+   "dosed_l": 17.5,
+   "achieved_ratio": 209,
+   "configured_ratio": 200,
+   "ppm": {
+    "Mg": 23.926,
+    "S": 44.663,
+    "P": 21.733,
+    "K": 56.798,
+    "NH4_N": 0,
+    "NO3_N": 0
+   }
+  },
+  {
+   "tank_id": 3,
+   "letter": "C",
+   "name": "Tank C \u2014 Potassium nitrate",
+   "mixture_id": 16,
+   "mixture_name": "Tank C v2 (2026-09-25) \u2014 Potassium nitrate 38 kg",
+   "water_base_liters": 1000,
+   "items": [
+    {
+     "name": "Potassium Nitrate (13-0-46)",
+     "amount": 38,
+     "unit": "kg",
+     "composition": {
+      "N": 13,
+      "K": 38.2
+     }
+    }
+   ],
+   "stock_mg_per_l": {
+    "N": 4940,
+    "K": 14516
+   },
+   "dosed_l": 18.25,
+   "achieved_ratio": 200,
+   "configured_ratio": 200,
+   "ppm": {
+    "N": 24.661,
+    "K": 72.467,
+    "NH4_N": 0,
+    "NO3_N": 24.661
+   }
+  },
+  {
+   "tank_id": 4,
+   "letter": "D",
+   "name": "Tank D \u2014 Fe EDDHA + Fetrilon Combi 2",
+   "mixture_id": 17,
+   "mixture_name": "Tank D v2 (2026-09-25) \u2014 Fe EDDHA 4 kg + Fetrilon Combi 2 2 kg",
+   "water_base_liters": 1000,
+   "items": [
+    {
+     "name": "Iron EDDHA 6%",
+     "amount": 4,
+     "unit": "kg",
+     "composition": {
+      "Fe": 6
+     }
+    },
+    {
+     "name": "Fetrilon Combi 2 (Compo Expert)",
+     "amount": 2,
+     "unit": "kg",
+     "composition": {
+      "Fe": 4,
+      "Mn": 3,
+      "Zn": 4,
+      "B": 1.5,
+      "Cu": 0.6,
+      "Mo": 0.05,
+      "N": 3.5
+     }
+    }
+   ],
+   "stock_mg_per_l": {
+    "Fe": 320,
+    "Mn": 60,
+    "Zn": 80,
+    "B": 30,
+    "Cu": 12,
+    "Mo": 1,
+    "N": 70
+   },
+   "dosed_l": 18.25,
+   "achieved_ratio": 200,
+   "configured_ratio": 200,
+   "ppm": {
+    "Fe": 1.598,
+    "Mn": 0.3,
+    "Zn": 0.399,
+    "B": 0.15,
+    "Cu": 0.06,
+    "Mo": 0.005,
+    "N": 0.349,
+    "NH4_N": 0.349,
+    "NO3_N": 0
+   }
+  }
+ ],
+ "ppm": {
+  "N": 102.39,
+  "Ca": 94.852,
+  "NH4_N": 5.841,
+  "NO3_N": 96.549,
+  "Mg": 23.926,
+  "S": 44.663,
+  "P": 21.733,
+  "K": 129.265,
+  "Fe": 1.598,
+  "Mn": 0.3,
+  "Zn": 0.399,
+  "B": 0.15,
+  "Cu": 0.06,
+  "Mo": 0.005
+ },
+ "configured_ratio_ppm": {
+  "N": 102.55,
+  "Ca": 95,
+  "NH4_N": 5.85,
+  "NO3_N": 96.7,
+  "Mg": 24.99,
+  "S": 46.65,
+  "P": 22.7,
+  "K": 131.905,
+  "Fe": 1.6,
+  "Mn": 0.3,
+  "Zn": 0.4,
+  "B": 0.15,
+  "Cu": 0.06,
+  "Mo": 0.005
+ },
+ "ratios": {
+  "N_K": 0.79,
+  "K_Ca": 1.36,
+  "K_Mg": 5.4,
+  "Ca_Mg": 3.96,
+  "K_N": 1.26,
+  "nh4_share_pct": 5.7,
+  "cation_meq_pct": {
+   "K": 33,
+   "Ca": 47.3,
+   "Mg": 19.7
+  }
+ },
+ "ec": {
+  "calc": {
+   "method": "sum of cations (meq/L) / 10, source water excluded",
+   "cations_meq_l": 10.43,
+   "anions_meq_l": 10.38,
+   "cations": {
+    "Ca": 4.73,
+    "Mg": 1.97,
+    "K": 3.31,
+    "NH4": 0.42,
+    "Na": 0
+   },
+   "anions": {
+    "NO3": 6.89,
+    "H2PO4": 0.7,
+    "SO4": 2.79,
+    "Cl": 0
+   },
+   "balance_pct": 0.2,
+   "ec_ms_cm": 1.04
+  },
+  "calc_plus_source_water_ms_cm": null,
+  "source_water_ec_ms_cm": null,
+  "measured_ms_cm": 1.72,
+  "measured_minus_calc_ms_cm": 0.68
+ },
+ "ph_measured": 6.33,
+ "acid_s": 120,
+ "acid_est_l": 3.4,
+ "acid_note": "acid volume is an estimate (acid valve not metered)",
+ "plants": {
+  "total": 17568,
+  "per_section": 4392,
+  "sections": 4,
+  "source": "estimated_from_flow",
+  "basis": {
+   "zone_flow_lph": 8784,
+   "dripper_flow_lph": 2,
+   "drippers_per_plant": 1
+  }
+ },
+ "ml_per_plant_day": 208,
+ "ml_per_plant_run": null,
+ "stage": {
+  "effective": "vegetative",
+  "days_after_transplant": 23
+ },
+ "targets": {
+  "stage": {
+   "id": 1,
+   "profile_id": 1,
+   "stage": "vegetative",
+   "ec_min": 1.8,
+   "ec_target": 1.9,
+   "ec_max": 2,
+   "ph_min": 5.8,
+   "ph_max": 6.2,
+   "drain_pct_min": 20,
+   "drain_pct_target": 25,
+   "drain_pct_max": 30,
+   "drain_ec_delta_max": 0.6,
+   "drain_ph_min": 5.8,
+   "drain_ph_max": 6.5,
+   "ml_min": null,
+   "ml_target": 930,
+   "ml_max": null,
+   "source": "operator",
+   "notes": null,
+   "updated_at": "2026-09-29 08:13:39"
+  },
+  "elements": [
+   {
+    "id": 1795,
+    "growth_stage": "vegetative",
+    "element": "B",
+    "hard_min": 0.275,
+    "soft_target": 0.393,
+    "hard_max": 0.59,
+    "priority": 4,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band -30/+50 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 0.275,
+    "basis_soft_target": 0.393,
+    "basis_hard_max": 0.59,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1789,
+    "growth_stage": "vegetative",
+    "element": "Ca",
+    "hard_min": 141.2,
+    "soft_target": 166.1,
+    "hard_max": 191,
+    "priority": 2,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band \u00b115 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 141.2,
+    "basis_soft_target": 166.1,
+    "basis_hard_max": 191,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1796,
+    "growth_stage": "vegetative",
+    "element": "Cu",
+    "hard_min": 0.11,
+    "soft_target": 0.157,
+    "hard_max": 0.236,
+    "priority": 5,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band -30/+50 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 0.11,
+    "basis_soft_target": 0.157,
+    "basis_hard_max": 0.236,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1792,
+    "growth_stage": "vegetative",
+    "element": "Fe",
+    "hard_min": 1.468,
+    "soft_target": 2.098,
+    "hard_max": 3.147,
+    "priority": 3,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band -30/+50 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 1.468,
+    "basis_soft_target": 2.098,
+    "basis_hard_max": 3.147,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1788,
+    "growth_stage": "vegetative",
+    "element": "K",
+    "hard_min": 237.3,
+    "soft_target": 279.2,
+    "hard_max": 321.1,
+    "priority": 2,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band \u00b115 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 237.3,
+    "basis_soft_target": 279.2,
+    "basis_hard_max": 321.1,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1790,
+    "growth_stage": "vegetative",
+    "element": "Mg",
+    "hard_min": 29.1,
+    "soft_target": 34.3,
+    "hard_max": 39.4,
+    "priority": 3,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band \u00b115 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 29.1,
+    "basis_soft_target": 34.3,
+    "basis_hard_max": 39.4,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1793,
+    "growth_stage": "vegetative",
+    "element": "Mn",
+    "hard_min": 0.551,
+    "soft_target": 0.787,
+    "hard_max": 1.18,
+    "priority": 4,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band -30/+50 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 0.551,
+    "basis_soft_target": 0.787,
+    "basis_hard_max": 1.18,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1797,
+    "growth_stage": "vegetative",
+    "element": "Mo",
+    "hard_min": 0.009,
+    "soft_target": 0.013,
+    "hard_max": 0.02,
+    "priority": 5,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band -30/+50 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 0.009,
+    "basis_soft_target": 0.013,
+    "basis_hard_max": 0.02,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1786,
+    "growth_stage": "vegetative",
+    "element": "N",
+    "hard_min": 172,
+    "soft_target": 202.3,
+    "hard_max": 232.6,
+    "priority": 2,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band \u00b115 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 172,
+    "basis_soft_target": 202.3,
+    "basis_hard_max": 232.6,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1787,
+    "growth_stage": "vegetative",
+    "element": "P",
+    "hard_min": 33.7,
+    "soft_target": 39.7,
+    "hard_max": 45.6,
+    "priority": 3,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band \u00b115 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 33.7,
+    "basis_soft_target": 39.7,
+    "basis_hard_max": 45.6,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1791,
+    "growth_stage": "vegetative",
+    "element": "S",
+    "hard_min": 52,
+    "soft_target": 61.2,
+    "hard_max": 70.4,
+    "priority": 4,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band \u00b115 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 52,
+    "basis_soft_target": 61.2,
+    "basis_hard_max": 70.4,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   },
+   {
+    "id": 1794,
+    "growth_stage": "vegetative",
+    "element": "Zn",
+    "hard_min": 0.734,
+    "soft_target": 1.049,
+    "hard_max": 1.573,
+    "priority": 4,
+    "notes": "Scaled: human agronomist protocol vegetative recipe \u00d71.3111 (1:150 \u2192 \u22481:114) to input EC 1.9 (fertilizers 1.9, source water not entered (0)); band -30/+50 %",
+    "updated_at": "2026-09-30 05:34:20",
+    "basis_hard_min": 0.734,
+    "basis_soft_target": 1.049,
+    "basis_hard_max": 1.573,
+    "basis_source": "scaled",
+    "basis_ec": 1.9,
+    "basis_factor": 1.3111,
+    "manual": false
+   }
+  ]
+ },
+ "comparisons": {
+  "elements": [
+   {
+    "element": "N",
+    "value": 102.39,
+    "min": 172,
+    "target": 202.3,
+    "max": 232.6,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -49.4,
+    "band_assumed": false
+   },
+   {
+    "element": "P",
+    "value": 21.733,
+    "min": 33.7,
+    "target": 39.7,
+    "max": 45.6,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -45.3,
+    "band_assumed": false
+   },
+   {
+    "element": "K",
+    "value": 129.265,
+    "min": 237.3,
+    "target": 279.2,
+    "max": 321.1,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -53.7,
+    "band_assumed": false
+   },
+   {
+    "element": "Ca",
+    "value": 94.852,
+    "min": 141.2,
+    "target": 166.1,
+    "max": 191,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -42.9,
+    "band_assumed": false
+   },
+   {
+    "element": "Mg",
+    "value": 23.926,
+    "min": 29.1,
+    "target": 34.3,
+    "max": 39.4,
+    "status": "low",
+    "severity": "caution",
+    "pct": -30.2,
+    "band_assumed": false
+   },
+   {
+    "element": "S",
+    "value": 44.663,
+    "min": 52,
+    "target": 61.2,
+    "max": 70.4,
+    "status": "low",
+    "severity": "caution",
+    "pct": -27,
+    "band_assumed": false
+   },
+   {
+    "element": "Fe",
+    "value": 1.598,
+    "min": 1.468,
+    "target": 2.098,
+    "max": 3.147,
+    "status": "ok",
+    "severity": "ok",
+    "pct": -23.8,
+    "band_assumed": false
+   },
+   {
+    "element": "Mn",
+    "value": 0.3,
+    "min": 0.551,
+    "target": 0.787,
+    "max": 1.18,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -61.9,
+    "band_assumed": false
+   },
+   {
+    "element": "Zn",
+    "value": 0.399,
+    "min": 0.734,
+    "target": 1.049,
+    "max": 1.573,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -62,
+    "band_assumed": false
+   },
+   {
+    "element": "B",
+    "value": 0.15,
+    "min": 0.275,
+    "target": 0.393,
+    "max": 0.59,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -61.8,
+    "band_assumed": false
+   },
+   {
+    "element": "Cu",
+    "value": 0.06,
+    "min": 0.11,
+    "target": 0.157,
+    "max": 0.236,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -61.8,
+    "band_assumed": false
+   },
+   {
+    "element": "Mo",
+    "value": 0.005,
+    "min": 0.009,
+    "target": 0.013,
+    "max": 0.02,
+    "status": "low",
+    "severity": "alarm",
+    "pct": -61.5,
+    "band_assumed": false
+   }
+  ],
+  "ec": {
+   "status": "low",
+   "severity": "caution",
+   "pct": -9.7,
+   "band_assumed": false
+  },
+  "ph": {
+   "status": "high",
+   "severity": "caution",
+   "pct": 5.4,
+   "band_assumed": false
+  },
+  "ml_per_plant_day": {
+   "status": "unknown",
+   "severity": "unknown",
+   "reason": "partial_day",
+   "pct": null
+  },
+  "drain": {
+   "status": "unknown",
+   "severity": "unknown",
+   "reason": "not_measured",
+   "pct": null
+  }
+ },
+ "protocol": {
+  "recipe": "vegetative",
+  "design_dilution": 150,
+  "ppm_at_design": {
+   "N": 154.3,
+   "Ca": 126.667,
+   "NH4_N": 8.033,
+   "NO3_N": 146.267,
+   "Mg": 26.133,
+   "S": 46.667,
+   "K": 212.973,
+   "P": 30.267,
+   "Fe": 1.6,
+   "Mn": 0.6,
+   "Zn": 0.8,
+   "B": 0.3,
+   "Cu": 0.12,
+   "Mo": 0.01
+  },
+  "ec_at_design": 1.45,
+  "ppm_at_configured_ratio": {
+   "N": 115.725,
+   "Ca": 95,
+   "NH4_N": 6.025,
+   "NO3_N": 109.7,
+   "Mg": 19.6,
+   "S": 35,
+   "K": 159.73,
+   "P": 22.7,
+   "Fe": 1.2,
+   "Mn": 0.45,
+   "Zn": 0.6,
+   "B": 0.225,
+   "Cu": 0.09,
+   "Mo": 0.008
+  },
+  "ec_at_configured_ratio": 1.09,
+  "tanks_vs_protocol": [
+   {
+    "letter": "A",
+    "tank_id": 1,
+    "tank_name": "Tank A \u2014 Calcium nitrate",
+    "mixture_name": "Tank A v2 (2026-09-25) \u2014 Calcium nitrate 100 kg",
+    "per_liters": 1000,
+    "lines": [
+     {
+      "ingredient": "Calcium nitrate",
+      "library_name": "Calcium Nitrate",
+      "protocol_kg": 100,
+      "current_kg": 100,
+      "current_unit": "kg",
+      "diff_kg": 0
+     }
+    ]
+   },
+   {
+    "letter": "B",
+    "tank_id": 2,
+    "tank_name": "Tank B \u2014 Mg + MKP + K2SO4",
+    "mixture_name": "Tank B v2 (2026-09-25) \u2014 MgSO4 51 + MKP 20 + K2SO4 15 kg",
+    "per_liters": 1000,
+    "lines": [
+     {
+      "ingredient": "Magnesium sulphate (MgSO4\u00b77H2O)",
+      "library_name": "Magnesium Sulphate (Epsom, MgSO4\u00b77H2O)",
+      "protocol_kg": 40,
+      "current_kg": 51,
+      "current_unit": "kg",
+      "diff_kg": 11
+     },
+     {
+      "ingredient": "Potassium sulphate (K2SO4)",
+      "library_name": "Potassium Sulphate",
+      "protocol_kg": 10,
+      "current_kg": 15,
+      "current_unit": "kg",
+      "diff_kg": 5
+     },
+     {
+      "ingredient": "Monopotassium phosphate (MKP)",
+      "library_name": "MKP",
+      "protocol_kg": 20,
+      "current_kg": 20,
+      "current_unit": "kg",
+      "diff_kg": 0
+     }
+    ]
+   },
+   {
+    "letter": "C",
+    "tank_id": 3,
+    "tank_name": "Tank C \u2014 Potassium nitrate",
+    "mixture_name": "Tank C v2 (2026-09-25) \u2014 Potassium nitrate 38 kg",
+    "per_liters": 1000,
+    "lines": [
+     {
+      "ingredient": "Potassium nitrate (KNO3)",
+      "library_name": "Potassium Nitrate (13-0-46)",
+      "protocol_kg": 58,
+      "current_kg": 38,
+      "current_unit": "kg",
+      "diff_kg": -20
+     }
+    ]
+   },
+   {
+    "letter": "D",
+    "tank_id": 4,
+    "tank_name": "Tank D \u2014 Fe EDDHA + Fetrilon Combi 2",
+    "mixture_name": "Tank D v2 (2026-09-25) \u2014 Fe EDDHA 4 kg + Fetrilon Combi 2 2 kg",
+    "per_liters": 1000,
+    "lines": [
+     {
+      "ingredient": "Fe-EDDHA 6 %",
+      "library_name": "Iron EDDHA 6%",
+      "protocol_kg": 2,
+      "current_kg": 4,
+      "current_unit": "kg",
+      "diff_kg": 2
+     },
+     {
+      "ingredient": "Fetrilon Combi 2",
+      "library_name": "Fetrilon Combi 2 (Compo Expert)",
+      "protocol_kg": 3,
+      "current_kg": 2,
+      "current_unit": "kg",
+      "diff_kg": -1
+     }
+    ]
+   }
+  ],
+  "analysis_sources": [
+   "Calcium nitrate: library",
+   "Magnesium sulphate (MgSO4\u00b77H2O): library",
+   "Potassium sulphate (K2SO4): library",
+   "Monopotassium phosphate (MKP): library",
+   "Potassium nitrate (KNO3): library",
+   "Fe-EDDHA 6 %: library",
+   "Fetrilon Combi 2: library"
+  ]
+ },
+ "assumptions": [
+  "Calcium Nitrate: calcium nitrate 15.5 N = 14.4 NO3-N + 1.1 NH4-N (typical label)",
+  "Potassium Nitrate (13-0-46): N assumed all nitrate",
+  "Fetrilon Combi 2 (Compo Expert): label declares N as NH4-N"
+ ],
+ "runs": []
+}

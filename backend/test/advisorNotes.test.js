@@ -30,9 +30,9 @@ const NOTES = '  Lower leaves on rows 3-5 turned pale since Sunday.\r\nIs the Mg
 function output({ notesResponse } = {}) {
   return {
     analysis_markdown: 'Day 21, vegetative. The plants get about 94 ppm N, 124 ppm K and 93 ppm Ca today against a protocol vegetative feed of about 154 N, 213 K and 127 Ca at 1:150. Tank C holds 38 kg KNO3 per 1000 L where the protocol asks 58 kg, and the ratio is 1:200 instead of 1:150, so N and K are low. Mg is about 20 ppm against a target of 26 ppm, which fits pale lower leaves. Drain is not measured.',
-    per_element: F.ELEMENTS.map(el => ({ element: el, status: el === 'Mg' ? 'low' : 'ok', comment: `${el} comment.` })),
-    warnings: [{ severity: 'warning', message: 'Mg is below the stage target.' }],
-    recommendations: [{ priority: 'high', action: 'Next refill of Tank B: 60 kg MgSO4 per 1000 L.', rationale: 'Mg is low.', when: 'next refill of Tank B', vs_protocol: 'extends', vs_protocol_reason: 'The protocol has 51 kg.' }],
+    per_element: F.ELEMENTS.map(el => ({ element: el, status: el === 'Mg' ? 'low' : 'ok', comment: `${el} comment.`, basis: ['measured', 'senseHub_calculation'] })),
+    warnings: [{ severity: 'warning', message: 'Mg is below the stage target.', basis: ['operator_targets', 'senseHub_calculation'] }],
+    recommendations: [{ priority: 'high', action: 'Next refill of Tank B: 60 kg MgSO4 per 1000 L.', rationale: 'Mg is low.', when: 'next refill of Tank B', vs_protocol: 'extends', vs_protocol_reason: 'The protocol has 51 kg.', basis: ['protocol', 'operator_notes'] }],
     questions_for_operator: [],
     status: 'caution',
     summary: 'Feeding is below the protocol for day 21; Mg is low, which fits the pale lower leaves the team reported.',

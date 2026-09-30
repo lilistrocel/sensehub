@@ -37,6 +37,16 @@
     --state-lighting: #A46BC6; --state-lighting-rgb: 164 107 198;
     --state-water: #4E93B8;    --state-water-rgb: 78 147 184;
 
+    /* provenance: where a number or statement comes from (src/ui/Provenance.jsx,
+       operator request 2026-09-30). Marking only, never status or accent; each
+       kind also has its own icon and label, so colour is never the only cue.
+       Text contrast >= 5.4:1 on panel, paper and the 10 % tint (AA). */
+    --prov-protocol: #7A4A1E;   --prov-protocol-rgb: 122 74 30;    /* human: agronomist protocol */
+    --prov-operator: #1D6B5E;   --prov-operator-rgb: 29 107 94;    /* human: farm team in SenseHub */
+    --prov-measured: #2A6690;   --prov-measured-rgb: 42 102 144;   /* sensors / meters */
+    --prov-calculated: #58524D; --prov-calculated-rgb: 88 82 77;   /* SenseHub maths + assumptions */
+    --prov-ai: #8E2A7B;         --prov-ai-rgb: 142 42 123;         /* AI-generated */
+
     color-scheme: light;
   }
 
@@ -51,6 +61,12 @@
        bg-brand-600 (fixed) so white text stays readable in both themes. */
     --brand: #A380B6;   --brand-rgb: 163 128 182;
     --state-idle: #C9C2BC; --state-idle-rgb: 201 194 188;
+
+    --prov-protocol: #E2B887;   --prov-protocol-rgb: 226 184 135;
+    --prov-operator: #7FCDB9;   --prov-operator-rgb: 127 205 185;
+    --prov-measured: #93C2E0;   --prov-measured-rgb: 147 194 224;
+    --prov-calculated: #C9C2BC; --prov-calculated-rgb: 201 194 188;
+    --prov-ai: #E7A8DA;         --prov-ai-rgb: 231 168 218;
 
     color-scheme: dark;
   }

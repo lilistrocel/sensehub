@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card, Label, Button, StatusPill } from '../../ui';
+import { Card, Label, Button, StatusPill, ProvenanceBadge, ProvenanceMark, BasisChips, isAiOnlyBasis } from '../../ui';
 import ConfirmDialog from '../ConfirmDialog';
 import ReportMarkdown from '../agronomist/ReportMarkdown';
 import { ReportTextContext, reportTextProps } from '../agronomist/reportText';
@@ -8,8 +8,7 @@ import { StatusMark, SectionStatusPill } from '../agronomist/SectionStatus';
 import { useFormat } from '../../i18n/useFormat';
 import { usePoll } from '../../hooks/usePoll';
 import { normalizeLanguage } from '../../i18n/languages';
-import { SourceBadge } from './parts';
-import { shapeOf, railOf, warningState, isStaleAdvice, VS_PROTOCOL } from './nutritionUtil';
+import { shapeOf, railOf, warningState, isStaleAdvice, VS_PROTOCOL, adviceHasBasis } from './nutritionUtil';
 
 /**
  * AI fertilizer advisor — a SECOND OPINION on the human agronomist's protocol.
@@ -19,6 +18,12 @@ import { shapeOf, railOf, warningState, isStaleAdvice, VS_PROTOCOL } from './nut
  * Operator notes (2026-09-29): an optional "Notes for this run" goes with a
  * manual run as context for the AI (observations to verify, never instructions);
  * the report shows the notes as written and the AI's answer to them.
+ *
+ * Provenance (operator request 2026-09-30): the report is marked AI-generated
+ * (shared provenance kinds, src/ui/Provenance.jsx); every verdict, warning and
+ * recommendation shows what it is based on (`basis`), and items resting only on
+ * the AI's own knowledge are drawn dashed "AI knowledge - not from your data".
+ * Advices before 2026-09-30 have no basis: one "basis not recorded" line.
  */
 
 export const MAX_NOTES = 1000;
@@ -114,7 +119,7 @@ export default function AdvisorPanel({ api, canEdit, isAdmin }) {
     <div className="space-y-4">
       <Card padding="sm" rail="idle" data-testid="advisor-advisory-note">
         <div className="flex flex-wrap items-start gap-2 text-sm">
-          <SourceBadge kind="ai" />
+          <ProvenanceBadge kind="ai" />
           <p className="min-w-0 flex-1">{t('advisor.advisoryOnly')}</p>
         </div>
       </Card>
@@ -241,17 +246,30 @@ export default function AdvisorPanel({ api, canEdit, isAdmin }) {
   );
 }
 
-function AdviceView({ adv, ui, original, onToggleOriginal }) {
+/** Section label of AI text: label + AI marker. */
+function AiLabel({ children }) {
+  const { t } = useTranslation('nutrition');
+  return (
+    <span className="flex items-center gap-1.5">
+      <Label>{children}</Label>
+      <ProvenanceMark kind="ai" detail={t('prov.aiText')} />
+    </span>
+  );
+}
+
+export function AdviceView({ adv, ui, original, onToggleOriginal }) {
   const { t } = useTranslation('nutrition');
   const fmt = useFormat();
   const a = adv.advice;
   const textProps = reportTextProps(adv, ui);
   const stale = isStaleAdvice(adv.created_at);
   const trigger = TRIGGERS.includes(adv.trigger) ? adv.trigger : 'manual';
+  const hasBasis = adviceHasBasis(a);
   return (
     <ReportTextContext.Provider value={textProps}>
       <Card rail={stale ? 'stale' : railOf(a.status)} padding="md" data-testid="advisor-advice" data-advice-status={a.status}>
         <div className="flex flex-wrap items-center gap-2">
+          <ProvenanceBadge kind="ai" detail={t('prov.aiText')} data-testid="advisor-ai-badge" />
           <SectionStatusPill status={a.status} />
           {stale && <StatusPill state="caution" text={t('advisor.stale')} />}
           <span className="text-xs text-muted">
@@ -273,25 +291,30 @@ function AdviceView({ adv, ui, original, onToggleOriginal }) {
           </div>
         )}
 
+        {!hasBasis && <p className="mt-2" data-testid="advisor-basis-not-recorded"><BasisChips basis={null} /></p>}
+
         {adv.operator_notes && <OperatorNotes notes={adv.operator_notes} />}
 
         <p className="mt-3 text-base text-ink" {...textProps} data-testid="advisor-summary">{a.summary}</p>
 
         {a.operator_notes_response && (
           <div className="mt-4" data-testid="advisor-notes-response">
-            <Label>{t('advisor.notes.response')}</Label>
+            <AiLabel>{t('advisor.notes.response')}</AiLabel>
             <div className="mt-1"><ReportMarkdown markdown={a.operator_notes_response} /></div>
           </div>
         )}
 
         {a.warnings.length > 0 && (
           <div className="mt-4" data-testid="advisor-warnings">
-            <Label>{t('advisor.warnings')}</Label>
+            <AiLabel>{t('advisor.warnings')}</AiLabel>
             <ul className="mt-1 space-y-1.5">
               {a.warnings.map((w, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
+                <li key={i} className={`flex items-start gap-2 text-sm ${hasBasis && isAiOnlyBasis(w.basis) ? 'rounded-md border border-dashed border-prov-ai/60 p-1.5' : ''}`} data-ai-only={hasBasis && isAiOnlyBasis(w.basis) ? 'true' : undefined}>
                   <span className="mt-0.5"><StatusMark status={warningState(w.severity) === 'idle' ? 'unknown' : warningState(w.severity)} /></span>
-                  <span className="min-w-0"><span className="font-semibold me-1">{t(`advisor.severity.${w.severity}`, { defaultValue: w.severity })}:</span><span {...textProps}>{w.message}</span></span>
+                  <span className="min-w-0">
+                    <span className="font-semibold me-1">{t(`advisor.severity.${w.severity}`, { defaultValue: w.severity })}:</span><span {...textProps}>{w.message}</span>
+                    {hasBasis && <span className="block mt-0.5"><BasisChips basis={w.basis} /></span>}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -299,10 +322,10 @@ function AdviceView({ adv, ui, original, onToggleOriginal }) {
         )}
 
         <div className="mt-4" data-testid="advisor-recommendations">
-          <Label>{t('advisor.recommendations')}</Label>
+          <AiLabel>{t('advisor.recommendations')}</AiLabel>
           <ol className="mt-1 space-y-2">
             {a.recommendations.map((r, i) => (
-              <li key={i} className="rounded-md border border-line p-2.5">
+              <li key={i} className={`rounded-md border p-2.5 ${hasBasis && isAiOnlyBasis(r.basis) ? 'border-dashed border-prov-ai/60' : 'border-line'}`} data-ai-only={hasBasis && isAiOnlyBasis(r.basis) ? 'true' : undefined}>
                 <div className="flex flex-wrap items-center gap-1.5 mb-1">
                   <PriorityTag value={r.priority} />
                   <VsProtocolBadge value={r.vs_protocol} />
@@ -311,20 +334,24 @@ function AdviceView({ adv, ui, original, onToggleOriginal }) {
                 <p className="text-sm font-semibold text-ink" {...textProps}>{r.action}</p>
                 {r.rationale && <p className="text-sm text-muted mt-0.5" {...textProps}>{r.rationale}</p>}
                 {r.vs_protocol_reason && <p className="text-xs mt-1"><span className="text-muted">{t('advisor.vsReason')}: </span><span {...textProps}>{r.vs_protocol_reason}</span></p>}
+                {hasBasis && <div className="mt-1.5"><BasisChips basis={r.basis} /></div>}
               </li>
             ))}
           </ol>
         </div>
 
         <div className="mt-4" data-testid="advisor-elements">
-          <Label>{t('advisor.perElement')}</Label>
+          <AiLabel>{t('advisor.perElement')}</AiLabel>
           <ul className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
             {a.per_element.map(e => (
               <li key={e.element} className="flex items-start gap-2 text-sm min-w-0" data-element={e.element} data-status={e.status}>
                 <span className="mt-0.5"><StatusMark status={shapeOf(e.status, 'caution')} /></span>
                 <span className="font-semibold w-6 shrink-0" lang="en">{e.element}</span>
                 <span className="text-xs text-muted w-14 shrink-0 mt-0.5">{t(`cmp.${e.status}`)}</span>
-                <span className="min-w-0 break-words" {...textProps}>{e.comment}</span>
+                <span className="min-w-0 break-words">
+                  <span {...textProps}>{e.comment}</span>
+                  {hasBasis && <span className="ms-1.5 inline-flex align-middle"><BasisChips basis={e.basis} compact /></span>}
+                </span>
               </li>
             ))}
           </ul>
@@ -332,7 +359,7 @@ function AdviceView({ adv, ui, original, onToggleOriginal }) {
 
         {a.questions_for_operator.length > 0 && (
           <div className="mt-4" data-testid="advisor-questions">
-            <Label>{t('advisor.questions')}</Label>
+            <AiLabel>{t('advisor.questions')}</AiLabel>
             <ul className="mt-1 list-disc ps-5 text-sm space-y-0.5">
               {a.questions_for_operator.map((q, i) => <li key={i} {...textProps}>{q}</li>)}
             </ul>
@@ -340,7 +367,7 @@ function AdviceView({ adv, ui, original, onToggleOriginal }) {
         )}
 
         <details className="mt-4 group" data-testid="advisor-analysis">
-          <summary className="cursor-pointer select-none text-sm font-semibold text-ink">{t('advisor.analysis')}</summary>
+          <summary className="cursor-pointer select-none text-sm font-semibold text-ink">{t('advisor.analysis')} <ProvenanceMark kind="ai" detail={t('prov.aiText')} /></summary>
           <div className="mt-2"><ReportMarkdown markdown={a.analysis_markdown} /></div>
         </details>
       </Card>
@@ -353,7 +380,10 @@ function OperatorNotes({ notes }) {
   const { t } = useTranslation('nutrition');
   return (
     <div className="mt-3 rounded-md border border-line bg-field p-2.5" data-testid="advisor-operator-notes">
-      <Label>{t('advisor.notes.title')}</Label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Label>{t('advisor.notes.title')}</Label>
+        <ProvenanceBadge kind="operator" detail={t('prov.operatorNotes')} />
+      </div>
       <p className="mt-1 text-sm whitespace-pre-wrap break-words" dir="auto">{notes}</p>
     </div>
   );
@@ -380,7 +410,7 @@ function HistoryList({ history, selectedId, onSelect }) {
                     <span>{t(`advisor.trigger.${TRIGGERS.includes(h.trigger) ? h.trigger : 'manual'}`)}</span>
                     {h.status !== 'success' && <span className="font-semibold">{h.status === 'running' ? t('advisor.running') : t('advisor.errorClass.' + (ERROR_CLASSES.includes(h.error_class) ? h.error_class : 'other'))}</span>}
                   </span>
-                  {h.summary && <span className="block truncate" dir="auto">{h.summary}</span>}
+                  {h.summary && <span className="flex items-center gap-1.5 min-w-0"><ProvenanceMark kind="ai" className="shrink-0" /><span className="block truncate" dir="auto">{h.summary}</span></span>}
                   {h.operator_notes && <span className="block truncate text-xs text-muted" dir="auto" data-testid="advisor-history-notes">{t('advisor.notes.history', { notes: h.operator_notes })}</span>}
                 </span>
               </button>

@@ -26,11 +26,11 @@ const quiet = process.env.DEBUG_ADVISOR ? console : { log() {}, warn() {}, error
 function goodOutput(tag = '') {
   return {
     analysis_markdown: `Day 21, vegetative. The plants get about 94 ppm N, 124 ppm K and 93 ppm Ca today against a protocol vegetative feed of about 154 N, 213 K and 127 Ca at 1:150${tag}. Tank C holds 38 kg KNO3 per 1000 L where the protocol asks 58 kg, and the ratio is 1:200 instead of the 1:150 design, so N and K are both well under target. Measured feed EC is about 2.0 mS/cm while the recipe accounts for only about 1.0 mS/cm, so roughly 1 mS/cm comes from source water or acid, which is not recorded. Drain is not measured.`,
-    per_element: F.ELEMENTS.map(el => ({ element: el, status: ['N', 'K'].includes(el) ? 'low' : 'ok', comment: `${el} comment${tag}.` })),
-    warnings: [{ severity: 'warning', message: `Nitrogen and potassium are about 35 % under the protocol target${tag}.` }],
+    per_element: F.ELEMENTS.map(el => ({ element: el, status: ['N', 'K'].includes(el) ? 'low' : 'ok', comment: `${el} comment${tag}.`, basis: ['senseHub_calculation', 'protocol'] })),
+    warnings: [{ severity: 'warning', message: `Nitrogen and potassium are about 35 % under the protocol target${tag}.`, basis: ['senseHub_calculation', 'protocol'] }],
     recommendations: [
-      { priority: 'high', action: `Next refill of Tank C: 58 kg KNO3 per 1000 L as in the protocol${tag}.`, rationale: 'N and K are low.', when: 'next refill of Tank C', vs_protocol: 'agrees', vs_protocol_reason: 'The protocol vegetative recipe has 58 kg KNO3.' },
-      { priority: 'medium', action: 'Measure the source water EC once.', rationale: 'The EC gap of 1 mS/cm is unexplained.', when: 'this week', vs_protocol: 'extends', vs_protocol_reason: 'The protocol does not cover source water.' },
+      { priority: 'high', action: `Next refill of Tank C: 58 kg KNO3 per 1000 L as in the protocol${tag}.`, rationale: 'N and K are low.', when: 'next refill of Tank C', vs_protocol: 'agrees', vs_protocol_reason: 'The protocol vegetative recipe has 58 kg KNO3.', basis: ['protocol', 'operator_targets'] },
+      { priority: 'medium', action: 'Measure the source water EC once.', rationale: 'The EC gap of 1 mS/cm is unexplained.', when: 'this week', vs_protocol: 'extends', vs_protocol_reason: 'The protocol does not cover source water.', basis: ['measured', 'ai_general_knowledge'] },
     ],
     questions_for_operator: ['What is the EC of the source water?'],
     status: 'caution',

@@ -81,6 +81,14 @@ export default {
           lighting: token('state-lighting'),
           water: token('state-water'),
         },
+        // provenance kinds (src/ui/Provenance.jsx) - marking only, never status
+        prov: {
+          protocol: token('prov-protocol'),
+          operator: token('prov-operator'),
+          measured: token('prov-measured'),
+          calculated: token('prov-calculated'),
+          ai: token('prov-ai'),
+        },
         // --- palette scales ---
         ok, caution, alarm, lighting, water,
         // --- legacy family remap (keeps existing page classes working) ---

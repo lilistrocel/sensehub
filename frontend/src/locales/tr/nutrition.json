@@ -28,13 +28,6 @@
   "plantingType": {
     "transplant": "Fide dikimi"
   },
-  "source": {
-    "live": "Canlı sistemden",
-    "operator": "Operatör girdi",
-    "notMeasured": "SenseHub ölçmüyor",
-    "protocol": "Agronomistin protokolü",
-    "ai": "Yapay zekâ ikinci görüşü"
-  },
   "fields": {
     "crop": "Ürün",
     "variety": "Çeşit",
@@ -215,8 +208,7 @@
     "ecCorrespondNoWater": "Bu ppm değerleri ≈ gübrelerden EC {{fert}} mS/cm (kaynak suyu EC girilmedi)",
     "ecMatch": "giriş EC hedefi {{ec}} ile uyumlu",
     "ecMismatch": "giriş EC hedefi {{ec}} ile uyumlu değil",
-    "manualBadge": "düzenlendi",
-    "manualHint": "düzenlendi = elle değiştirildi; hedefler EC hedefine göre ölçeklenirken, işaretlemediğiniz sürece korunur.",
+    "manualHint": "İnsan · operatör (kişi simgesi) = elle değiştirildi; hedefler EC hedefine ölçeklenirken işaretlemediğiniz sürece korunur.",
     "scale": {
       "button": "EC’ye ölçekle",
       "title": "Element hedefleri EC {{ec}} değerine ölçeklensin mi?",
@@ -474,5 +466,36 @@
   },
   "toast": {
     "saved": "Ürün profili kaydedildi"
+  },
+  "prov": {
+    "stageProtocol": "Agronomistin protokolüyle aynı.",
+    "stageEdited": "Çiftlik ekibi değiştirdi: protokolden farklı ({{fields}}).",
+    "stageNoProtocol": "Çiftlik ekibi girdi; protokolde burada değer yok.",
+    "elementProtocol": "1:{{ratio}} tasarım seyreltmesinde protokol reçetesi (SenseHub varsayımı), SenseHub'ın min / maks bandıyla.",
+    "elementScaled": "SenseHub tarafından giriş EC {{ec}} mS/cm değerine ölçeklenmiş protokol reçetesi (×{{factor}}), SenseHub'ın min / maks bandıyla.",
+    "elementManual": "Çiftlik ekibi elle düzenledi.",
+    "protocolColumn": "Agronomistin protokolünde yazıldığı gibi değerler.",
+    "protocolRecipe": "Protokol reçetesi tank başına 1:{{ratio}} seyreltilmiş; seyreltme bir SenseHub tasarım varsayımıdır.",
+    "delivered": "Reçete analizleri × her çalışmanın ölçülen konsantre ve su litreleri.",
+    "deliveredConfigured": "Reçete analizleri × ayarlı seyreltme (bu dönemde ölçülen çalışma yok).",
+    "status": "Verilen değerlerin hedeflerle SenseHub karşılaştırması.",
+    "targets": "Bu ürünün hedefleri: her birinin kaynağı için Ürün profili → Evre hedefleri bölümüne bakın.",
+    "feedEc": "SEKO probundan besleme EC.",
+    "feedPh": "SEKO probundan besleme pH.",
+    "ecCalc": "Reçete katyonlarının toplamı (meq/L) ÷ 10; kaynak suyu dahil değil.",
+    "sourceWater": "Çiftlik ekibi girdi (SenseHub ölçmüyor).",
+    "waterPerPlant": "Ölçülen su litresi ÷ bitki sayısı.",
+    "dosed": "Tank tüketim sayaçları (0,25 L adımlar).",
+    "achievedRatio": "Ölçülen su ÷ ölçülen konsantre.",
+    "configuredRatio": "Çiftlik ekibinin ayarladığı dozaj oranı.",
+    "tankCurrent": "Çiftlik ekibinin SenseHub'a girdiği tank reçetesi.",
+    "diff": "Mevcut eksi protokol, SenseHub hesabı.",
+    "systemMeasured": "SenseHub'ın kaydettiği debiler, litreler, EC / pH ve tank stoku.",
+    "systemConfigured": "Çiftlik ekibinin SenseHub'da ayarladığı tanklar, reçeteler, röleler, oranlar ve program.",
+    "stageAuto": "SenseHub tarafından dikim tarihi ve evre zaman çizelgesinden hesaplandı.",
+    "stageOverride": "Çiftlik ekibi elle belirledi.",
+    "notMeasured": "SenseHub'ın ölçemediği, çiftlik ekibinin girdiği bilgiler.",
+    "operatorNotes": "Çiftlik ekibi bu çalışma için yazdı (yazıldığı gibi gösterilir, çevrilmez).",
+    "aiText": "Yapay zekâ danışmanı yazdı."
   }
 }

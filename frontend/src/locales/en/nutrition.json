@@ -28,13 +28,6 @@
   "plantingType": {
     "transplant": "Transplant"
   },
-  "source": {
-    "live": "From live system",
-    "operator": "Entered by operator",
-    "notMeasured": "Not measured by SenseHub",
-    "protocol": "Human agronomist protocol",
-    "ai": "AI second opinion"
-  },
   "fields": {
     "crop": "Crop",
     "variety": "Variety",
@@ -215,8 +208,7 @@
     "ecCorrespondNoWater": "These ppm ≈ EC {{fert}} mS/cm from the fertilizers (source water EC not entered)",
     "ecMatch": "matches the input EC target {{ec}}",
     "ecMismatch": "does not match the input EC target {{ec}}",
-    "manualBadge": "edited",
-    "manualHint": "edited = changed by hand; kept when the targets are scaled to the EC target unless you tick it.",
+    "manualHint": "Human · operator (person icon) = changed by hand; kept when the targets are scaled to the EC target unless you tick it.",
     "scale": {
       "button": "Scale to EC",
       "title": "Scale element targets to EC {{ec}}?",
@@ -474,5 +466,36 @@
   },
   "toast": {
     "saved": "Crop profile saved"
+  },
+  "prov": {
+    "stageProtocol": "Same as the human agronomist protocol.",
+    "stageEdited": "Changed by the farm team: differs from the protocol ({{fields}}).",
+    "stageNoProtocol": "Entered by the farm team; the protocol has no value here.",
+    "elementProtocol": "Protocol recipe at the 1:{{ratio}} design dilution (SenseHub assumption), with SenseHub's min / max band.",
+    "elementScaled": "Protocol recipe scaled by SenseHub to input EC {{ec}} mS/cm (×{{factor}}), with SenseHub's min / max band.",
+    "elementManual": "Edited by hand by the farm team.",
+    "protocolColumn": "Values as written in the human agronomist protocol.",
+    "protocolRecipe": "Protocol recipe diluted 1:{{ratio}} per tank; the dilution is a SenseHub design assumption.",
+    "delivered": "Recipe analyses × measured concentrate and water litres of each run.",
+    "deliveredConfigured": "Recipe analyses × the configured dilution (no measured run in this period).",
+    "status": "SenseHub comparison of the delivered values with the targets.",
+    "targets": "This crop's targets: see Crop profile → Targets per stage for where each one comes from.",
+    "feedEc": "Feed EC from the SEKO probe.",
+    "feedPh": "Feed pH from the SEKO probe.",
+    "ecCalc": "Sum of the recipe cations (meq/L) ÷ 10; source water not included.",
+    "sourceWater": "Entered by the farm team (SenseHub does not measure it).",
+    "waterPerPlant": "Measured water litres ÷ plant count.",
+    "dosed": "Tank consumption counters (0.25 L steps).",
+    "achievedRatio": "Measured water ÷ measured concentrate.",
+    "configuredRatio": "Dosing ratio configured by the farm team.",
+    "tankCurrent": "Tank recipe as the farm team entered it in SenseHub.",
+    "diff": "Current minus protocol, worked out by SenseHub.",
+    "systemMeasured": "Flows, litres, EC / pH and tank stock as SenseHub recorded them.",
+    "systemConfigured": "Tanks, recipes, relays, ratios and schedule as the farm team configured them in SenseHub.",
+    "stageAuto": "Worked out by SenseHub from the transplant date and the stage timeline.",
+    "stageOverride": "Set by hand by the farm team.",
+    "notMeasured": "Facts SenseHub cannot measure, entered by the farm team.",
+    "operatorNotes": "Written by the farm team for this run (shown as written, not translated).",
+    "aiText": "Written by the AI advisor."
   }
 }

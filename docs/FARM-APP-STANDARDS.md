@@ -99,6 +99,9 @@ if (this.isPaused && !state.hasCoils) return;   // relay boards are the firmware
 
 **4.5 Pages must survive their own data.** Any list that can grow (alerts, relay events, readings) is paginated server-side from day one.
 
+**4.6 Say where every number comes from.** Values and statements are marked with the shared provenance kinds in `frontend/src/ui/Provenance.jsx` — *Human · protocol*, *Human · operator*, *Measured*, *Calculated by SenseHub*, *AI-generated* — each with its own icon, `--prov-*` token and label (never colour alone). AI output never appears unmarked; AI items that act on farm data carry a `basis` list, and items resting only on the model's own knowledge are shown as "AI knowledge – not from your data".
+*Operator request 2026-09-30:* the farm team could not tell which numbers on Crop & Nutrition came from the agronomist, from themselves, from SenseHub's 1:150 assumption or from the AI.
+
 ---
 
 ## 5. Visual language

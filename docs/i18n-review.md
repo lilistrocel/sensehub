@@ -372,3 +372,7 @@ To decide:
 - ☐ ar "مشعب الفنتوري" for the *venturi manifold*.
 - ☐ ar "يكفي ≈ N يوم" (days of stock left) with decimals (e.g. 11.2): singular "يوم" kept for fractional numbers.
 - ☐ Stock source tags: measured "ölçülen / مُقاس", estimated "tahmini / تقديري", not metered "ölçülmüyor / غير مُقاس".
+
+### Provenance markings (2026-09-30)
+
+Machine-translated, pending native review: `frontend/src/locales/{tr,ar}/common.json provenance.*` (badges, legend, AI "based on" chips on the Crop & Nutrition page, Agronomist, Planner, Tasks) and `nutrition.json prov.*` (tooltips), `targets.manualHint`. New glossary rows: the five provenance labels, based on / AI knowledge – not from your data / basis not recorded.

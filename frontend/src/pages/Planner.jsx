@@ -3,7 +3,7 @@ import { useTranslation, Trans } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useFormat } from '../i18n/useFormat';
-import { Card, Label, Button, StatusPill } from '../ui';
+import { Card, Label, Button, StatusPill, ProvenanceBadge } from '../ui';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FailureBanner, { classifyPlanError, leadingFailureRun } from '../components/planner/FailureBanner';
 
@@ -1034,6 +1034,7 @@ export default function Planner() {
                     <div className="text-lg font-semibold text-gray-900 dark:text-white">
                       {t('detail.planFor', { date: fmtDate(fmt, selected.plan_date) })}
                     </div>
+                    <ProvenanceBadge kind="ai" data-testid="plan-ai-badge" />
                     {selected.version > 1 && (
                       <span className="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-mono">v{selected.version}</span>
                     )}

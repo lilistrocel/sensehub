@@ -115,6 +115,8 @@ Aligned with the backend agent's term list (2026-09-27). Where the two differed,
 | (human) agronomist protocol | agronomistin protokolü | بروتوكول المهندس الزراعي |
 | agrees with / extends / differs from the protocol | protokolle aynı / protokolü genişletiyor / protokolden farklı | يتفق مع / يوسّع / يختلف عن البروتوكول |
 | advisory only | yalnızca tavsiye | للاستشارة فقط |
+| provenance: human · protocol / human · operator / measured / calculated by SenseHub / AI-generated | insan · protokol / insan · operatör / ölçülen / SenseHub hesabı / yapay zekâ üretimi | بشري · البروتوكول / بشري · المشغّل / مقاس / محسوب بواسطة SenseHub / مُولَّد بالذكاء الاصطناعي |
+| based on / AI knowledge – not from your data / basis not recorded | dayanağı / yapay zekâ bilgisi – verilerinizden değil / dayanak kaydedilmedi | يستند إلى / معرفة الذكاء الاصطناعي – ليست من بياناتك / الأساس غير مسجّل |
 | crop | ürün | المحصول |
 | dashboard | gösterge paneli | لوحة المتابعة |
 | status board | durum panosu | لوحة الحالة |

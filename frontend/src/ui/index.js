@@ -6,3 +6,4 @@ export { default as Button } from './Button';
 export { default as SectionHeader } from './SectionHeader';
 export { default as Kpi } from './Kpi';
 export { default as Chart, CHART_TONES } from './Chart';
+export { ProvenanceBadge, ProvenanceMark, ProvenanceIcon, ProvenanceLegend, BasisChips, PROVENANCE_KINDS, BASIS_KIND, BASIS_VALUES, cleanBasis, isAiOnlyBasis } from './Provenance';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shapeOf, railOf, targetStages, stageDate, parseNum, diffFields, invalidField, isStaleAdvice, ppmDecimals, warningState, ecCorrespondenceState } from './nutritionUtil';
+import { shapeOf, railOf, targetStages, stageDate, parseNum, diffFields, invalidField, isStaleAdvice, ppmDecimals, warningState, ecCorrespondenceState, stageRowProvenance, elementTargetProvenance, plantsProvenance } from './nutritionUtil';
 
 describe('nutritionUtil', () => {
   it('status → shape: unknown never renders as ok, severity picks triangle vs square', () => {
@@ -51,5 +51,26 @@ describe('ecCorrespondenceState (element targets vs the input EC target)', () =>
     expect(ecCorrespondenceState({ total_ec_ms_cm: 1.45 }, null)).toBe('unknown');
     expect(ecCorrespondenceState(null, 1.9)).toBe('unknown');
     expect(ecCorrespondenceState({ total_ec_ms_cm: null }, 1.9)).toBe('unknown');
+  });
+});
+
+describe('provenance helpers (2026-09-30)', () => {
+  it('stage rows: equal to protocol → protocol; any change or no protocol value → operator', () => {
+    expect(stageRowProvenance([1.8, 2.0, 2.2], [1.8, 2.0, 2.2])).toEqual({ kind: 'protocol', edited: [] });
+    expect(stageRowProvenance([1.8, 2.2, 2.4], [1.8, 2.0, 2.2])).toEqual({ kind: 'operator', edited: [1, 2] });
+    expect(stageRowProvenance([5.5, null, 6.5], [5.5, null, 6.5]).kind).toBe('protocol');
+    expect(stageRowProvenance([null, 3000, null], null)).toEqual({ kind: 'operator', edited: [1] });
+    expect(stageRowProvenance([null, null, null], [1, 2, 3])).toBeNull();
+  });
+  it('element targets: manual → operator; protocol prefill / scaled → calculated from protocol', () => {
+    expect(elementTargetProvenance({ manual: true, basis_source: 'protocol' }).kind).toBe('operator');
+    expect(elementTargetProvenance({ manual: false, basis_source: 'protocol' })).toMatchObject({ kind: 'calculated', from: 'protocol', basis: 'protocol' });
+    expect(elementTargetProvenance({ manual: false, basis_source: 'scaled', basis_ec: 2.2, basis_factor: 0.93 })).toMatchObject({ kind: 'calculated', from: 'protocol', basis: 'scaled', ec: 2.2, factor: 0.93 });
+    expect(elementTargetProvenance(null)).toBeNull();
+  });
+  it('plants source → kind', () => {
+    expect(plantsProvenance('entered')).toBe('operator');
+    expect(plantsProvenance('estimated_from_flow')).toBe('calculated');
+    expect(plantsProvenance(undefined)).toBeNull();
   });
 });

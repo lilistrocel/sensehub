@@ -110,5 +110,45 @@
   "interlock": {
     "withPartner": "{{partner}} ile kilitleme: bunu açmak eş kanalı kapatır",
     "generic": "Kilitlemeli kanal"
+  },
+  "provenance": {
+    "kind": {
+      "protocol": "İnsan · protokol",
+      "operator": "İnsan · operatör",
+      "measured": "Ölçülen",
+      "calculated": "SenseHub hesabı",
+      "ai": "Yapay zekâ üretimi"
+    },
+    "desc": {
+      "protocol": "Çiftliğin agronomisti tarafından yazıldı (agronomistin protokolü). SenseHub'da salt okunur; belirleyici olan odur.",
+      "operator": "Çiftlik ekibi tarafından SenseHub'da girildi veya düzenlendi: hedefler, ürün profili, tank reçeteleri, notlar.",
+      "measured": "Sensörlerden ve sayaçlardan okundu: debimetre ve tank litreleri, besleme EC / pH, iklim.",
+      "calculated": "SenseHub tarafından diğer değerlerden sabit kurallar ve varsayımlarla hesaplandı (ör. 1:150 tasarım seyreltmesi, min / maks bantları, EC ölçekleme, EC tahminleri). Ölçülmedi.",
+      "ai": "Yapay zekâ gübre danışmanı veya yapay zekâ agronomist tarafından yazıldı. Yalnızca ikinci görüş: uygulamadan önce protokol ve verilerinizle karşılaştırın."
+    },
+    "from": {
+      "calculated": {
+        "protocol": "Protokolden hesaplandı",
+        "measured": "Ölçümlerden hesaplandı"
+      }
+    },
+    "basis": {
+      "label": "Dayanağı",
+      "protocol": "Protokol",
+      "operator_targets": "Hedefleriniz ve ayarlarınız",
+      "operator_notes": "Notlarınız",
+      "measured": "Ölçümler",
+      "senseHub_calculation": "SenseHub hesabı",
+      "ai_general_knowledge": "Yapay zekâ bilgisi",
+      "aiOnly": "Yapay zekâ bilgisi – verilerinizden değil",
+      "aiOnlyHint": "Yapay zekâ burada yalnızca kendi genel agronomi bilgisini kullandı; çiftliğin protokolünü, hedeflerini, notlarını veya ölçümlerini değil. Uygulamadan önce agronomistle kontrol edin.",
+      "notRecorded": "Dayanak kaydedilmedi"
+    },
+    "legend": {
+      "title": "İşaretlerin anlamı",
+      "show": "göster",
+      "basisNote": "Her yapay zekâ maddesi neye dayandığını söyler. Kesikli çizgili “Yapay zekâ bilgisi – verilerinizden değil” maddesi yalnızca yapay zekânın genel bilgisine dayanır.",
+      "derivedNote": "İki simge = türetilmiş: ör. hesap makinesi + belge = SenseHub tarafından protokolden hesaplandı."
+    }
   }
 }

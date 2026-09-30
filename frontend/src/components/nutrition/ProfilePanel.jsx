@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card, Label, Button, StatusPill } from '../../ui';
+import { Card, Label, Button, StatusPill, ProvenanceBadge, ProvenanceMark } from '../../ui';
 import ConfirmDialog from '../ConfirmDialog';
 import { useFormat } from '../../i18n/useFormat';
 import { Section, Field, Dash, TextInput, NumInput, Num, TableWrap } from './parts';
 import SystemPanel from './SystemPanel';
 import TargetsPanel from './TargetsPanel';
-import { STAGES, diffFields, invalidField, stageDate } from './nutritionUtil';
+import { STAGES, diffFields, invalidField, stageDate, plantsProvenance } from './nutritionUtil';
 
 /**
  * Crop profile: crop (editable), what SenseHub cannot measure (editable, short),
@@ -84,7 +84,7 @@ export default function ProfilePanel({ profile, canEdit, save, onSaved, api }) {
       <Section
         testId="nutrition-crop"
         title={t('profile.crop.title')}
-        source="operator"
+        provenance="operator"
         canEdit={canEdit}
         editing={edit === 'crop'}
         onEdit={() => begin('crop')}
@@ -124,7 +124,7 @@ export default function ProfilePanel({ profile, canEdit, save, onSaved, api }) {
         testId="nutrition-not-measured"
         title={t('profile.notMeasured.title')}
         subtitle={t('profile.notMeasured.subtitle')}
-        source="notMeasured"
+        provenance={{ kind: 'operator', detail: t('prov.notMeasured') }}
         canEdit={canEdit}
         editing={edit === 'nm'}
         onEdit={() => begin('nm')}
@@ -162,7 +162,10 @@ export default function ProfilePanel({ profile, canEdit, save, onSaved, api }) {
           <Label className="shrink-0">{t('profile.plants.title')}</Label>
           {plants.total ? (
             <>
-              <span className="font-mono">{t('profile.plants.total', { total: fmt.int(plants.total), perSection: fmt.int(plants.per_section), sections: plants.sections })}</span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="font-mono">{t('profile.plants.total', { total: fmt.int(plants.total), perSection: fmt.int(plants.per_section), sections: plants.sections })}</span>
+                {plantsProvenance(plants.source) && <ProvenanceMark kind={plantsProvenance(plants.source)} from={plants.source === 'estimated_from_flow' ? 'measured' : null} data-testid="plants-provenance" />}
+              </span>
               <span className="text-xs text-muted">{t(`profile.plants.source.${plants.source}`, {
                 flow: plants.basis ? fmt.withUnit(plants.basis.zone_flow_lph, 'L/h', { decimals: 0 }) : '',
                 dripper: plants.basis ? fmt.withUnit(plants.basis.dripper_flow_lph, 'L/h', { decimals: 1 }) : '',
@@ -181,7 +184,7 @@ export default function ProfilePanel({ profile, canEdit, save, onSaved, api }) {
       <Section
         testId="nutrition-stage"
         title={t('profile.stage.title')}
-        source="operator"
+        provenance="operator"
         canEdit={canEdit}
         editing={edit === 'stage'}
         onEdit={() => begin('stage')}
@@ -200,6 +203,9 @@ export default function ProfilePanel({ profile, canEdit, save, onSaved, api }) {
               ? (stage.days_after_transplant >= 0 ? t('profile.stage.day', { count: stage.days_after_transplant }) : t('profile.stage.beforeTransplant'))
               : t('profile.stage.noTransplant')}
           </span>
+          {(stage.source === 'override' || stage.source === 'auto') && (
+            <ProvenanceMark kind={stage.source === 'override' ? 'operator' : 'calculated'} detail={stage.source === 'override' ? t('prov.stageOverride') : t('prov.stageAuto')} data-testid="stage-provenance" />
+          )}
           <span className="text-xs text-muted">· {stage.source === 'override' ? t('profile.stage.sourceOverride') : stage.source === 'auto' ? t('profile.stage.sourceAuto') : ''}</span>
         </div>
         {stage.override && stage.override.note && edit !== 'stage' && (
@@ -296,6 +302,7 @@ function ProtocolCard({ protocol }) {
     <Card padding="md" data-testid="nutrition-protocol">
       <div className="flex flex-wrap items-center gap-2 mb-1">
         <h2 className="font-display text-base font-semibold text-ink">{t('protocol.title')}</h2>
+        <ProvenanceBadge kind="protocol" detail={t('prov.protocolColumn')} />
         <span className="text-xs text-muted">{t('protocol.readOnly')}</span>
       </div>
       <p className="text-sm text-muted" dir="auto">{protocol.name}</p>

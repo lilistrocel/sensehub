@@ -1,32 +1,40 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card, Label, Button } from '../../ui';
+import { Card, Label, Button, ProvenanceBadge, ProvenanceMark } from '../../ui';
+import { useFormat } from '../../i18n/useFormat';
+import { elementTargetProvenance } from './nutritionUtil';
 
 /**
  * Small building blocks of the Crop & Nutrition page. Strings: `nutrition` namespace.
  */
 
-const SOURCE_STYLE = {
-  live: 'border-water-300 text-water-700 dark:border-water-700 dark:text-water-300',
-  operator: 'border-line text-muted',
-  notMeasured: 'border-caution-300 text-caution-700 dark:border-caution-700 dark:text-caution-300',
-  protocol: 'border-brand-300 text-brand-700 dark:border-brand-700 dark:text-brand-300',
-  ai: 'border-lighting-300 text-lighting-700 dark:border-lighting-700 dark:text-lighting-300',
-};
-
-/** Where a block of data comes from: live system / operator / not measured / human protocol / AI. */
-export function SourceBadge({ kind, className = '' }) {
-  const { t } = useTranslation('nutrition');
-  return (
-    <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${SOURCE_STYLE[kind] || SOURCE_STYLE.operator} ${className}`} data-source={kind}>
-      {kind === 'live' && <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-state-water" />}
-      {t(`source.${kind}`)}
-    </span>
-  );
+/**
+ * Provenance badges of a section (shared kinds, src/ui/Provenance.jsx): a kind
+ * string, one {kind, from, detail} object or an array of them.
+ */
+export function ProvenanceBadges({ items }) {
+  const list = (Array.isArray(items) ? items : [items]).filter(Boolean).map(x => (typeof x === 'string' ? { kind: x } : x));
+  return list.map((p, i) => <ProvenanceBadge key={`${p.kind}-${i}`} {...p} />);
 }
 
-/** A section card: title, optional source badge, optional edit / save / cancel. */
-export function Section({ title, subtitle, source, rail = null, editing = false, canEdit = false, onEdit, onSave, onCancel, saving = false, children, testId, actions = null }) {
+/**
+ * Where one element ppm target comes from: hand-edited by the farm team, or
+ * calculated by SenseHub from the protocol (prefill at the 1:ratio design
+ * dilution, or scaled to the input EC target). `fallback` = no row known.
+ */
+export function ElementTargetMark({ row, ratio, fallback = false, className = '' }) {
+  const { t } = useTranslation('nutrition');
+  const fmt = useFormat();
+  const p = elementTargetProvenance(row);
+  if (!p) return fallback ? <ProvenanceMark kind="operator" detail={t('prov.targets')} className={className} /> : null;
+  const detail = p.basis === 'manual' ? t('prov.elementManual')
+    : p.basis === 'scaled' ? t('prov.elementScaled', { ec: p.ec != null ? fmt.number(p.ec, { decimals: 2 }) : '—', factor: p.factor != null ? fmt.number(p.factor, { decimals: 2 }) : '—' })
+    : t('prov.elementProtocol', { ratio });
+  return <ProvenanceMark kind={p.kind} from={p.from} detail={detail} className={className} data-testid="element-target-provenance" />;
+}
+
+/** A section card: title, optional provenance badge(s), optional edit / save / cancel. */
+export function Section({ title, subtitle, provenance = null, rail = null, editing = false, canEdit = false, onEdit, onSave, onCancel, saving = false, children, testId, actions = null }) {
   const { t } = useTranslation('nutrition');
   return (
     <Card rail={rail} padding="md" data-testid={testId}>
@@ -34,7 +42,7 @@ export function Section({ title, subtitle, source, rail = null, editing = false,
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-base font-semibold text-ink">{title}</h2>
-            {source && <SourceBadge kind={source} />}
+            {provenance && <ProvenanceBadges items={provenance} />}
           </div>
           {subtitle && <p className="text-xs text-muted mt-0.5">{subtitle}</p>}
         </div>

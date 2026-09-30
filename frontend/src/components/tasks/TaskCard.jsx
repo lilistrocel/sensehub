@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { Card, Button, StatusPill, Label } from '../../ui';
+import { Card, Button, StatusPill, Label, ProvenanceBadge } from '../../ui';
 import { useFormat } from '../../i18n/useFormat';
 import { normalizeLanguage } from '../../i18n/languages';
 
@@ -27,6 +27,9 @@ const CATEGORY_LABEL = {
   tutorial: 'Tutorial',
   config_change: 'Config change',
 };
+
+/** Who wrote the task (operator request 2026-09-30): the AI agents vs the farm team. */
+const SOURCE_PROVENANCE = { agronomist: 'ai', planner: 'ai', manual: 'operator' };
 
 function railFor(task, outdated) {
   if (outdated) return 'caution';
@@ -73,6 +76,7 @@ export default function TaskCard({ task, outdated = false, ageDays = null, canCo
           <div className="flex flex-wrap items-center gap-2 mb-1.5">
             <StatusPill state={pr.state} filled={pr.filled} className="uppercase" data-testid="task-priority">{t(`priority.${priorityKey}`)}</StatusPill>
             <StatusPill state={st.state} filled={st.filled}>{t(`status.${statusKey}`)}</StatusPill>
+            {SOURCE_PROVENANCE[task.source] && <ProvenanceBadge kind={SOURCE_PROVENANCE[task.source]} data-testid="task-provenance" />}
             {outdated && (
               <StatusPill state="caution" filled={false} className="!whitespace-normal" data-testid="task-outdated">
                 {t('card.outdated', { count: ageDays ?? 0 })}

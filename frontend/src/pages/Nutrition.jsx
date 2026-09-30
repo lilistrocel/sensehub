@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useFormat } from '../i18n/useFormat';
 import { usePoll } from '../hooks/usePoll';
-import { Card, StatusPill } from '../ui';
+import { Card, StatusPill, ProvenanceLegend } from '../ui';
 import ReportTabs, { tabPanelProps } from '../components/agronomist/ReportTabs';
 import ProfilePanel from '../components/nutrition/ProfilePanel';
 import FeedPanel from '../components/nutrition/FeedPanel';
@@ -17,6 +17,8 @@ import AdvisorPanel from '../components/nutrition/AdvisorPanel';
  * (second opinion on the human agronomist's protocol; advisory only).
  * Viewing: every role. Editing + running the advisor: admin / operator.
  * UI strings: locales/<lng>/nutrition.json.
+ * Provenance (2026-09-30): every value is marked protocol / operator / measured /
+ * calculated / AI with the shared src/ui/Provenance.jsx; the legend sits on top.
  */
 
 const API_BASE = '/api';
@@ -88,6 +90,8 @@ export default function Nutrition() {
           </div>
         )}
       </div>
+
+      <ProvenanceLegend />
 
       <ReportTabs variant="segmented" tabs={tabs} active={view} onChange={switchView} idBase={idBase} label={t('views.label')} />
 

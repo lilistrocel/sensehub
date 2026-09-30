@@ -25,9 +25,9 @@ const { NOW, seedFarm, addRun, addSchedule } = require('./fixtures/nutritionFarm
 const quiet = { log() {}, warn() {}, error() {} };
 const out = {
   analysis_markdown: 'N and K are low against the protocol vegetative feed because Tank C holds 38 kg KNO3 instead of 58 kg and dosing runs at 1:200 instead of the 1:150 design. Measured feed EC is about twice the recipe EC, so the source water or acid adds about 1 mS/cm that is not recorded. Drain is not measured, so the root-zone EC cannot be judged.',
-  per_element: F.ELEMENTS.map(el => ({ element: el, status: 'ok', comment: `${el} fine.` })),
-  warnings: [{ severity: 'warning', message: 'N and K low.' }],
-  recommendations: [{ priority: 'high', action: 'Next refill of Tank C: 58 kg KNO3 per 1000 L.', rationale: 'Protocol value.', when: 'next refill', vs_protocol: 'agrees', vs_protocol_reason: 'Same as the protocol.' }],
+  per_element: F.ELEMENTS.map(el => ({ element: el, status: 'ok', comment: `${el} fine.`, basis: ['senseHub_calculation'] })),
+  warnings: [{ severity: 'warning', message: 'N and K low.', basis: ['senseHub_calculation', 'protocol'] }],
+  recommendations: [{ priority: 'high', action: 'Next refill of Tank C: 58 kg KNO3 per 1000 L.', rationale: 'Protocol value.', when: 'next refill', vs_protocol: 'agrees', vs_protocol_reason: 'Same as the protocol.', basis: ['protocol'] }],
   questions_for_operator: [],
   status: 'caution',
   summary: 'Feeding is below the human protocol: N and K about a third low.',

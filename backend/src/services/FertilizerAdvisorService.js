@@ -590,7 +590,7 @@ class FertilizerAdvisorService {
       JSON.stringify(snapshot),
       '```',
       '',
-      'Give your second opinion on the fertilizer program: analysis, per-element verdicts, warnings, recommendations (each with vs_protocol) and questions. Base every number on the snapshot; say what is missing.',
+      'Give your second opinion on the fertilizer program: analysis, per-element verdicts, warnings, recommendations (each with vs_protocol) and questions; give every verdict, warning and recommendation its basis. Base every number on the snapshot; say what is missing.',
       ...(notesBlock ? ['', notesBlock] : []),
       ...(outOfService ? ['', outOfService] : []),
     ].join('\n');

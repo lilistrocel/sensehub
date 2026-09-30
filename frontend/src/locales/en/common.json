@@ -110,5 +110,45 @@
   "interlock": {
     "withPartner": "Interlocked with {{partner}}: turning this on switches the partner off",
     "generic": "Interlocked channel"
+  },
+  "provenance": {
+    "kind": {
+      "protocol": "Human · protocol",
+      "operator": "Human · operator",
+      "measured": "Measured",
+      "calculated": "Calculated by SenseHub",
+      "ai": "AI-generated"
+    },
+    "desc": {
+      "protocol": "Written by the farm's human agronomist (the agronomist protocol). Read-only in SenseHub; it stays authoritative.",
+      "operator": "Entered or edited by the farm team in SenseHub: targets, crop profile, tank recipes, notes.",
+      "measured": "Read from sensors and meters: flow meter and tank litres, feed EC / pH, climate.",
+      "calculated": "Worked out by SenseHub from other values with fixed rules and assumptions (e.g. the 1:150 design dilution, min / max bands, EC scaling, EC estimates). Not measured.",
+      "ai": "Written by the AI fertilizer advisor or AI agronomist. A second opinion only: check it against the protocol and your data before acting."
+    },
+    "from": {
+      "calculated": {
+        "protocol": "Calculated from protocol",
+        "measured": "Calculated from measurements"
+      }
+    },
+    "basis": {
+      "label": "Based on",
+      "protocol": "Protocol",
+      "operator_targets": "Your targets & settings",
+      "operator_notes": "Your notes",
+      "measured": "Measurements",
+      "senseHub_calculation": "SenseHub calculation",
+      "ai_general_knowledge": "AI knowledge",
+      "aiOnly": "AI knowledge – not from your data",
+      "aiOnlyHint": "The AI used only its own general agronomy knowledge here, not the farm's protocol, targets, notes or measurements. Check it with the agronomist before acting.",
+      "notRecorded": "Basis not recorded"
+    },
+    "legend": {
+      "title": "What the markings mean",
+      "show": "show",
+      "basisNote": "Every AI item says what it is based on. A dashed “AI knowledge – not from your data” item rests only on the AI's general knowledge.",
+      "derivedNote": "Two icons = derived: e.g. calculator + document = calculated by SenseHub from the protocol."
+    }
   }
 }

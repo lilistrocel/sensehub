@@ -1,9 +1,9 @@
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card, Label, StatusPill } from '../../ui';
+import { Card, Label, StatusPill, ProvenanceBadge, ProvenanceMark } from '../../ui';
 import { useFormat } from '../../i18n/useFormat';
 import { usePoll } from '../../hooks/usePoll';
-import { SourceBadge, Num, Dash, TableWrap } from './parts';
+import { Num, Dash, TableWrap } from './parts';
 import { TankStockCompact } from '../irrigation/TankStock';
 
 /**
@@ -32,7 +32,8 @@ export default function SystemPanel({ api, profile }) {
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="font-display text-base font-semibold text-ink">{t('system.title')}</h2>
-          <SourceBadge kind="live" />
+          <ProvenanceBadge kind="measured" detail={t('prov.systemMeasured')} />
+          <ProvenanceBadge kind="operator" detail={t('prov.systemConfigured')} />
         </div>
         <p className="text-xs text-muted mt-0.5">{t('system.subtitle')}</p>
       </div>
@@ -74,11 +75,11 @@ export default function SystemPanel({ api, profile }) {
           <thead>
             <tr className="text-label uppercase text-muted">
               <th className="py-1 pe-3 text-start font-semibold">{t('system.col.tank')}</th>
-              <th className="py-1 pe-3 text-start font-semibold">{t('system.col.contents')}</th>
+              <th className="py-1 pe-3 text-start font-semibold">{t('system.col.contents')} <ProvenanceMark kind="operator" detail={t('prov.tankCurrent')} /></th>
               <th className="py-1 pe-3 text-start font-semibold">{t('system.col.relay')}</th>
-              <th className="py-1 pe-3 text-end font-semibold">{t('system.col.ratio')}</th>
+              <th className="py-1 pe-3 text-end font-semibold">{t('system.col.ratio')} <ProvenanceMark kind="operator" detail={t('prov.configuredRatio')} /></th>
               <th className="py-1 pe-3 text-end font-semibold">{t('system.col.draw')}</th>
-              <th className="py-1 pe-3 text-start font-semibold">{t('system.col.stock')}</th>
+              <th className="py-1 pe-3 text-start font-semibold">{t('system.col.stock')} <ProvenanceMark kind="measured" detail={t('prov.dosed')} /></th>
               <th className="py-1 text-start font-semibold">{t('system.col.refill')}</th>
             </tr>
           </thead>
@@ -95,8 +96,8 @@ export default function SystemPanel({ api, profile }) {
                 </td>
                 <td className="py-1.5 pe-3 text-end font-mono whitespace-nowrap">{tk.target_ratio ? `1:${tk.target_ratio}` : <Dash />}</td>
                 <td className="py-1.5 pe-3 text-end whitespace-nowrap">
-                  <Num value={tk.measured_draw_lpm} decimals={2} fmt={fmt} />
-                  <span className="text-xs text-muted"> / <Num value={tk.configured_draw_lpm} decimals={2} fmt={fmt} /> L/min</span>
+                  <Num value={tk.measured_draw_lpm} decimals={2} fmt={fmt} /> <ProvenanceMark kind="measured" />
+                  <span className="text-xs text-muted"> / <Num value={tk.configured_draw_lpm} decimals={2} fmt={fmt} /> <ProvenanceMark kind="operator" /> L/min</span>
                 </td>
                 <td className="py-1.5 pe-3 whitespace-nowrap" data-testid="nutrition-tank-stock">
                   {tk.stock ? <TankStockCompact stock={tk.stock} tankLabel={tk.letter} /> : <Dash />}

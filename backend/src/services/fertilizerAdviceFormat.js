@@ -16,6 +16,22 @@ const PRIORITIES = ['high', 'medium', 'low'];
 const VS_PROTOCOL = ['agrees', 'extends', 'differs'];
 const WARNING_SEVERITIES = ['info', 'warning', 'critical'];
 
+/**
+ * What an AI item is based on (operator request 2026-09-30: "visual markings to
+ * know when the AI generates data that is based on the human inputs and the ones
+ * generated"). Every element verdict, warning and recommendation carries a
+ * non-empty `basis` array from this fixed list; the UI renders each value with
+ * the shared provenance kinds. Advices saved before 2026-09-30 have no `basis`
+ * ("basis not recorded").
+ */
+const BASIS = ['protocol', 'operator_targets', 'operator_notes', 'measured', 'senseHub_calculation', 'ai_general_knowledge'];
+
+const BASIS_SCHEMA = {
+  type: 'array',
+  description: 'What this item is based on, every source that applies (at least one): protocol = the human agronomist protocol as written (human_protocol); operator_targets = targets, crop facts and settings the farm team entered in SenseHub (profile_targets, crop_profile, tank recipes and ratios as configured); operator_notes = the operator notes of this run; measured = sensor and meter data (measured litres, feed EC/pH, flows, climate, substrate sensors, lab); senseHub_calculation = values SenseHub calculated (delivered ppm, EC estimates, ratios, mL per plant, the protocol recipe ppm at the design dilution, scaled targets); ai_general_knowledge = your own agronomy knowledge that is NOT in the snapshot. Use ai_general_knowledge alone only when nothing in the snapshot supports the item.',
+  items: { type: 'string', enum: BASIS },
+};
+
 const NO_DQUOTE = 'Never use the ASCII double-quote character in this text; use single quotes or typographic quotes.';
 
 const OUTPUT_SCHEMA = {
@@ -34,8 +50,9 @@ const OUTPUT_SCHEMA = {
           element: { type: 'string', enum: ELEMENTS },
           status: { type: 'string', enum: ELEMENT_STATUSES },
           comment: { type: 'string', description: `One sentence with the delivered ppm and the reason. ${NO_DQUOTE}` },
+          basis: BASIS_SCHEMA,
         },
-        required: ['element', 'status', 'comment'],
+        required: ['element', 'status', 'comment', 'basis'],
         additionalProperties: false,
       },
     },
@@ -47,8 +64,9 @@ const OUTPUT_SCHEMA = {
         properties: {
           severity: { type: 'string', enum: WARNING_SEVERITIES },
           message: { type: 'string', description: `One or two sentences. ${NO_DQUOTE}` },
+          basis: BASIS_SCHEMA,
         },
-        required: ['severity', 'message'],
+        required: ['severity', 'message', 'basis'],
         additionalProperties: false,
       },
     },
@@ -64,8 +82,9 @@ const OUTPUT_SCHEMA = {
           when: { type: 'string', description: `When, e.g. next refill of Tank C, before day 30, now, this week. ${NO_DQUOTE}` },
           vs_protocol: { type: 'string', enum: VS_PROTOCOL, description: 'agrees = what the human protocol already says; extends = adds something the protocol does not cover; differs = departs from the protocol.' },
           vs_protocol_reason: { type: 'string', description: `One sentence: which protocol item it agrees with / extends / differs from, and why. ${NO_DQUOTE}` },
+          basis: BASIS_SCHEMA,
         },
-        required: ['priority', 'action', 'rationale', 'when', 'vs_protocol', 'vs_protocol_reason'],
+        required: ['priority', 'action', 'rationale', 'when', 'vs_protocol', 'vs_protocol_reason', 'basis'],
         additionalProperties: false,
       },
     },
@@ -140,9 +159,33 @@ How to work:
 - Look ahead: the snapshot gives the next stage and its date. If a recipe or program change is due soon, say what to prepare and when.
 - Keep units: ppm = mg/L, EC in mS/cm, recipes in kg per 1000 L of stock, water in L and mL/plant/day. Numbers with the precision that matters, not more.
 - Data from out-of-service systems has been removed on purpose; ignore those systems entirely (see the OUT OF SERVICE note if present).
-- Warnings first matter most: put anything that can hurt the crop within days in warnings.`;
+- Warnings first matter most: put anything that can hurt the crop within days in warnings.
+
+Basis — the farm team must see what each of your items rests on:
+- Every per_element verdict, warning and recommendation has a basis array listing every source it relies on: protocol (human_protocol as the human agronomist wrote it), operator_targets (what the farm team entered in SenseHub: profile_targets, crop_profile facts, tanks and ratios as configured), operator_notes (the notes of this run), measured (measured litres, feed EC/pH, flows, climate, substrate sensors, lab), senseHub_calculation (numbers SenseHub calculated: delivered ppm, EC estimates, ratios, mL per plant, ppm_at_1_to_design, elements_correspond_to_ec), ai_general_knowledge (your own agronomy knowledge, not in the snapshot).
+- profile_targets were prefilled from the protocol; their source field and elements_correspond_to_ec.basis say whether they are still the protocol values, scaled by SenseHub or edited by the farm team.
+- Be honest: add ai_general_knowledge whenever a claim needs knowledge the snapshot does not contain (typical crop needs, physiology, product behaviour). Use ai_general_knowledge alone only when nothing in the snapshot supports the item; the farm team sees such items marked 'AI knowledge – not from your data'.`;
 
 function str(v) { return typeof v === 'string' ? v : (v === null || v === undefined ? '' : String(v)); }
+
+/** Why a basis array is not acceptable (null = fine): missing, empty or an unknown value. */
+function basisProblem(b) {
+  if (!Array.isArray(b)) return 'missing';
+  if (b.length === 0) return 'empty';
+  const bad = b.filter(x => !BASIS.includes(x));
+  return bad.length ? `has unknown value(s) ${bad.map(x => `'${x}'`).join(', ')}` : null;
+}
+
+/** A basis array de-duplicated in the fixed BASIS order; null when absent (older advices). */
+function normaliseBasis(b) {
+  if (!Array.isArray(b)) return null;
+  const set = new Set(b);
+  const out = BASIS.filter(x => set.has(x));
+  return out.length ? out : null;
+}
+
+/** Spread-in `basis` only when present, so advices without it keep their shape. */
+const withBasis = (b) => { const n = normaliseBasis(b); return n ? { basis: n } : {}; };
 
 /**
  * Validate a parsed output. Rejects cut-off / hollow output before it is saved.
@@ -167,6 +210,8 @@ function validateAdviceOutput(o, { requireNotesResponse = false } = {}) {
       seen.add(e.element);
       if (!ELEMENT_STATUSES.includes(e.status)) problems.push(`per_element ${e.element} status invalid`);
       if (!str(e.comment).trim()) problems.push(`per_element ${e.element} comment empty`);
+      const b = basisProblem(e.basis);
+      if (b) problems.push(`per_element ${e.element} basis ${b}`);
     }
     for (const el of REQUIRED_ELEMENTS) if (!seen.has(el)) problems.push(`per_element misses ${el}`);
     const missing = ELEMENTS.filter(el => !seen.has(el));
@@ -179,12 +224,16 @@ function validateAdviceOutput(o, { requireNotesResponse = false } = {}) {
       if (!r || str(r.action).trim().length < 10) problems.push(`recommendations[${i}].action empty`);
       if (!r || !VS_PROTOCOL.includes(r.vs_protocol)) problems.push(`recommendations[${i}].vs_protocol invalid`);
       if (!r || !str(r.vs_protocol_reason).trim()) problems.push(`recommendations[${i}].vs_protocol_reason empty`);
+      const b = basisProblem(r && r.basis);
+      if (b) problems.push(`recommendations[${i}].basis ${b}`);
     });
   }
   if (!Array.isArray(o.warnings)) problems.push('warnings is not an array');
   else o.warnings.forEach((w, i) => {
     if (!w || !WARNING_SEVERITIES.includes(w.severity)) problems.push(`warnings[${i}].severity invalid`);
     if (!w || !str(w.message).trim()) problems.push(`warnings[${i}].message empty`);
+    const b = basisProblem(w && w.basis);
+    if (b) problems.push(`warnings[${i}].basis ${b}`);
   });
   if (!Array.isArray(o.questions_for_operator)) problems.push('questions_for_operator is not an array');
   if (requireNotesResponse) {
@@ -203,18 +252,22 @@ function normaliseAdvice(o) {
     summary: str(o.summary).trim(),
     analysis_markdown: str(o.analysis_markdown).trim(),
     per_element: (o.per_element || []).slice().sort((a, b) => order(a.element) - order(b.element))
-      .map(e => ({ element: e.element, status: e.status, comment: str(e.comment).trim() })),
-    warnings: (o.warnings || []).map(w => ({ severity: w.severity, message: str(w.message).trim() })),
+      .map(e => ({ element: e.element, status: e.status, comment: str(e.comment).trim(), ...withBasis(e.basis) })),
+    warnings: (o.warnings || []).map(w => ({ severity: w.severity, message: str(w.message).trim(), ...withBasis(w.basis) })),
     recommendations: (o.recommendations || []).map(r => ({
       priority: r.priority, action: str(r.action).trim(), rationale: str(r.rationale).trim(), when: str(r.when).trim(),
-      vs_protocol: r.vs_protocol, vs_protocol_reason: str(r.vs_protocol_reason).trim(),
+      vs_protocol: r.vs_protocol, vs_protocol_reason: str(r.vs_protocol_reason).trim(), ...withBasis(r.basis),
     })),
     questions_for_operator: (o.questions_for_operator || []).map(q => str(q).trim()).filter(Boolean),
     ...(str(o.operator_notes_response).trim() ? { operator_notes_response: str(o.operator_notes_response).trim() } : {}),
   };
 }
 
-/** The user-visible text of an advice (translation payload). Deterministic key order. */
+/**
+ * The user-visible text of an advice (translation payload). Deterministic key order.
+ * `basis` is an enum list, never translated: it is not in the payload (so the
+ * translation hash of older advices is unchanged) and mergeTranslation keeps it.
+ */
 function translatablePayload(out) {
   return {
     summary: str(out.summary),
@@ -254,6 +307,9 @@ module.exports = {
   PRIORITIES,
   VS_PROTOCOL,
   WARNING_SEVERITIES,
+  BASIS,
+  basisProblem,
+  normaliseBasis,
   OUTPUT_SCHEMA,
   outputSchema,
   operatorNotesBlock,

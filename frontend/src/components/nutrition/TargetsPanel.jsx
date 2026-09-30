@@ -1,13 +1,13 @@
 import React, { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../ui';
+import { Button, ProvenanceBadge, ProvenanceMark } from '../../ui';
 import ConfirmDialog from '../ConfirmDialog';
 import ReportTabs, { tabPanelProps } from '../agronomist/ReportTabs';
 import { useFormat } from '../../i18n/useFormat';
 import { StatusMark } from '../agronomist/SectionStatus';
-import { Section, NumInput, TableWrap, SourceBadge } from './parts';
+import { Section, NumInput, TableWrap, ElementTargetMark } from './parts';
 import ScaleToEcDialog from './ScaleToEcDialog';
-import { ELEMENTS, ppmDecimals, parseNum, targetStages, ecCorrespondenceState } from './nutritionUtil';
+import { ELEMENTS, ppmDecimals, parseNum, targetStages, ecCorrespondenceState, stageRowProvenance } from './nutritionUtil';
 
 /**
  * Targets per stage, editable (admin / operator), next to the human agronomist's
@@ -16,6 +16,12 @@ import { ELEMENTS, ppmDecimals, parseNum, targetStages, ecCorrespondenceState } 
  * Element targets follow the input EC target (2026-09-29): the header says which
  * EC the ppm currently correspond to; saving a changed EC target (or "Scale to
  * EC") opens a confirmation listing every element old → new with the factor.
+ *
+ * Provenance (operator request 2026-09-30): every value carries the shared
+ * marker (src/ui/Provenance.jsx) - stage rows: protocol when equal to the
+ * protocol, else operator; element rows: operator when hand-edited, else
+ * calculated from the protocol (prefill at the design dilution or scaled to EC);
+ * the protocol ppm column is calculated from the protocol.
  */
 
 // [key, [min field, target field, max field] (null = not applicable), unit, decimals, protocol getter]
@@ -33,6 +39,18 @@ function Triple({ values, decimals, fmt }) {
   const f = (v) => (v === null || v === undefined ? '—' : fmt.number(v, { decimals }));
   if (!values) return <span className="text-muted">—</span>;
   return <span className="font-mono whitespace-nowrap" dir="ltr">{f(a)} · <strong className="font-semibold">{f(b)}</strong> · {f(c)}</span>;
+}
+
+const TRIPLE_KEYS = ['min', 'targetShort', 'max'];
+
+/** Marker for one stage-target row (protocol value vs changed by the farm team). */
+function StageRowMark({ values, proto, t }) {
+  const p = stageRowProvenance(values, proto);
+  if (!p) return null;
+  const detail = p.kind === 'protocol' ? t('prov.stageProtocol')
+    : !proto ? t('prov.stageNoProtocol')
+    : t('prov.stageEdited', { fields: p.edited.map(i => t(`targets.col.${TRIPLE_KEYS[i]}`)).join(', ') });
+  return <ProvenanceMark kind={p.kind} detail={detail} data-testid="stage-row-provenance" />;
 }
 
 export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
@@ -56,6 +74,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
   const protoPpm = profile.protocol_ppm?.by_stage?.[stage] || null;
   const corr = profile.element_targets_ec?.[stage] || null;
   const corrState = ecCorrespondenceState(corr, st.ec_target);
+  const ratio = profile.protocol_ppm ? profile.protocol_ppm.design_dilution : 150;
 
   const begin = () => {
     const d = { stage: {}, el: {} };
@@ -117,7 +136,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
 
   if (!stages.length) {
     return (
-      <Section title={t('targets.title')} source="operator" testId="nutrition-targets">
+      <Section title={t('targets.title')} provenance="operator" testId="nutrition-targets">
         <p className="text-sm text-muted">{t('targets.none')}</p>
       </Section>
     );
@@ -131,7 +150,6 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
       testId="nutrition-targets"
       title={t('targets.title')}
       subtitle={t('targets.subtitle')}
-      source="operator"
       canEdit={canEdit}
       editing={editing}
       onEdit={begin}
@@ -153,7 +171,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
               <tr className="text-label uppercase text-muted">
                 <th className="py-1 pe-3 text-start font-semibold">{t('targets.col.target')}</th>
                 <th className="py-1 pe-3 text-start font-semibold">{t('targets.col.profile')}</th>
-                <th className="py-1 text-start font-semibold"><SourceBadge kind="protocol" /></th>
+                <th className="py-1 text-start font-semibold"><ProvenanceBadge kind="protocol" detail={t('prov.protocolColumn')} /></th>
               </tr>
             </thead>
             <tbody>
@@ -168,7 +186,10 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
                         {fields.map((f, i) => (f ? <span key={f}>{cellIn(draft.stage[f], (v) => setDraft(d => ({ ...d, stage: { ...d.stage, [f]: v } })), `${t(`targets.row.${key}`)} ${t(`targets.col.${['min', 'targetShort', 'max'][i]}`)}`)}</span> : null))}
                       </span>
                     ) : (
-                      <Triple values={fields.map(f => (f ? st[f] ?? null : null))} decimals={dec} fmt={fmt} />
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <Triple values={fields.map(f => (f ? st[f] ?? null : null))} decimals={dec} fmt={fmt} />
+                        <StageRowMark values={fields.map(f => (f ? st[f] ?? null : null))} proto={protoGet(protoStage)} t={t} />
+                      </span>
                     )}
                   </td>
                   <td className="py-1.5"><Triple values={protoGet(protoStage)} decimals={dec} fmt={fmt} /></td>
@@ -200,7 +221,12 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
               <tr className="text-label uppercase text-muted">
                 <th className="py-1 pe-3 text-start font-semibold">{t('targets.col.element')}</th>
                 <th className="py-1 pe-3 text-start font-semibold">{t('targets.col.profilePpm')}</th>
-                <th className="py-1 text-end font-semibold">{t('targets.col.protocolPpm', { ratio: profile.protocol_ppm ? profile.protocol_ppm.design_dilution : 150 })}</th>
+                <th className="py-1 text-end font-semibold">
+                  <span className="inline-flex flex-wrap items-center justify-end gap-1">
+                    {t('targets.col.protocolPpm', { ratio })}
+                    <ProvenanceBadge kind="calculated" from="protocol" detail={t('prov.protocolRecipe', { ratio })} data-testid="protocol-ppm-provenance" />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -220,7 +246,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
                       ) : (
                         <span className="inline-flex flex-wrap items-center gap-1.5">
                           <Triple values={r ? [r.hard_min, r.soft_target, r.hard_max] : null} decimals={dec} fmt={fmt} />
-                          {r && r.manual && <span className="rounded border border-caution-300 px-1 text-[11px] font-semibold text-caution-700 dark:border-caution-700 dark:text-caution-300" data-testid="target-manual" title={t('targets.manualHint')}>{t('targets.manualBadge')}</span>}
+                          <ElementTargetMark row={r} ratio={ratio} />
                         </span>
                       )}
                     </td>
