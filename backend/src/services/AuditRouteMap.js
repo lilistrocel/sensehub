@@ -684,6 +684,27 @@ const ROUTES = [
       return `Scaled the ${(ctx.body && ctx.body.stage) || ''} element targets of crop profile #${ctx.params.id} to input EC ${r.math ? r.math.ec_target : '?'} (×${r.factor ?? '?'}, ${r.written ?? 0} written${kept})`;
     },
   },
+  // "Follow crop targets" link to the dose controller (operator decision 2026-09-30)
+  simple('PUT', '/api/nutrition/profiles/:id/controller-link', 'crop_link.mode', 'dosing', (ctx) => {
+    const m = ctx.body && ctx.body.mode;
+    return m === 'follow_crop_targets'
+      ? `Linked crop profile #${ctx.params.id} to the dose controller ("Follow crop targets": changes create proposals that need approval)`
+      : `Set crop profile #${ctx.params.id} to manual dose-controller settings${m && m !== 'manual' ? ` (${m})` : ''} (open proposals cancelled)`;
+  }, { tags: ['crops'], severity: 'warning', target: (ctx) => ({ type: 'crop_profile', id: ctx.params.id, name: null }) }),
+  ...['approve', 'reject'].map(verb => simple('POST', `/api/nutrition/controller-link/proposals/:pid/${verb}`, `crop_link.${verb}`, 'dosing', (ctx) => {
+    const p = ctx.resBody && ctx.resBody.proposal;
+    const fmt = (v) => (v && typeof v === 'object' ? Object.entries(v).map(([k, x]) => `${k}:${x}`).join(' ') : String(v));
+    const diff = p && Array.isArray(p.diff) && p.diff.length ? `: ${p.diff.map(d => `${d.field} ${fmt(d.current)} -> ${fmt(d.proposed)}`).join('; ')}` : '';
+    return verb === 'approve'
+      ? `Approved crop-target proposal #${ctx.params.pid} for the dose controller (applies at the next dose-cycle start)${diff}`
+      : `Rejected crop-target proposal #${ctx.params.pid} for the dose controller${diff}`;
+  }, { tags: ['crops'], severity: 'warning', target: (ctx) => ({ type: 'controller_link_proposal', id: ctx.params.pid, name: null }) })),
+  simple('POST', '/api/nutrition/profiles/:id/controller-link/ec-trim', 'crop_link.ec_trim', 'dosing', (ctx) => {
+    const b = ctx.body || {};
+    return b.enable === true
+      ? `Enabled EC fine-tuning (SEKO feed-EC trim) — verification: handheld ${b.handheld_ec_ms} mS/cm vs SEKO ${b.seko_ec_ms} mS/cm at ${b.measured_at}`
+      : 'Disabled EC fine-tuning (SEKO feed-EC trim)';
+  }, { tags: ['crops'], severity: 'warning', target: (ctx) => ({ type: 'crop_profile', id: ctx.params.id, name: null }) }),
   simple('POST', '/api/nutrition/advice/run', 'fertilizer_advisor.run', 'ai', (ctx) => {
     const n = ctx.body && typeof ctx.body.notes === 'string' ? ctx.body.notes.trim() : '';
     return `Started a fertilizer advisor run (AI, advisory only)${n ? ` with operator notes (${n.length} chars)` : ''}`;

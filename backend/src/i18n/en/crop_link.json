@@ -1,0 +1,23 @@
+{
+  "alert": {
+    "pending": "Crop targets → dose controller: proposal #{id} for {crop} ({stage}) would change {count} controller setting(s). Review it on Crop & Nutrition — nothing changes until an admin or operator approves it.",
+    "approved": "Crop-target proposal #{id} for {crop} approved by {by}: it applies at the start of the next dose cycle.",
+    "rejected": "Crop-target proposal #{id} for {crop} rejected by {by}: the dose controller keeps its settings.",
+    "applied": "Crop-target proposal #{id} for {crop} applied at the start of a dose cycle.",
+    "cancelled": "{crop}: the dose controller link was switched to manual; open proposals were cancelled.",
+    "matches": "{crop}: the dose controller already matches the crop targets.",
+    "apply_failed": "Crop-target proposal #{id} was NOT applied, the dose controller is unchanged: {reason}"
+  },
+  "telegram": {
+    "pending": "Dose controller proposal ({crop})"
+  },
+  "stage": {
+    "seedling": "seedling",
+    "vegetative": "vegetative",
+    "flowering": "flowering / fruit set",
+    "fruiting": "fruiting",
+    "ripening": "ripening",
+    "harvested": "harvested",
+    "none": "no stage"
+  }
+}

@@ -376,3 +376,15 @@ To decide:
 ### Provenance markings (2026-09-30)
 
 Machine-translated, pending native review: `frontend/src/locales/{tr,ar}/common.json provenance.*` (badges, legend, AI "based on" chips on the Crop & Nutrition page, Agronomist, Planner, Tasks) and `nutrition.json prov.*` (tooltips), `targets.manualHint`. New glossary rows: the five provenance labels, based on / AI knowledge – not from your data / basis not recorded.
+
+### Follow crop targets — dose controller link (2026-09-30)
+
+Machine-translated, pending native review. Safety wording first: the texts must make clear that nothing changes without approval and that approved changes wait for the NEXT dose cycle.
+- Frontend: `nutrition.json link.*` (Crop & Nutrition under Targets per stage, and Fertigation under the dose controller card), `common.json provenance.from.calculated.operator` ("Calculated from crop targets").
+- Backend: `src/i18n/{tr,ar}/crop_link.json` (proposal alerts + Telegram title, stage names).
+New glossary rows: dose controller, Follow crop targets / manual, proposal / approve / reject, EC fine-tuning, handheld meter, dilution, best fit.
+
+To decide:
+- ☐ tr "EC ince ayarı" / ar "الضبط الدقيق لـ EC" for *EC fine-tuning* (the slow EC-trim outer loop).
+- ☐ ar "وحدة التحكم في الحقن" (glossary dose controller) is used in the alerts; the page title "ربط وحدة التحكم في الحقن" for *Dose controller link*.
+- ☐ tr "Ürün hedeflerini izle" / ar "اتباع أهداف المحصول" for the link mode *Follow crop targets*.

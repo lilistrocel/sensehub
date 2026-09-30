@@ -129,7 +129,8 @@
     "from": {
       "calculated": {
         "protocol": "Protokolden hesaplandı",
-        "measured": "Ölçümlerden hesaplandı"
+        "measured": "Ölçümlerden hesaplandı",
+        "operator": "Ürün hedeflerinden hesaplandı"
       }
     },
     "basis": {

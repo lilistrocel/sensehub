@@ -27,8 +27,21 @@
  *   POST /api/nutrition/advice/:id/translate        admin — (re)translate one advice ({ lang })
  *   PUT  /api/nutrition/advisor/config              admin
  *
- * ADVISORY ONLY: nothing here changes recipes, dose programs, dosing ratios,
- * tanks or automations. No endpoint actuates anything.
+ * "Follow crop targets" link to the dose controller (operator decision 2026-09-30,
+ * services/ControllerLinkService.js):
+ *   GET  /api/nutrition/controller-link?profile_id=            any role — link mode, controller values + origin,
+ *        crop-implied values (match / mismatch), pending / approved proposal, history, source-water
+ *        discrepancy, EC fine-tuning state, element best fit (advisory)
+ *   GET  /api/nutrition/profiles/:id/controller-link/proposals?limit=&offset=   any role — proposal history
+ *   PUT  /api/nutrition/profiles/:id/controller-link           admin, operator — { mode: 'manual' | 'follow_crop_targets' }
+ *   POST /api/nutrition/controller-link/proposals/:pid/approve admin, operator — { note? } applies at the NEXT dose-cycle start
+ *   POST /api/nutrition/controller-link/proposals/:pid/reject  admin, operator — { note? }
+ *   POST /api/nutrition/profiles/:id/controller-link/ec-trim   admin, operator — { enable, confirm: true,
+ *        handheld_ec_ms, seko_ec_ms, measured_at, note } EC fine-tuning (enable needs the recorded SEKO check)
+ * These write dose-controller SETPOINTS only through approved proposals (never mid-cycle, never a coil).
+ *
+ * Everything else is ADVISORY ONLY: it never changes recipes, dose programs, dosing
+ * ratios, tanks or automations. No endpoint actuates anything.
  */
 const express = require('express');
 const { requireRole } = require('../middleware/auth');
@@ -43,6 +56,7 @@ function sendError(res, err) {
   if (err && err.code) body.code = err.code;
   if (err && err.running_id) body.running_id = err.running_id;
   if (err && err.reason) body.reason = err.reason;
+  for (const k of ['newer_id', 'fields', 'deviation_pct', 'status_now']) if (err && err[k] !== undefined) body[k] = err[k];
   if (status >= 500) console.error('[nutrition]', err && err.stack ? err.stack : err);
   res.status(status).json(body);
 }
@@ -59,6 +73,12 @@ function createNutritionRouter(deps = {}) {
   const systemView = () => deps.systemView || require('../services/FertigationSystemView').fertigationSystemView;
   const db = () => deps.db || require('../utils/database').db;
   const idParam = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; };
+  const link = () => deps.link || require('../services/ControllerLinkService').getControllerLinkService();
+  // A write to the crop targets / source water / stage: a linked profile gets a new proposal
+  // when the implied controller values changed (never applied without approval).
+  const relink = (id) => {
+    try { link().evaluate(id); } catch (e) { if (!e.status || e.status >= 500) console.error('[nutrition] controller link evaluation failed:', e.message); }
+  };
 
   const profileFor = (req) => {
     const id = idParam(req.query.profile_id);
@@ -97,19 +117,25 @@ function createNutritionRouter(deps = {}) {
 
   router.put('/profiles/:id', requireRole('admin', 'operator'), (req, res) => {
     try {
-      res.json(profiles().update(idParam(req.params.id), req.body || {}, { userId: req.user && req.user.id }));
+      const p = profiles().update(idParam(req.params.id), req.body || {}, { userId: req.user && req.user.id });
+      relink(p.id);
+      res.json(p);
     } catch (err) { sendError(res, err); }
   });
 
   router.put('/profiles/:id/targets', requireRole('admin', 'operator'), (req, res) => {
     try {
-      res.json(profiles().setTargets(idParam(req.params.id), req.body || {}, { userId: req.user && req.user.id }));
+      const p = profiles().setTargets(idParam(req.params.id), req.body || {}, { userId: req.user && req.user.id });
+      relink(p.id);
+      res.json(p);
     } catch (err) { sendError(res, err); }
   });
 
   router.post('/profiles/:id/targets/reset', requireRole('admin', 'operator'), (req, res) => {
     try {
-      res.json(profiles().resetTargetsToProtocol(idParam(req.params.id), { userId: req.user && req.user.id }));
+      const p = profiles().resetTargetsToProtocol(idParam(req.params.id), { userId: req.user && req.user.id });
+      relink(p.id);
+      res.json(p);
     } catch (err) { sendError(res, err); }
   });
 
@@ -118,6 +144,54 @@ function createNutritionRouter(deps = {}) {
       const b = req.body || {};
       const preview = b.preview === undefined ? true : !!b.preview;
       res.json(profiles().scaleTargetsToEc(idParam(req.params.id), { stage: b.stage, preview, include: b.include === undefined ? [] : b.include }, { userId: req.user && req.user.id }));
+    } catch (err) { sendError(res, err); }
+  });
+
+  // ---------- "Follow crop targets" link to the dose controller ----------
+
+  const who = (req) => (req.user ? { id: req.user.id ?? null, email: req.user.email ?? null, role: req.user.role } : null);
+
+  router.get('/controller-link', (req, res) => {
+    try {
+      const id = idParam(req.query.profile_id) || link().activeProfileId();
+      if (!id) return res.json({ view: null });
+      res.json({ view: link().view(id) });
+    } catch (err) { sendError(res, err); }
+  });
+
+  router.get('/profiles/:id/controller-link/proposals', (req, res) => {
+    try {
+      const id = idParam(req.params.id);
+      if (!id) return res.status(404).json({ error: 'Crop profile not found' });
+      res.json(link().listProposals(id, { limit: req.query.limit, offset: req.query.offset }));
+    } catch (err) { sendError(res, err); }
+  });
+
+  router.put('/profiles/:id/controller-link', requireRole('admin', 'operator'), (req, res) => {
+    try {
+      const id = idParam(req.params.id);
+      const r = link().setMode(id, (req.body || {}).mode, who(req));
+      res.json({ ...r, view: link().view(id) });
+    } catch (err) { sendError(res, err); }
+  });
+
+  router.post('/controller-link/proposals/:pid/approve', requireRole('admin', 'operator'), (req, res) => {
+    try {
+      const p = link().approve(idParam(req.params.pid), who(req), (req.body || {}).note);
+      res.json({ proposal: p, view: link().view(p.profile_id) });
+    } catch (err) { sendError(res, err); }
+  });
+
+  router.post('/controller-link/proposals/:pid/reject', requireRole('admin', 'operator'), (req, res) => {
+    try {
+      const p = link().reject(idParam(req.params.pid), who(req), (req.body || {}).note);
+      res.json({ proposal: p, view: link().view(p.profile_id) });
+    } catch (err) { sendError(res, err); }
+  });
+
+  router.post('/profiles/:id/controller-link/ec-trim', requireRole('admin', 'operator'), (req, res) => {
+    try {
+      res.json({ view: link().setEcTrim(idParam(req.params.id), req.body || {}, who(req)) });
     } catch (err) { sendError(res, err); }
   });
 

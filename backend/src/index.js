@@ -419,6 +419,16 @@ server.listen(PORT, async () => {
     console.error('Dose controller: Failed to start -', error.message);
   }
 
+  // "Follow crop targets" (operator decision 2026-09-30): a 60 s check of LINKED crop
+  // profiles turns a stage transition into a PENDING proposal. Never actuates; an
+  // approved proposal is applied only by DoseController.beginCycle (next cycle start).
+  try {
+    require('./services/ControllerLinkService').getControllerLinkService().start();
+    console.log('Controller link (crop targets -> dose controller proposals): Started');
+  } catch (error) {
+    console.error('Controller link: Failed to start -', error.message);
+  }
+
   // Irrigation runs: groups monitor cycles + relay events into automated / manual
   // runs (irrigation_runs, derived data). Read-only for the plant: no relay writes.
   try {

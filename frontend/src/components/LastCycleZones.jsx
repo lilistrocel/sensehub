@@ -160,7 +160,7 @@ export default function LastCycleZones({ run, formatTime, compact = false, class
       {rows.length === 0 ? (
         <p className="mt-1 text-sm text-muted">{t('lastCycle.noZoneRecord')}</p>
       ) : (
-        <div className="mt-1.5 -mx-3 overflow-x-auto overscroll-x-contain" role="region" aria-label={t('lastCycle.tableAria')} tabIndex={0} dir="ltr">
+        <div className="relative mt-1.5 -mx-3 overflow-x-auto overscroll-x-contain" role="region" aria-label={t('lastCycle.tableAria')} tabIndex={0} dir="ltr">
           <table className={`w-full min-w-[33rem] border-collapse ${compact ? 'text-xs' : 'text-sm'}`}>
             <thead>
               <tr className="border-b border-line">

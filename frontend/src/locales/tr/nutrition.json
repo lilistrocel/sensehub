@@ -497,5 +497,208 @@
     "notMeasured": "SenseHub'ın ölçemediği, çiftlik ekibinin girdiği bilgiler.",
     "operatorNotes": "Çiftlik ekibi bu çalışma için yazdı (yazıldığı gibi gösterilir, çevrilmez).",
     "aiText": "Yapay zekâ danışmanı yazdı."
+  },
+  "link": {
+    "title": "Dozlama denetleyicisi bağlantısı",
+    "subtitle": "Fertigasyon dozlama denetleyicisi bu ürünün evre hedeflerini izlesin mi? Her değişiklik, bir yönetici veya operatörün onayladığı bir öneridir; bir sonraki dozlama döngüsünün başında uygulanır.",
+    "noProfile": "Etkin ürün profili yok.",
+    "mode": {
+      "follow": "Ürün hedeflerini izle",
+      "manual": "Manuel",
+      "followHint": "Evre hedeflerinde, kaynak suyu EC’sinde veya evrede bir değişiklik öneri oluşturur. Onay olmadan hiçbir şey değişmez.",
+      "manualHint": "Dozlama denetleyicisi kendi ayarlarını korur. Hiçbir şey önerilmez veya değiştirilmez.",
+      "switchFollow": "Ürün hedeflerini izle",
+      "switchManual": "Manuele geç"
+    },
+    "water": {
+      "missingDefault": "Ürün profilinde kaynak suyu EC’si boş, ancak denetleyicinin EC ince ayarı {{water}} mS/cm varsayıyor. Bu değer 2026-09-26’da koda yazılmış bir SenseHub varsayılanıdır (kapalı döngü dozlama, cd17586) — hiç ölçülmedi. Ölçülen kaynak suyu EC’sini Ürün profili → SenseHub’ın ölçemediği bilgiler bölümüne girin; o zamana kadar bağlantının EC kısmı engellidir (pH kısmı çalışmaya devam eder).",
+      "missing": "Ürün profilinde kaynak suyu EC’si boş, ancak denetleyicinin EC ince ayarı {{water}} mS/cm kullanıyor. Ölçülen kaynak suyu EC’sini ürün profiline girin — tek doğru kaynak odur; o zamana kadar bağlantının EC kısmı engellidir.",
+      "mismatch": "Kaynak suyu EC’si farklı: ürün profili {{profile}} mS/cm, denetleyici EC ince ayarı {{trim}} mS/cm, EC aralık kontrolü {{raw}} mS/cm. Tek doğru kaynak ürün profilindeki değerdir; öneriyi onaylamak denetleyicinin onu izlemesini sağlar.",
+      "defaultNote": "Denetleyicideki {{water}} mS/cm bir SenseHub kod varsayılanıdır (2026-09-26, cd17586), hiç ölçülmedi."
+    },
+    "controller": {
+      "title": "Şu anki denetleyici ve ürün hedefleri",
+      "running": "Bir dozlama döngüsü sürüyor: başladığı değerleri korur.",
+      "table": "Dozlama denetleyicisi ayarlarının ürün hedefleriyle karşılaştırması"
+    },
+    "col": {
+      "setting": "Ayar",
+      "controller": "Şu anki denetleyici",
+      "fromTargets": "Ürün hedeflerinden",
+      "match": "Uyum",
+      "current": "Şu anki",
+      "proposed": "Önerilen",
+      "reason": "Neden"
+    },
+    "field": {
+      "phSetpoint": "pH ayar noktası",
+      "phFloor": "pH alt sınırı (asit durur)",
+      "ratio": "Seyreltme, A–D tankları",
+      "trimTarget": "EC ince ayarı hedefi",
+      "trimWater": "EC ince ayarı su EC’si",
+      "rawWater": "Ham su EC’si (EC aralık kontrolü)",
+      "trimEnabled": "EC ince ayarı",
+      "other": "Ayar"
+    },
+    "match": {
+      "ok": "Uyumlu",
+      "caution": "Farklı",
+      "unknown": "Mevcut değil"
+    },
+    "part": {
+      "ph": "pH",
+      "ec": "EC / seyreltme"
+    },
+    "blockedShort": {
+      "source_water_missing": "Kaynak suyu EC’si gerekli",
+      "no_ec_target": "EC hedefi yok",
+      "no_protocol": "Protokol yok",
+      "no_protocol_recipe": "Protokol reçetesi yok",
+      "protocol_ec_unknown": "Reçete EC’si bilinmiyor",
+      "source_water_exceeds_target": "Su ≥ hedef",
+      "factor_out_of_range": "Aralık dışında",
+      "ratio_out_of_bounds": "1:100–1:250 dışında",
+      "no_tanks": "Oranlı tank yok",
+      "no_ph_target": "pH aralığı yok",
+      "cross_check": "Güvenlik kontrollerini geçmiyor",
+      "no_stage_targets": "Evre hedefi yok"
+    },
+    "blocked": {
+      "source_water_missing": "{{part}} önerilmedi: önce ölçülen kaynak suyu EC’sini ürün profiline girin.",
+      "no_ec_target": "{{part}} önerilmedi: bu evrenin giriş EC hedefi yok.",
+      "no_protocol": "{{part}} önerilmedi: ürün profilinde reçete EC’sinin alınacağı bir agronomist protokolü yok.",
+      "no_protocol_recipe": "{{part}} önerilmedi: protokolde bu evre için reçete yok.",
+      "protocol_ec_unknown": "{{part}} önerilmedi: protokol reçetesinin EC’si hesaplanamıyor.",
+      "source_water_exceeds_target": "{{part}} önerilmedi: kaynak suyu EC’si EC hedefine eşit veya daha yüksek.",
+      "factor_out_of_range": "{{part}} önerilmedi: EC hedefi protokol reçetesinden çok uzak (×0.3–×3 dışında).",
+      "ratio_out_of_bounds": "{{part}} önerilmedi: 1:{{ratio}} gerekir, bu güvenli 1:{{min}}–1:{{max}} aralığının dışında.",
+      "no_tanks": "{{part}} önerilmedi: denetleyicide seyreltmesi olan besin tankı yok.",
+      "no_ph_target": "{{part}} önerilmedi: bu evrenin giriş pH aralığı yok.",
+      "cross_check": "{{part}} önerilmedi: ortaya çıkan ayar noktası / alt sınır denetleyicinin güvenlik kontrollerinden geçmez.",
+      "no_stage_targets": "{{part}} önerilmedi: mevcut evrenin hedefi yok."
+    },
+    "trim": {
+      "on": "Açık",
+      "off": "Kapalı",
+      "notProposed": "Bir öneriyle asla değiştirilmez.",
+      "title": "EC ince ayarı (SEKO besleme EC’si)",
+      "explain": "Önceki çalışmanın SEKO besleme EC’sine göre tüm seyreltmeleri döngü başına bir kez birlikte EC hedefine doğru ayarlar. SEKO EC’si el tipi bir ölçerle kontrol edilene kadar (en fazla %{{max}} fark) kapalı kalır.",
+      "enable": "EC ince ayarını etkinleştir (SEKO EC’sinin el tipi ölçerle doğrulanması gerekir)",
+      "disable": "EC ince ayarını devre dışı bırak",
+      "check": {
+        "enable": "{{who}} tarafından {{at}} tarihinde etkinleştirildi: el tipi {{handheld}} / SEKO {{seko}} mS/cm (%{{dev}}).",
+        "disable": "{{who}} tarafından {{at}} tarihinde devre dışı bırakıldı.",
+        "refused": "{{at}} tarihinde reddedildi ({{who}}): el tipi {{handheld}} ile SEKO {{seko}} mS/cm arasında %{{dev}} fark var."
+      }
+    },
+    "crop": {
+      "stage": "Evre: {{stage}}",
+      "ec": "EC hedefi {{ec}} mS/cm",
+      "ph": "pH {{min}}–{{max}}",
+      "protocolPh": "Protokol pH {{min}}–{{max}}",
+      "water": "Kaynak suyu EC {{water}} mS/cm",
+      "stockEc": "Mevcut tank stoku 1:{{ratio}} ile gübrelerden ≈ EC {{ec}} mS/cm"
+    },
+    "prov": {
+      "cropLink": "SenseHub tarafından ürün hedeflerinden hesaplandı; #{{id}} numaralı onaylı öneriden {{at}} tarihinde uygulandı.",
+      "operator": "Çiftlik ekibi tarafından ayarlandı ({{who}}, {{at}}).",
+      "trimCheck": "Çiftlik ekibi tarafından kayıtlı bir SEKO / el tipi ölçer kontrolüyle değiştirildi ({{who}}, {{at}}).",
+      "unrecorded": "SenseHub denetleyici değerlerinin kaynağını kaydetmeye başlamadan önce çiftlik ekibi tarafından ayarlandı.",
+      "default": "SenseHub varsayılan değeri: çiftlik ekibi tarafından hiç ayarlanmadı ve hiç ölçülmedi.",
+      "mixed": "Tanklar farklı zamanlarda ayarlandı.",
+      "fromTargets": "SenseHub tarafından ürün evre hedeflerinden ve kaynak suyu EC’sinden hesaplandı.",
+      "stageTargets": "Bu ürünün evre hedefleri (Evre başına hedefler).",
+      "stockEc": "Mevcut tank reçetelerinin bu seyreltmedeki katyon toplamı ÷ 10; kaynak suyu dahil değil."
+    },
+    "proposal": {
+      "diffTable": "Önerilen dozlama denetleyicisi değişiklikleri",
+      "pendingTitle": "#{{id}} numaralı öneri onay bekliyor",
+      "approvedTitle": "#{{id}} numaralı öneri onaylandı — bir sonraki dozlama döngüsünü bekliyor",
+      "approve": "Onayla",
+      "reject": "Reddet",
+      "approvedBy": "{{who}} tarafından {{at}} tarihinde onaylandı. Bir sonraki dozlama döngüsünün başında uygulanır; süren bir döngü değişmez.",
+      "nextCycle": "Bir yönetici veya operatör onaylayana kadar hiçbir şey değişmez. Onaylanan değişiklikler bir sonraki dozlama döngüsünün başında uygulanır, asla süren bir döngü sırasında değil.",
+      "viewerNote": "Yalnızca bir yönetici veya operatör onaylayabilir ya da reddedebilir.",
+      "none": "Denetleyici ürün hedeflerini izliyor. Bekleyen öneri yok.",
+      "noneDecided": "Bekleyen öneri yok. Bir öneri reddedildiği veya bir kısım engellendiği için denetleyici ürün hedeflerinden farklı.",
+      "manualPreview": "Manuel mod: ürün hedefleri {{n}} farklı denetleyici ayarı gerektiriyor. Bağlantı manuelken hiçbir şey önerilmez."
+    },
+    "trigger": {
+      "link_enabled": "Bağlantı açıldı",
+      "targets_changed": "Evre hedefleri değişti",
+      "source_water_changed": "Kaynak suyu EC’si değişti",
+      "stage_changed": "Gelişim evresi değişti",
+      "controller_changed": "Denetleyici ayarları değişti",
+      "protocol_changed": "Protokol değişti"
+    },
+    "status": {
+      "pending": "Onay bekliyor",
+      "approved": "Onaylandı, bir sonraki döngüyü bekliyor",
+      "applied": "Uygulandı",
+      "rejected": "Reddedildi",
+      "superseded": "Daha yeni bir öneriyle değiştirildi",
+      "cancelled": "İptal edildi",
+      "failed": "Uygulanmadı (kontrollerden geçmedi)"
+    },
+    "reason": {
+      "ph_midpoint": "Evre pH aralığının ortası {{min}}–{{max}}.",
+      "ph_target": "Evre pH hedefi {{target}}.",
+      "ph_floor": "Evre pH alt değeri {{min}} − {{offset}}, asla {{floorMin}} altında değil. Asit sınırları ve sensör kontrolleri olduğu gibi kalır.",
+      "ec_ratio": "EC hedefi {{ec}} − kaynak suyu {{water}} = gübrelerden {{fert}} mS/cm. Protokol reçetesi 1:{{design}} ile {{protocolEc}} mS/cm verir, yani ×{{factor}} → her tank için 1:{{ratio}} (tüm tanklar eşit çeker).",
+      "trim_target": "Evre EC hedefi {{ec}} mS/cm.",
+      "trim_water": "Ürün profilinden kaynak suyu EC’si {{water}} mS/cm.",
+      "raw_water": "Ürün profilinden kaynak suyu EC’si {{water}} mS/cm."
+    },
+    "history": {
+      "title": "Öneri geçmişi ({{n}})",
+      "by": "{{who}} tarafından",
+      "applied": "{{at}} tarihinde uygulandı (çalışma #{{run}})"
+    },
+    "fit": {
+      "title": "Mevcut tank stoku ile element için en iyi uyum",
+      "method": "SenseHub: güvenli aralıktaki tank başına seyreltmeler içinde evre element hedeflerine en yakın olanı (bağıl hata üzerinde ağırlıklı en küçük kareler; ağırlıklar element önceliğinden).",
+      "advisory": "Yalnızca tavsiye — asla uygulanmaz",
+      "none": {
+        "no_tanks": "Seyreltmesi olan besin tankı yok.",
+        "no_element_targets": "Bu evrenin element hedefi yok.",
+        "other": "En iyi uyum hesaplanamadı."
+      },
+      "explain": "Tankların şu anki karışımıyla element hedeflerine en çok yaklaşacak tank başına farklı seyreltmeler (1:{{min}}–1:{{max}}). Agronomi kararı tüm tanklardan eşit çekiş olduğundan bu yalnızca bilgi amaçlıdır.",
+      "now": "şu an 1:{{ratio}}",
+      "ec": "gübrelerden ≈ EC {{ec}} mS/cm",
+      "table": "Element hedefleri ve en iyi uyum",
+      "col": {
+        "target": "Hedef ppm",
+        "now": "Şu an ppm",
+        "fit": "En iyi uyum ppm"
+      },
+      "stockChange": "Stok reçetesi değişikliği gerekir (ulaşılabilir {{min}}–{{max}} ppm)",
+      "status": {
+        "ok": "Aralıkta (%{{pct}})",
+        "low": "Düşük (%{{pct}})",
+        "high": "Yüksek (%{{pct}})"
+      },
+      "unreachable": "Mevcut stokla aralıktaki hiçbir seyreltmede ulaşılamıyor: {{elements}}. Stok reçetesi değişikliği gerekir.",
+      "compromised": "En iyi uyumda bile aralık dışında: {{elements}}. Aynı tanktaki elementler birlikte değişir (ör. D tankında Fe ve mikro elementler), bu nedenle tüm hedeflere ulaşmak için stok reçetesi değişikliği gerekir."
+    },
+    "dialog": {
+      "followTitle": "Ürün hedefleri izlensin mi?",
+      "followBody": "Bundan sonra evre hedeflerinde, kaynak suyu EC’sinde veya gelişim evresinde bir değişiklik dozlama denetleyicisi için bir öneri oluşturur. Denetleyici, bir yönetici veya operatör onaylayana kadar değerlerini korur; onaylanan değişiklikler bir sonraki dozlama döngüsünün başında uygulanır. Şu ayarlar ürün hedeflerini izleyecek:",
+      "manualTitle": "Manuele geçilsin mi?",
+      "manualBody": "Dozlama denetleyicisi mevcut ayarlarını korur; üzerinde hiçbir şey değişmez. Açık öneriler (bekleyen veya onaylanan) iptal edilir.",
+      "approveTitle": "#{{id}} numaralı öneri onaylansın mı?",
+      "approveBody": "Bu dozlama denetleyicisi ayarları bir sonraki dozlama döngüsünün BAŞINDA değişir. Şu anda süren bir döngü değerlerini korur. EC ince ayarı değiştirilmez.",
+      "rejectTitle": "#{{id}} numaralı öneri reddedilsin mi?",
+      "rejectBody": "Dozlama denetleyicisi mevcut ayarlarını korur. Ürün hedefleri değişene kadar aynı öneri yeniden oluşturulmaz.",
+      "trimOffTitle": "EC ince ayarı devre dışı bırakılsın mı?",
+      "trimOffBody": "Bir sonraki dozlama döngüsünden itibaren seyreltmeler temel değerlerinde kalır (SEKO besleme EC’sinden düzeltme yapılmaz).",
+      "trimOnTitle": "EC ince ayarı etkinleştirilsin mi?",
+      "trimOnBody": "Bir çalışma sırasında besleme numunesi alın ve kalibre edilmiş el tipi bir EC ölçerle ölçün; aynı anda SEKO EC’sini not edin. İkisi de adınızla kaydedilir. Aralarındaki fark en fazla %{{max}} olmalıdır. İnce ayar bir sonraki dozlama döngüsüyle başlar.",
+      "handheld": "El tipi ölçer EC’si",
+      "seko": "Aynı andaki SEKO EC’si",
+      "measuredAt": "Ölçüm zamanı",
+      "note": "Ölçer / not",
+      "deviation": "Fark: %{{dev}}"
+    }
   }
 }

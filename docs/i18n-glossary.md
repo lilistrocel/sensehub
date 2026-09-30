@@ -118,6 +118,13 @@ Aligned with the backend agent's term list (2026-09-27). Where the two differed,
 | provenance: human · protocol / human · operator / measured / calculated by SenseHub / AI-generated | insan · protokol / insan · operatör / ölçülen / SenseHub hesabı / yapay zekâ üretimi | بشري · البروتوكول / بشري · المشغّل / مقاس / محسوب بواسطة SenseHub / مُولَّد بالذكاء الاصطناعي |
 | based on / AI knowledge – not from your data / basis not recorded | dayanağı / yapay zekâ bilgisi – verilerinizden değil / dayanak kaydedilmedi | يستند إلى / معرفة الذكاء الاصطناعي – ليست من بياناتك / الأساس غير مسجّل |
 | crop | ürün | المحصول |
+| dose controller | dozlama denetleyicisi | وحدة التحكم في الحقن |
+| Follow crop targets (link mode) / manual | Ürün hedeflerini izle / manuel | اتباع أهداف المحصول / يدوي |
+| proposal / approve / reject | öneri / onayla / reddet | اقتراح / موافقة / رفض |
+| EC fine-tuning (EC trim outer loop) | EC ince ayarı | الضبط الدقيق لـ EC |
+| handheld meter | el tipi ölçer | جهاز قياس محمول |
+| dilution (1:N) | seyreltme | التخفيف |
+| best fit (advisory) | en iyi uyum | أفضل ملاءمة |
 | dashboard | gösterge paneli | لوحة المتابعة |
 | status board | durum panosu | لوحة الحالة |
 

@@ -83,6 +83,9 @@ if (this.isPaused && !state.hasCoils) return;   // relay boards are the firmware
 **3.7 Never risk a lockout on a guess.**
 *Incident "camera lockout":* the greenhouse PTZ had been powered off for three months unnoticed. Probing a Hikvision found at a different IP with repeated passwords tripped its 7-fail/30-min lockout — and it was a different camera. Lessons: alert on unreachable devices (`equipment_offline:<id>`); one credential attempt per unconfirmed device; `curl rtsp:// -X DESCRIBE` proves nothing because curl sends OPTIONS.
 
+**3.8 A setpoint derived from other data changes only through an approved proposal, applied at the next cycle start.**
+*Operator decision 2026-09-30 ("Follow crop targets"):* the crop stage targets may drive the dose controller's pH setpoint / floor, ratio and EC-trim targets, but only as a pending proposal (diff, reason, provenance, info alert) that an admin or operator approves; `DoseController.beginCycle` applies it before the cycle reads its config (`ControllerLinkService.applyApprovedForCycle`), re-validated with `validateConfigUpdate` + `crossCheck` + hard bounds (ratio 1:100-1:250), failing closed. A running cycle keeps its pH targets (`_cycleConfig`) and ratios. Missing inputs block the part they feed (no source water EC -> no EC proposal; the 250 µS/cm EC-trim water value was a code default, never measured). Closed-loop features that rest on an unverified sensor (EC trim on the SEKO EC) stay off behind their own control with a recorded verification. Every run records `config_version_id` / `link_proposal_id`.
+
 ---
 
 ## 4. Operator interface

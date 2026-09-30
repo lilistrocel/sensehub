@@ -6,6 +6,7 @@ import { useFormat } from '../../i18n/useFormat';
 import { Section, Field, Dash, TextInput, NumInput, Num, TableWrap } from './parts';
 import SystemPanel from './SystemPanel';
 import TargetsPanel from './TargetsPanel';
+import ControllerLinkPanel from './ControllerLinkPanel';
 import { STAGES, diffFields, invalidField, stageDate, plantsProvenance } from './nutritionUtil';
 
 /**
@@ -281,6 +282,9 @@ export default function ProfilePanel({ profile, canEdit, save, onSaved, api }) {
 
       {/* ---- Targets per stage ---- */}
       <TargetsPanel profile={profile} canEdit={canEdit} api={api} onSaved={onSaved} />
+
+      {/* ---- Dose controller link: follow the crop targets through approved proposals ---- */}
+      {profile.active && <ControllerLinkPanel api={api} canEdit={canEdit} profileId={profile.id} refreshKey={profile.updated_at} />}
 
       {/* ---- Human protocol baseline ---- */}
       {profile.protocol && <ProtocolCard protocol={profile.protocol} />}

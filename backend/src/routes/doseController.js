@@ -7,7 +7,10 @@
  *   GET /api/dose-controller/runs                any role — ?date=YYYY-MM-DD&from=&to=&limit=&offset= (run records)
  *   GET /api/dose-controller/runs/last           any role — latest finished run (per-zone table), { run: null } if none
  *   GET /api/dose-controller/config              admin — settings (system_settings 'dose_controller') + defaults + programs' control_mode
- *   PUT /api/dose-controller/config              admin — partial (deep) update, validated
+ *   PUT /api/dose-controller/config              admin — partial (deep) update, validated; recorded as a config
+ *                                                version + "Human · operator" origin of each changed tracked field.
+ *                                                pH setpoint / deadband / floor of a RUNNING cycle stay as they were at
+ *                                                its start (the change applies from the next cycle)
  *   PUT /api/dose-controller/programs/:id/mode   admin — { control_mode: 'closed_loop' | 'open_loop' } (takes effect next cycle)
  *
  * Nothing here actuates. The controller only drives valves inside a dose cycle
@@ -72,7 +75,8 @@ router.get('/config', requireRole('admin'), (req, res) => {
 
 router.put('/config', requireRole('admin'), (req, res) => {
   try {
-    const config = getDoseController().saveConfig(req.body || {});
+    const u = req.user || {};
+    const config = getDoseController().saveConfig(req.body || {}, { source: 'operator', user: { id: u.id ?? null, email: u.email ?? null } });
     res.json({ config, programs: programModes() });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.status === 400 ? 'Bad Request' : 'Internal Server Error', message: err.message });

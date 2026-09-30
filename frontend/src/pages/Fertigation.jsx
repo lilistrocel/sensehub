@@ -8,6 +8,7 @@ import { startPolling } from '../hooks/usePoll';
 import { MeasuredDosingCard } from '../components/reports/MeasuredWater';
 import FlowWatchStatus from '../components/FlowWatchStatus';
 import DoseControllerStatus from '../components/DoseControllerStatus';
+import ControllerLinkPanel from '../components/nutrition/ControllerLinkPanel';
 import StopIrrigationButton from '../components/irrigation/StopIrrigationButton';
 import TankStock from '../components/irrigation/TankStock';
 import { useFormat } from '../i18n/useFormat';
@@ -924,6 +925,7 @@ function TanksTab({ headers, canEdit, formatDateTime }) {
       <StopIrrigationButton className="bg-panel border border-line rounded-card p-3" />
       <FlowWatchStatus formatDateTime={formatDateTime} />
       <DoseControllerStatus formatDateTime={formatDateTime} />
+      <ControllerLinkPanel headers={headers} canEdit={canEdit} />
       <LiveDoseCycleBanner headers={headers} canEdit={canEdit} />
 
       <div className="flex items-center justify-between">

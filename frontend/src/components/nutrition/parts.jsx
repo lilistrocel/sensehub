@@ -123,10 +123,14 @@ export function Num({ value, decimals = 1, unit, fmt, className = '' }) {
   );
 }
 
-/** Scroll container for wide tables at 390 px. */
+/**
+ * Scroll container for wide tables at 390 px. `relative`: absolutely positioned
+ * screen-reader labels (sr-only) inside the table are clipped by this scroller
+ * instead of widening the whole page.
+ */
 export function TableWrap({ children, dir, label }) {
   return (
-    <div className="overflow-x-auto -mx-1 px-1" dir={dir} role="region" aria-label={label} tabIndex={0}>
+    <div className="relative overflow-x-auto -mx-1 px-1" dir={dir} role="region" aria-label={label} tabIndex={0}>
       {children}
     </div>
   );

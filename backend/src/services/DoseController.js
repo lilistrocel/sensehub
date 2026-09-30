@@ -107,6 +107,14 @@
 const zoneStats = require('./DoseRunZoneStats');
 
 const CONFIG_KEY = 'dose_controller';
+const PROVENANCE_KEY = 'dose_controller_provenance';
+// Controller fields whose origin is recorded (operator edit / crop-target proposal /
+// EC fine-tuning check) and shown with the shared provenance marks (FARM-APP-STANDARDS 4.6).
+const TRACKED_FIELDS = ['ph.setpoint', 'ph.floor_ph', 'nutrients.ec_trim.enabled', 'nutrients.ec_trim.target_us', 'nutrients.ec_trim.water_us', 'ec_check.raw_water_ec_us'];
+// pH targets frozen for a running cycle (operator decision 2026-09-30: a saved change,
+// e.g. an approved crop-target proposal, never alters a cycle that is already running;
+// the ratios and the EC trim are fixed at beginCycle already).
+const CYCLE_FROZEN_PH = ['setpoint', 'deadband', 'floor_ph'];
 const TICK_MS = 1000;
 const CHECKPOINT_MS = 15000;
 const PH_READ_GAP_MS = 900;
@@ -479,11 +487,18 @@ function crossCheck(cfg) {
  * scaling every ratio by s scales the nutrient EC by 1/s:
  *   s = ((ec_prev - water) / (target - water)) ^ gain, limited to +/- max_step_pct,
  *   ratio_i = clamp(prev_ratio_i x s, min_ratio, max_ratio).
- * prevRun: { id, ec_avg, ec_samples, tanks: [{tank_id, ratio_target}] } or null.
- * baseRatios: {tank_id: ratio}. Returns { applied, factor, ratios, from_run, reason }.
+ * prevRun: { id, ec_avg, ec_samples, tanks: [{tank_id, ratio_target}], base_ratios? } or null.
+ * baseRatios: {tank_id: ratio}. Returns { applied, factor, ratios, base_ratios, from_run, reason }.
+ *
+ * Base change (operator decision 2026-09-30, "Follow crop targets"): the trim steps
+ * from the previous run's trimmed ratio only while the BASE ratio is unchanged. When
+ * the base moved (a crop-target proposal was applied, a stage changed, an operator
+ * edit), the trim restarts from the new base — it never drags an old stage's
+ * correction into the new one. Runs recorded before base_ratios existed keep the
+ * previous behaviour.
  */
 function computeEcTrim(prevRun, baseRatios, trim) {
-  const out = { applied: false, factor: 1, ratios: { ...baseRatios }, from_run: prevRun ? prevRun.id : null, reason: null };
+  const out = { applied: false, factor: 1, ratios: { ...baseRatios }, base_ratios: { ...baseRatios }, from_run: prevRun ? prevRun.id : null, reason: null };
   if (!trim || !trim.enabled) { out.reason = 'disabled'; return out; }
   if (!prevRun || !(prevRun.ec_avg > 0) || !(prevRun.ec_samples >= trim.min_samples)) { out.reason = 'no previous run with feed EC'; return out; }
   const fert = prevRun.ec_avg - trim.water_us;
@@ -494,13 +509,18 @@ function computeEcTrim(prevRun, baseRatios, trim) {
   s = clamp(s, 1 - lim, 1 + lim);
   const prevRatios = {};
   for (const t of prevRun.tanks || []) if (t && t.ratio_target > 0) prevRatios[t.tank_id] = t.ratio_target;
+  const prevBase = prevRun.base_ratios && typeof prevRun.base_ratios === 'object' ? prevRun.base_ratios : null;
+  const rebased = [];
   for (const id of Object.keys(baseRatios)) {
-    const from = prevRatios[id] || baseRatios[id];
+    const baseMoved = prevBase && Number(prevBase[id]) > 0 && Math.abs(Number(prevBase[id]) - baseRatios[id]) > 1e-9;
+    if (baseMoved) rebased.push(id);
+    const from = baseMoved ? baseRatios[id] : (prevRatios[id] || baseRatios[id]);
     out.ratios[id] = Math.round(clamp(from * s, trim.min_ratio, trim.max_ratio) * 10) / 10;
   }
   out.applied = true;
   out.factor = Math.round(s * 1000) / 1000;
-  out.reason = `previous run #${prevRun.id} feed EC ${Math.round(prevRun.ec_avg)} µS/cm vs target ${trim.target_us}`;
+  out.reason = `previous run #${prevRun.id} feed EC ${Math.round(prevRun.ec_avg)} µS/cm vs target ${trim.target_us}${rebased.length ? ' (base ratio changed: restarted from the new base)' : ''}`;
+  if (rebased.length) out.rebased = rebased.map(Number);
   return out;
 }
 
@@ -508,6 +528,21 @@ function computeEcTrim(prevRun, baseRatios, trim) {
 function validateConfigUpdate(updates) {
   return validateSection(updates, SCHEMA, '');
 }
+
+/** Value of a dotted field ('ph.setpoint', 'nutrients.ratio.3') in a config. */
+function fieldValue(cfg, field) {
+  let v = cfg;
+  for (const k of field.split('.')) { if (v === null || v === undefined) return undefined; v = v[k]; }
+  return v;
+}
+
+/** Tracked fields of a config, ratios per tank included. */
+function trackedFields(cfg) {
+  const ratios = Object.keys((cfg && cfg.nutrients && cfg.nutrients.ratio) || {}).map(id => `nutrients.ratio.${id}`);
+  return [...TRACKED_FIELDS, ...ratios];
+}
+
+const configHash = (text) => require('crypto').createHash('sha1').update(String(text)).digest('hex');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -780,6 +815,9 @@ class DoseController {
     this.tz = deps.tz || null;
     this.log = deps.logger || console;
     this._notifyFn = deps.notify || null;
+    // Called at the start of every cycle BEFORE the config is read: applies an approved
+    // crop-target proposal (ControllerLinkService). null = none (tests); undefined = default.
+    this._beforeCycleHook = deps.beforeCycle;
 
     this.flow = null;     // { values, receivedMs, farmId }
     this.dosing = null;   // { tanks, receivedMs, farmId }
@@ -892,17 +930,132 @@ class DoseController {
     return this.getConfig(true).enabled === true;
   }
 
-  saveConfig(updates) {
+  /**
+   * Validated partial update of the stored config. meta (optional):
+   *   { source: 'operator' | 'crop_link' | 'ec_trim_check', user: { id, email }, proposalId, note }
+   * Every write records a config version (dose_controller_config_versions) and the
+   * origin of each changed tracked field (system_settings 'dose_controller_provenance').
+   */
+  saveConfig(updates, meta = {}) {
     const { value, error } = validateConfigUpdate(updates);
     if (error) { const e = new Error(error); e.status = 400; throw e; }
-    const merged = mergeConfig(mergeConfig(DEFAULT_CONFIG, this.getStoredConfig()), value);
+    const before = mergeConfig(DEFAULT_CONFIG, this.getStoredConfig());
+    const merged = mergeConfig(before, value);
     const bad = crossCheck(merged);
     if (bad) { const e = new Error(bad); e.status = 400; throw e; }
-    this.db.prepare(
-      "INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-    ).run(CONFIG_KEY, JSON.stringify(merged));
+    const text = JSON.stringify(merged);
+    const write = () => {
+      this.db.prepare(
+        "INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+      ).run(CONFIG_KEY, text);
+      this._recordWrite(before, merged, text, meta || {});
+    };
+    this.db.transaction(write)();
     this._config = null;
     return this.getConfig(true);
+  }
+
+  /** Version row + field provenance of one config write (same transaction as the write). */
+  _recordWrite(before, after, text, meta) {
+    const nowIso = iso(this.now());
+    const source = meta.source || 'operator';
+    const user = meta.user || {};
+    const changed = [];
+    for (const f of new Set([...trackedFields(before), ...trackedFields(after)])) {
+      const a = fieldValue(before, f); const b = fieldValue(after, f);
+      if (JSON.stringify(a ?? null) !== JSON.stringify(b ?? null)) changed.push(f);
+    }
+    let versionId = null;
+    try {
+      versionId = Number(this.db.prepare(`
+        INSERT INTO dose_controller_config_versions (hash, source, proposal_id, user_id, user_email, changed_json, config_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(configHash(text), source, meta.proposalId ?? null, user.id ?? null, user.email ?? null, JSON.stringify(changed), text, nowIso).lastInsertRowid);
+    } catch (e) {
+      this.log.error(`[DoseController] could not record config version: ${e.message}`);
+    }
+    if (changed.length) {
+      const prov = this.getFieldProvenance();
+      for (const f of changed) {
+        if (fieldValue(after, f) === undefined) { delete prov[f]; continue; }
+        prov[f] = {
+          kind: source === 'crop_link' ? 'crop_link' : source === 'ec_trim_check' ? 'ec_trim_check' : 'operator',
+          proposal_id: meta.proposalId ?? null, user_email: user.email ?? null, at: nowIso, config_version_id: versionId,
+        };
+      }
+      this.db.prepare(
+        "INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+      ).run(PROVENANCE_KEY, JSON.stringify(prov));
+    }
+    this._lastVersionId = versionId;
+    return versionId;
+  }
+
+  /** { field: { kind, proposal_id, user_email, at, config_version_id } } of the tracked fields (empty when never recorded). */
+  getFieldProvenance() {
+    try {
+      const row = this.db.prepare('SELECT value FROM system_settings WHERE key = ?').get(PROVENANCE_KEY);
+      const v = row && row.value ? JSON.parse(row.value) : {};
+      return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    } catch (_) { return {}; }
+  }
+
+  /**
+   * Config version of the STORED config (a cycle start): the latest version row with
+   * its hash, or a new 'unrecorded' row when the stored text was never versioned
+   * (written before versions existed, or by hand). Never throws.
+   * @returns {{ id, proposal_id } | null}  proposal_id = the crop-target proposal behind
+   *   the tracked fields that still hold (latest), else null
+   */
+  _versionForCycle() {
+    try {
+      const row = this.db.prepare('SELECT value FROM system_settings WHERE key = ?').get(CONFIG_KEY);
+      const text = row && row.value ? row.value : JSON.stringify(mergeConfig(DEFAULT_CONFIG, {}));
+      const h = configHash(text);
+      let v = this.db.prepare('SELECT id FROM dose_controller_config_versions WHERE hash = ? ORDER BY id DESC LIMIT 1').get(h);
+      if (!v) {
+        const id = Number(this.db.prepare(`
+          INSERT INTO dose_controller_config_versions (hash, source, config_json, created_at) VALUES (?, ?, ?, ?)
+        `).run(h, row ? 'unrecorded' : 'defaults', text, iso(this.now())).lastInsertRowid);
+        v = { id };
+      }
+      const prov = this.getFieldProvenance();
+      const linked = Object.values(prov).filter(p => p && p.kind === 'crop_link' && p.proposal_id).map(p => Number(p.proposal_id));
+      return { id: v.id, proposal_id: linked.length ? Math.max(...linked) : null };
+    } catch (e) {
+      this.log.error(`[DoseController] config version lookup failed: ${e.message}`);
+      return null;
+    }
+  }
+
+  /** Apply an approved crop-target proposal before the cycle reads its config. Never throws. */
+  _beforeCycle() {
+    let hook = this._beforeCycleHook;
+    if (hook === null) return null;
+    if (hook === undefined) {
+      hook = (ctl) => require('./ControllerLinkService').controllerLinkServiceFor(ctl.db).applyApprovedForCycle(ctl);
+    }
+    try { return hook(this) || null; } catch (e) {
+      this.log.error(`[DoseController] before-cycle hook failed (config unchanged): ${e.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * The config a RUNNING cycle uses: the live config (safety switches, caps and limits
+   * stay live) with the pH targets frozen at the cycle start (CYCLE_FROZEN_PH), so a
+   * save during a run — an approved crop-target proposal or an operator edit — takes
+   * effect at the next cycle, never mid-cycle. Ratios / EC trim are fixed at beginCycle.
+   */
+  _cycleConfig(c) {
+    const live = this.getConfig();
+    if (!c || !c.cfgAtStart) return live;
+    if (c._cfgLive === live && c._cfgView) return c._cfgView;
+    const frozen = {};
+    for (const k of CYCLE_FROZEN_PH) frozen[k] = c.cfgAtStart.ph[k];
+    const view = { ...live, ph: { ...live.ph, ...frozen } };
+    c._cfgLive = live; c._cfgView = view;
+    return view;
   }
 
   _expectedFlow(cfg) {
@@ -1315,7 +1468,11 @@ class DoseController {
   beginCycle(ctx) {
     if (this.cycle) throw new Error('dose controller already runs a cycle');
     this._subscribe();
+    // An approved crop-target proposal is written HERE, before this cycle reads its
+    // config — the only place it can take effect (never mid-cycle).
+    const linkApplied = this._beforeCycle();
     const cfg = this.getConfig(true);
+    const version = this._versionForCycle();
     const now = this.now();
     const schedTanks = (ctx.tanks || []).filter(t => t && t.equipment_id && t.channel != null);
     const baseRatios = {};
@@ -1345,6 +1502,7 @@ class DoseController {
     const token = ++this._token;
     const c = {
       token, ctx, cfgAtStart: cfg,
+      configVersionId: version ? version.id : null, linkProposalId: version ? version.proposal_id : null, linkApplied: linkApplied || null,
       startedAt: now, endsAt: now + Math.round(ctx.durationSeconds * 1000), durationS: ctx.durationSeconds,
       tanks, tankById: new Map(tanks.map(t => [t.tank_id, t])), phTank,
       monitorMap: this._monitorMap((this.dosing && this.dosing.farmId) || (this.flow && this.flow.farmId) || null),
@@ -1382,9 +1540,9 @@ class DoseController {
 
     try {
       const info = this.db.prepare(`
-        INSERT INTO dose_controller_runs (cycle_log_id, program_id, automation_id, started_at, local_date, status, water_l, acid_s, acid_pulses, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'running', 0, 0, 0, ?, ?)
-      `).run(ctx.cycleLogId ?? null, ctx.programId ?? null, ctx.automationId ?? null, iso(now), c.localDate, iso(now), iso(now));
+        INSERT INTO dose_controller_runs (cycle_log_id, program_id, automation_id, started_at, local_date, status, water_l, acid_s, acid_pulses, created_at, updated_at, config_version_id, link_proposal_id)
+        VALUES (?, ?, ?, ?, ?, 'running', 0, 0, 0, ?, ?, ?, ?)
+      `).run(ctx.cycleLogId ?? null, ctx.programId ?? null, ctx.automationId ?? null, iso(now), c.localDate, iso(now), iso(now), c.configVersionId, c.linkProposalId);
       c.runId = Number(info.lastInsertRowid);
     } catch (e) {
       this.log.error(`[DoseController] could not record run: ${e.message}`);
@@ -1409,7 +1567,10 @@ class DoseController {
       }, TICK_MS);
       if (c.timer.unref) c.timer.unref();
     }
-    this.log.log(`[DoseController] cycle #${ctx.cycleLogId} started (run ${c.runId}): ${tanks.map(t => `${t.name} ${t.ratio ? `1:${t.ratio}` : 'schedule'}`).join(', ')}; pH ${phTank ? `${phTank.name} ch${phTank.channel}` : 'no pH Down tank bound'}`);
+    if (linkApplied && linkApplied.proposal_id && c.runId) {
+      try { this.db.prepare('UPDATE controller_link_proposals SET applied_run_id = ? WHERE id = ? AND applied_run_id IS NULL').run(c.runId, linkApplied.proposal_id); } catch (_) { /* audit detail only */ }
+    }
+    this.log.log(`[DoseController] cycle #${ctx.cycleLogId} started (run ${c.runId}, config v${c.configVersionId ?? '?'}${c.linkProposalId ? `, crop-target proposal #${c.linkProposalId}` : ''}): ${tanks.map(t => `${t.name} ${t.ratio ? `1:${t.ratio}` : 'schedule'}`).join(', ')}; pH ${phTank ? `${phTank.name} ch${phTank.channel}` : 'no pH Down tank bound'}`);
     return { runId: c.runId, phTank };
   }
 
@@ -1417,14 +1578,16 @@ class DoseController {
   _previousRunForTrim(programId) {
     try {
       const row = this.db.prepare(`
-        SELECT id, ec_avg, ec_samples, tanks_json FROM dose_controller_runs
+        SELECT id, ec_avg, ec_samples, tanks_json, trim_json FROM dose_controller_runs
         WHERE status IN ('completed', 'aborted') AND ec_avg IS NOT NULL AND (? IS NULL OR program_id = ?)
         ORDER BY started_at DESC, id DESC LIMIT 1
       `).get(programId ?? null, programId ?? null);
       if (!row) return null;
       let tanks = [];
       try { tanks = JSON.parse(row.tanks_json || '[]'); } catch (_) { tanks = []; }
-      return { id: row.id, ec_avg: row.ec_avg, ec_samples: row.ec_samples, tanks };
+      let base = null;
+      try { const tj = JSON.parse(row.trim_json || 'null'); base = tj && tj.base_ratios && typeof tj.base_ratios === 'object' ? tj.base_ratios : null; } catch (_) { base = null; }
+      return { id: row.id, ec_avg: row.ec_avg, ec_samples: row.ec_samples, tanks, base_ratios: base };
     } catch (_) { return null; }
   }
 
@@ -1510,7 +1673,7 @@ class DoseController {
   step(now = this.now()) {
     const c = this.cycle;
     if (!c || c.ended) return;
-    const cfg = this.getConfig();
+    const cfg = this._cycleConfig(c);
     const n = cfg.nutrients;
     let ws = this._waterState(c, cfg, now);
     const disarmed = this._disarmed(now);
@@ -2966,6 +3129,8 @@ class DoseController {
       zones: j(row.zones_json, []),
       acid_s: row.acid_s, acid_est_l: row.acid_est_l, acid_est_unverified: true, acid_pulses: row.acid_pulses,
       trips: j(row.trips_json, []),
+      config_version_id: row.config_version_id ?? null,
+      link_proposal_id: row.link_proposal_id ?? null,
     };
     return this._withZoneStats(run, row);
   }
@@ -3044,7 +3209,8 @@ class DoseController {
   }
 
   getStatus(now = this.now()) {
-    const cfg = this.getConfig();
+    // a running cycle reports the pH targets it actually runs with (frozen at its start)
+    const cfg = this.cycle && !this.cycle.ended ? this._cycleConfig(this.cycle) : this.getConfig();
     const base = {
       enabled: cfg.enabled,
       ph_enabled: cfg.ph.enabled,
@@ -3155,6 +3321,8 @@ class DoseController {
       modes: s.modes,
       trips: s.trips,
       trim: c.trim,
+      config_version_id: c.configVersionId ?? null,
+      link_proposal_id: c.linkProposalId ?? null,
       last_run: this.lastRun(),
     };
   }
@@ -3198,6 +3366,11 @@ module.exports = {
   reasonSpec,
   ALERT_SPECS,
   computeEcTrim,
+  fieldValue,
+  trackedFields,
+  configHash,
+  CYCLE_FROZEN_PH,
+  PROVENANCE_KEY,
   getDoseController,
   validateConfigUpdate,
   mergeConfig,

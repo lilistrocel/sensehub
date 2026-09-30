@@ -1005,6 +1005,14 @@ const initSchema = () => {
     console.error('crop nutrition schema failed:', err.message);
   }
 
+  // "Follow crop targets" link to the dose controller: proposals, config versions,
+  // EC fine-tuning checks (operator decision 2026-09-30). After crop + dose schemas.
+  try {
+    require('./controllerLinkSchema').ensureControllerLinkSchema(db);
+  } catch (err) {
+    console.error('controller link schema failed:', err.message);
+  }
+
   // SEKO Kontrol 800 EC register auto-ranges (x10 below 2000 µS, x1 above): decode it.
   try {
     require('./sekoEcAutoRange').ensureSekoEcAutoRange(db);

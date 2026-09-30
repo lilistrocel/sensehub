@@ -1,0 +1,23 @@
+{
+  "alert": {
+    "pending": "Ürün hedefleri → dozlama denetleyicisi: {crop} ({stage}) için #{id} numaralı öneri {count} denetleyici ayarını değiştirir. Ürün ve Besleme sayfasında inceleyin — bir yönetici veya operatör onaylayana kadar hiçbir şey değişmez.",
+    "approved": "{crop} için #{id} numaralı ürün hedefi önerisi {by} tarafından onaylandı: bir sonraki dozlama döngüsünün başında uygulanır.",
+    "rejected": "{crop} için #{id} numaralı ürün hedefi önerisi {by} tarafından reddedildi: dozlama denetleyicisi ayarlarını korur.",
+    "applied": "{crop} için #{id} numaralı ürün hedefi önerisi bir dozlama döngüsünün başında uygulandı.",
+    "cancelled": "{crop}: dozlama denetleyicisi bağlantısı manuele alındı; açık öneriler iptal edildi.",
+    "matches": "{crop}: dozlama denetleyicisi zaten ürün hedefleriyle uyumlu.",
+    "apply_failed": "#{id} numaralı ürün hedefi önerisi UYGULANMADI, dozlama denetleyicisi değişmedi: {reason}"
+  },
+  "telegram": {
+    "pending": "Dozlama denetleyicisi önerisi ({crop})"
+  },
+  "stage": {
+    "seedling": "fide",
+    "vegetative": "vejetatif",
+    "flowering": "çiçeklenme / meyve tutumu",
+    "fruiting": "meyve dönemi",
+    "ripening": "olgunlaşma",
+    "harvested": "hasat edildi",
+    "none": "evre yok"
+  }
+}

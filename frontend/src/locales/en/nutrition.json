@@ -497,5 +497,208 @@
     "notMeasured": "Facts SenseHub cannot measure, entered by the farm team.",
     "operatorNotes": "Written by the farm team for this run (shown as written, not translated).",
     "aiText": "Written by the AI advisor."
+  },
+  "link": {
+    "title": "Dose controller link",
+    "subtitle": "Should the fertigation dose controller follow this crop's stage targets? Every change is a proposal that an admin or operator approves; it applies at the start of the next dose cycle.",
+    "noProfile": "No active crop profile.",
+    "mode": {
+      "follow": "Follow crop targets",
+      "manual": "Manual",
+      "followHint": "Changes to the stage targets, the source water EC or the stage create a proposal. Nothing changes without approval.",
+      "manualHint": "The dose controller keeps its own settings. Nothing is proposed or changed.",
+      "switchFollow": "Follow crop targets",
+      "switchManual": "Switch to manual"
+    },
+    "water": {
+      "missingDefault": "Source water EC is blank on the crop profile, but the controller's EC fine-tuning assumes {{water}} mS/cm. That value is a SenseHub default written into the code on 2026-09-26 (closed-loop dosing, cd17586) — it was never measured. Enter the measured source water EC under Crop profile → Facts SenseHub cannot measure; until then the EC part of the link is blocked (the pH part still works).",
+      "missing": "Source water EC is blank on the crop profile, but the controller's EC fine-tuning uses {{water}} mS/cm. Enter the measured source water EC on the crop profile — it is the one source of truth; until then the EC part of the link is blocked.",
+      "mismatch": "Source water EC differs: crop profile {{profile}} mS/cm, controller EC fine-tuning {{trim}} mS/cm, EC range check {{raw}} mS/cm. The crop profile value is the one source of truth; approving the proposal makes the controller follow it.",
+      "defaultNote": "The controller's {{water}} mS/cm is a SenseHub code default (2026-09-26, cd17586), never measured."
+    },
+    "controller": {
+      "title": "Controller now vs crop targets",
+      "running": "A dose cycle is running: it keeps the values it started with.",
+      "table": "Dose controller settings compared with the crop targets"
+    },
+    "col": {
+      "setting": "Setting",
+      "controller": "Controller now",
+      "fromTargets": "From crop targets",
+      "match": "Match",
+      "current": "Current",
+      "proposed": "Proposed",
+      "reason": "Why"
+    },
+    "field": {
+      "phSetpoint": "pH setpoint",
+      "phFloor": "pH floor (acid stops)",
+      "ratio": "Dilution, tanks A–D",
+      "trimTarget": "EC fine-tuning target",
+      "trimWater": "EC fine-tuning water EC",
+      "rawWater": "Raw water EC (EC range check)",
+      "trimEnabled": "EC fine-tuning",
+      "other": "Setting"
+    },
+    "match": {
+      "ok": "Matches",
+      "caution": "Differs",
+      "unknown": "Not available"
+    },
+    "part": {
+      "ph": "pH",
+      "ec": "EC / dilution"
+    },
+    "blockedShort": {
+      "source_water_missing": "Needs source water EC",
+      "no_ec_target": "No EC target",
+      "no_protocol": "No protocol",
+      "no_protocol_recipe": "No protocol recipe",
+      "protocol_ec_unknown": "Recipe EC unknown",
+      "source_water_exceeds_target": "Water ≥ target",
+      "factor_out_of_range": "Out of range",
+      "ratio_out_of_bounds": "Outside 1:100–1:250",
+      "no_tanks": "No ratio tanks",
+      "no_ph_target": "No pH range",
+      "cross_check": "Fails safety checks",
+      "no_stage_targets": "No stage targets"
+    },
+    "blocked": {
+      "source_water_missing": "{{part}} not proposed: enter the measured source water EC on the crop profile first.",
+      "no_ec_target": "{{part}} not proposed: this stage has no input EC target.",
+      "no_protocol": "{{part}} not proposed: the crop profile has no human agronomist protocol to take the recipe EC from.",
+      "no_protocol_recipe": "{{part}} not proposed: the protocol has no recipe for this stage.",
+      "protocol_ec_unknown": "{{part}} not proposed: the EC of the protocol recipe cannot be calculated.",
+      "source_water_exceeds_target": "{{part}} not proposed: the source water EC is at or above the EC target.",
+      "factor_out_of_range": "{{part}} not proposed: the EC target is too far from the protocol recipe (more than ×0.3–×3).",
+      "ratio_out_of_bounds": "{{part}} not proposed: it would need 1:{{ratio}}, outside the safe range 1:{{min}}–1:{{max}}.",
+      "no_tanks": "{{part}} not proposed: no nutrient tank has a dilution in the controller.",
+      "no_ph_target": "{{part}} not proposed: this stage has no input pH range.",
+      "cross_check": "{{part}} not proposed: the resulting setpoint / floor would fail the controller's safety checks.",
+      "no_stage_targets": "{{part}} not proposed: the current stage has no targets."
+    },
+    "trim": {
+      "on": "On",
+      "off": "Off",
+      "notProposed": "Never switched by a proposal.",
+      "title": "EC fine-tuning (SEKO feed EC)",
+      "explain": "Adjusts all dilutions together once per cycle from the previous run's SEKO feed EC toward the EC target. It stays off until the SEKO EC has been checked against a handheld meter (within {{max}} %).",
+      "enable": "Enable EC fine-tuning (requires SEKO EC verified against a handheld meter)",
+      "disable": "Disable EC fine-tuning",
+      "check": {
+        "enable": "Enabled by {{who}} on {{at}}: handheld {{handheld}} vs SEKO {{seko}} mS/cm ({{dev}} %).",
+        "disable": "Disabled by {{who}} on {{at}}.",
+        "refused": "Refused on {{at}} ({{who}}): handheld {{handheld}} vs SEKO {{seko}} mS/cm differ by {{dev}} %."
+      }
+    },
+    "crop": {
+      "stage": "Stage: {{stage}}",
+      "ec": "EC target {{ec}} mS/cm",
+      "ph": "pH {{min}}–{{max}}",
+      "protocolPh": "Protocol pH {{min}}–{{max}}",
+      "water": "Source water EC {{water}} mS/cm",
+      "stockEc": "Current tank stock at 1:{{ratio}} ≈ EC {{ec}} mS/cm from fertilizers"
+    },
+    "prov": {
+      "cropLink": "Calculated from the crop targets by SenseHub; applied from approved proposal #{{id}} on {{at}}.",
+      "operator": "Set by the farm team ({{who}}, {{at}}).",
+      "trimCheck": "Switched by the farm team with a recorded SEKO vs handheld check ({{who}}, {{at}}).",
+      "unrecorded": "Set by the farm team before SenseHub recorded where controller values come from.",
+      "default": "SenseHub default value: never set by the farm team and never measured.",
+      "mixed": "The tanks were set at different times.",
+      "fromTargets": "Calculated by SenseHub from the crop stage targets and the source water EC.",
+      "stageTargets": "Stage targets of this crop (Targets per stage).",
+      "stockEc": "Sum of the cations of the current tank recipes at this dilution ÷ 10; source water not included."
+    },
+    "proposal": {
+      "diffTable": "Proposed dose controller changes",
+      "pendingTitle": "Proposal #{{id}} waiting for approval",
+      "approvedTitle": "Proposal #{{id}} approved — waiting for the next dose cycle",
+      "approve": "Approve",
+      "reject": "Reject",
+      "approvedBy": "Approved by {{who}} on {{at}}. It is applied at the start of the next dose cycle; a running cycle is not changed.",
+      "nextCycle": "Nothing changes until an admin or operator approves. Approved changes apply at the start of the next dose cycle, never during a running cycle.",
+      "viewerNote": "Only an admin or operator can approve or reject.",
+      "none": "The controller follows the crop targets. No proposal is waiting.",
+      "noneDecided": "No proposal is waiting. The controller differs from the crop targets because a proposal was rejected or a part is blocked.",
+      "manualPreview": "Manual mode: the crop targets imply {{n}} different controller setting(s). Nothing is proposed while the link is manual."
+    },
+    "trigger": {
+      "link_enabled": "Link switched on",
+      "targets_changed": "Stage targets changed",
+      "source_water_changed": "Source water EC changed",
+      "stage_changed": "Growth stage changed",
+      "controller_changed": "Controller settings changed",
+      "protocol_changed": "Protocol changed"
+    },
+    "status": {
+      "pending": "Waiting for approval",
+      "approved": "Approved, waiting for the next cycle",
+      "applied": "Applied",
+      "rejected": "Rejected",
+      "superseded": "Replaced by a newer proposal",
+      "cancelled": "Cancelled",
+      "failed": "Not applied (failed checks)"
+    },
+    "reason": {
+      "ph_midpoint": "Middle of the stage pH range {{min}}–{{max}}.",
+      "ph_target": "Stage pH target {{target}}.",
+      "ph_floor": "Stage pH minimum {{min}} − {{offset}}, never below {{floorMin}}. Acid caps and sensor checks stay as they are.",
+      "ec_ratio": "EC target {{ec}} − source water {{water}} = {{fert}} mS/cm from fertilizers. The protocol recipe gives {{protocolEc}} mS/cm at 1:{{design}}, so ×{{factor}} → 1:{{ratio}} for every tank (all tanks draw equally).",
+      "trim_target": "Stage EC target {{ec}} mS/cm.",
+      "trim_water": "Source water EC {{water}} mS/cm from the crop profile.",
+      "raw_water": "Source water EC {{water}} mS/cm from the crop profile."
+    },
+    "history": {
+      "title": "Proposal history ({{n}})",
+      "by": "by {{who}}",
+      "applied": "applied {{at}} (run #{{run}})"
+    },
+    "fit": {
+      "title": "Element best fit with the current tank stock",
+      "method": "SenseHub: per-tank dilutions within the safe range that come closest to the stage element targets (weighted least squares on the relative error; weights from the element priority).",
+      "advisory": "Advisory only — never applied",
+      "none": {
+        "no_tanks": "No nutrient tanks with a dilution.",
+        "no_element_targets": "This stage has no element targets.",
+        "other": "The best fit could not be calculated."
+      },
+      "explain": "Different dilutions per tank (1:{{min}}–1:{{max}}) that would come closest to the element targets with the tanks as they are mixed now. The agronomy decision is equal draw from all tanks, so this is for information only.",
+      "now": "now 1:{{ratio}}",
+      "ec": "≈ EC {{ec}} mS/cm from fertilizers",
+      "table": "Element targets vs the best fit",
+      "col": {
+        "target": "Target ppm",
+        "now": "Now ppm",
+        "fit": "Best fit ppm"
+      },
+      "stockChange": "Needs a stock recipe change (reachable {{min}}–{{max}} ppm)",
+      "status": {
+        "ok": "In band ({{pct}} %)",
+        "low": "Low ({{pct}} %)",
+        "high": "High ({{pct}} %)"
+      },
+      "unreachable": "Not reachable with the current stock at any dilution in range: {{elements}}. Needs a stock recipe change.",
+      "compromised": "Out of band even at the best fit: {{elements}}. The elements of one tank move together (e.g. Fe and the micros in tank D), so reaching all targets needs a stock recipe change."
+    },
+    "dialog": {
+      "followTitle": "Follow crop targets?",
+      "followBody": "From now on a change of the stage targets, the source water EC or the growth stage creates a proposal for the dose controller. The controller keeps its values until an admin or operator approves; approved changes apply at the start of the next dose cycle. These settings will follow the crop targets:",
+      "manualTitle": "Switch to manual?",
+      "manualBody": "The dose controller keeps its current settings; nothing changes on it. Open proposals (waiting or approved) are cancelled.",
+      "approveTitle": "Approve proposal #{{id}}?",
+      "approveBody": "These dose controller settings change at the START of the next dose cycle. A cycle that is running now keeps its values. EC fine-tuning is not switched.",
+      "rejectTitle": "Reject proposal #{{id}}?",
+      "rejectBody": "The dose controller keeps its current settings. The same proposal is not raised again until the crop targets change.",
+      "trimOffTitle": "Disable EC fine-tuning?",
+      "trimOffBody": "From the next dose cycle the dilutions stay at their base values (no correction from the SEKO feed EC).",
+      "trimOnTitle": "Enable EC fine-tuning?",
+      "trimOnBody": "Take a feed sample during a run and measure it with a calibrated handheld EC meter; note the SEKO EC at the same moment. Both are recorded with your name. They must agree within {{max}} %. Fine-tuning starts with the next dose cycle.",
+      "handheld": "Handheld meter EC",
+      "seko": "SEKO EC at the same moment",
+      "measuredAt": "Measured at",
+      "note": "Meter / note",
+      "deviation": "Difference: {{dev}} %"
+    }
   }
 }

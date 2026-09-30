@@ -129,7 +129,8 @@
     "from": {
       "calculated": {
         "protocol": "Calculated from protocol",
-        "measured": "Calculated from measurements"
+        "measured": "Calculated from measurements",
+        "operator": "Calculated from crop targets"
       }
     },
     "basis": {
