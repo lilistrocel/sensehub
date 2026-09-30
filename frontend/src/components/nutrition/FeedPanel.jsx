@@ -92,9 +92,12 @@ export function FeedBody({ rep, profile, fmt, t }) {
   const measured = rep.basis === 'measured';
   const plantsSource = rep.plants && rep.plants.source;
   const designRatio = proto ? proto.design_dilution : 150;
+  const designSource = proto && proto.dilution_source ? proto.dilution_source : 'sensehub_assumption';
   const elTargets = (profile && rep.stage && rep.stage.effective && profile.element_targets && profile.element_targets[rep.stage.effective]) || [];
   const deliveredProv = measured ? { kind: 'calculated', from: 'measured', detail: t('prov.delivered') } : { kind: 'calculated', detail: t('prov.deliveredConfigured') };
-  const protoProv = { kind: 'calculated', from: 'protocol', detail: t('prov.protocolRecipe', { ratio: designRatio }) };
+  const protoProv = { kind: 'calculated', from: 'protocol', detail: t(designSource === 'protocol' ? 'prov.protocolRecipeStated' : 'prov.protocolRecipe', { ratio: designRatio }) };
+  // a refill inside the period changed a recipe: each run is counted with the recipe its tanks held (operator request 2026-09-30)
+  const olderRecipes = rep.recipe_changed_in_period && Array.isArray(rep.recipe_segments) ? rep.recipe_segments.filter(sg => !sg.current) : [];
 
   return (
     <>
@@ -162,7 +165,7 @@ export function FeedBody({ rep, profile, fmt, t }) {
                     <td className="py-1.5 pe-3 text-end font-mono text-muted">{protoPpm ? f(protoPpm[el]) : '—'}</td>
                     <td className="py-1.5 text-xs whitespace-nowrap text-muted">
                       <span className="font-mono" dir="ltr">{c.target == null && c.min == null ? '—' : `${f(c.min)} · ${f(c.target)} · ${f(c.max)}`}</span>
-                      {(c.target != null || c.min != null) && <ElementTargetMark row={elTargets.find(r => r.element === el)} ratio={designRatio} fallback className="ms-1" />}
+                      {(c.target != null || c.min != null) && <ElementTargetMark row={elTargets.find(r => r.element === el)} ratio={designRatio} ratioSource={designSource} fallback className="ms-1" />}
                     </td>
                   </tr>
                 );
@@ -285,6 +288,12 @@ export function FeedBody({ rep, profile, fmt, t }) {
             protoEcCfg: fmt.number(proto.ec_at_configured_ratio, { decimals: 2 }),
           })}</p>
         </Card>
+      )}
+
+      {olderRecipes.length > 0 && (
+        <p className="text-xs text-muted" data-testid="feed-recipe-changed">
+          {t('feed.recipeChanged', { tanks: [...new Set(olderRecipes.map(sg => sg.letter))].join(', ') })}
+        </p>
       )}
 
       {rep.assumptions && rep.assumptions.length > 0 && (

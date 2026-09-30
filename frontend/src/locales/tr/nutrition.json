@@ -23,7 +23,8 @@
   },
   "recipe": {
     "vegetative": "vejetatif",
-    "fruiting": "meyve dönemi"
+    "fruiting": "meyve dönemi",
+    "fruit_set": "meyve tutumu"
   },
   "plantingType": {
     "transplant": "Fide dikimi"
@@ -247,7 +248,8 @@
     "climateNight": "Gece {{min}}-{{max}} °C ({{alarm}} °C altında alarm)",
     "climateRh": "Bağıl nem {{min}}-{{max}} % ({{low}} % altında / {{high}} % üstünde alarm)",
     "timeline": "Zaman çizelgesi (dikimden sonraki günler)",
-    "readOnly": "salt okunur"
+    "readOnly": "salt okunur",
+    "programFrom": "Program {{date}} tarihinden itibaren geçerli."
   },
   "history": {
     "title": "Ürün dönemleri",
@@ -346,7 +348,8 @@
       "diff": "Δ kg",
       "hint": "Protokol reçetesi 1:{{ratio}} oranında ≈ EC {{protoEc}} mS/cm, yapılandırılan oranda ≈ {{protoEcCfg}} mS/cm (yalnızca gübreler)."
     },
-    "assumptions": "Hesaplama varsayımları"
+    "assumptions": "Hesaplama varsayımları",
+    "recipeChanged": "Bu dönemde bir tank reçetesi değişti (tank {{tanks}}): her sulama, başladığı anda tanklarda bulunan reçeteyle hesaplanır."
   },
   "advisor": {
     "advisoryOnly": "Yalnızca tavsiye niteliğindedir. SenseHub bu tavsiyeye göre reçeteleri, dozlama programlarını, dozlama oranlarını, tankları ya da otomasyonları asla değiştirmez. Yetkili olan agronomistin protokolüdür; yapay zekâ ikinci görüş verir.",
@@ -496,7 +499,9 @@
     "stageOverride": "Çiftlik ekibi elle belirledi.",
     "notMeasured": "SenseHub'ın ölçemediği, çiftlik ekibinin girdiği bilgiler.",
     "operatorNotes": "Çiftlik ekibi bu çalışma için yazdı (yazıldığı gibi gösterilir, çevrilmez).",
-    "aiText": "Yapay zekâ danışmanı yazdı."
+    "aiText": "Yapay zekâ danışmanı yazdı.",
+    "elementProtocolStated": "Protokolün belirttiği 1:{{ratio}} seyreltmede protokol reçetesi, SenseHub'ın min / maks bandıyla.",
+    "protocolRecipeStated": "Protokol reçetesi tank başına 1:{{ratio}} seyreltilmiş; seyreltme protokol sayfasında belirtilmiştir."
   },
   "link": {
     "title": "Dozlama denetleyicisi bağlantısı",

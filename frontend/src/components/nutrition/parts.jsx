@@ -22,14 +22,14 @@ export function ProvenanceBadges({ items }) {
  * calculated by SenseHub from the protocol (prefill at the 1:ratio design
  * dilution, or scaled to the input EC target). `fallback` = no row known.
  */
-export function ElementTargetMark({ row, ratio, fallback = false, className = '' }) {
+export function ElementTargetMark({ row, ratio, ratioSource = 'sensehub_assumption', fallback = false, className = '' }) {
   const { t } = useTranslation('nutrition');
   const fmt = useFormat();
   const p = elementTargetProvenance(row);
   if (!p) return fallback ? <ProvenanceMark kind="operator" detail={t('prov.targets')} className={className} /> : null;
   const detail = p.basis === 'manual' ? t('prov.elementManual')
     : p.basis === 'scaled' ? t('prov.elementScaled', { ec: p.ec != null ? fmt.number(p.ec, { decimals: 2 }) : '—', factor: p.factor != null ? fmt.number(p.factor, { decimals: 2 }) : '—' })
-    : t('prov.elementProtocol', { ratio });
+    : t(ratioSource === 'protocol' ? 'prov.elementProtocolStated' : 'prov.elementProtocol', { ratio });
   return <ProvenanceMark kind={p.kind} from={p.from} detail={detail} className={className} data-testid="element-target-provenance" />;
 }
 

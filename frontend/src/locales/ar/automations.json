@@ -480,7 +480,9 @@
       "cronUnset": "Cron (غير محدد)",
       "schedule": "جدول",
       "event": "حدث",
-      "manual": "يدوي"
+      "manual": "يدوي",
+      "activeFrom": "اعتبارًا من {{date}}",
+      "activeUntil": "حتى {{date}}"
     },
     "forDuration": "لمدة {{duration}}",
     "upTo": "حتى {{duration}}",

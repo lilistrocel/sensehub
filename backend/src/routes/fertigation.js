@@ -690,16 +690,56 @@ router.delete('/tanks/:id', requireRole('admin', 'operator'), (req, res) => {
 // POST /api/fertigation/tanks/:id/refill
 // Records a refill event and resets the tank's current_stock_liters. The recipe at refill
 // time is snapshotted as JSON so historical batches stay accurate even if the recipe later
-// changes. Body: { water_liters_added, mixture_id?, notes? }. If mixture_id is omitted the
-// tank's currently configured mixture is used.
+// changes. Body: { water_liters_added, mixture_id?, notes?, refilled_at?, total_volume_after? }.
+// If mixture_id is omitted the tank's currently configured mixture is used.
+//
+// refilled_at (operator request 2026-09-30: tanks refilled with the fruit-set recipe at
+// 12:00, logged afterwards): ISO 8601 WITH a zone, not in the future, at most 7 days back
+// and after the tank's previous refill. It is when the new stock (and recipe) took effect:
+// the stock countdown anchors there (draws measured after it count against the new
+// stock) and the feed calculator uses this recipe for runs that started after it.
+// total_volume_after: the level right after the refill (0..capacity) when known; default
+// min(capacity, current level + water added).
+const REFILL_BACKDATE_MAX_MS = 7 * 86400000;
+function parseRefilledAt(v, nowMs) {
+  if (v === undefined || v === null || v === '') return { value: null };
+  const str = String(v);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?([zZ]|[+-]\d{2}:?\d{2})$/.test(str)) {
+    return { error: 'refilled_at must be ISO 8601 with a timezone, e.g. 2026-09-30T12:00:00+04:00' };
+  }
+  const ms = Date.parse(str);
+  if (!Number.isFinite(ms)) return { error: 'refilled_at is not a valid time' };
+  if (ms > nowMs + 60000) return { error: 'refilled_at must not be in the future' };
+  if (ms < nowMs - REFILL_BACKDATE_MAX_MS) return { error: 'refilled_at must be within the last 7 days' };
+  return { value: new Date(ms).toISOString().slice(0, 19).replace('T', ' '), ms };
+}
+
 router.post('/tanks/:id/refill', requireRole('admin', 'operator'), (req, res) => {
   const { water_liters_added, mixture_id, notes, use_pending_mixture } = req.body;
   const liters = parseFloat(water_liters_added);
   if (!Number.isFinite(liters) || liters <= 0) {
     return res.status(400).json({ error: 'water_liters_added must be a positive number' });
   }
+  const at = parseRefilledAt(req.body.refilled_at, Date.now());
+  if (at.error) return res.status(400).json({ error: at.error });
   try {
-    if (!db.prepare('SELECT id FROM fertigation_tanks WHERE id = ?').get(req.params.id)) return res.status(404).json({ error: 'Tank not found' });
+    const exists = db.prepare('SELECT id, capacity_liters FROM fertigation_tanks WHERE id = ?').get(req.params.id);
+    if (!exists) return res.status(404).json({ error: 'Tank not found' });
+    let totalAfter = null;
+    if (req.body.total_volume_after !== undefined && req.body.total_volume_after !== null && req.body.total_volume_after !== '') {
+      totalAfter = parseFloat(req.body.total_volume_after);
+      const cap = exists.capacity_liters > 0 ? exists.capacity_liters : Infinity;
+      if (!Number.isFinite(totalAfter) || totalAfter <= 0 || totalAfter > cap) {
+        return res.status(400).json({ error: `total_volume_after must be a number above 0 and at most the tank capacity (${exists.capacity_liters} L)` });
+      }
+    }
+    if (at.value) {
+      const prev = db.prepare('SELECT refilled_at FROM fertigation_tank_refills WHERE tank_id = ? ORDER BY refilled_at DESC LIMIT 1').get(req.params.id);
+      if (prev && prev.refilled_at >= at.value) return res.status(400).json({ error: `refilled_at must be after the tank's previous refill (${prev.refilled_at} UTC)` });
+    }
+    if (mixture_id != null && !db.prepare('SELECT id FROM fertigation_mixtures WHERE id = ?').get(mixture_id)) {
+      return res.status(400).json({ error: 'mixture_id not found' });
+    }
     // the current level comes from the stock ledger (measured draws since the last refill)
     try { tankStock().recompute(Number(req.params.id)); } catch (err) { console.error('[fertigation] stock recompute failed:', err.message); }
     const tank = db.prepare('SELECT * FROM fertigation_tanks WHERE id = ?').get(req.params.id);
@@ -726,14 +766,15 @@ router.post('/tanks/:id/refill', requireRole('admin', 'operator'), (req, res) =>
         composition: it.composition ? JSON.parse(it.composition) : null,
       })),
     };
-    const newStock = Math.min(tank.capacity_liters || liters, (tank.current_stock_liters || 0) + liters);
+    const newStock = totalAfter !== null ? totalAfter : Math.min(tank.capacity_liters || liters, (tank.current_stock_liters || 0) + liters);
     const tx = db.transaction(() => {
       const result = db.prepare(`
         INSERT INTO fertigation_tank_refills
-          (tank_id, water_liters_added, total_volume_after, mixture_id, composition_snapshot, user_id, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (tank_id, refilled_at, water_liters_added, total_volume_after, mixture_id, composition_snapshot, user_id, notes)
+        VALUES (?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?, ?, ?, ?)
       `).run(
         req.params.id,
+        at.value,
         liters,
         newStock,
         mixId,

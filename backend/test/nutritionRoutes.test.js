@@ -75,7 +75,7 @@ test('viewer: reads everything, cannot edit, cannot run the advisor', async () =
   assert.equal(active.status, 200);
   assert.equal(active.body.profile.crop, 'Cucumber');
   assert.equal((await call('GET', `/profiles/${active.body.profile.id}`, 'viewer')).body.stage.effective, 'vegetative');
-  assert.equal((await call('GET', '/protocols', 'viewer')).body.length, 1);
+  assert.equal((await call('GET', '/protocols', 'viewer')).body.length, 2);
   const sys = await call('GET', '/system', 'viewer');
   assert.equal(sys.status, 200);
   assert.equal(sys.body.source, 'live_system');

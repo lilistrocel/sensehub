@@ -445,11 +445,15 @@ class FertilizerAdvisorService {
       const pd = profile.protocol.data || {};
       const recipes = {};
       for (const [k, rec] of Object.entries(pd.recipes || {})) {
-        const tanks = require('./cropProtocol').recipeTanks(pd, k, library);
+        const CP = require('./cropProtocol');
+        const tanks = CP.recipeTanks(pd, k, library);
+        const dil = CP.recipeDilution(pd, k);
         recipes[k] = {
           per_liters: rec.per_liters,
           tanks: Object.fromEntries(tanks.map(t => [t.letter, contentsLine(t.items)])),
-          ppm_at_1_to_design: FC.mixPpm(tanks.map(t => ({ tank: t, fraction: 1 / (Number(pd.senseHub_design_dilution) || 150) }))).ppm,
+          design_dilution: dil.dilution,
+          design_dilution_source: dil.source === 'protocol' ? 'stated by the human protocol' : 'SenseHub assumption (not in the protocol)',
+          ppm_at_1_to_design: FC.mixPpm(tanks.map(t => ({ tank: t, fraction: 1 / dil.dilution }))).ppm,
         };
       }
       humanProtocol = {
@@ -465,7 +469,7 @@ class FertilizerAdvisorService {
         stage_targets: pd.stage_targets,
         stage_recipe: pd.stage_recipe,
         recipes,
-        recipe_ppm_note: `ppm_at_1_to_design = the recipe diluted 1:${pd.senseHub_design_dilution || 150} per tank (${pd.senseHub_design_dilution_note || 'SenseHub assumption'})`,
+        recipe_ppm_note: `ppm_at_1_to_design = the recipe diluted 1:design_dilution per tank; design_dilution_source says whether the protocol states it or it is the SenseHub 1:${pd.senseHub_design_dilution || 150} assumption (${pd.senseHub_design_dilution_note || 'SenseHub assumption'})`,
         daily_program: pd.daily_program,
         climate: pd.climate,
         timeline: pd.timeline,

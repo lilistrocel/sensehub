@@ -432,7 +432,9 @@
       "cronUnset": "Cron (unset)",
       "schedule": "Schedule",
       "event": "Event",
-      "manual": "Manual"
+      "manual": "Manual",
+      "activeFrom": "from {{date}}",
+      "activeUntil": "until {{date}}"
     },
     "forDuration": "{{duration}}",
     "upTo": "up to {{duration}}",

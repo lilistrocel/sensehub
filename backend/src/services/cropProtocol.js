@@ -163,6 +163,101 @@ const PROTOCOL = {
   },
 };
 
+// ─── Protocol revision 2026-09-30 (operator request 2026-09-30) ─────────────
+// The agronomist feeds the fruit-set recipe (same stock recipe as `fruiting`) from
+// fruit set on, i.e. in the flowering stage, and the new sheet states the resulting
+// feed solution "at 1:100". That dilution is STATED BY THE PROTOCOL (provenance:
+// human protocol), unlike the 1:150 SenseHub assumption of the 2026-09-28 version,
+// which still applies to recipes without a stated dilution. 2026-09-28 is kept
+// intact (history / traceability of advice given against it).
+
+const PROTOCOL_NAME_2026_09_30 = 'Human agronomist protocol (2026-09-30)';
+const PROTOCOL_KEY_2026_09_30 = 'cucumber_1021_2026_09_30';
+
+const RECIPES_2026_09_30 = {
+  vegetative: RECIPES.vegetative,
+  fruit_set: {
+    per_liters: 1000,
+    tanks: {
+      A: [item('ca_nitrate', 90)],
+      B: [item('mgso4', 40), item('k2so4', 15), item('mkp', 18)],
+      C: [item('kno3', 68)],
+      D: [item('fe_eddha', 2), item('fetrilon', 3)],
+    },
+    // Stated by the protocol sheet ("Resulting solution (at 1:100)"): not a SenseHub assumption.
+    stated_dilution: 100,
+    stated_dilution_note: "Protocol sheet 2026-09-30: 'Resulting solution (at 1:100)'",
+    notes: 'Tank A alone; Tank D: pre-dissolve Fe-EDDHA and Fetrilon in a bucket; acid tank by pH setpoint.',
+  },
+  fruiting: RECIPES.fruiting,
+};
+
+const STAGE_RECIPE_2026_09_30 = { vegetative: 'vegetative', flowering: 'fruit_set', fruiting: 'fruiting' };
+
+const DAILY_PROGRAM_2026_10_01 = {
+  stage: 'flowering',
+  effective_from: '2026-10-01',
+  sections_order: [1, 2, 3, 4],
+  runs: [
+    { time: '07:30', minutes: 3, ml_per_plant: 100 },
+    { time: '08:45', minutes: 3, ml_per_plant: 100, new_in_table: true },
+    { time: '09:45', minutes: 3, ml_per_plant: 100 },
+    { time: '10:30', minutes: 3.5, ml_per_plant: 117 },
+    { time: '11:15', minutes: 3.5, ml_per_plant: 117, new_in_table: true },
+    { time: '12:00', minutes: 3.5, ml_per_plant: 117, new_in_table: true },
+    { time: '12:45', minutes: 3.5, ml_per_plant: 117 },
+    { time: '13:30', minutes: 3.5, ml_per_plant: 117 },
+    { time: '14:15', minutes: 3, ml_per_plant: 100, new_in_table: true },
+    { time: '15:15', minutes: 3, ml_per_plant: 100 },
+    { time: '17:00', minutes: 2, ml_per_plant: 67, last: true },
+  ],
+  minutes_per_section: 34.5,
+  ml_per_plant_day: 1150,
+  note: "Each run waters the 4 sections back-to-back ('Parti 1-4', order 1 -> 4). 1 min = 33 mL/plant (2 L/h dripper). Program from 2026-10-01.",
+};
+
+const PROTOCOL_2026_09_30 = {
+  key: PROTOCOL_KEY_2026_09_30,
+  name: PROTOCOL_NAME_2026_09_30,
+  source: "Revision of 'cucumber_1021 protokol': fruit-set recipe sheet ('Resulting solution (at 1:100)') + daily program table from 2026-10-01 (operator request 2026-09-30)",
+  source_date: '2026-09-30',
+  author: 'human agronomist',
+  crop: 'Cucumber',
+  variety: 'S13-06 F1',
+  breeder: 'Sakata',
+  data: {
+    ...PROTOCOL.data,
+    stage_recipe: STAGE_RECIPE_2026_09_30,
+    recipes: RECIPES_2026_09_30,
+    daily_program: DAILY_PROGRAM_2026_10_01,
+    previous_version: PROTOCOL_KEY,
+    changes: [
+      'Flowering (fruit set) is fed the fruit-set recipe (was: the vegetative recipe).',
+      'Fruit-set recipe dilution 1:100 is stated by the protocol sheet.',
+      'Daily program from 2026-10-01: 11 runs, 34.5 min per section, ~1,150 mL/plant/day.',
+    ],
+  },
+};
+
+/** Every protocol version SenseHub knows, oldest first (a changed protocol is a NEW row). */
+const PROTOCOLS = [PROTOCOL, PROTOCOL_2026_09_30];
+
+/**
+ * Dilution used to turn a recipe into feed ppm: the protocol's own stated dilution for
+ * that recipe when it gives one (provenance 'protocol'), otherwise the SenseHub design
+ * assumption (senseHub_design_dilution, default 1:150; provenance 'sensehub_assumption').
+ * @returns {{ dilution: number, source: 'protocol'|'sensehub_assumption', note: string|null }}
+ */
+function recipeDilution(protocolData, recipeKey) {
+  const data = protocolData || PROTOCOL.data;
+  const recipe = data.recipes && data.recipes[recipeKey];
+  const stated = recipe ? Number(recipe.stated_dilution) : NaN;
+  if (Number.isFinite(stated) && stated > 0) {
+    return { dilution: stated, source: 'protocol', note: recipe.stated_dilution_note || null };
+  }
+  return { dilution: Number(data.senseHub_design_dilution) || 150, source: 'sensehub_assumption', note: data.senseHub_design_dilution_note || null };
+}
+
 /**
  * Resolve a protocol recipe into calculator tanks: [{ letter, water_base_liters, items }]
  * where items have the fertigationMath item shape. `library(name)` returns the live
@@ -203,6 +298,13 @@ function recipeTanks(protocolData, recipeKey, library = () => null) {
 
 module.exports = {
   PROTOCOL,
+  PROTOCOLS,
+  PROTOCOL_2026_09_30,
+  PROTOCOL_NAME_2026_09_30,
+  PROTOCOL_KEY_2026_09_30,
+  STAGE_RECIPE_2026_09_30,
+  DAILY_PROGRAM_2026_10_01,
+  recipeDilution,
   PROTOCOL_NAME,
   PROTOCOL_KEY,
   INGREDIENTS,

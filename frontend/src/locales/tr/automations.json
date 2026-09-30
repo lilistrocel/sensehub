@@ -432,7 +432,9 @@
       "cronUnset": "Cron (ayarlanmadı)",
       "schedule": "Program",
       "event": "Olay",
-      "manual": "Manuel"
+      "manual": "Manuel",
+      "activeFrom": "{{date}} tarihinden itibaren",
+      "activeUntil": "{{date}} tarihine kadar"
     },
     "forDuration": "{{duration}}",
     "upTo": "en fazla {{duration}}",

@@ -205,12 +205,19 @@ function seedProfileTargets(db, profileId, cropAssignmentId, protocolData) {
   return { stages, elements };
 }
 
+/**
+ * Every protocol version is inserted once (INSERT OR IGNORE by key): a stored version is
+ * never rewritten, a revision is a NEW row (2026-09-30: fruit set recipe + program). Which
+ * version a profile follows is its protocol_id (operator choice). Returns the FIRST
+ * version, which the first-run seed below uses.
+ */
 function ensureProtocol(db) {
-  const { PROTOCOL } = require('../services/cropProtocol');
-  db.prepare(`
+  const { PROTOCOL, PROTOCOLS } = require('../services/cropProtocol');
+  const ins = db.prepare(`
     INSERT OR IGNORE INTO crop_protocols (key, name, source, source_date, author, crop, variety, breeder, data)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(PROTOCOL.key, PROTOCOL.name, PROTOCOL.source, PROTOCOL.source_date, PROTOCOL.author, PROTOCOL.crop, PROTOCOL.variety, PROTOCOL.breeder, JSON.stringify(PROTOCOL.data));
+  `);
+  for (const P of PROTOCOLS) ins.run(P.key, P.name, P.source, P.source_date, P.author, P.crop, P.variety, P.breeder, JSON.stringify(P.data));
   return db.prepare('SELECT * FROM crop_protocols WHERE key = ?').get(PROTOCOL.key);
 }
 

@@ -6,6 +6,7 @@ const { relayTimerService } = require('../services/RelayTimerService');
 const { automationArmingService } = require('../services/AutomationArmingService');
 const { validateAutomationActions } = require('../services/RelayInterlockService');
 const { clampActions, resolveRelayLimits, validateHysteresis } = require('../services/AutomationGuards');
+const { validateActiveWindow } = require('../utils/scheduleWindow');
 
 const lookupEquipment = (id) => db.prepare('SELECT * FROM equipment WHERE id = ?').get(id) || null;
 
@@ -63,6 +64,8 @@ router.post('/', requireRole('admin', 'operator'), (req, res) => {
   if (!name) {
     return res.status(400).json({ error: 'Bad Request', message: 'Name is required' });
   }
+  const windowError = validateActiveWindow(trigger_config);
+  if (windowError) return res.status(400).json({ error: 'Bad Request', message: windowError });
 
   let doseProgId = null;
   try { doseProgId = resolveDoseProgramId(dose_program_id); }
@@ -302,6 +305,8 @@ router.put('/:id', requireRole('admin', 'operator'), (req, res) => {
   if (!automation) {
     return res.status(404).json({ error: 'Not Found', message: 'Automation not found' });
   }
+  const windowError = validateActiveWindow(trigger_config);
+  if (windowError) return res.status(400).json({ error: 'Bad Request', message: windowError });
 
   // dose_program_id: only override when the field is explicitly present in the
   // payload (so PATCH-style partial updates don't accidentally clear an existing link).

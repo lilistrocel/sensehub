@@ -225,7 +225,30 @@ function monthShort(date, loc) {
   return new Intl.DateTimeFormat(intlLocale(L(loc).lng), { month: 'short' }).format(date);
 }
 
-export function describeSchedule(trigger, { long = false, loc } = {}) {
+/**
+ * Dated activation (trigger active_from / active_until, local YYYY-MM-DD — operator request
+ * 2026-09-30: the new irrigation program starts on a set day): appended to the schedule text.
+ */
+function activeWindowSuffix(trigger, lc) {
+  const { t } = lc;
+  const fmtDay = (s) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+    if (!m) return ltrIso(String(s), lc);
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return `${d.getDate()} ${monthShort(d, lc)}`;
+  };
+  const parts = [];
+  if (trigger?.active_from) parts.push(t('summary.when.activeFrom', { date: fmtDay(trigger.active_from) }));
+  if (trigger?.active_until) parts.push(t('summary.when.activeUntil', { date: fmtDay(trigger.active_until) }));
+  return parts.length ? ` · ${parts.join(' · ')}` : '';
+}
+
+export function describeSchedule(trigger, opts = {}) {
+  const lc = L(opts.loc);
+  return describeScheduleBase(trigger, opts) + activeWindowSuffix(trigger, lc);
+}
+
+function describeScheduleBase(trigger, { long = false, loc } = {}) {
   const lc = L(loc);
   const { t } = lc;
   const type = trigger?.schedule_type || 'daily';
@@ -747,6 +770,17 @@ function nextCronRun(cron, now) {
 /** Next fire time for a schedule trigger, or null when it cannot be computed. */
 export function nextScheduleRun(trigger, now = new Date()) {
   if (!trigger || trigger.type !== 'schedule') return null;
+  // dated activation: not before the first active day, nothing after the last one
+  const dayStart = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null; };
+  const from = dayStart(trigger.active_from);
+  const until = dayStart(trigger.active_until);
+  const base = from && from > now ? new Date(from.getTime() - 1) : now;
+  const next = nextScheduleRunBase(trigger, base);
+  if (next && until && next >= new Date(until.getFullYear(), until.getMonth(), until.getDate() + 1)) return null;
+  return next;
+}
+
+function nextScheduleRunBase(trigger, now) {
   const type = trigger.schedule_type || 'daily';
   const [hh, mm] = String(trigger.time || '08:00').split(':').map(n => parseInt(n, 10));
   if (type === 'once') {

@@ -14,6 +14,7 @@ const { createAlert } = require('../utils/alertBroadcast');
 const { executeAutomation } = require('./AutomationExecutor');
 const { evaluateSkip } = require('./SkipEvaluator');
 const { automationArmingService } = require('./AutomationArmingService');
+const { isWithinActiveWindow } = require('../utils/scheduleWindow');
 
 class AutomationSchedulerService {
   constructor() {
@@ -228,6 +229,9 @@ class AutomationSchedulerService {
       const lastRunTime = this._parseUtcTimestamp(lastRun);
       if (lastRunTime && (now - lastRunTime) < 55000) return false;
     }
+
+    // Dated activation (active_from / active_until, local dates): outside it nothing is due.
+    if (!isWithinActiveWindow(triggerConfig, now)) return false;
 
     const scheduleType = triggerConfig.schedule_type;
 

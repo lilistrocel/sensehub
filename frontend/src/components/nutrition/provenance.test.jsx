@@ -152,3 +152,41 @@ describe('feed calculator provenance', () => {
     expect(html).toContain('aria-label="Human · operator: Edited by hand by the farm team."'); // K is hand-edited in the fixture profile
   });
 });
+
+// Operator request 2026-09-30: the fruit-set recipe's 1:100 dilution is STATED by the protocol
+// (2026-09-30 version), not the 1:150 SenseHub assumption; a mid-day recipe change is shown.
+describe('protocol-stated dilution (2026-09-30) and recipe change', () => {
+  const flowering = {
+    ...profile,
+    stage: { effective: 'flowering' },
+    stage_targets: { flowering: { ec_min: 2.0, ec_target: 2.1, ec_max: 2.2 } },
+    element_targets: { flowering: [{ element: 'N', hard_min: 190, soft_target: 223, hard_max: 256, manual: false, basis_source: 'protocol' }] },
+    protocol: { name: 'Human agronomist protocol (2026-09-30)', data: { stage_targets: { flowering: { input_ec: { target: 1.7 } } } } },
+    protocol_ppm: { design_dilution: 150, by_stage: { flowering: { recipe: 'fruit_set', design_dilution: 100, dilution_source: 'protocol', ec_ms_cm: 2.21, ppm: { N: 229, K: 373, Ca: 171 } } } },
+  };
+  it('targets panel: 1:100 marked as stated by the protocol, recipe label translated', () => {
+    const html = render(<TargetsPanel profile={flowering} canEdit={false} api={{}} onSaved={() => {}} />);
+    expect(html).toContain('Protocol recipe at 1:100 as stated by the protocol');
+    expect(html).toContain('Protocol recipe diluted 1:100 per tank, as the protocol sheet states.');
+    expect(html).toContain('Protocol fruit set recipe diluted 1:100');
+    expect(html).not.toContain('1:150');
+    const ar = render(<TargetsPanel profile={flowering} canEdit={false} api={{}} onSaved={() => {}} />, 'ar');
+    expect(ar).toContain('عقد الثمار');
+  });
+  it('feed body: stated dilution in the protocol column; recipe-change note lists the tanks', () => {
+    const rep = {
+      ...feedToday,
+      protocol: feedToday.protocol ? { ...feedToday.protocol, recipe: 'fruit_set', design_dilution: 100, dilution_source: 'protocol' } : feedToday.protocol,
+      recipe_changed_in_period: true,
+      recipe_segments: [
+        { tank_id: 1, letter: 'A', mixture_id: 14, current: false, runs: 4, dosed_l: 30 },
+        { tank_id: 1, letter: 'A', mixture_id: 18, current: true, runs: 2, dosed_l: 12 },
+        { tank_id: 2, letter: 'B', mixture_id: 15, current: false, runs: 4, dosed_l: 30 },
+      ],
+    };
+    const html = render(<FeedHarness rep={rep} profile={{ ...profile, element_targets: { vegetative: profile.element_targets.vegetative } }} />);
+    expect(html).toContain('data-testid="feed-recipe-changed"');
+    expect(html).toContain('(tank A, B)');
+    if (feedToday.protocol) expect(html).toContain('as the protocol sheet states');
+  });
+});

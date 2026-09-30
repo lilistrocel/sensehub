@@ -22,6 +22,7 @@ const { M } = require('../i18n');
 const DAY_KEYS = ['watchdog.day.0', 'watchdog.day.1', 'watchdog.day.2', 'watchdog.day.3', 'watchdog.day.4', 'watchdog.day.5', 'watchdog.day.6'];
 const { telegramService } = require('./TelegramService');
 const { automationArmingService } = require('./AutomationArmingService');
+const { isWithinActiveWindow } = require('../utils/scheduleWindow');
 
 // Auto-rearm: when a threshold automation should be firing but hasn't (the relay was
 // killed by the safety watchdog and the condition is still met, so no rising edge
@@ -851,6 +852,8 @@ class WatchdogService {
   // ─── Schedule Helpers ───
 
   _isScheduleMissed(triggerConfig, lastRun, graceMinutes, now) {
+    // Outside its dated activation window a schedule is not due, so it cannot be missed.
+    if (!isWithinActiveWindow(triggerConfig, now)) return { missed: false };
     const graceMs = graceMinutes * 60000;
     const scheduleType = triggerConfig.schedule_type;
 

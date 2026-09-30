@@ -5,8 +5,10 @@
  *
  *   ppm_el = Σ_tank  stock_mg_per_L(tank, el) × concentrate_L(tank) ÷ water_L
  *
- * stock_mg_per_L comes from each tank's CURRENT mixture (ingredient analyses,
- * % w/w, fertigationMath) and concentrate / water litres are MEASURED
+ * stock_mg_per_L comes from the mixture each tank held when the run STARTED (refill
+ * history: the last fertigation_tank_refills row at/before the run, else the tank's
+ * current mixture — operator request 2026-09-30, recipe changed at 12:00 mid-day;
+ * ingredient analyses, % w/w, fertigationMath) and concentrate / water litres are MEASURED
  * (irrigation_runs: every run incl. manual ones, from the irrigation monitor's
  * flow meter + per-tank consumption counters; fallback dose_controller_runs).
  * With no measured run in the period the configured dose-controller ratio
@@ -239,6 +241,44 @@ function loadCurrentTanks(db) {
   }));
 }
 
+/** 'YYYY-MM-DD HH:MM:SS' (SQLite, UTC) or ISO with zone -> epoch ms. */
+function tsMs(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const str = String(v);
+  const ms = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(str) ? str : `${str.replace(' ', 'T')}Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Recipe history per tank from the refill events (fertigation_tank_refills: refilled_at +
+ * mixture_id). A refill is when a recipe took effect (operator request 2026-09-30: the
+ * fruit-set recipe went into A-D at 12:00, so the runs before 12:00 were fed the old
+ * recipe and the runs after it the new one).
+ * @returns {Map<tank_id, [{ at_ms, mixture_id, refill_id }]>} oldest first
+ */
+function loadRecipeHistory(db) {
+  const out = new Map();
+  let rows = [];
+  try {
+    rows = db.prepare('SELECT id, tank_id, refilled_at, mixture_id FROM fertigation_tank_refills WHERE mixture_id IS NOT NULL ORDER BY refilled_at, id').all();
+  } catch (_) { rows = []; }
+  for (const r of rows) {
+    const at = tsMs(r.refilled_at);
+    if (at === null) continue;
+    if (!out.has(r.tank_id)) out.set(r.tank_id, []);
+    out.get(r.tank_id).push({ at_ms: at, mixture_id: r.mixture_id, refill_id: r.id });
+  }
+  return out;
+}
+
+/** Mixture a tank held when a run started: the last refill at/before it; else its current mixture. */
+function mixtureAt(history, tank, startMs) {
+  const list = history.get(tank.tank_id) || [];
+  let found = null;
+  if (startMs !== null) for (const h of list) { if (h.at_ms <= startMs) found = h; else break; }
+  return found ? { mixture_id: found.mixture_id, refill_id: found.refill_id, from_ms: found.at_ms } : { mixture_id: tank.mixture_id, refill_id: null, from_ms: null };
+}
+
 /** Dose-controller config (stored merged onto defaults), or the defaults. */
 function doseConfig(db) {
   let DC = null;
@@ -361,9 +401,55 @@ function buildFeedReport(db, { profile = null, period = 'today', nowMs = Date.no
 
   let basis;
   let mix;
+  let recipeSegments = null;
   if (water > 0 && anyDosed) {
     basis = 'measured';
-    mix = mixPpm(nutrientTanks.map(t => ({ tank: t, fraction: (dosedBy[t.tank_id] || 0) / water, dosed_l: dosedBy[t.tank_id] || 0 })));
+    // Each run is fed the recipe its tanks held when it started (refill history): litres are
+    // summed per (tank, mixture) and every part is mixed at its own stock concentration.
+    const history = loadRecipeHistory(db);
+    const itemsCache = new Map();
+    const itemsOf = (mixtureId) => {
+      if (!itemsCache.has(mixtureId)) itemsCache.set(mixtureId, M.loadMixtureItems(db, mixtureId).map(it => ({ ...it, composition: M.parseComposition(it.composition) })));
+      return itemsCache.get(mixtureId);
+    };
+    const segs = new Map(); // `${tank_id}:${mixture_id}` -> { tank, mixture_id, dosed_l, runs, from_ms }
+    for (const r of runs) {
+      const startMs = tsMs(r.started_at);
+      for (const t of nutrientTanks) {
+        const l = Number(r.tanks[t.tank_id]) || 0;
+        if (!(l > 0)) continue;
+        const at = mixtureAt(history, t, startMs);
+        const key = `${t.tank_id}:${at.mixture_id}`;
+        if (!segs.has(key)) segs.set(key, { tank: t, mixture_id: at.mixture_id, refill_id: at.refill_id, from_ms: at.from_ms, dosed_l: 0, runs: 0 });
+        const sg = segs.get(key);
+        sg.dosed_l += l; sg.runs += 1;
+      }
+    }
+    const parts = [...segs.values()].map(sg => ({
+      tank: sg.mixture_id === sg.tank.mixture_id ? sg.tank : { ...sg.tank, mixture_id: sg.mixture_id, items: itemsOf(sg.mixture_id) },
+      fraction: sg.dosed_l / water,
+      dosed_l: sg.dosed_l,
+    }));
+    const raw = mixPpm(parts);
+    // per tank: the sum over its recipes
+    const perTank = nutrientTanks.map(t => {
+      const own = raw.per_tank.filter(p => p.tank_id === t.tank_id);
+      const ppm = {};
+      for (const p of own) for (const [el, v] of Object.entries(p.ppm)) ppm[el] = (ppm[el] || 0) + v;
+      const dosed = dosedBy[t.tank_id] || 0;
+      return { tank_id: t.tank_id, letter: t.letter, name: t.name, dosed_l: r2(dosed), ratio: dosed > 0 ? Math.round(water / dosed) : null, ppm: M.round(ppm, 3) };
+    });
+    mix = { ppm: raw.ppm, per_tank: perTank, assumptions: raw.assumptions };
+    const mixNames = new Map();
+    const nameOf = (id) => {
+      if (!mixNames.has(id)) { try { mixNames.set(id, (db.prepare('SELECT name FROM fertigation_mixtures WHERE id = ?').get(id) || {}).name || null); } catch (_) { mixNames.set(id, null); } }
+      return mixNames.get(id);
+    };
+    recipeSegments = [...segs.values()].map(sg => ({
+      tank_id: sg.tank.tank_id, letter: sg.tank.letter, mixture_id: sg.mixture_id, mixture_name: nameOf(sg.mixture_id),
+      current: sg.mixture_id === sg.tank.mixture_id, since: sg.from_ms !== null ? new Date(sg.from_ms).toISOString() : null,
+      refill_id: sg.refill_id, runs: sg.runs, dosed_l: r2(sg.dosed_l),
+    })).sort((a, b) => (a.tank_id - b.tank_id) || String(a.since || '').localeCompare(String(b.since || '')));
   } else {
     basis = 'configured_ratio';
     mix = mixPpm(nutrientTanks.map(t => ({ tank: t, fraction: ratioOf(t) ? 1 / ratioOf(t) : 0 })));
@@ -405,9 +491,11 @@ function buildFeedReport(db, { profile = null, period = 'today', nowMs = Date.no
   let protocol = null;
   if (protocolData && stage && stage.effective) {
     const recipeKey = (protocolData.stage_recipe || {})[stage.effective] || stage.effective;
-    const pTanks = require('./cropProtocol').recipeTanks(protocolData, recipeKey, library || (() => null));
+    const CP = require('./cropProtocol');
+    const pTanks = CP.recipeTanks(protocolData, recipeKey, library || (() => null));
     if (pTanks.length) {
-      const design = Number(protocolData.senseHub_design_dilution) || 150;
+      const dil = CP.recipeDilution(protocolData, recipeKey);
+      const design = dil.dilution;
       const pDesign = mixPpm(pTanks.map(t => ({ tank: t, fraction: 1 / design })));
       const ratioByLetter = {};
       for (const t of nutrientTanks) ratioByLetter[t.letter] = ratioOf(t);
@@ -415,6 +503,7 @@ function buildFeedReport(db, { profile = null, period = 'today', nowMs = Date.no
       protocol = {
         recipe: recipeKey,
         design_dilution: design,
+        dilution_source: dil.source,
         ppm_at_design: pDesign.ppm,
         ec_at_design: ecEstimate(pDesign.ppm).ec_ms_cm,
         ppm_at_configured_ratio: pConfigured.ppm,
@@ -436,6 +525,10 @@ function buildFeedReport(db, { profile = null, period = 'today', nowMs = Date.no
     days_with_runs: new Set(runs.map(r => r.local_date)).size,
     last_run_at: lastRun ? lastRun.started_at : null,
     water_l: r1(water),
+    // measured basis: which recipe each tank's litres were mixed with (a refill inside the
+    // period splits it); recipe_changed = a run of the period was fed a recipe that is not current
+    recipe_segments: recipeSegments,
+    recipe_changed_in_period: !!(recipeSegments && recipeSegments.some(sg => !sg.current)),
     tanks: nutrientTanks.map(t => {
       const pt = mix.per_tank.find(p => p.tank_id === t.tank_id) || {};
       return {
@@ -496,6 +589,8 @@ module.exports = {
   compareRecipes,
   loadCurrentTanks,
   loadMeasuredRuns,
+  loadRecipeHistory,
+  mixtureAt,
   doseConfig,
   periodDates,
   buildFeedReport,

@@ -74,7 +74,10 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
   const protoPpm = profile.protocol_ppm?.by_stage?.[stage] || null;
   const corr = profile.element_targets_ec?.[stage] || null;
   const corrState = ecCorrespondenceState(corr, st.ec_target);
-  const ratio = profile.protocol_ppm ? profile.protocol_ppm.design_dilution : 150;
+  // the dilution of this stage's recipe: stated by the protocol (2026-09-30 fruit set 1:100) or the 1:150 SenseHub assumption
+  const ratio = protoPpm && protoPpm.design_dilution ? protoPpm.design_dilution : (profile.protocol_ppm ? profile.protocol_ppm.design_dilution : 150);
+  const ratioSource = protoPpm && protoPpm.dilution_source ? protoPpm.dilution_source : 'sensehub_assumption';
+  const ratioDetail = t(ratioSource === 'protocol' ? 'prov.protocolRecipeStated' : 'prov.protocolRecipe', { ratio });
 
   const begin = () => {
     const d = { stage: {}, el: {} };
@@ -224,7 +227,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
                 <th className="py-1 text-end font-semibold">
                   <span className="inline-flex flex-wrap items-center justify-end gap-1">
                     {t('targets.col.protocolPpm', { ratio })}
-                    <ProvenanceBadge kind="calculated" from="protocol" detail={t('prov.protocolRecipe', { ratio })} data-testid="protocol-ppm-provenance" />
+                    <ProvenanceBadge kind="calculated" from="protocol" detail={ratioDetail} data-testid="protocol-ppm-provenance" />
                   </span>
                 </th>
               </tr>
@@ -246,7 +249,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
                       ) : (
                         <span className="inline-flex flex-wrap items-center gap-1.5">
                           <Triple values={r ? [r.hard_min, r.soft_target, r.hard_max] : null} decimals={dec} fmt={fmt} />
-                          <ElementTargetMark row={r} ratio={ratio} />
+                          <ElementTargetMark row={r} ratio={ratio} ratioSource={ratioSource} />
                         </span>
                       )}
                     </td>
@@ -259,7 +262,7 @@ export default function TargetsPanel({ profile, canEdit, api, onSaved }) {
         </TableWrap>
         {els.some(e => e.manual) && <p className="text-xs text-muted mt-1">{t('targets.manualHint')}</p>}
         {protoPpm && (
-          <p className="text-xs text-muted mt-1">{t('targets.protocolPpmHint', { recipe: t(`recipe.${protoPpm.recipe}`, { defaultValue: protoPpm.recipe }), ratio: profile.protocol_ppm.design_dilution, ec: fmt.number(protoPpm.ec_ms_cm, { decimals: 2 }) })}</p>
+          <p className="text-xs text-muted mt-1">{t('targets.protocolPpmHint', { recipe: t(`recipe.${protoPpm.recipe}`, { defaultValue: protoPpm.recipe }), ratio, ec: fmt.number(protoPpm.ec_ms_cm, { decimals: 2 }) })}</p>
         )}
         {error && <p role="alert" className="mt-2 text-sm text-state-alarm">{t('errors.saveFailed', { error })}</p>}
       </div>

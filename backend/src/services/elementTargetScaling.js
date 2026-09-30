@@ -5,8 +5,10 @@
  * Pure (no DB): unit-testable. The DB side lives in CropProfileService.
  *
  * The human agronomist's protocol gives stock recipes; SenseHub prefills the
- * element targets with that recipe diluted at a FIXED design dilution (1:150),
- * which corresponds to one fertilizer EC (≈ 1.45 mS/cm for the vegetative recipe).
+ * element targets with that recipe diluted at a FIXED design dilution: the one the
+ * protocol STATES for the recipe when it gives one (2026-09-30 version: fruit set
+ * 1:100, provenance "human protocol"), else the SenseHub assumption 1:150 — which
+ * corresponds to one fertilizer EC (≈ 1.45 mS/cm for the vegetative recipe).
  * When the operator sets a different input EC target, every element is scaled by
  * the same factor so the protocol's element RATIOS are kept:
  *
@@ -61,11 +63,20 @@ function protocolStagePpm(protocolData, stage, library = () => null) {
   if (!protocolData) return null;
   const recipeKey = (protocolData.stage_recipe || {})[stage];
   if (!recipeKey) return null;
-  const tanks = require('./cropProtocol').recipeTanks(protocolData, recipeKey, library);
+  const CP = require('./cropProtocol');
+  const tanks = CP.recipeTanks(protocolData, recipeKey, library);
   if (!tanks.length) return null;
-  const design = Number(protocolData.senseHub_design_dilution) || 150;
+  // the protocol's stated dilution for this recipe (2026-09-30: fruit set 1:100), else the 1:150 SenseHub assumption
+  const dil = CP.recipeDilution(protocolData, recipeKey);
+  const design = dil.dilution;
   const { ppm } = FC.mixPpm(tanks.map(t => ({ tank: t, fraction: 1 / design })));
-  return { recipe: recipeKey, design_dilution: design, ppm, fertilizer_ec_ms_cm: FC.cationEc(ppm) };
+  return { recipe: recipeKey, design_dilution: design, dilution_source: dil.source, ppm, fertilizer_ec_ms_cm: FC.cationEc(ppm) };
+}
+
+/** "1:100 (stated by the protocol)" / "1:150 (SenseHub design assumption)" — for notes. */
+function dilutionText(stagePpm) {
+  if (!stagePpm) return '';
+  return `1:${stagePpm.design_dilution} (${stagePpm.dilution_source === 'protocol' ? 'stated by the protocol' : 'SenseHub design assumption'})`;
 }
 
 /** Prefill rows (protocol at the design dilution) — factor 1. */
@@ -75,7 +86,7 @@ function protocolElementRows(stagePpm) {
     element: el,
     ...bandRow(el, stagePpm.ppm[el]),
     priority: ELEMENT_PRIORITY[el] || 3,
-    notes: `Prefill: human agronomist protocol ${stagePpm.recipe} recipe at 1:${stagePpm.design_dilution} (SenseHub design assumption); band ${bandText(el)} %`,
+    notes: `Prefill: human agronomist protocol ${stagePpm.recipe} recipe at ${dilutionText(stagePpm)}; band ${bandText(el)} %`,
   }));
 }
 
@@ -96,6 +107,7 @@ function scaleFactor({ ecTarget, sourceWaterEc = null, stagePpm }) {
     fertilizer_ec_target: fertEc !== null ? round(fertEc, 3) : null,
     recipe: stagePpm ? stagePpm.recipe : null,
     design_dilution: stagePpm ? stagePpm.design_dilution : null,
+    dilution_source: stagePpm ? stagePpm.dilution_source || 'sensehub_assumption' : null,
     protocol_fertilizer_ec: protocolEc !== null ? round(protocolEc, 3) : null,
     factor: null,
     equivalent_dilution: null,
@@ -170,7 +182,7 @@ function scaleElementTargets({ stagePpm, ecTarget, sourceWaterEc = null, current
       old,
       new: next,
       priority: priorityFor(el, cur ? cur.priority : null),
-      notes: `Scaled: human agronomist protocol ${m.recipe} recipe ×${m.factor} (1:${m.design_dilution} → ≈1:${m.equivalent_dilution}) to input EC ${m.ec_target} (fertilizers ${m.fertilizer_ec_target}, ${swText}); band ${bandText(el)} %`,
+      notes: `Scaled: human agronomist protocol ${m.recipe} recipe ×${m.factor} (1:${m.design_dilution}${m.dilution_source === 'protocol' ? ' stated by the protocol' : ''} → ≈1:${m.equivalent_dilution}) to input EC ${m.ec_target} (fertilizers ${m.fertilizer_ec_target}, ${swText}); band ${bandText(el)} %`,
     });
   }
   return { ok: true, factor: f.factor, math: m, rows, kept_manual: kept };
@@ -214,6 +226,7 @@ module.exports = {
   priorityFor,
   protocolStagePpm,
   protocolElementRows,
+  dilutionText,
   scaleFactor,
   isManuallyEdited,
   scaleElementTargets,

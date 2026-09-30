@@ -23,7 +23,8 @@
   },
   "recipe": {
     "vegetative": "vegetative",
-    "fruiting": "fruiting"
+    "fruiting": "fruiting",
+    "fruit_set": "fruit set"
   },
   "plantingType": {
     "transplant": "Transplant"
@@ -247,7 +248,8 @@
     "climateNight": "Night {{min}}-{{max}} °C (alarm below {{alarm}} °C)",
     "climateRh": "RH {{min}}-{{max}} % (alarm below {{low}} % / above {{high}} %)",
     "timeline": "Timeline (days after transplant)",
-    "readOnly": "read-only"
+    "readOnly": "read-only",
+    "programFrom": "Program in use from {{date}}."
   },
   "history": {
     "title": "Crop cycles",
@@ -346,7 +348,8 @@
       "diff": "Δ kg",
       "hint": "Protocol recipe ≈ EC {{protoEc}} mS/cm at 1:{{ratio}} and ≈ {{protoEcCfg}} mS/cm at the configured ratio (fertilizers only)."
     },
-    "assumptions": "Calculation assumptions"
+    "assumptions": "Calculation assumptions",
+    "recipeChanged": "A tank recipe changed in this period (tank {{tanks}}): each run is counted with the recipe its tanks held when it started."
   },
   "advisor": {
     "advisoryOnly": "Advisory only. SenseHub never changes recipes, dose programs, dosing ratios, tanks or automations from this advice. The human agronomist's protocol stays authoritative; the AI gives a second opinion.",
@@ -496,7 +499,9 @@
     "stageOverride": "Set by hand by the farm team.",
     "notMeasured": "Facts SenseHub cannot measure, entered by the farm team.",
     "operatorNotes": "Written by the farm team for this run (shown as written, not translated).",
-    "aiText": "Written by the AI advisor."
+    "aiText": "Written by the AI advisor.",
+    "elementProtocolStated": "Protocol recipe at 1:{{ratio}} as stated by the protocol, with SenseHub's min / max band.",
+    "protocolRecipeStated": "Protocol recipe diluted 1:{{ratio}} per tank, as the protocol sheet states."
   },
   "link": {
     "title": "Dose controller link",

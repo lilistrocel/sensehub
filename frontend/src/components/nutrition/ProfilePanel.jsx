@@ -325,6 +325,7 @@ function ProtocolCard({ protocol }) {
               </div>
             </TableWrap>
             <p className="text-xs text-muted mt-1">{t('protocol.programTotal', { minutes: prog.minutes_per_section, ml: fmt.int(prog.ml_per_plant_day) })}</p>
+            {prog.effective_from && <p className="text-xs text-muted mt-0.5">{t('protocol.programFrom', { date: fmt.date(`${prog.effective_from}T12:00:00Z`) })}</p>}
           </div>
         )}
         {cl && (

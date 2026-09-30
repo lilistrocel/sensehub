@@ -289,12 +289,17 @@ class CropProfileService {
       try {
         const FC = require('./FeedCalculator');
         const library = this._library();
-        protocolPpm = { design_dilution: Number(protocol.data.senseHub_design_dilution) || 150, by_stage: {} };
+        // design_dilution / dilution_source: the SenseHub default; each stage carries its own
+        // (a recipe with a protocol-stated dilution, e.g. fruit set 1:100 from 2026-09-30, uses that).
+        protocolPpm = { design_dilution: Number(protocol.data.senseHub_design_dilution) || 150, dilution_source: 'sensehub_assumption', by_stage: {} };
         for (const stage of Object.keys(protocol.data.stage_recipe)) {
           const sp = ScaleMath.protocolStagePpm(protocol.data, stage, library);
           if (!sp) continue;
           stagePpm[stage] = sp;
-          protocolPpm.by_stage[stage] = { recipe: sp.recipe, ppm: sp.ppm, ec_ms_cm: FC.ecEstimate(sp.ppm).ec_ms_cm };
+          protocolPpm.by_stage[stage] = {
+            recipe: sp.recipe, ppm: sp.ppm, ec_ms_cm: FC.ecEstimate(sp.ppm).ec_ms_cm,
+            design_dilution: sp.design_dilution, dilution_source: sp.dilution_source,
+          };
         }
       } catch (_) { protocolPpm = null; }
     }
