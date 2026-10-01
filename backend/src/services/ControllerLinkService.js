@@ -317,6 +317,8 @@ class ControllerLinkService {
       if (!(val >= L.RATIO_HARD_BOUNDS.min && val <= L.RATIO_HARD_BOUNDS.max)) return `ratio of tank ${id} (1:${val}) outside the hard bounds 1:${L.RATIO_HARD_BOUNDS.min}..1:${L.RATIO_HARD_BOUNDS.max}`;
     }
     if (update.nutrients && update.nutrients.ec_trim && 'enabled' in update.nutrients.ec_trim) return 'a crop-target proposal never switches EC fine-tuning';
+    // equal draw is an operator decision (requirement 2026-10-01): a proposal never touches it
+    if (update.nutrients && 'equal_draw' in update.nutrients) return 'a crop-target proposal never changes equal draw';
     if (update.enabled !== undefined || (update.ph && 'enabled' in update.ph)) return 'a crop-target proposal never switches the controller or the pH loop';
     return null;
   }
@@ -563,6 +565,33 @@ class ControllerLinkService {
         checks: checks.map(x => ({ id: x.id, action: x.action, handheld_ec_ms: x.handheld_ec_ms, seko_ec_ms: x.seko_ec_ms, deviation_pct: x.deviation_pct, measured_at: x.measured_at, note: x.note, user_email: x.user_email, created_at: x.created_at })),
       },
       best_fit: this._bestFit(c),
+      equal_draw: this._equalDrawView(cfg, c),
+    };
+  }
+
+  /**
+   * Equal draw vs the ratio (operator requirement 2026-10-01): what equal draw achieved in
+   * recent runs (DoseController.equalDrawCapability) and whether the controller's / the
+   * proposed uniform ratio is richer than that — then the venturis cannot deliver it with
+   * equal draw and the EC target needs stronger stock or larger venturis.
+   */
+  _equalDrawView(cfg, c) {
+    const e = cfg.nutrients.equal_draw || {};
+    let cap = null;
+    try { const ctl = this.ctl(); cap = typeof ctl.equalDrawCapability === 'function' ? ctl.equalDrawCapability() : null; } catch (_) { cap = null; }
+    const achievable = cap && cap.achievable_ratio ? cap.achievable_ratio : null;
+    const pend = this._latest(c.row.id, ['pending', 'approved']);
+    const pendUpdate = pend ? parse(pend.update_json, {}) : null;
+    const uniform = (ratio) => (ratio ? L.uniformRatio(ratio, c.tankIds) : null);
+    const check = (ratio) => (ratio && achievable && ratio < achievable * 0.97 ? { ratio, achievable_ratio: achievable } : null);
+    const current = uniform(cfg.nutrients.ratio);
+    const proposed = uniform(pendUpdate && pendUpdate.nutrients && pendUpdate.nutrients.ratio) || uniform(c.proposal.update && c.proposal.update.nutrients && c.proposal.update.nutrients.ratio);
+    return {
+      enabled: e.enabled === true, tolerance_l: e.tolerance_l ?? null, tolerance_pct: e.tolerance_pct ?? null, on_tank_failure: e.on_tank_failure || null,
+      achievable_ratio: achievable, best_ratio: cap ? cap.best_ratio : null, n_limited: cap ? cap.n_limited : 0, n_runs: cap ? cap.n_runs : 0,
+      runs: cap ? cap.runs.slice(0, 8).map(r => ({ id: r.id, started_at: r.started_at, equal_ratio: r.equal_ratio, limited: r.limited, equal_draw: r.equal_draw })) : [],
+      warning_current: check(current),
+      warning_proposed: proposed && proposed !== current ? check(proposed) : null,
     };
   }
 }

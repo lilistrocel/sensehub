@@ -391,6 +391,43 @@ test('default DoseController hook: no approved proposal -> config and run untouc
   assert.ok(plain.getRun(r.runId).config_version_id > 0);
 });
 
+// ─── equal draw (operator requirement 2026-10-01) is never clobbered ──────────
+
+test('equal draw: an applied crop-target proposal preserves nutrients.equal_draw (never clobbers it); a proposal touching it is refused', async () => {
+  // operator: equal draw ON with its own tolerance, and a ratio that differs from the crop targets
+  ctl.saveConfig({ nutrients: { ratio: { 1: 150, 2: 150, 3: 150, 4: 150 }, equal_draw: { enabled: true, tolerance_l: 0.6 } } },
+    { source: 'operator', user: { id: 1, email: 'admin@farm.test' } });
+  assert.deepEqual(JSON.parse(storedConfig()).nutrients.equal_draw, { enabled: true, tolerance_l: 0.6, tolerance_pct: 5, on_tank_failure: 'hold_all' });
+  const link1 = await call('PUT', `/profiles/${PID}/controller-link`, 'admin', { mode: 'follow_crop_targets' });
+  assert.equal(link1.status, 200, JSON.stringify(link1.body));
+  const pend = link.view(PID).pending;
+  assert.ok(pend && pend.update.nutrients && pend.update.nutrients.ratio, 'a ratio proposal back to the crop targets');
+  assert.ok(!('equal_draw' in pend.update.nutrients), 'proposals never carry equal_draw');
+  const ok = await call('POST', `/controller-link/proposals/${pend.id}/approve`, 'admin', {});
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  clock += 3600000;
+  const r = ctl.beginCycle(ctx(108));
+  assert.equal(link.getProposal(pend.id).status, 'applied');
+  const cfg = JSON.parse(storedConfig());
+  assert.deepEqual(cfg.nutrients.ratio, Object.fromEntries(Object.entries(pend.update.nutrients.ratio).map(([k, v]) => [k, v])), 'the proposal applied');
+  assert.notEqual(cfg.nutrients.ratio[1], 150);
+  assert.deepEqual(cfg.nutrients.equal_draw, { enabled: true, tolerance_l: 0.6, tolerance_pct: 5, on_tank_failure: 'hold_all' }, 'equal draw kept');
+  assert.ok(ctl.cycle.eq, 'the cycle runs with equal draw');
+  assert.equal(ctl.cycle.eq.tolerance_l, 0.6);
+  await ctl.endCycle({ status: 'completed' });
+  assert.ok(ctl.getRun(r.runId).equal_draw && ctl.getRun(r.runId).equal_draw.enabled);
+  // a proposal that touches equal_draw never passes the controller checks
+  const bad = link._applyCheck({ nutrients: { ratio: { 1: 140 }, equal_draw: { enabled: false } } }, ctl.getConfig(true));
+  assert.match(bad, /never changes equal draw/);
+  // the view reports equal draw + the achievable-ratio check
+  const v = link.view(PID);
+  assert.equal(v.equal_draw.enabled, true);
+  assert.ok('achievable_ratio' in v.equal_draw && 'warning_current' in v.equal_draw);
+  // back to the earlier state for the tests below
+  ctl.saveConfig({ nutrients: { equal_draw: { enabled: false } } }, { source: 'operator' });
+  await call('PUT', `/profiles/${PID}/controller-link`, 'admin', { mode: 'manual' });
+});
+
 // ─── EC trim base change ────────────────────────────────────────────────────
 
 test('EC trim restarts from the new base ratio when the base changed; unchanged base keeps stepping', () => {

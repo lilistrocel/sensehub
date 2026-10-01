@@ -415,7 +415,10 @@
       "targetRatio": "target 1:{{ratio}}",
       "cantReach": "can't reach target",
       "notDrawing": "not drawing {{duration}}",
-      "retrying": "second try: valve re-opened"
+      "retrying": "second try: valve re-opened",
+      "eqPacer": "slowest — paces the others",
+      "eqHeld": "held: equal draw",
+      "eqHeldFailure": "held — a tank is not drawing (water only)"
     },
     "lastRun": {
       "title": "Last run",
@@ -445,6 +448,7 @@
     "acidCycle": "cycle <v>{{used}}</v> / <m>{{cap}}</m> s",
     "acidToday": "today <v>{{used}}</v> / <m>{{cap}}</m> s",
     "acidEst": "~<m>{{litres}}</m> L est.",
-    "acidEstTitle": "acid is not metered: estimate from the configured valve flow, unverified"
+    "acidEstTitle": "acid is not metered: estimate from the configured valve flow, unverified",
+    "equalDraw": "Equal draw: paced by <v>{{tank}}</v> · spread <m>{{spread}} L</m> (tolerance {{tol}} L)"
   }
 }

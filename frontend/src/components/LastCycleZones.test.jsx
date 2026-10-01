@@ -62,3 +62,41 @@ describe('LastCycleZones — line flush excluded', () => {
     expect(htmlTr).toContain('Hat yıkaması hariç tutuldu');
   });
 });
+
+// Equal draw (operator requirement 2026-10-01): spread column, pacing tank, summary +
+// the max achievable equal ratio of recent runs.
+describe('LastCycleZones — equal draw', () => {
+  const eqTanks = (vals, pacer) => vals.map((l, i) => ({ tank_id: i + 1, name: `Tank ${'ABCD'[i]}`, dosed_l: l, dosed_est_l: l, ...(i + 1 === pacer ? { eq_pacer: true } : { eq_paced: true, eq_held_s: 40 }) }));
+  const EQRUN = {
+    ...RUN, ratio_target: 116,
+    tanks: [1, 2, 3, 4].map(id => ({ tank_id: id, name: `Tank ${'ABCD'[id - 1]}`, dosed_l: 9.5, ratio_target: 116 })),
+    zone_visits: [
+      zone(1, { tanks: eqTanks([2.5, 2.25, 2.5, 2.5], 2), equal_draw: { tolerance_l: 0.5 } }),
+      zone(2, { tanks: eqTanks([2.25, 2.25, 2.5, 3.25], 2), equal_draw: { tolerance_l: 0.5 } }),
+    ],
+    equal_draw: { enabled: true, tolerance_l: 0.5, spread_l: 0.25, spread_pct: 1.9, within_tolerance: true, pacer: { tank_id: 2, name: 'Tank B' }, common_ratio: 188, failures: [] },
+    equal_draw_capability: { achievable_ratio: 171, best_ratio: 150, n_limited: 4 },
+  };
+  it('shows the spread per zone (caution above tolerance + one counter step), the pacing tank and the summary', () => {
+    const html = render(EQRUN);
+    expect(html).toContain('data-testid="last-cycle-equal-draw"');
+    expect(html).toContain('spread 0.25 L (1.9 %)');
+    expect(html).toContain('paced by B');
+    expect(html).toContain('1:188');
+    expect(html.match(/data-eq-pacer="true"/g).length).toBe(2);
+    const spreads = [...html.matchAll(/data-testid="last-cycle-spread">([^<]+)</g)].map(m => m[1]);
+    expect(spreads).toEqual(['0.25', '1.00']);
+    expect(html).toMatch(/text-caution-700[^"]*" data-testid="last-cycle-spread">1.00/);
+    expect(html).toContain('Max achievable equal ratio (4 recent runs');
+    expect(html).toContain('≈1:171');
+    expect(html).toContain('data-testid="last-cycle-achievable-warning"');
+  });
+  it('without equal draw: no spread column; failures are listed; Arabic + Turkish render', () => {
+    const off = render({ ...RUN });
+    expect(off).not.toContain('last-cycle-spread');
+    const fail = render({ ...EQRUN, equal_draw: { ...EQRUN.equal_draw, failures: [{ tank_id: 2, name: 'Tank B', policy: 'hold_all', resolved_at: null }] } });
+    expect(fail).toContain('Tank B stopped drawing — the other tanks were held (water only)');
+    expect(render(EQRUN, 'ar')).toContain('سحب متساوٍ');
+    expect(render(EQRUN, 'tr')).toContain('Eşit emiş');
+  });
+});

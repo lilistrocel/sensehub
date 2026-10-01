@@ -141,6 +141,14 @@ function TankRow({ t, ratioTarget }) {
             <StatusMark status={t.drawing.alarm ? 'alarm' : 'caution'} /> {tr('doseController.tank.notDrawing', { duration: fmtDur(t.drawing.not_drawing_s) })}
           </span>
         )}
+        {t.equal_draw && t.equal_draw.pacer && (
+          <span className="text-xs text-muted" data-testid="eq-pacer">{tr('doseController.tank.eqPacer')}</span>
+        )}
+        {t.equal_draw && t.equal_draw.held && t.valve !== 'open' && (
+          t.equal_draw.held_why === 'equal draw: held — a tank is not drawing'
+            ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-alarm-700 dark:text-alarm-300" data-testid="eq-held-failure"><StatusMark status="alarm" /> {tr('doseController.tank.eqHeldFailure')}</span>
+            : <span className="text-xs text-muted" data-testid="eq-held">{tr('doseController.tank.eqHeld')}</span>
+        )}
         {t.redraw_retry && (t.redraw_retry.phase === 'off' || t.redraw_retry.phase === 'verify') && (
           <span className="inline-flex items-center gap-1 text-xs text-caution-700 dark:text-caution-300" data-testid="redraw-retry">
             <StatusMark status="caution" /> {tr('doseController.tank.retrying')}
@@ -287,6 +295,13 @@ export default function DoseControllerStatus({ formatDateTime }) {
             <span><Trans t={t} i18nKey="doseController.endsIn" values={{ time: fmtDur(s.cycle?.remaining_s) }} components={{ m: monoMuted }} /></span>
           </div>
 
+          {s.equal_draw && s.equal_draw.enabled && (
+            <p className="mt-1.5 text-xs text-muted" data-testid="dose-equal-draw">
+              <Trans t={t} i18nKey="doseController.equalDraw"
+                values={{ tank: s.equal_draw.pacer ? s.equal_draw.pacer.name : '—', spread: fmt(s.equal_draw.spread_est_l, 2), tol: fmt(s.equal_draw.tolerance_l, 1) }}
+                components={{ v: mono, m: monoMuted }} />
+            </p>
+          )}
           <ul className="mt-2" aria-label={t('doseController.tanksAria')}>
             {[...(s.tanks || [])].sort((a, b) => a.tank_id - b.tank_id).map(t => <TankRow key={t.tank_id} t={t} ratioTarget={ratioTarget} />)}
           </ul>

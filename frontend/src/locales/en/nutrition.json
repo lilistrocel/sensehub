@@ -704,6 +704,21 @@
       "measuredAt": "Measured at",
       "note": "Meter / note",
       "deviation": "Difference: {{dev}} %"
+    },
+    "equalDraw": {
+      "title": "Equal draw",
+      "on": "On — tolerance {{tol}} L / {{pct}} %, a tank failure {{policy}}",
+      "off": "Off — each tank follows its own ratio",
+      "policy": {
+        "hold_all": "holds all tanks (water only)",
+        "exclude_failed": "excludes that tank"
+      },
+      "achieved_one": "Recent runs achieved ≈1:{{ratio}} with equal draw ({{count}} run where the slowest venturi was the limit).",
+      "achieved_other": "Recent runs achieved ≈1:{{ratio}} with equal draw ({{count}} runs where the slowest venturi was the limit).",
+      "unknown": "No recent run was limited by a venturi: every ratio so far was reachable.",
+      "warnCurrent": "The venturis cannot reach 1:{{ratio}} with equal draw: recent runs achieved ≈1:{{achieved}}. The EC target needs stronger stock solutions or larger venturis.",
+      "warnProposed": "The proposed 1:{{ratio}} is beyond what the venturis deliver with equal draw (recent runs ≈1:{{achieved}}). The EC target needs stronger stock solutions or larger venturis.",
+      "basis": "Measured: water ÷ litres of the slowest tank, median of the recent runs where its valve was open ≥ 90 %"
     }
   }
 }

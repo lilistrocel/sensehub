@@ -95,6 +95,48 @@
  *    per tank per run, Telegram), resolved when it draws again; no tank drawing at all ->
  *    ONE caution (monitor / venturi manifold); a tank at 0 L for the whole run -> summary.
  *
+ * EQUAL DRAW (operator requirement 2026-10-01; nutrients.equal_draw, enabled on the live
+ * config the same day). The agronomist designs the A-D recipes for EQUAL litres drawn from
+ * each stock tank. At 1:116 (crop-target proposal #1, 2026-10-01) A-C cannot reach the ratio
+ * (valves ~97 % open, physics_limited) while D can, so independent control drew unequal
+ * volumes (runs 33-35: A 14.25 / B 12.5 / C 12.25 / D 16 L; then 13.75/10.5/11.75/16;
+ * 14/9.25/11.5/16). With equal draw every ratio-dosed tank (role nutrient with a ratio;
+ * never the pH tank) is paced to the SLOWEST one, on cycle-cumulative estimated litres
+ * E_i (sub-step estimate, the same numbers the zone targets use):
+ *     P = min_j E_j (members not excluded), lead = max(tolerance_l, tolerance_pct % of the
+ *         pacing tank's litres in this zone) - margin (0.2 L; 0.45 L with substep_estimate off)
+ *     open tank i closes when E_i + rate_i x latency_s >= P + lead       ('paced …')
+ *     a closed tank i may open only when E_i <= P + 0.02 L (hysteresis = the lead)
+ * i.e. target_i(t) = min(zone/ratio target, P + lead): pacing only ever CLOSES or keeps a
+ * valve closed — it never opens one — so the ratio target, the overdose cap, min on/off,
+ * no-water close-all, not-drawing alarm, redraw retry, arming and pause all stay as they
+ * were. Per zone and per cycle |V_i - V_j| <= lead + estimate error < tolerance: the margin
+ * covers two sub-step estimates (<= 0.06 L each against the true litres in the precision
+ * sim), the 1.5 s close latency and the min on/off slack; the 0.25 L counter itself can add
+ * one step to the counter-litres spread the table shows. Default 0.5 L / 5 %: a ~3 L zone
+ * dose is held within 0.5 L (the counter alone is +/-0.25 L), a ~12 L run within 0.6 L.
+ * The config is read at the cycle START (cfgAtStart) — a saved change never alters a
+ * running cycle.
+ *  - Monitor blind (fallback): with equal draw the fixed schedule would draw unequal,
+ *    unmeasured litres (the venturis differ by up to 1.7x), so the ratio tanks are held
+ *    CLOSED (water only) while blind; closed loop picks up where it was (the cumulative
+ *    litres keep the tanks equal). Controller switched off = the operator's fixed schedule.
+ *  - Tank failure = its not-drawing ALARM (a measured symptom: an empty tank, a blocked
+ *    filter or foot valve all look like this). The stock countdown is an estimate and is
+ *    never used to stop dosing. on_tank_failure 'hold_all' (default): every other ratio
+ *    tank is closed at once and held (water only) until the failed tank draws again — then
+ *    the pacing makes it catch up first, so the cycle still ends equal; critical alert
+ *    naming the tank (+ Telegram). 'exclude_failed': the tank leaves the pacing for the
+ *    rest of the cycle (still capped at the others' P + lead) and the others go on paced to
+ *    each other — keeps the EC up but delivers a recipe without that tank's elements.
+ *    hold_all is the default because a missing tank changes the element balance the
+ *    agronomist designed (e.g. no Ca from A, or no Mg/P/S from B) while the EC still looks
+ *    right, whereas a few minutes of water only is visible (EC drops), harmless for the crop
+ *    and corrected by the next cycle.
+ *  - Records: zones_json tanks[].eq_pacer / eq_held_s / eq_paced + zones[].equal_draw
+ *    {pacer_tank_id, spread_l, spread_est_l, spread_pct, common_ratio}; run equal_draw_json
+ *    {spread, pacer, common ratio, failures, held seconds}.
+ *
  * ACTUATION: every write goes through the scheduler's guarded path
  * (FertigationDoseScheduler._writeValve: guardEnergise/validateWriteSet on ON,
  * RelayEventLogger with source 'dose_controller' / 'ph_controller'). No ON write
@@ -110,7 +152,7 @@ const CONFIG_KEY = 'dose_controller';
 const PROVENANCE_KEY = 'dose_controller_provenance';
 // Controller fields whose origin is recorded (operator edit / crop-target proposal /
 // EC fine-tuning check) and shown with the shared provenance marks (FARM-APP-STANDARDS 4.6).
-const TRACKED_FIELDS = ['ph.setpoint', 'ph.floor_ph', 'nutrients.ec_trim.enabled', 'nutrients.ec_trim.target_us', 'nutrients.ec_trim.water_us', 'ec_check.raw_water_ec_us'];
+const TRACKED_FIELDS = ['ph.setpoint', 'ph.floor_ph', 'nutrients.ec_trim.enabled', 'nutrients.ec_trim.target_us', 'nutrients.ec_trim.water_us', 'ec_check.raw_water_ec_us', 'nutrients.equal_draw.enabled'];
 // pH targets frozen for a running cycle (operator decision 2026-09-30: a saved change,
 // e.g. an approved crop-target proposal, never alters a cycle that is already running;
 // the ratios and the EC trim are fixed at beginCycle already).
@@ -138,6 +180,15 @@ const PUMP_START_MAX_AGE_MS = 15000; // a pump ON event first seen later than th
 const DRAW_RATE_MIN_LPH = 5;       // a drawing venturi reads ~40-100 L/h; a dry / blocked tank reads 0.0
 const DRAWING_RECENT_MS = 15000;   // "is drawing now": a counter step within 15 s (one 0.25 L step at ~60 L/h) or rate >= 5 L/h
 const MAX_NOT_DRAWING_NOTIFY = 3;  // Telegram messages per tank per run (the alert row is one per tank per run)
+// Equal draw (nutrients.equal_draw, operator requirement 2026-10-01) — see EQUAL DRAW in the header
+const EQ_MARGIN_L = 0.2;           // tolerance - lead: two sub-step estimates (~0.06 L each, precision sim) + close latency + min on/off slack
+const EQ_LEAD_MIN_L = 0.1;         // never pace tighter than this (switching)
+const EQ_PACED = 'paced to the slowest tank (equal draw)';
+const EQ_HOLD = 'equal draw: held — a tank is not drawing';
+const EQ_BLIND = 'equal draw: monitor blind — held closed';
+const EQ_CAPABILITY_RUNS = 8;      // recent finished runs looked at for the "max achievable equal ratio"
+const EQ_MARGIN_LEGACY_L = EQ_MARGIN_L + 0.25; // substep_estimate off: the legacy interpolation adds up to one counter step
+const eqMargin = (n) => (n && n.substep_estimate === false ? EQ_MARGIN_LEGACY_L : EQ_MARGIN_L);
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: true,
@@ -214,6 +265,20 @@ const DEFAULT_CONFIG = Object.freeze({
     redraw_retry_after_s: 20,
     redraw_verify_s: 20,
     redraw_min_zone_left_s: 25,
+    // EQUAL DRAW (operator requirement 2026-10-01): every ratio-dosed tank (A-D, never the
+    // pH tank) delivers the SAME litres per zone and per cycle, within
+    // max(tolerance_l, tolerance_pct % of the zone's volume): faster tanks are paced to the
+    // slowest tank's measured (sub-step estimated) volume, never above their own ratio
+    // target or the overdose limits. on_tank_failure: 'hold_all' (default) = a tank that is
+    // not drawing holds the others closed (water only) until it draws again;
+    // 'exclude_failed' = it leaves the pacing for the rest of the cycle and the others go
+    // on paced to each other. Read at the cycle start (never changes a running cycle).
+    equal_draw: Object.freeze({
+      enabled: false,
+      tolerance_l: 0.5,
+      tolerance_pct: 5,
+      on_tank_failure: 'hold_all',
+    }),
     // Optional slow outer loop (OFF): scale all ratios together, once per cycle,
     // from the previous run's feed EC toward target_us. Bounded 1:min..1:max.
     ec_trim: Object.freeze({
@@ -322,6 +387,15 @@ const SCHEMA = {
       redraw_retry_after_s: NUM(10, 120),
       redraw_verify_s: NUM(5, 120),
       redraw_min_zone_left_s: NUM(10, 300),
+      equal_draw: {
+        t: 'obj',
+        fields: {
+          enabled: { t: 'bool' },
+          tolerance_l: NUM(0.3, 5),
+          tolerance_pct: NUM(0, 50),
+          on_tank_failure: { t: 'enum', values: ['hold_all', 'exclude_failed'] },
+        },
+      },
       ec_trim: {
         t: 'obj',
         fields: {
@@ -445,7 +519,11 @@ function validateSection(updates, schema, path) {
 
 function mergeConfig(base, upd) {
   const out = {
-    ...base, nutrients: { ...base.nutrients, ratio: { ...base.nutrients.ratio }, ec_trim: { ...base.nutrients.ec_trim } },
+    ...base,
+    nutrients: {
+      ...base.nutrients, ratio: { ...base.nutrients.ratio }, ec_trim: { ...base.nutrients.ec_trim },
+      equal_draw: { ...DEFAULT_CONFIG.nutrients.equal_draw, ...(base.nutrients.equal_draw || {}) },
+    },
     ec_check: { ...base.ec_check }, ph: { ...base.ph }, stats: { ...(base.stats || DEFAULT_CONFIG.stats) },
   };
   if (!upd) return out;
@@ -453,9 +531,10 @@ function mergeConfig(base, upd) {
   if (upd.stats) Object.assign(out.stats, upd.stats);
   if (upd.enabled !== undefined) out.enabled = upd.enabled;
   if (upd.nutrients) {
-    const { ratio, ec_trim: trim, ...rest } = upd.nutrients;
+    const { ratio, ec_trim: trim, equal_draw: eq, ...rest } = upd.nutrients;
     Object.assign(out.nutrients, rest);
     if (trim) Object.assign(out.nutrients.ec_trim, trim);
+    if (eq) Object.assign(out.nutrients.equal_draw, eq);
     if (ratio) {
       for (const [k, v] of Object.entries(ratio)) {
         if (v === null) delete out.nutrients.ratio[k];
@@ -478,6 +557,15 @@ function crossCheck(cfg) {
   const tr = cfg.nutrients.ec_trim;
   if (tr.min_ratio >= tr.max_ratio) return 'nutrients.ec_trim.min_ratio must be below max_ratio';
   if (tr.water_us >= tr.target_us) return 'nutrients.ec_trim.water_us must be below target_us';
+  const eq = cfg.nutrients.equal_draw;
+  if (eq && eq.enabled) {
+    // the pacing lead is tolerance - estimate margin; without the sub-step estimate the
+    // margin grows by one 0.25 L counter step
+    const margin = eqMargin(cfg.nutrients);
+    if (eq.tolerance_l < margin + EQ_LEAD_MIN_L - 1e-9) {
+      return `nutrients.equal_draw.tolerance_l must be at least ${r2(margin + EQ_LEAD_MIN_L)} L${cfg.nutrients.substep_estimate ? '' : ' with substep_estimate off'} (volume estimate uncertainty ${r2(margin)} L)`;
+    }
+  }
   return null;
 }
 
@@ -648,6 +736,9 @@ const REASON_TEXTS = {
   'zone start': M('dose_controller.why.zone_start'),
   'pump start': M('dose_controller.why.pump_start'),
   'redraw retry': M('dose_controller.why.redraw_retry'),
+  [EQ_PACED]: M('dose_controller.why.equal_draw_paced'),
+  [EQ_HOLD]: M('dose_controller.why.equal_draw_hold'),
+  [EQ_BLIND]: M('dose_controller.why.equal_draw_blind'),
   'no pH Down tank bound to the dosing board': M('dose_controller.gate.no_ph_tank'),
   'controller switched off': M('dose_controller.gate.controller_off'),
   'pH control switched off': M('dose_controller.gate.ph_off'),
@@ -671,6 +762,7 @@ const REASON_PATTERNS = [
   [/^dosing paused — (.+)$/s, (m) => M('dose_controller.reason.paused', { detail: reasonSpec(m[1]) })],
   [/^waiting for monitor data \((.+)\)$/s, (m) => M('dose_controller.reason.waiting_monitor', { why: reasonSpec(m[1]) })],
   [/^monitor blind: (.+) — fixed schedule$/s, (m) => M('dose_controller.reason.monitor_blind', { why: reasonSpec(m[1]) })],
+  [/^monitor blind: (.+) — nutrient valves held closed \(equal draw\)$/s, (m) => M('dose_controller.reason.monitor_blind_equal', { why: reasonSpec(m[1]) })],
   [/^no flowmeter data for (-?\d+) s$/, (m) => M('dose_controller.reason.no_flowmeter_for', { secs: m[1] })],
   [/^flowmeter unhealthy \(signal (.*), flags (.*)\)$/, (m) => M('dose_controller.reason.flowmeter_unhealthy', { signal: m[1], flags: m[2] })],
   [/^no dosing data for (-?\d+) s$/, (m) => M('dose_controller.reason.no_dosing_data_for', { secs: m[1] })],
@@ -740,11 +832,18 @@ const ALERT_SPECS = {
   noneDrawingResolved: () => M('dose_controller.alert.none_drawing_resolved'),
   runZero: (tank, openS, water) => M('dose_controller.alert.run_zero', { tank: S(tank), open_s: S(openS), water: S(water) }),
   lastDrawUnknown: () => M('dose_controller.alert.last_draw_unknown'),
+  // equal draw (operator requirement 2026-10-01); tank / others = data, never translated
+  fallbackEqual: (reason) => M('dose_controller.alert.fallback_equal', { reason: reasonSpec(reason) }),
+  fallbackEqualEnded: (secs, why, cause) => M('dose_controller.alert.fallback_equal_ended', { secs: S(secs), why: reasonSpec(why), cause: reasonSpec(cause) }),
+  equalDrawHold: (tank, others) => M('dose_controller.alert.equal_draw_hold', { tank: S(tank), others: S(others) }),
+  equalDrawExcluded: (tank, others) => M('dose_controller.alert.equal_draw_excluded', { tank: S(tank), others: S(others) }),
+  equalDrawResumed: (tank, secs) => M('dose_controller.alert.equal_draw_resumed', { tank: S(tank), secs: S(secs) }),
 };
 const TELEGRAM_TITLES = {
   notDrawing: (tank) => M('dose_controller.telegram.not_drawing', { tank: S(tank) }),
   noneDrawing: () => M('dose_controller.telegram.none_drawing'),
   runZero: (tank) => M('dose_controller.telegram.run_zero', { tank: S(tank) }),
+  equalDraw: (tank) => M('dose_controller.telegram.equal_draw', { tank: S(tank) }),
 };
 
 /**
@@ -1537,6 +1636,7 @@ class DoseController {
     if (this.flow && now - this.flow.receivedMs <= 30000) this._accumulateWater(c, this.flow.values, this.flow.receivedMs);
     if (this.dosing && now - this.dosing.receivedMs <= 30000) this._accumulateDosing(c, this.dosing.tanks, this.dosing.receivedMs);
     for (const t of tanks) { t.est.lastMs = now; t.est.A0 = this._estAbs(t); }
+    c.eq = this._eqInit(c, cfg);
 
     try {
       const info = this.db.prepare(`
@@ -1693,7 +1793,7 @@ class DoseController {
           : !ws.dosingFresh ? (ws.dosingAgeMs === null ? 'no dosing data' : `no dosing data for ${Math.round(ws.dosingAgeMs / 1000)} s`)
             : 'no flow value';
       if (!c.monitorSeenOk && now - c.startedAt < n.start_grace_s * 1000) { mode = 'waiting'; reason = `waiting for monitor data (${why})`; }
-      else { mode = 'fallback'; reason = `monitor blind: ${why} — fixed schedule`; }
+      else { mode = 'fallback'; reason = c.eq ? `monitor blind: ${why} — nutrient valves held closed (equal draw)` : `monitor blind: ${why} — fixed schedule`; }
     } else {
       mode = 'closed_loop';
       c.monitorSeenOk = true;
@@ -1717,6 +1817,7 @@ class DoseController {
       this._sampleZoneQuality(c, cfg, now, ws);
     }
 
+    if (c.eq) this._eqUpdate(c, cfg, now, ws, mode);
     const due = now - c.lastEvalMs >= n.eval_s * 1000 - 1;
     if (due || justArmed || mode === 'hold' || ws.stopped) {
       this._evalNutrients(c, cfg, now, ws, mode);
@@ -1725,6 +1826,7 @@ class DoseController {
       this._perZoneCloseCheck(c, cfg, now, ws); // close decisions on every 1 s tick (open decisions keep eval_s)
     }
     this._drawWatch(c, cfg, now, ws, mode, disarmed);
+    if (c.eq) this._eqFailures(c, cfg, now, ws);
     this._processPh(c, cfg, now, ws);
     this._evalAcid(c, cfg, now, ws, disarmed);
     this._checkActualStates(c, cfg, now);
@@ -1750,7 +1852,7 @@ class DoseController {
       c.fallbackPeriods.push({ from: iso(now), to: null, reason });
       this._trip(c, 'fallback', now, reason);
       this.log.warn(`[DoseController] FALLBACK to the fixed schedule: ${reason}`);
-      this._alert(c, 'fallback', 'warning', ALERT_SPECS.fallback(reason),
+      this._alert(c, 'fallback', 'warning', c.eq && /^monitor blind: /.test(String(reason)) ? ALERT_SPECS.fallbackEqual(reason) : ALERT_SPECS.fallback(reason),
         { equipment_id: this._dosingEq(c) });
       c.fallbackAlerted = true;
     } else if (prev) {
@@ -1764,7 +1866,7 @@ class DoseController {
       p.to = iso(now);
       const secs = Math.round((now - Date.parse(p.from)) / 1000);
       if (c.fallbackAlerted) {
-        const spec = ALERT_SPECS.fallbackEnded(secs, why, p.reason);
+        const spec = c.eq && /^monitor blind: /.test(String(p.reason)) ? ALERT_SPECS.fallbackEqualEnded(secs, why, p.reason) : ALERT_SPECS.fallbackEnded(secs, why, p.reason);
         this._updateOpenAlert('dose_controller:fallback', {
           message: i18n.render('en', spec), messageKey: spec.$k, messageParams: spec.$p,
           severity: 'info',
@@ -1814,7 +1916,9 @@ class DoseController {
       else if (ws.stopped) { want = false; force = true; why = 'no water'; reason = 'water stopped — nutrient valves closed'; }
       else if (ws.dry && !ws.known) { want = false; why = 'no water (monitor idle)'; }
       else if (mode === 'fallback') {
-        if (ws.known && !ws.ok && !c.waterEstablishedAt) { want = false; why = 'waiting for water'; }
+        // equal draw: the fixed schedule would draw unequal, unmeasured litres -> water only while blind
+        if (cfg.enabled && c.eq && c.eq.members.includes(t)) { want = false; force = true; why = EQ_BLIND; }
+        else if (ws.known && !ws.ok && !c.waterEstablishedAt) { want = false; why = 'waiting for water'; }
         else if (ws.known && !ws.ok) { want = want && true; why = 'low flow'; } // dip: hold, never open
         else { want = this._scheduleState(t, elapsedS); why = 'fixed schedule'; }
       } else if (c.pumpArmed && t.ratio && n.mode !== 'tracking' && !ws.ok) {
@@ -1844,6 +1948,10 @@ class DoseController {
 
       // automatic second try: the valve stays closed for min_off_s, then _drawWatch re-opens it
       if (t.retry && t.retry.phase === 'off') { want = false; why = 'redraw retry'; }
+      // equal draw: pace to the slowest tank / hold on a tank failure (only ever closes)
+      const eqMember = !!(c.eq && mode === 'closed_loop' && c.eq.members.includes(t));
+      const eqG = eqMember && want ? this._eqGate(c, cfg, t, now, ws) : null;
+      if (eqG) { want = false; why = eqG.why; if (eqG.force) force = true; }
       if (endStop && want) { want = false; why = 'end of cycle'; }
 
       // Hard overdose cap (needs measured water + concentrate). Basis: nutrients.overdose_basis
@@ -1876,6 +1984,7 @@ class DoseController {
 
       const switched = this._applyValve(c, t, want, { force, why, now, cfg });
       if (switched && want && why === 'pump start' && c.seg) c.seg.pumpStartOpen = true;
+      if (eqMember) this._eqMarkHeld(c, t, eqG, now);
     }
     if (initial) c.initialOpened = true;
     c.lastReason = reason;
@@ -2100,7 +2209,9 @@ class DoseController {
       const dosed = this._vEst(t, now, ws) - st.V0;
       const dosedCounter = t.V - st.V0q;
       const short = target - dosed;
-      const cantReach = st.closedBy !== 'target' && short > n.deadband_l && water > 0;
+      // equal draw: a tank held back by the pacing / a failure hold is short by design, not "can't reach"
+      const eqHeld = !!(c.eq && st.eqPaced);
+      const cantReach = st.closedBy !== 'target' && short > n.deadband_l && water > 0 && !eqHeld;
       const lim = (n.carry_clamp_pct / 100) * base;
       const carryOut = clamp(short, -lim, lim);
       c.carry[t.tank_id] = carryOut;
@@ -2112,6 +2223,7 @@ class DoseController {
         closed_at_s: st.closedAt !== null && st.closedBy ? r1((st.closedAt - seg.startMs) / 1000) : null,
         closed_by: st.closedBy, reopens: st.reopens, cant_reach: cantReach,
         ...(st.redrawRetry ? { redraw_retry: { ...st.redrawRetry } } : {}),
+        ...(eqHeld ? { eq_paced: true, eq_held_s: r1((st.eqHeldMs || 0) / 1000) } : {}),
         ...(t.nd && t.nd.zoneKey === seg.key && t.nd.zoneAccumS >= 1 ? { not_drawing_s: r1(t.nd.zoneAccumS) } : {}),
       });
       if (cantReach) {
@@ -2119,6 +2231,7 @@ class DoseController {
         this._trip(c, 'cant_reach', now, `${t.name}: ${r2(dosed)} of ${r2(target)} L in ${seg.name}${seg.slot ? ` slot ${seg.slot + 1}` : ''}`);
       }
     }
+    if (c.eq) { const eqRec = this._eqZoneRecord(c, seg, rec, water); if (eqRec) rec.equal_draw = eqRec; }
     Object.assign(rec, zoneStats.accFields(seg.q), { stats_source: 'live' });
     c.zoneRecords.push(rec);
     // A SEKO sample taken before this switch but first seen after it still belongs here.
@@ -2180,8 +2293,222 @@ class DoseController {
     for (const t of c.tanks) {
       if (!t.open || !t.ratio) continue;
       const d = this._perZoneWant(c, cfg, t, now, ws);
-      if (!d.want) this._applyValve(c, t, false, { why: d.why, now, cfg });
+      if (!d.want) { this._applyValve(c, t, false, { why: d.why, now, cfg }); continue; }
+      const g = c.eq && c.eq.members.includes(t) ? this._eqGate(c, cfg, t, now, ws) : null;
+      if (g && this._applyValve(c, t, false, { why: g.why, now, cfg, force: !!g.force })) this._eqMarkHeld(c, t, g, now);
     }
+  }
+
+  // ─── equal draw (nutrients.equal_draw, operator requirement 2026-10-01) ─────
+  //
+  // See EQUAL DRAW in the header. State c.eq (null when off for this cycle); per tank
+  // t.eqE (cycle-cumulative estimated litres), t.eqHeld / t.eqHeldSince (closed by the
+  // pacing or a failure hold).
+
+  /** Equal-draw state of a cycle from the config at its start, or null (off / < 2 ratio tanks). */
+  _eqInit(c, cfg) {
+    const e = cfg.nutrients.equal_draw;
+    if (!e || e.enabled !== true) return null;
+    const members = c.tanks.filter(t => t.kind === 'nutrient' && t.ratio > 0 && !this._isAcid(t));
+    if (members.length < 2) return null;
+    for (const t of members) { t.eqBase = this._substep(cfg) ? t.est.A0 : 0; t.eqE = 0; t.eqHeld = false; t.eqHeldSince = null; t.eqHeldMs = 0; t.eqPacerMs = 0; }
+    return {
+      tolerance_l: e.tolerance_l, tolerance_pct: e.tolerance_pct, policy: e.on_tank_failure,
+      margin: eqMargin(cfg.nutrients), members, excluded: new Set(), failures: new Map(),
+      P: null, pacer: null, lead: Math.max(EQ_LEAD_MIN_L, e.tolerance_l - eqMargin(cfg.nutrients)), lastMs: null,
+    };
+  }
+
+  /** Cumulative litres of every member, the pacing level P (slowest), the lead; pacer / held time. */
+  _eqUpdate(c, cfg, now, ws, mode) {
+    const eq = c.eq;
+    const dt = eq.lastMs === null || now < eq.lastMs ? 0 : Math.min(5000, now - eq.lastMs);
+    eq.lastMs = now;
+    let P = Infinity; let pacer = null;
+    for (const t of eq.members) {
+      t.eqE = this._vEst(t, now, ws) - (t.eqBase || 0);
+      if (eq.excluded.has(t.tank_id)) continue;
+      // a tank the monitor does not meter cannot be paced (nothing measured): it never sets P
+      if (!t.metered) {
+        if (c.monitorSeenOk && this.dosing && !eq.unmeteredNoted) {
+          eq.unmeteredNoted = true;
+          this._trip(c, 'equal_draw_unmetered', now, `${t.name}: no dosing counter from the monitor — not paced`);
+        }
+        continue;
+      }
+      if (t.eqE < P - 1e-9) { P = t.eqE; pacer = t; }
+    }
+    eq.P = pacer ? P : null;
+    eq.pacer = pacer;
+    const st = pacer && c.seg ? c.seg.tanks[pacer.tank_id] : null;
+    const zoneL = st ? Math.max(0, st.dosed) : 0;
+    eq.lead = Math.max(EQ_LEAD_MIN_L, Math.max(eq.tolerance_l, (eq.tolerance_pct / 100) * zoneL) - eq.margin);
+    // time accounting only while water flows in closed loop (what the records judge)
+    if (!dt || mode !== 'closed_loop' || !ws.ok) return;
+    if (pacer && pacer.open) {
+      pacer.eqPacerMs += dt;
+      if (c.seg) c.seg.eqPacerMs = { ...(c.seg.eqPacerMs || {}), [pacer.tank_id]: ((c.seg.eqPacerMs || {})[pacer.tank_id] || 0) + dt };
+    }
+    for (const t of eq.members) {
+      if (!t.eqHeld || t.open) continue;
+      t.eqHeldMs += dt;
+      const zs = c.seg ? c.seg.tanks[t.tank_id] : null;
+      if (zs) zs.eqHeldMs = (zs.eqHeldMs || 0) + dt;
+    }
+  }
+
+  /** Failed (not-drawing alarm open) member under hold_all, other than t. */
+  _eqHoldingFailure(c, t) {
+    const eq = c.eq;
+    if (!eq || eq.policy !== 'hold_all') return null;
+    for (const [id, f] of eq.failures) if (f.resolvedAt === null && id !== t.tank_id) return f;
+    return null;
+  }
+
+  /**
+   * Objection of the equal-draw pacing to tank t being (or becoming) open, or null.
+   * { why, force } — only ever a CLOSE / keep-closed, never an open.
+   */
+  _eqGate(c, cfg, t, now, ws) {
+    const eq = c.eq;
+    if (!eq || !eq.members.includes(t)) return null;
+    if (this._eqHoldingFailure(c, t)) return { why: EQ_HOLD, force: true };
+    if (eq.P === null || !t.metered) return null;
+    if (eq.pacer === t) return null; // the slowest tank is never paced
+    if (t.open) {
+      const rate = this._substep(cfg) ? this._estRateLps(c, t, now, cfg).lps : this._rateLps(t, ws);
+      return t.eqE + rate * cfg.nutrients.latency_s >= eq.P + eq.lead ? { why: EQ_PACED } : null;
+    }
+    return t.eqE <= eq.P + 0.02 ? null : { why: EQ_PACED };
+  }
+
+  /** Held-state bookkeeping after an equal-draw decision for t (g = the objection or null). */
+  _eqMarkHeld(c, t, g, now) {
+    if (g && !t.open) {
+      if (!t.eqHeld) { t.eqHeld = true; t.eqHeldSince = now; }
+      t.eqHeldWhy = g.why;
+      const zs = c.seg ? c.seg.tanks[t.tank_id] : null;
+      if (zs) zs.eqPaced = true;
+    } else {
+      t.eqHeld = false; t.eqHeldSince = null; t.eqHeldWhy = null;
+    }
+  }
+
+  /**
+   * Tank failure = its not-drawing alarm. hold_all: close every other member at once and
+   * keep them closed until it draws again; exclude_failed: it leaves the pacing for the
+   * rest of the cycle. Critical alert (fingerprint per tank per run) + Telegram once.
+   */
+  _eqFailures(c, cfg, now, ws) {
+    const eq = c.eq;
+    const n = cfg.nutrients;
+    for (const t of eq.members) {
+      const f = eq.failures.get(t.tank_id);
+      const failing = !!(t.nd && t.nd.alarmOpen);
+      if (failing && (!f || f.resolvedAt !== null)) {
+        if (eq.policy === 'exclude_failed' && eq.excluded.has(t.tank_id)) continue;
+        const others = eq.members.filter(u => u !== t && !eq.excluded.has(u.tank_id));
+        const rec = {
+          tank_id: t.tank_id, name: t.name, policy: eq.policy, at: now, resolvedAt: null,
+          count: f ? f.count + 1 : 1, notified: f ? f.notified : false,
+        };
+        eq.failures.set(t.tank_id, rec);
+        const label = this._tankLabel(t);
+        const names = others.map(u => u.name).join(', ');
+        if (eq.policy === 'exclude_failed') {
+          eq.excluded.add(t.tank_id);
+          this._trip(c, 'equal_draw_excluded', now, `${t.name} not drawing — excluded from equal draw for the rest of the cycle; ${names} go on paced to each other`);
+        } else {
+          for (const u of others) {
+            if (u.open && this._applyValve(c, u, false, { force: true, why: EQ_HOLD, now, cfg })) this._eqMarkHeld(c, u, { why: EQ_HOLD }, now);
+          }
+          this._trip(c, 'equal_draw_hold', now, `${t.name} not drawing — ${names} held closed (water only) until it draws again`);
+        }
+        const spec = eq.policy === 'exclude_failed' ? ALERT_SPECS.equalDrawExcluded(label, names) : ALERT_SPECS.equalDrawHold(label, names);
+        this._alert(c, this._eqFailureKey(c, t), 'critical', spec, { equipment_id: t.equipment_id });
+        this.log.warn(`[DoseController] equal draw: ${t.name} not drawing — ${eq.policy === 'exclude_failed' ? 'excluded' : `${names} held closed`}`);
+        if (n.not_drawing_telegram && !rec.notified) {
+          rec.notified = true;
+          this._notify(TELEGRAM_TITLES.equalDraw(t.name), spec, 'critical');
+        }
+      } else if (!failing && f && f.resolvedAt === null && eq.policy === 'hold_all') {
+        f.resolvedAt = now;
+        const secs = Math.round((now - f.at) / 1000);
+        this._trip(c, 'equal_draw_resumed', now, `${t.name} drew again after ${secs} s — equal draw resumed (it catches up first)`);
+        const spec = ALERT_SPECS.equalDrawResumed(t.name, secs);
+        this._updateOpenAlert(`dose_controller:${this._eqFailureKey(c, t)}`, {
+          message: i18n.render('en', spec), messageKey: spec.$k, messageParams: spec.$p, severity: 'info',
+        });
+      }
+    }
+  }
+
+  _eqFailureKey(c, t) {
+    return `equal_draw_failure:${t.tank_id}:${c.runId ?? c.token}`;
+  }
+
+  /** Per-zone equal-draw record (counter litres = ground truth; estimate = what was controlled). */
+  _eqZoneRecord(c, seg, rec, water) {
+    const eq = c.eq;
+    const ids = new Set(eq.members.filter(t => !eq.excluded.has(t.tank_id)).map(t => t.tank_id));
+    const rows = rec.tanks.filter(x => ids.has(x.tank_id));
+    if (rows.length < 2) return null;
+    const cnt = rows.map(x => x.dosed_l || 0);
+    const est = rows.map(x => (typeof x.dosed_est_l === 'number' ? x.dosed_est_l : x.dosed_l || 0));
+    const meanEst = est.reduce((a, b) => a + b, 0) / est.length;
+    const meanCnt = cnt.reduce((a, b) => a + b, 0) / cnt.length;
+    const pm = seg.eqPacerMs || {};
+    let pacerId = null; let best = -1;
+    for (const [id, ms] of Object.entries(pm)) if (ids.has(Number(id)) && ms > best) { best = ms; pacerId = Number(id); }
+    if (pacerId === null) { let lo = Infinity; rows.forEach((x, i) => { if (est[i] < lo) { lo = est[i]; pacerId = x.tank_id; } }); }
+    for (const x of rec.tanks) if (x.tank_id === pacerId) x.eq_pacer = true;
+    const spreadEst = Math.max(...est) - Math.min(...est);
+    const tol = Math.max(eq.tolerance_l, (eq.tolerance_pct / 100) * meanEst);
+    return {
+      pacer_tank_id: pacerId,
+      spread_l: r2(Math.max(...cnt) - Math.min(...cnt)), spread_est_l: r2(spreadEst),
+      spread_pct: meanEst > 0 ? r1((spreadEst / meanEst) * 100) : null,
+      tolerance_l: r2(tol), within_tolerance: spreadEst <= tol + 1e-9,
+      common_ratio: meanCnt > 0 && water > 0 ? Math.round(water / meanCnt) : null,
+    };
+  }
+
+  /** Run-level equal-draw record (equal_draw_json), or null when off for this cycle. */
+  _eqSummary(c, now) {
+    const eq = c.eq;
+    if (!eq) return null;
+    const sub = this._substep(c.cfgAtStart);
+    const tanks = eq.members.map(t => ({
+      tank_id: t.tank_id, name: t.name, dosed_l: r2(t.V),
+      dosed_est_l: r2(sub && t.est.A0 !== null ? this._estAbs(t) - t.est.A0 : t.V),
+      held_s: r1((t.eqHeldMs || 0) / 1000), pacer_s: r1((t.eqPacerMs || 0) / 1000),
+      excluded: eq.excluded.has(t.tank_id),
+    }));
+    const inSet = tanks.filter(x => !x.excluded);
+    const cnt = inSet.map(x => x.dosed_l || 0);
+    const est = inSet.map(x => x.dosed_est_l || 0);
+    const meanEst = est.length ? est.reduce((a, b) => a + b, 0) / est.length : 0;
+    const meanCnt = cnt.length ? cnt.reduce((a, b) => a + b, 0) / cnt.length : 0;
+    const minCnt = cnt.length ? Math.min(...cnt) : 0;
+    const pacer = [...inSet].sort((a, b) => b.pacer_s - a.pacer_s || a.dosed_est_l - b.dosed_est_l)[0] || null;
+    const spreadEst = est.length ? Math.max(...est) - Math.min(...est) : 0;
+    const tol = Math.max(eq.tolerance_l, (eq.tolerance_pct / 100) * meanEst);
+    const zoneSpreads = c.zoneRecords.map(z => z.equal_draw).filter(Boolean);
+    return {
+      enabled: true, tolerance_l: eq.tolerance_l, tolerance_pct: eq.tolerance_pct, on_tank_failure: eq.policy,
+      margin_l: eq.margin, lead_l: r2(eq.lead),
+      pacer: pacer ? { tank_id: pacer.tank_id, name: pacer.name } : null,
+      spread_l: cnt.length ? r2(Math.max(...cnt) - minCnt) : null, spread_est_l: r2(spreadEst),
+      spread_pct: meanEst > 0 ? r1((spreadEst / meanEst) * 100) : null,
+      tolerance_used_l: r2(tol), within_tolerance: spreadEst <= tol + 1e-9,
+      max_zone_spread_l: zoneSpreads.length ? Math.max(...zoneSpreads.map(z => z.spread_l || 0)) : null,
+      max_zone_spread_est_l: zoneSpreads.length ? r2(Math.max(...zoneSpreads.map(z => z.spread_est_l || 0))) : null,
+      zones_within_tolerance: zoneSpreads.every(z => z.within_tolerance !== false),
+      common_ratio: meanCnt > 0 && c.W > 0 ? Math.round(c.W / meanCnt) : null,
+      slowest_ratio: minCnt > 0 && c.W > 0 ? Math.round(c.W / minCnt) : null,
+      tanks,
+      failures: [...eq.failures.values()].map(f => ({ tank_id: f.tank_id, name: f.name, policy: f.policy, at: iso(f.at), resolved_at: iso(f.resolvedAt), count: f.count })),
+    };
   }
 
   /**
@@ -2541,7 +2868,10 @@ class DoseController {
     const st = c.seg ? c.seg.tanks[t.tank_id] : null;
     const count = st ? (st.redrawRetries || 0) : t.retries.filter(x => x.zoneKey === zoneKey).length;
     if (count >= 1) return;
-    if (!c.tanks.some(u => u !== t && u.open && u.metered && this._drawingNow(u, now, ws))) return;
+    // proof that water + monitor work: another open tank draws — or, with equal draw (the
+    // others may already be held by the pacing), another tank drew since this one stopped
+    const drewSince = (u) => u.lastIncMs !== null && t.nd.stretchMs !== null && u.lastIncMs >= t.nd.stretchMs;
+    if (!c.tanks.some(u => u !== t && u.metered && ((u.open && this._drawingNow(u, now, ws)) || (c.eq && drewSince(u))))) return;
     if (this._zoneLeftMs(c, now) < n.redraw_min_zone_left_s * 1000) {
       if (st && !st.redrawSkipLogged) {
         st.redrawSkipLogged = true;
@@ -3024,6 +3354,7 @@ class DoseController {
           open_at_pump_start: !!c.cfgAtStart.nutrients.open_at_pump_start,
           flush_seconds: c.cfgAtStart.stats ? c.cfgAtStart.stats.flush_seconds : 0,
           first_pump_at: iso(c.firstPumpMs),
+          ...(c.eq ? { equal_draw: true } : {}),
         },
       },
       ph: {
@@ -3044,6 +3375,7 @@ class DoseController {
       acid_pulses: a.pulses,
       acid_overrun_s: r1((a.overrunMs || 0) / 1000),
       acid_overruns: a.overruns || 0,
+      equal_draw: this._eqSummary(c, now),
       trips: c.trips,
     };
   }
@@ -3055,10 +3387,10 @@ class DoseController {
       this.db.prepare(`
         UPDATE dose_controller_runs SET water_l = ?, tanks_json = ?, modes_json = ?, ph_min = ?, ph_avg = ?, ph_max = ?, ph_last = ?, ph_samples = ?,
           ec_min = ?, ec_avg = ?, ec_max = ?, ec_last = ?, ec_samples = ?, trim_json = ?, zones_json = ?,
-          acid_s = ?, acid_est_l = ?, acid_pulses = ?, trips_json = ?, duration_s = ?, updated_at = ? WHERE id = ?
+          acid_s = ?, acid_est_l = ?, acid_pulses = ?, trips_json = ?, equal_draw_json = ?, duration_s = ?, updated_at = ? WHERE id = ?
       `).run(s.water_l, JSON.stringify(s.tanks), JSON.stringify(s.modes), s.ph.min, s.ph.avg, s.ph.max, s.ph.last, s.ph.samples,
         s.ec.min, s.ec.avg, s.ec.max, s.ec.last, s.ec.samples, JSON.stringify(s.trim), JSON.stringify(s.zones),
-        s.acid_s, s.acid_est_l, s.acid_pulses, JSON.stringify(s.trips), r1((now - c.startedAt) / 1000), iso(now), c.runId);
+        s.acid_s, s.acid_est_l, s.acid_pulses, JSON.stringify(s.trips), s.equal_draw ? JSON.stringify(s.equal_draw) : null, r1((now - c.startedAt) / 1000), iso(now), c.runId);
     } catch (e) {
       this.log.error(`[DoseController] checkpoint failed: ${e.message}`);
     }
@@ -3079,11 +3411,11 @@ class DoseController {
         this.db.prepare(`
           UPDATE dose_controller_runs SET ended_at = ?, status = ?, end_reason = ?, duration_s = ?, water_l = ?, tanks_json = ?, modes_json = ?,
             ph_min = ?, ph_avg = ?, ph_max = ?, ph_last = ?, ph_samples = ?, ec_min = ?, ec_avg = ?, ec_max = ?, ec_last = ?, ec_samples = ?, trim_json = ?, zones_json = ?,
-            acid_s = ?, acid_est_l = ?, acid_pulses = ?, trips_json = ?, updated_at = ?
+            acid_s = ?, acid_est_l = ?, acid_pulses = ?, trips_json = ?, equal_draw_json = ?, updated_at = ?
           WHERE id = ?
         `).run(iso(now), status, reason, r1((now - c.startedAt) / 1000), s.water_l, JSON.stringify(s.tanks), JSON.stringify(s.modes),
           s.ph.min, s.ph.avg, s.ph.max, s.ph.last, s.ph.samples, s.ec.min, s.ec.avg, s.ec.max, s.ec.last, s.ec.samples, JSON.stringify(s.trim), JSON.stringify(s.zones),
-          s.acid_s, s.acid_est_l, s.acid_pulses, JSON.stringify(s.trips), iso(now), c.runId);
+          s.acid_s, s.acid_est_l, s.acid_pulses, JSON.stringify(s.trips), s.equal_draw ? JSON.stringify(s.equal_draw) : null, iso(now), c.runId);
       } catch (e) {
         this.log.error(`[DoseController] could not finalise run ${c.runId}: ${e.message}`);
       }
@@ -3131,6 +3463,7 @@ class DoseController {
       trips: j(row.trips_json, []),
       config_version_id: row.config_version_id ?? null,
       link_proposal_id: row.link_proposal_id ?? null,
+      equal_draw: j(row.equal_draw_json, null),
     };
     return this._withZoneStats(run, row);
   }
@@ -3191,8 +3524,52 @@ class DoseController {
 
   lastRun() {
     try {
-      return this.formatRun(this.db.prepare("SELECT r.*, a.name AS automation_name FROM dose_controller_runs r LEFT JOIN automations a ON a.id = r.automation_id WHERE r.status <> 'running' ORDER BY r.started_at DESC, r.id DESC LIMIT 1").get());
+      const run = this.formatRun(this.db.prepare("SELECT r.*, a.name AS automation_name FROM dose_controller_runs r LEFT JOIN automations a ON a.id = r.automation_id WHERE r.status <> 'running' ORDER BY r.started_at DESC, r.id DESC LIMIT 1").get());
+      if (run) run.equal_draw_capability = this.equalDrawCapability();
+      return run;
     } catch (_) { return null; }
+  }
+
+  /**
+   * "Max achievable equal ratio" from recent finished runs (equal draw or not): per run the
+   * ratio the SLOWEST ratio tank reached (water / its counter litres) — what equal draw
+   * delivers to every tank — counted only when that tank was physics-limited (valve open
+   * >= 90 %, short of its ratio target), i.e. the venturi, not the controller, set it.
+   * Runs with a tank failure / a tank at 0 L are skipped (a fault, not the capacity).
+   * achievable_ratio = median of those runs (null when every target was reachable).
+   */
+  equalDrawCapability(limit = EQ_CAPABILITY_RUNS) {
+    try {
+      const rows = this.db.prepare(`
+        SELECT id, started_at, water_l, tanks_json, equal_draw_json FROM dose_controller_runs
+        WHERE status IN ('completed', 'aborted') AND water_l > 100 ORDER BY started_at DESC, id DESC LIMIT ?
+      `).all(limit);
+      const runs = [];
+      for (const r of rows) {
+        let tanks = [];
+        try { tanks = JSON.parse(r.tanks_json || '[]'); } catch (_) { tanks = []; }
+        const ratioTanks = tanks.filter(t => t && t.ratio_target > 0 && typeof t.dosed_l === 'number');
+        if (ratioTanks.length < 2) continue;
+        if (ratioTanks.some(t => !(t.dosed_l > 0) || t.delivered_zero || (t.not_drawing && t.not_drawing.alarms > 0))) continue;
+        const slow = ratioTanks.reduce((a, b) => (b.dosed_l < a.dosed_l ? b : a));
+        const targets = ratioTanks.map(t => t.ratio_target);
+        runs.push({
+          id: r.id, started_at: r.started_at, equal_ratio: Math.round(r.water_l / slow.dosed_l),
+          slowest: { tank_id: slow.tank_id, name: slow.name, dosed_l: slow.dosed_l, open_pct: slow.open_pct ?? null },
+          target_ratio: targets.every(x => x === targets[0]) ? targets[0] : Math.min(...targets),
+          limited: !!slow.physics_limited, equal_draw: !!r.equal_draw_json,
+        });
+      }
+      const lim = runs.filter(x => x.limited).map(x => x.equal_ratio);
+      return {
+        runs, n_runs: runs.length, n_limited: lim.length,
+        achievable_ratio: lim.length ? Math.round(median(lim)) : null,
+        best_ratio: lim.length ? Math.min(...lim) : null,
+      };
+    } catch (e) {
+      this.log.error(`[DoseController] equal-draw capability failed: ${e.message}`);
+      return null;
+    }
   }
 
   listRuns({ limit = 50, offset = 0, from = null, to = null, date = null } = {}) {
@@ -3220,6 +3597,8 @@ class DoseController {
         acid_cap_cycle_s: cfg.ph.max_acid_s_per_cycle, acid_cap_day_s: cfg.ph.max_acid_s_per_day,
       },
       warnings: cfg.ph.window_s < cfg.ph.tau_s + cfg.ph.dead_time_s ? [`pH window ${cfg.ph.window_s} s is shorter than the plant lag (tau ${cfg.ph.tau_s} s + dead time ${cfg.ph.dead_time_s} s)`] : [],
+      // equal draw in the saved config (a running cycle uses what it started with: cycle.equal_draw)
+      equal_draw_config: { ...cfg.nutrients.equal_draw },
     };
     const c = this.cycle;
     if (!c) {
@@ -3295,8 +3674,18 @@ class DoseController {
             last_draw_at: iso(t.lastIncMs),
           },
           redraw_retry: t.retry ? { phase: t.retry.phase, result: t.retry.result || null, at: iso(t.retry.at) } : null,
+          equal_draw: c.eq && c.eq.members.includes(t) ? {
+            litres_est: r2(t.eqE), pacer: c.eq.pacer === t, held: !!t.eqHeld, held_why: t.eqHeldWhy || null,
+            excluded: c.eq.excluded.has(t.tank_id), failed: !!(c.eq.failures.get(t.tank_id) && c.eq.failures.get(t.tank_id).resolvedAt === null),
+          } : null,
         };
       }),
+      equal_draw: c.eq ? {
+        enabled: true, on_tank_failure: c.eq.policy, tolerance_l: c.eq.tolerance_l, tolerance_pct: c.eq.tolerance_pct,
+        lead_l: r2(c.eq.lead), level_l: r2(c.eq.P), pacer: c.eq.pacer ? { tank_id: c.eq.pacer.tank_id, name: c.eq.pacer.name } : null,
+        spread_est_l: (() => { const v = c.eq.members.filter(t => !c.eq.excluded.has(t.tank_id)).map(t => t.eqE); return v.length ? r2(Math.max(...v) - Math.min(...v)) : null; })(),
+        holding: !!c.eq.members.some(t => this._eqHoldingFailure(c, t)),
+      } : { enabled: false },
       ph: {
         enabled: cfg.ph.enabled && !!c.phTank,
         tank: c.phTank ? { tank_id: c.phTank.tank_id, name: c.phTank.name, channel: c.phTank.channel, actual: actualOf(c.phTank) } : null,

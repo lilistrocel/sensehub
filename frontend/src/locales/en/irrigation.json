@@ -160,7 +160,22 @@
     "ecTitleNoCount": "EC {{min}}–{{max}} mS/cm",
     "phTitleNoCount": "pH {{min}}–{{max}}",
     "flushTitle": "Line flush excluded: first {{seconds}} s after the run's first pump start (EC {{ec}} mS/cm, pH {{ph}})",
-    "flushNote": "* EC/pH without the line flush (first {{seconds}} s after the run's first pump start)"
+    "flushNote": "* EC/pH without the line flush (first {{seconds}} s after the run's first pump start)",
+    "equalDraw": "Equal draw",
+    "equalDrawSpread": "spread {{spread}} L ({{pct}} %)",
+    "pacedBy": "paced by {{tank}}",
+    "colSpread": "Spread",
+    "colSpreadTitle": "Equal draw: largest minus smallest tank litres in the zone (counter, 0.25 L steps)",
+    "pacerTitle": "slowest tank — the others were paced to it (equal draw)",
+    "heldTitle": "held back {{seconds}} s to stay equal with the slowest tank",
+    "legendPacer": "slowest tank, the others paced to it · spread tolerance {{tol}} L",
+    "eqFailureHold": "Tank {{tank}} stopped drawing — the other tanks were held (water only)",
+    "eqFailureHoldResolved": "Tank {{tank}} stopped drawing — the other tanks were held until it drew again",
+    "eqFailureExcluded": "Tank {{tank}} stopped drawing — excluded from equal draw for the rest of the cycle",
+    "achievable_one": "Max achievable equal ratio ({{count}} recent run where the slowest venturi was the limit):",
+    "achievable_other": "Max achievable equal ratio ({{count}} recent runs where the slowest venturi was the limit):",
+    "achievableBest": "best",
+    "achievableBelowTarget": "the target 1:{{target}} is richer than equal draw can deliver"
   },
   "stop": {
     "button": "Stop irrigation",

@@ -154,6 +154,35 @@ function ProposalCard({ p, letters, canEdit, onApprove, onReject, busy, t, fmt }
   );
 }
 
+/**
+ * Equal draw (operator requirement 2026-10-01): its setting, what it achieved in recent runs
+ * (measured: water / litres of the slowest, venturi-limited tank) and a caution when the
+ * controller's or the proposed ratio is richer than that — the venturis cannot deliver it.
+ */
+function EqualDrawNote({ eq, t }) {
+  const warn = eq.warning_proposed || eq.warning_current;
+  const which = eq.warning_proposed ? 'warnProposed' : 'warnCurrent';
+  return (
+    <div className="mt-3" data-testid="link-equal-draw" data-enabled={eq.enabled ? 'true' : 'false'}>
+      {eq.enabled && warn && (
+        <div className="rounded-card border border-line border-s-[3px] border-s-state-caution p-2.5 text-sm" role="note" data-testid="link-equal-draw-warning">
+          <p className="flex items-start gap-2">
+            <span className="mt-0.5"><StatusMark status="caution" /></span>
+            <span className="min-w-0">{t(`link.equalDraw.${which}`, { ratio: warn.ratio, achieved: warn.achievable_ratio })}</span>
+          </p>
+        </div>
+      )}
+      <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+        <span className="font-semibold text-ink">{t('link.equalDraw.title')}</span>
+        <span>{eq.enabled ? t('link.equalDraw.on', { tol: eq.tolerance_l, pct: eq.tolerance_pct, policy: t(`link.equalDraw.policy.${eq.on_tank_failure === 'exclude_failed' ? 'exclude_failed' : 'hold_all'}`) }) : t('link.equalDraw.off')}</span>
+        {eq.achievable_ratio
+          ? <span className="inline-flex items-center gap-1" data-testid="link-equal-draw-achieved">{t('link.equalDraw.achieved', { ratio: eq.achievable_ratio, count: eq.n_limited })}<ProvenanceMark kind="measured" detail={t('link.equalDraw.basis')} /></span>
+          : <span>{t('link.equalDraw.unknown')}</span>}
+      </p>
+    </div>
+  );
+}
+
 /** The whole link view (pure: data in, callbacks out) — also used by the tests. */
 export function ControllerLinkView({ view, canEdit = false, busy = false, onToggleMode, onApprove, onReject, onTrim }) {
   const { t } = useTranslation('nutrition');
@@ -211,6 +240,9 @@ export function ControllerLinkView({ view, canEdit = false, busy = false, onTogg
           </p>
         </div>
       )}
+
+      {/* equal draw vs the ratio (operator requirement 2026-10-01) */}
+      {view.equal_draw && <EqualDrawNote eq={view.equal_draw} t={t} />}
 
       {/* controller vs crop targets */}
       <div className="mt-3">

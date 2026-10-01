@@ -704,6 +704,21 @@
       "measuredAt": "Ölçüm zamanı",
       "note": "Ölçer / not",
       "deviation": "Fark: %{{dev}}"
+    },
+    "equalDraw": {
+      "title": "Eşit emiş",
+      "on": "Açık — tolerans {{tol}} L / %{{pct}}, tank arızasında {{policy}}",
+      "off": "Kapalı — her tank kendi oranını izler",
+      "policy": {
+        "hold_all": "tüm tanklar bekletilir (yalnızca su)",
+        "exclude_failed": "o tank hariç tutulur"
+      },
+      "achieved_one": "Son çalışmalar eşit emişle ≈1:{{ratio}} elde etti (en yavaş venturinin sınır olduğu {{count}} çalışma).",
+      "achieved_other": "Son çalışmalar eşit emişle ≈1:{{ratio}} elde etti (en yavaş venturinin sınır olduğu {{count}} çalışma).",
+      "unknown": "Son çalışmaların hiçbiri bir venturi ile sınırlanmadı: şimdiye kadarki her orana ulaşıldı.",
+      "warnCurrent": "Venturiler eşit emişle 1:{{ratio}} oranına ulaşamıyor: son çalışmalar ≈1:{{achieved}} elde etti. EC hedefi için daha güçlü stok çözeltileri veya daha büyük venturiler gerekir.",
+      "warnProposed": "Önerilen 1:{{ratio}}, venturilerin eşit emişle verebileceğinin ötesinde (son çalışmalar ≈1:{{achieved}}). EC hedefi için daha güçlü stok çözeltileri veya daha büyük venturiler gerekir.",
+      "basis": "Ölçülen: su ÷ en yavaş tankın litresi, valfi ≥ %90 açık olan son çalışmaların medyanı"
     }
   }
 }

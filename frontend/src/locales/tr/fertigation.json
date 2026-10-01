@@ -415,7 +415,10 @@
       "targetRatio": "hedef 1:{{ratio}}",
       "cantReach": "hedefe ulaşamıyor",
       "notDrawing": "{{duration}} emiş yok",
-      "retrying": "ikinci deneme: vana yeniden açıldı"
+      "retrying": "ikinci deneme: vana yeniden açıldı",
+      "eqPacer": "en yavaş — diğerleri buna göre",
+      "eqHeld": "bekletiliyor: eşit emiş",
+      "eqHeldFailure": "bekletiliyor — bir tank emiş yapmıyor (yalnızca su)"
     },
     "lastRun": {
       "title": "Son çalışma",
@@ -445,6 +448,7 @@
     "acidCycle": "döngü <v>{{used}}</v> / <m>{{cap}}</m> sn",
     "acidToday": "bugün <v>{{used}}</v> / <m>{{cap}}</m> sn",
     "acidEst": "~<m>{{litres}}</m> L tahmini",
-    "acidEstTitle": "asit ölçülmüyor: ayarlı vana debisinden tahmin, doğrulanmamış"
+    "acidEstTitle": "asit ölçülmüyor: ayarlı vana debisinden tahmin, doğrulanmamış",
+    "equalDraw": "Eşit emiş: <v>{{tank}}</v> tankına göre · fark <m>{{spread}} L</m> (tolerans {{tol}} L)"
   }
 }

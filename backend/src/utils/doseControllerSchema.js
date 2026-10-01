@@ -24,6 +24,11 @@
  *   zones_json   per zone (segment) per tank: target/dosed L, carry in/out, open/close time,
  *                closed_by ('target' | 'no water' | …), reopens, cant_reach
  *   trim_json    optional EC trim applied at the start {applied, factor, ratios, from_run, reason}
+ *   equal_draw_json  equal draw (nutrients.equal_draw) of the run, null when off:
+ *                {tolerance_l, tolerance_pct, on_tank_failure, lead_l, pacer, spread_l (counter),
+ *                 spread_est_l, spread_pct, within_tolerance, max_zone_spread_l, common_ratio,
+ *                 slowest_ratio, tanks:[{tank_id, dosed_l, dosed_est_l, held_s, pacer_s, excluded}],
+ *                 failures:[{tank_id, name, policy, at, resolved_at}]}
  */
 const DOSE_CONTROLLER_SQL = `
   CREATE TABLE IF NOT EXISTS dose_controller_runs (
@@ -65,6 +70,9 @@ const DOSE_CONTROLLER_SQL = `
 
 function ensureDoseControllerSchema(db) {
   db.exec(DOSE_CONTROLLER_SQL);
+  // equal draw (operator requirement 2026-10-01): per-run record, null when off for that run
+  const runCols = db.pragma('table_info(dose_controller_runs)').map(c => c.name);
+  if (runCols.length && !runCols.includes('equal_draw_json')) db.exec('ALTER TABLE dose_controller_runs ADD COLUMN equal_draw_json TEXT');
   const cols = db.pragma('table_info(fertigation_dose_programs)').map(c => c.name);
   if (cols.length && !cols.includes('control_mode')) {
     db.exec("ALTER TABLE fertigation_dose_programs ADD COLUMN control_mode TEXT NOT NULL DEFAULT 'open_loop'");

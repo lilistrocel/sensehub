@@ -147,4 +147,18 @@ describe('ControllerLinkView', () => {
     expect(render(view(fx.withWater), 'tr')).toContain('Ürün hedeflerini izle');
     expect(render(view(fx.withWater), 'ar')).toContain('اتباع أهداف المحصول');
   });
+
+  it('equal draw: warns when the controller / proposed ratio is richer than recent runs achieved (venturis cannot reach it)', () => {
+    const v = { ...fx, equal_draw: { enabled: true, tolerance_l: 0.5, tolerance_pct: 5, on_tank_failure: 'hold_all', achievable_ratio: 171, best_ratio: 150, n_limited: 4, n_runs: 6, runs: [], warning_current: { ratio: 116, achievable_ratio: 171 }, warning_proposed: null } };
+    const html = render(view(v));
+    expect(html).toContain('data-testid="link-equal-draw-warning"');
+    expect(html).toContain('The venturis cannot reach 1:116 with equal draw: recent runs achieved ≈1:171. The EC target needs stronger stock solutions or larger venturis.');
+    expect(html).toContain('holds all tanks (water only)');
+    const ok = render(view({ ...v, equal_draw: { ...v.equal_draw, warning_current: null } }));
+    expect(ok).not.toContain('link-equal-draw-warning');
+    expect(ok).toContain('Recent runs achieved ≈1:171 with equal draw (4 runs');
+    const prop = render(view({ ...v, equal_draw: { ...v.equal_draw, warning_current: null, warning_proposed: { ratio: 110, achievable_ratio: 171 } } }), 'ar');
+    expect(prop).toContain('link-equal-draw-warning');
+    expect(prop).toContain('1:110');
+  });
 });

@@ -160,7 +160,22 @@
     "ecTitleNoCount": "EC {{min}}–{{max}} mS/cm",
     "phTitleNoCount": "pH {{min}}–{{max}}",
     "flushTitle": "Hat yıkaması hariç tutuldu: çalışmanın ilk pompa başlatmasından sonraki ilk {{seconds}} sn (EC {{ec}} mS/cm, pH {{ph}})",
-    "flushNote": "* EC/pH hat yıkaması hariç (çalışmanın ilk pompa başlatmasından sonraki ilk {{seconds}} sn)"
+    "flushNote": "* EC/pH hat yıkaması hariç (çalışmanın ilk pompa başlatmasından sonraki ilk {{seconds}} sn)",
+    "equalDraw": "Eşit emiş",
+    "equalDrawSpread": "fark {{spread}} L (%{{pct}})",
+    "pacedBy": "{{tank}} tankına göre",
+    "colSpread": "Fark",
+    "colSpreadTitle": "Eşit emiş: bölgedeki en çok ve en az tank litresi arasındaki fark (sayaç, 0,25 L adım)",
+    "pacerTitle": "en yavaş tank — diğerleri buna göre dozlandı (eşit emiş)",
+    "heldTitle": "en yavaş tankla eşit kalmak için {{seconds}} sn bekletildi",
+    "legendPacer": "en yavaş tank, diğerleri buna göre dozlandı · fark toleransı {{tol}} L",
+    "eqFailureHold": "Tank {{tank}} emişi durdu — diğer tanklar bekletildi (yalnızca su)",
+    "eqFailureHoldResolved": "Tank {{tank}} emişi durdu — diğer tanklar o yeniden emene kadar bekletildi",
+    "eqFailureExcluded": "Tank {{tank}} emişi durdu — döngünün geri kalanında eşit emişten çıkarıldı",
+    "achievable_one": "Ulaşılabilen en yüksek eşit oran (en yavaş venturinin sınır olduğu {{count}} son çalışma):",
+    "achievable_other": "Ulaşılabilen en yüksek eşit oran (en yavaş venturinin sınır olduğu {{count}} son çalışma):",
+    "achievableBest": "en iyi",
+    "achievableBelowTarget": "1:{{target}} hedefi, eşit emişin verebileceğinden daha yoğun"
   },
   "stop": {
     "button": "Sulamayı Durdur",

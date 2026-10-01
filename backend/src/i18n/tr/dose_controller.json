@@ -16,7 +16,12 @@
     "none_drawing": "Hiçbir tank emiş yapmıyor: {tanks} su akarken {secs} sn açık, ancak hiçbir tanktan sıvı çıkmadı. Dozlama izleyicisini ve venturi manifoldunu kontrol edin.",
     "none_drawing_resolved": "Tanklar yeniden emiş yapıyor (dozlama izleyicisi bir tanktan sıvı çıktığını görüyor).",
     "run_zero": "{tank} bu çalışmada 0 L verdi: vana {water} L su ile {open_s} sn açık kaldı. Bu tankın besinleri bitkilere ulaşmadı — tank seviyesini, emiş filtresini/dip klapesini ve venturiyi kontrol edin.",
-    "last_draw_unknown": "kayıt yok"
+    "last_draw_unknown": "kayıt yok",
+    "fallback_equal": "Dozaj kontrolörü monitörü göremiyor ({reason}): eşit emiş, A-D besin vanalarını kapalı tutuyor (yalnızca su) — sabit program eşit olmayan, ölçülmeyen hacimler çekerdi. Sulama monitörü verisi döndüğünde oran kontrolü devam eder.",
+    "fallback_equal_ended": "Dozaj kontrolörü: sulama monitörü verisi {secs} sn sonra geri geldi ({why}) — eşit emişli dozaj devam ediyor. Neden: {cause}.",
+    "equal_draw_hold": "Eşit emiş: {tank} emiş yapmıyor — tanklar eşit kalsın diye {others} kapalı tutuluyor (yalnızca su). Yeniden emiş yaptığında dozaj devam eder. Tank seviyesini, emiş filtresini/dip klapesini ve venturiyi kontrol edin.",
+    "equal_draw_excluded": "Eşit emiş: {tank} emiş yapmıyor — bu döngünün geri kalanında hariç tutuldu; {others} birbirine göre dozlanmaya devam ediyor (bu döngünün besin çözeltisinde o tankın besinleri yok). Tank seviyesini, emiş filtresini/dip klapesini ve venturiyi kontrol edin.",
+    "equal_draw_resumed": "Eşit emiş: {tank} {secs} sn sonra yeniden emiş yapıyor — dozaj devam ediyor (önce o tank yetişiyor)."
   },
   "sensor_kind": {
     "frozen": "donmuş",
@@ -52,7 +57,8 @@
     "flow_watch_dosing_no_water": "debi izleme: su akışı olmadan dozlama",
     "flow_watch_shutdown": "debi izleme kapatması: {zone} su akışı yok",
     "stop_irrigation_pressed": "Sulamayı Durdur: {who} tarafından basıldı",
-    "coil_write_failed": "röle yazma başarısız: {error}"
+    "coil_write_failed": "röle yazma başarısız: {error}",
+    "monitor_blind_equal": "monitör kör: {why} — besin vanaları kapalı tutuluyor (eşit emiş)"
   },
   "why": {
     "paused": "duraklatıldı",
@@ -76,7 +82,10 @@
     "zone_target_grew": "bölge hedefi arttı",
     "zone_start": "bölge başlangıcı",
     "pump_start": "pompa başlangıcı",
-    "redraw_retry": "ikinci deneme (vana yeniden açıldı)"
+    "redraw_retry": "ikinci deneme (vana yeniden açıldı)",
+    "equal_draw_paced": "en yavaş tanka göre dozlanıyor (eşit emiş)",
+    "equal_draw_hold": "eşit emiş: bekletiliyor — bir tank emiş yapmıyor",
+    "equal_draw_blind": "eşit emiş: monitör kör — kapalı tutuluyor"
   },
   "gate": {
     "no_ph_tank": "dozlama panosuna bağlı pH Düşürücü tankı yok",
@@ -99,6 +108,7 @@
   "telegram": {
     "not_drawing": "{tank} emiş yapmıyor",
     "none_drawing": "Hiçbir dozlama tankı emiş yapmıyor",
-    "run_zero": "{tank} 0 L verdi"
+    "run_zero": "{tank} 0 L verdi",
+    "equal_draw": "Eşit emiş durduruldu: {tank} emiş yapmıyor"
   }
 }

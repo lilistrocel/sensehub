@@ -16,7 +16,12 @@
     "none_drawing": "No tank is drawing: {tanks} open {secs} s with water flowing, but no liquid left any tank. Check the dosing monitor and the venturi manifold.",
     "none_drawing_resolved": "Tanks are drawing again (the dosing monitor sees liquid leaving a tank).",
     "run_zero": "{tank} delivered 0 L in this run: valve open {open_s} s with {water} L of water. Its nutrients did not reach the plants — check the tank level, the suction filter/foot valve and the venturi.",
-    "last_draw_unknown": "none recorded"
+    "last_draw_unknown": "none recorded",
+    "fallback_equal": "Dose controller monitor blind ({reason}): equal draw holds the nutrient valves A-D closed (water only) — the fixed schedule would draw unequal, unmeasured volumes. Ratio control resumes when the irrigation monitor data returns.",
+    "fallback_equal_ended": "Dose controller: irrigation monitor data back after {secs} s ({why}) — equal-draw dosing resumed. Cause was: {cause}.",
+    "equal_draw_hold": "Equal draw: {tank} is not drawing — {others} are held closed (water only) so the tanks stay equal. Dosing resumes when it draws again. Check the tank level, the suction filter/foot valve and the venturi.",
+    "equal_draw_excluded": "Equal draw: {tank} is not drawing — it is excluded for the rest of this cycle; {others} go on paced to each other (this cycle's feed lacks that tank's nutrients). Check the tank level, the suction filter/foot valve and the venturi.",
+    "equal_draw_resumed": "Equal draw: {tank} is drawing again after {secs} s — dosing resumed (it catches up first)."
   },
   "sensor_kind": {
     "frozen": "frozen",
@@ -52,7 +57,8 @@
     "flow_watch_dosing_no_water": "flow_watch: dosing without water flow",
     "flow_watch_shutdown": "flow_watch_shutdown: {zone} no water flow",
     "stop_irrigation_pressed": "stop_irrigation: Stop irrigation pressed by {who}",
-    "coil_write_failed": "coil write failed: {error}"
+    "coil_write_failed": "coil write failed: {error}",
+    "monitor_blind_equal": "monitor blind: {why} — nutrient valves held closed (equal draw)"
   },
   "why": {
     "paused": "paused",
@@ -76,7 +82,10 @@
     "zone_target_grew": "zone target grew",
     "zone_start": "zone start",
     "pump_start": "pump start",
-    "redraw_retry": "second try (valve re-opened)"
+    "redraw_retry": "second try (valve re-opened)",
+    "equal_draw_paced": "paced to the slowest tank (equal draw)",
+    "equal_draw_hold": "equal draw: held — a tank is not drawing",
+    "equal_draw_blind": "equal draw: monitor blind — held closed"
   },
   "gate": {
     "no_ph_tank": "no pH Down tank bound to the dosing board",
@@ -99,6 +108,7 @@
   "telegram": {
     "not_drawing": "{tank} not drawing",
     "none_drawing": "No dosing tank drawing",
-    "run_zero": "{tank} delivered 0 L"
+    "run_zero": "{tank} delivered 0 L",
+    "equal_draw": "Equal draw hold: {tank} not drawing"
   }
 }
