@@ -713,8 +713,8 @@
         "hold_all": "holds all tanks (water only)",
         "exclude_failed": "excludes that tank"
       },
-      "achieved_one": "Recent runs achieved ≈1:{{ratio}} with equal draw ({{count}} run where the slowest venturi was the limit).",
-      "achieved_other": "Recent runs achieved ≈1:{{ratio}} with equal draw ({{count}} runs where the slowest venturi was the limit).",
+      "achieved_one": "With equal draw every tank gets ≈1:{{ratio}} — the slowest tank's ratio in {{count}} recent run where its venturi was the limit.",
+      "achieved_other": "With equal draw every tank gets ≈1:{{ratio}} — the slowest tank's ratio in {{count}} recent runs where its venturi was the limit.",
       "unknown": "No recent run was limited by a venturi: every ratio so far was reachable.",
       "warnCurrent": "The venturis cannot reach 1:{{ratio}} with equal draw: recent runs achieved ≈1:{{achieved}}. The EC target needs stronger stock solutions or larger venturis.",
       "warnProposed": "The proposed 1:{{ratio}} is beyond what the venturis deliver with equal draw (recent runs ≈1:{{achieved}}). The EC target needs stronger stock solutions or larger venturis.",

@@ -156,7 +156,7 @@ describe('ControllerLinkView', () => {
     expect(html).toContain('holds all tanks (water only)');
     const ok = render(view({ ...v, equal_draw: { ...v.equal_draw, warning_current: null } }));
     expect(ok).not.toContain('link-equal-draw-warning');
-    expect(ok).toContain('Recent runs achieved ≈1:171 with equal draw (4 runs');
+    expect(ok).toContain('With equal draw every tank gets ≈1:171 — the slowest tank&#x27;s ratio in 4 recent runs');
     const prop = render(view({ ...v, equal_draw: { ...v.equal_draw, warning_current: null, warning_proposed: { ratio: 110, achievable_ratio: 171 } } }), 'ar');
     expect(prop).toContain('link-equal-draw-warning');
     expect(prop).toContain('1:110');
