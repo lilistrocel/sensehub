@@ -42,6 +42,7 @@ const { M } = i18n;
 const MODES = ['manual', 'follow_crop_targets'];
 const OPEN_STATUSES = ['pending', 'approved'];
 const TICK_MS = 60000;
+const PROPOSAL_PH_FIELDS = ['setpoint', 'floor_ph']; // everything else under ph (acid caps, tuning) stays the operator's
 const MAX_TRIM_DEVIATION_PCT = 10; // SEKO vs handheld meter: more than this and EC fine-tuning is refused
 
 class HttpError extends Error {
@@ -320,6 +321,10 @@ class ControllerLinkService {
     // equal draw is an operator decision (requirement 2026-10-01): a proposal never touches it
     if (update.nutrients && 'equal_draw' in update.nutrients) return 'a crop-target proposal never changes equal draw';
     if (update.enabled !== undefined || (update.ph && 'enabled' in update.ph)) return 'a crop-target proposal never switches the controller or the pH loop';
+    // the acid limits and the loop tuning are operator decisions (acid caps raised 2026-10-06):
+    // a proposal only ever moves the pH setpoint and floor
+    const phKeys = update.ph ? Object.keys(update.ph).filter(k => !PROPOSAL_PH_FIELDS.includes(k)) : [];
+    if (phKeys.length) return `a crop-target proposal only changes the pH setpoint and floor (not ${phKeys.join(', ')})`;
     return null;
   }
 

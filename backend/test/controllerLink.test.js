@@ -428,6 +428,52 @@ test('equal draw: an applied crop-target proposal preserves nutrients.equal_draw
   await call('PUT', `/profiles/${PID}/controller-link`, 'admin', { mode: 'manual' });
 });
 
+test('acid caps (operator approval 2026-10-06): an applied crop-target proposal keeps the raised caps; the run records that config version; a proposal touching them is refused', async () => {
+  // operator: caps 420/60 -> 600/90 through the audited config path, plus a ratio that differs from the crop targets
+  ctl.saveConfig({ ph: { max_acid_s_per_day: 600, max_acid_s_per_cycle: 90 }, nutrients: { ratio: { 1: 150, 2: 150, 3: 150, 4: 150 } } },
+    { source: 'operator', user: { id: 1, email: 'admin@farm.test' } });
+  const capsVersion = db.prepare('SELECT * FROM dose_controller_config_versions ORDER BY id DESC LIMIT 1').get();
+  assert.equal(capsVersion.source, 'operator');
+  assert.equal(JSON.parse(capsVersion.config_json).ph.max_acid_s_per_day, 600, 'the version row holds the new caps');
+  assert.equal(JSON.parse(capsVersion.config_json).ph.max_acid_s_per_cycle, 90);
+  const link1 = await call('PUT', `/profiles/${PID}/controller-link`, 'admin', { mode: 'follow_crop_targets' });
+  assert.equal(link1.status, 200, JSON.stringify(link1.body));
+  const pend = link.view(PID).pending;
+  assert.ok(pend, 'a proposal back to the crop targets');
+  assert.ok(!pend.update.ph || Object.keys(pend.update.ph).every(k => ['setpoint', 'floor_ph'].includes(k)), JSON.stringify(pend.update.ph));
+  const ok = await call('POST', `/controller-link/proposals/${pend.id}/approve`, 'admin', {});
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  clock += 3600000;
+  const r = ctl.beginCycle(ctx(109));
+  const applied = link.getProposal(pend.id);
+  assert.equal(applied.status, 'applied');
+  const cfg = JSON.parse(storedConfig());
+  assert.equal(cfg.ph.max_acid_s_per_day, 600, 'daily cap kept');
+  assert.equal(cfg.ph.max_acid_s_per_cycle, 90, 'cycle cap kept');
+  assert.equal(cfg.ph.min_pulse_s, DEFAULT_CONFIG.ph.min_pulse_s);
+  assert.equal(cfg.ph.window_s * cfg.ph.max_duty, DEFAULT_CONFIG.ph.window_s * DEFAULT_CONFIG.ph.max_duty, 'single-pulse bound unchanged');
+  // the cycle runs with the raised caps and records the version that holds them
+  assert.equal(ctl.cycle.cfgAtStart.ph.max_acid_s_per_day, 600);
+  assert.equal(ctl.cycle.cfgAtStart.ph.max_acid_s_per_cycle, 90);
+  await ctl.endCycle({ status: 'completed' });
+  const run = ctl.getRun(r.runId);
+  assert.equal(run.config_version_id, applied.applied_config_version_id);
+  const ver = JSON.parse(db.prepare('SELECT config_json FROM dose_controller_config_versions WHERE id = ?').get(run.config_version_id).config_json);
+  assert.equal(ver.ph.max_acid_s_per_day, 600);
+  assert.equal(ver.ph.max_acid_s_per_cycle, 90);
+  // the next evaluation has nothing to change (no proposal reverting the caps)
+  assert.equal(link.evaluate(PID), null);
+  // a proposal touching the acid caps (or any pH field but setpoint / floor) never passes the controller checks
+  assert.match(link._applyCheck({ ph: { setpoint: 6, max_acid_s_per_day: 420 } }, ctl.getConfig(true)), /only changes the pH setpoint and floor \(not max_acid_s_per_day\)/);
+  assert.match(link._applyCheck({ ph: { max_acid_s_per_cycle: 60 } }, ctl.getConfig(true)), /not max_acid_s_per_cycle/);
+  assert.equal(link._applyCheck({ ph: { setpoint: 6, floor_ph: 5.6 } }, ctl.getConfig(true)), null);
+  // cross-check: a cycle cap above the daily cap is refused
+  assert.throws(() => ctl.saveConfig({ ph: { max_acid_s_per_day: 80 } }), /must not exceed ph.max_acid_s_per_day/);
+  // back to the earlier state for the tests below
+  ctl.saveConfig({ ph: { max_acid_s_per_day: 420, max_acid_s_per_cycle: 60 } }, { source: 'operator' });
+  await call('PUT', `/profiles/${PID}/controller-link`, 'admin', { mode: 'manual' });
+});
+
 // ─── EC trim base change ────────────────────────────────────────────────────
 
 test('EC trim restarts from the new base ratio when the base changed; unchanged base keeps stepping', () => {

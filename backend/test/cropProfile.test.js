@@ -24,10 +24,11 @@ test('seed: protocol baseline + one profile from the active cucumber crop, with 
   farm = seedFarm(db);
   assert.equal(farm.seed.profiles, 1);
   const protocols = db.prepare('SELECT * FROM crop_protocols ORDER BY id').all();
-  // both versions stored (a revision is a new row); the first-run seed follows the first
-  assert.equal(protocols.length, 2);
+  // every version stored (a revision is a new row); the first-run seed follows the first
+  assert.equal(protocols.length, 3);
   assert.equal(protocols[0].name, PROTOCOL_NAME);
   assert.equal(protocols[1].name, 'Human agronomist protocol (2026-09-30)');
+  assert.equal(protocols[2].name, 'Human agronomist protocol (2026-10-07)');
   assert.equal(protocols[0].author, 'human agronomist');
   const p = svc.getActive();
   assert.equal(p.crop, 'Cucumber');
@@ -66,7 +67,7 @@ test('seed is idempotent: a second run (and a schema re-run) changes nothing; op
   assert.equal(seedCropNutrition(db, { log: { log() {} } }).profiles, 0);
   ensureCropNutritionSchema(db, { log: { log() {} } });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM crop_profiles').get().n, 1);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM crop_protocols').get().n, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM crop_protocols').get().n, 3);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM crop_element_targets').get().n, before);
   assert.equal(db.prepare("SELECT ec_target FROM crop_stage_targets WHERE stage = 'vegetative'").get().ec_target, 1.8);
   db.prepare("UPDATE crop_stage_targets SET ec_target = 1.7, source = 'protocol' WHERE stage = 'vegetative'").run();

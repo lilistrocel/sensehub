@@ -37,7 +37,7 @@ test('protocol 2026-09-30: flowering -> fruit_set recipe (= fruiting content), 1
   // the old version is untouched
   assert.equal(P.PROTOCOL.data.stage_recipe.flowering, 'vegetative');
   assert.equal(P.PROTOCOL.data.daily_program.ml_per_plant_day, 930);
-  assert.equal(P.PROTOCOLS.length, 2);
+  assert.equal(P.PROTOCOLS[1], v2, 'stored after 2026-09-28 (later revisions follow it)');
   // daily program from 2026-10-01: 11 runs, 34.5 min/section, ~1,150 mL/plant/day
   const prog = v2.data.daily_program;
   assert.equal(prog.runs.length, 11);

@@ -239,8 +239,64 @@ const PROTOCOL_2026_09_30 = {
   },
 };
 
+// ─── Protocol revision 2026-10-07 (operator request 2026-10-06) ─────────────
+// Same human agronomist: a new daily program from 2026-10-07 (13 runs, each run
+// waters the 4 sections back-to-back). Everything else — recipes, stage targets,
+// stage_recipe, the fruit-set 1:100 stated dilution, the 1:150 SenseHub assumption —
+// is the 2026-09-30 version unchanged. 2026-09-28 and 2026-09-30 are kept intact.
+
+const PROTOCOL_NAME_2026_10_07 = 'Human agronomist protocol (2026-10-07)';
+const PROTOCOL_KEY_2026_10_07 = 'cucumber_1021_2026_10_07';
+
+// mL/plant per run = minutes x 33.3 (2 L/h dripper), rounded as in the 2026-10-01 table.
+const run = (time, minutes, extra = {}) => ({ time, minutes, ml_per_plant: Math.round((minutes * 100) / 3), ...extra });
+
+const DAILY_PROGRAM_2026_10_07 = {
+  stage: 'flowering',
+  effective_from: '2026-10-07',
+  sections_order: [1, 2, 3, 4],
+  runs: [
+    run('07:30', 3.5),
+    run('08:30', 3.5),
+    run('09:30', 4),
+    run('10:15', 4),
+    run('11:00', 4),
+    run('11:40', 4),
+    run('12:20', 4),
+    run('13:00', 4),
+    run('13:40', 4),
+    run('14:20', 4),
+    run('15:10', 3.5),
+    run('16:00', 3),
+    run('17:00', 2, { last: true }),
+  ],
+  minutes_per_section: 47.5,
+  ml_per_plant_day: 1580,
+  note: "Each run waters the 4 sections back-to-back (order 1 -> 4). 1 min = 33 mL/plant (2 L/h dripper). Program from 2026-10-07.",
+};
+
+const PROTOCOL_2026_10_07 = {
+  key: PROTOCOL_KEY_2026_10_07,
+  name: PROTOCOL_NAME_2026_10_07,
+  source: "Revision of 'cucumber_1021 protokol': the agronomist's daily program table from 2026-10-07 (operator request 2026-10-06); recipes and targets as 2026-09-30",
+  source_date: '2026-10-07',
+  author: 'human agronomist',
+  crop: 'Cucumber',
+  variety: 'S13-06 F1',
+  breeder: 'Sakata',
+  data: {
+    ...PROTOCOL_2026_09_30.data,
+    daily_program: DAILY_PROGRAM_2026_10_07,
+    previous_version: PROTOCOL_KEY_2026_09_30,
+    changes: [
+      'Daily program from 2026-10-07: 13 runs, 47.5 min per section, ~1,580 mL/plant/day (was 11 runs, 34.5 min, ~1,150 mL).',
+      'Recipes, stage targets, stage recipes and dilutions unchanged from 2026-09-30.',
+    ],
+  },
+};
+
 /** Every protocol version SenseHub knows, oldest first (a changed protocol is a NEW row). */
-const PROTOCOLS = [PROTOCOL, PROTOCOL_2026_09_30];
+const PROTOCOLS = [PROTOCOL, PROTOCOL_2026_09_30, PROTOCOL_2026_10_07];
 
 /**
  * Dilution used to turn a recipe into feed ppm: the protocol's own stated dilution for
@@ -304,6 +360,10 @@ module.exports = {
   PROTOCOL_KEY_2026_09_30,
   STAGE_RECIPE_2026_09_30,
   DAILY_PROGRAM_2026_10_01,
+  PROTOCOL_2026_10_07,
+  PROTOCOL_NAME_2026_10_07,
+  PROTOCOL_KEY_2026_10_07,
+  DAILY_PROGRAM_2026_10_07,
   recipeDilution,
   PROTOCOL_NAME,
   PROTOCOL_KEY,
