@@ -78,7 +78,10 @@
     "sourcesSomeOut_one": "{{inUse}} kullanımda, {{count}} hizmet dışı: {{names}}",
     "sourcesSomeOut_other": "{{inUse}} kullanımda, {{count}} hizmet dışı: {{names}}",
     "sourcesAllIn_one": "{{count}} kullanımda, tüm kaynaklar hizmette",
-    "sourcesAllIn_other": "{{count}} kullanımda, tüm kaynaklar hizmette"
+    "sourcesAllIn_other": "{{count}} kullanımda, tüm kaynaklar hizmette",
+    "captureViews_one": "{{count}} ön ayar görünümü, saat {{time}}",
+    "captureViews_other": "{{count}} ön ayar görünümü, saat {{time}}",
+    "viewsOf": "{{total}} görünümden {{captured}}"
   },
   "count": {
     "frame_one": "{{count}} kare",
@@ -88,7 +91,9 @@
     "recommendation_one": "{{count}} öneri",
     "recommendation_other": "{{count}} öneri",
     "note_one": "{{count}} not",
-    "note_other": "{{count}} not"
+    "note_other": "{{count}} not",
+    "view_one": "{{count}} görünüm",
+    "view_other": "{{count}} görünüm"
   },
   "empty": {
     "noReports": "Henüz rapor yok. Oluşturmak için \"Şimdi Oluştur\"a tıklayın.",
@@ -175,11 +180,26 @@
     "refusal": "reddedildi"
   },
   "section": {
-    "crop": { "label": "Ürün", "title": "Ürünün Durumu" },
-    "irrigation": { "label": "Sulama", "title": "Sulama ve Fertigasyon" },
-    "nutrients": { "label": "Besinler", "title": "Besin Durumu (AMIC + Laboratuvar)" },
-    "climate": { "label": "İklim", "title": "İklim" },
-    "risks": { "label": "Riskler", "title": "Riskler ve Anormallikler" },
+    "crop": {
+      "label": "Ürün",
+      "title": "Ürünün Durumu"
+    },
+    "irrigation": {
+      "label": "Sulama",
+      "title": "Sulama ve Fertigasyon"
+    },
+    "nutrients": {
+      "label": "Besinler",
+      "title": "Besin Durumu (AMIC + Laboratuvar)"
+    },
+    "climate": {
+      "label": "İklim",
+      "title": "İklim"
+    },
+    "risks": {
+      "label": "Riskler",
+      "title": "Riskler ve Anormallikler"
+    },
     "numbered": "{{label}} {{n}}",
     "noDetail": "Bu bölümde başka ayrıntı yok.",
     "empty": "Raporda bu bölüm boş."
@@ -257,7 +277,8 @@
     "noHighPriority_one": "{{count}} öneri, hiçbiri yüksek öncelikli değil.",
     "noHighPriority_other": "{{count}} öneri, hiçbiri yüksek öncelikli değil.",
     "onlyTasks_one": "Yapılandırılmış öneri yok; bu çalışmadan {{count}} operatör görevi.",
-    "onlyTasks_other": "Yapılandırılmış öneri yok; bu çalışmadan {{count}} operatör görevi."
+    "onlyTasks_other": "Yapılandırılmış öneri yok; bu çalışmadan {{count}} operatör görevi.",
+    "viewsUsed": "Kullanılan kanopi görünümleri"
   },
   "details": {
     "title": "Rapor ayrıntıları",
@@ -358,5 +379,51 @@
     "noEquipment": "Kayıtlı ekipman yok.",
     "unsaved": "Kaydedilmemiş değişiklikler — sonraki yapay zekâ çalışması hâlâ kayıtlı ayarları kullanır.",
     "save": "Veri kaynaklarını kaydet"
+  },
+  "canopyViews": {
+    "help": "Öğle: her kamera ön ayarından ({{names}}) birer görünüm; her biri netlik ve ışık açısından kontrol edilir, ardından kamera eski konumuna döner. Her görünüm etiketlenerek rapora gönderilir. Öğle çekimi yoksa rapor 10:00–14:00 arasındaki 4 saatlik anlık görüntüleri kullanır.",
+    "toastCaptured": "{{total}} görünümden {{captured}} tanesi çekildi",
+    "justTaken": "Az önce elle tur çekildi — {{total}} görünümden {{captured}}",
+    "latest": "{{date}} ({{source}}) — {{total}} görünümden {{captured}}",
+    "notRestored": "Bu turdan sonra kamera eski konumuna döndürülmedi — canlı görüntüyü kontrol edin.",
+    "incomplete": "{{total}} görünümden {{captured}} tanesi çekildi; eksik olanlar işaretli.",
+    "tablist": "Kanopi görünümleri",
+    "tabAria": "Görünüm {{n}}: {{name}}",
+    "viewN": "Görünüm {{n}}",
+    "openFull": "Tam boyutta aç",
+    "imageAlt": "Kanopi görünümü {{name}}",
+    "viewOf": "Görünüm {{n}} / {{total}}",
+    "presetId": "ön ayar {{id}}",
+    "sharpness": "netlik {{value}}",
+    "poorQuality": "bulanık veya karanlık",
+    "notCaptured": "{{name}} — çekilmedi",
+    "status": {
+      "missing": "Kamerada bu adda bir ön ayar yok. Ön ayarı kamerada kaydedin veya aşağıdaki ayarlarda adı düzeltin.",
+      "goto_failed": "Kamera bu ön ayara gitmedi.",
+      "capture_failed": "Kamera hareket etti ancak görüntü alınamadı.",
+      "auth_stopped": "Kamera oturum açmayı reddetti; kamera kilitlenmesini önlemek için tur hemen durduruldu. Kamera şifresini kontrol edin.",
+      "not_attempted": "Denenmedi: kameranın ön ayar listesi okunamadı.",
+      "missing_file": "Görüntü dosyası artık saklanmıyor.",
+      "unknown": "Bu görünüm için görüntü yok."
+    },
+    "settings": {
+      "title": "Ziraat mühendisi görünümleri",
+      "help": "Öğlen ziyaret edilen kamera ön ayarları (ada göre) — her biri rapora bir görüntü gönderir (en fazla 3). Hepsini boş bırakırsanız tek ön ayarlı seri çekime dönülür. Kamera eski konumuna ya da “Dönüş” altında adı verilen ön ayara döner.",
+      "namePlaceholder": "Ön ayar adı, ör. Agronomist 1",
+      "unused": "kullanılmıyor",
+      "returnTo": "Dönüş",
+      "returnPlaceholder": "eski konumu (varsayılan)",
+      "perView": "Görünüm başına",
+      "noneConfigured": "Ön ayar adı yok: öğle çekimi tek ön ayarlı seri çekimi kullanacak.",
+      "checkFailed": "Kameranın ön ayarları okunamadı: {{error}}",
+      "check": "Kamerada kontrol et",
+      "checking": "Kontrol ediliyor…",
+      "save": "Görünümleri kaydet",
+      "saving": "Kaydediliyor…",
+      "reset": "Sıfırla",
+      "found": "ön ayar {{id}}",
+      "notFound": "kamerada yok",
+      "noCamera": "Yapılandırılmış kamera yok"
+    }
   }
 }

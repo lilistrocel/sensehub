@@ -97,15 +97,20 @@ function laplacianVariance(gray, width, height, centre = CENTRE_FRACTION) {
 }
 
 /**
- * @returns { sharpness, width, height, sampleWidth, sampleHeight } — `width`/`height`
- *          are the decoded image's; the score is computed on the subsample.
+ * @returns { sharpness, brightness, width, height, sampleWidth, sampleHeight } —
+ *          `width`/`height` are the decoded image's; the score is computed on the
+ *          subsample. `brightness` is the mean luma 0-255 of the whole subsample (a
+ *          "too dark to use" check for the preset tour; night/IR frames sit far below).
  */
 function sharpnessScore(buf, { maxWidth = SCORE_MAX_WIDTH, centre = CENTRE_FRACTION } = {}) {
   const img = decodeRgba(buf);
   const g = grayscaleSubsample(img, maxWidth);
   const denoised = gauss3(median3(g.gray, g.width, g.height), g.width, g.height);
   const v = laplacianVariance(denoised, g.width, g.height, centre);
-  return { sharpness: Math.round(v * 100) / 100, width: img.width, height: img.height, sampleWidth: g.width, sampleHeight: g.height };
+  let lum = 0;
+  for (let i = 0; i < g.gray.length; i++) lum += g.gray[i];
+  const brightness = g.gray.length ? Math.round((lum / g.gray.length) * 10) / 10 : null;
+  return { sharpness: Math.round(v * 100) / 100, brightness, width: img.width, height: img.height, sampleWidth: g.width, sampleHeight: g.height };
 }
 
 /** Area-average resample of an RGBA image to (dw x dh). */

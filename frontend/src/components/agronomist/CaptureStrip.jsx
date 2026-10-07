@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useToast } from '../../context/ToastContext';
 import { useFormat } from '../../i18n/useFormat';
 import { Button, StatusPill } from '../../ui';
+import CaptureViews from './CaptureViews';
+import CaptureViewsSettings from './CaptureViewsSettings';
 
 const API_BASE = '/api';
 
@@ -52,10 +54,12 @@ export function FrameStrip({ frames = [], bestId = null, className = '' }) {
 }
 
 /**
- * "Canopy captures" card: today's latest frames + a Capture now button (admin/operator)
- * that runs a 3-frame session and shows the resulting thumbnails.
+ * "Canopy captures" card: today's latest session + a Capture now button (admin/operator).
+ * With camera presets configured (default "Agronomist 1/2/3") a session is one view per
+ * preset, shown as tabs; otherwise a burst from one preset, shown as a frame strip.
+ * Admins also get the preset settings (CaptureViewsSettings).
  */
-export default function CapturePanel({ headers, canControl, config, embedded = false }) {
+export default function CapturePanel({ headers, canControl, config, embedded = false, isAdmin = false, onSaveConfig = null }) {
   const { t } = useTranslation('agronomist');
   const { showError, showSuccess } = useToast();
   const [group, setGroup] = useState(null);   // today's group from GET /captures?days=1
@@ -65,6 +69,8 @@ export default function CapturePanel({ headers, canControl, config, embedded = f
 
   const frames = config?.capture_frames || 3;
   const spacing = config?.capture_spacing_seconds ?? 30;
+  const presets = Array.isArray(config?.capture_presets) ? config.capture_presets : [];
+  const viewsMode = presets.length > 0;
 
   const load = async () => {
     setLoading(true);
@@ -87,9 +93,17 @@ export default function CapturePanel({ headers, canControl, config, embedded = f
     try {
       const res = await fetch(`${API_BASE}/agronomist/capture-now`, { method: 'POST', headers, body: JSON.stringify({}) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (!res.ok) {
+        // a tour that captured nothing still says which views failed and why
+        if (data.session?.views) setSession({ frames: [], session: data.session });
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
       setSession(data);
-      showSuccess(t('capture.toastCaptured', { count: data.frames?.length || 1 }));
+      if (data.session?.layout === 'views') {
+        showSuccess(t('canopyViews.toastCaptured', { captured: data.frames?.length || 0, total: data.session.views?.length || 0 }));
+      } else {
+        showSuccess(t('capture.toastCaptured', { count: data.frames?.length || 1 }));
+      }
       await load();
     } catch (err) {
       showError(t('capture.toastFailed', { error: err.message }));
@@ -98,8 +112,13 @@ export default function CapturePanel({ headers, canControl, config, embedded = f
     }
   };
 
-  const shown = session ? { frames: session.frames, best_id: session.session?.best_id } : group;
-  const eta = Math.max(1, Math.round(((frames - 1) * spacing + 5) / 60));
+  const shown = session
+    ? { frames: session.frames, best_id: session.session?.best_id, layout: session.session?.layout === 'views' ? 'views' : 'burst', session: session.session }
+    : group;
+  // a view takes ~15-25 s (move, settle, focus, 2 frames); a burst (frames-1) x spacing
+  const eta = viewsMode ? Math.max(1, Math.round((presets.length * 25 + 15) / 60)) : Math.max(1, Math.round(((frames - 1) * spacing + 5) / 60));
+  const what = viewsMode ? t('count.view', { count: presets.length }) : t('count.frame', { count: frames });
+  const isViews = shown?.layout === 'views';
 
   return (
     <div
@@ -109,14 +128,16 @@ export default function CapturePanel({ headers, canControl, config, embedded = f
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           {!embedded && <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">{t('capture.title')}</h3>}
-          <p className={`text-xs text-gray-500 dark:text-gray-400 ${embedded ? '' : 'mt-1'}`}>
-            {t('capture.help', {
-              frames: t('count.frame', { count: frames }),
-              spacing,
-              sharpest: config?.capture_frames_to_send
-                ? t('capture.sharpestN', { count: config.capture_frames_to_send })
-                : t('capture.sharpestOne'),
-            })}
+          <p className={`text-xs text-gray-500 dark:text-gray-400 ${embedded ? '' : 'mt-1'}`} data-testid="capture-help">
+            {viewsMode
+              ? t('canopyViews.help', { names: presets.map(n => `“${n}”`).join(', ') })
+              : t('capture.help', {
+                frames: t('count.frame', { count: frames }),
+                spacing,
+                sharpest: config?.capture_frames_to_send
+                  ? t('capture.sharpestN', { count: config.capture_frames_to_send })
+                  : t('capture.sharpestOne'),
+              })}
           </p>
         </div>
         {canControl && (
@@ -125,15 +146,32 @@ export default function CapturePanel({ headers, canControl, config, embedded = f
             size="sm"
             onClick={captureNow}
             disabled={capturing}
-            title={t('capture.captureNowTitle', { frames: t('count.frame', { count: frames }), minutes: eta })}
+            title={t('capture.captureNowTitle', { frames: what, minutes: eta })}
             data-testid="capture-now"
           >
-            {capturing ? t('capture.capturing', { frames: t('count.frame', { count: frames }), minutes: eta }) : t('capture.captureNow')}
+            {capturing ? t('capture.capturing', { frames: what, minutes: eta }) : t('capture.captureNow')}
           </Button>
         )}
       </div>
       <div className="mt-3">
-        {shown?.frames?.length ? (
+        {isViews && (shown.frames?.length || shown.session?.views?.length) ? (
+          <>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              {session
+                ? t('canopyViews.justTaken', { captured: shown.frames.length, total: shown.session?.views?.length || shown.frames.length })
+                : t('canopyViews.latest', {
+                  date: shown.date,
+                  source: t(`capture.source.${SOURCE_PILL[shown.source] ? shown.source : 'manual'}`),
+                  captured: shown.frames.length,
+                  total: shown.session?.views?.length || shown.frames.length,
+                })}
+            </div>
+            <CaptureViews views={shown.session?.views} frames={shown.frames} />
+            {shown.session?.restore && shown.session.restore.ok === false && shown.session.restore.mode !== 'not_needed' && (
+              <p className="mt-2 text-xs text-caution-700 dark:text-caution-300" data-testid="views-not-restored">{t('canopyViews.notRestored')}</p>
+            )}
+          </>
+        ) : shown?.frames?.length ? (
           <>
             <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
               {session
@@ -146,6 +184,9 @@ export default function CapturePanel({ headers, canControl, config, embedded = f
           <div className="text-xs text-gray-500 dark:text-gray-400">{loading ? t('capture.loading') : t('capture.noneToday')}</div>
         )}
       </div>
+      {isAdmin && config && onSaveConfig && (
+        <CaptureViewsSettings headers={headers} config={config} onSave={onSaveConfig} />
+      )}
     </div>
   );
 }

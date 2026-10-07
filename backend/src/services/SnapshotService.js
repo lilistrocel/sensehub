@@ -72,18 +72,16 @@ class SnapshotService {
       console.warn(`[Snapshot] Noon capture for ${dateStr} skipped: go2rtc not ready`);
       return;
     }
-    const frames = cfg.capture_frames || 3;
-    console.log(`[Snapshot] Firing noon canopy session for ${dateStr} (${zone}): ${frames} frame(s), ${cfg.capture_spacing_seconds ?? 30} s apart`);
+    const views = Array.isArray(cfg.capture_presets) ? cfg.capture_presets : null;
+    console.log(`[Snapshot] Firing noon canopy session for ${dateStr} (${zone}): ${views?.length
+      ? `preset views ${views.map(v => `"${v}"`).join(', ')}`
+      : `${cfg.capture_frames || 3} frame(s), ${cfg.capture_spacing_seconds ?? 30} s apart`}`);
     try {
-      const row = await agronomistCaptureService.captureForDate(dateStr, {
-        cameraId: cfg.capture_camera_id || null,
-        presetId: cfg.capture_preset_id || null,
-        source: 'noon',
-        frames,
-        spacingMs: (cfg.capture_spacing_seconds ?? 30) * 1000,
-      });
-      const summary = (row.frames || []).map(f => `#${f.sequence} sharp=${f.sharpness == null ? 'n/a' : Math.round(f.sharpness)}`).join(', ');
-      console.log(`[Snapshot] Noon session stored: ${row.frames?.length || 1} frame(s) [${summary}]; best ${row.path} (${row.width}x${row.height}, ${(row.bytes / 1024).toFixed(0)} KB)`);
+      const row = await agronomistCaptureService.runConfiguredSession(dateStr, cfg, { source: 'noon' });
+      const summary = row.views
+        ? row.views.map(v => `${v.index} "${v.name}" ${v.status === 'ok' ? `sharp=${v.sharpness == null ? 'n/a' : Math.round(v.sharpness)}` : v.status}`).join(', ')
+        : (row.frames || []).map(f => `#${f.sequence} sharp=${f.sharpness == null ? 'n/a' : Math.round(f.sharpness)}`).join(', ');
+      console.log(`[Snapshot] Noon session stored: ${row.frames?.length || 1} frame(s) [${summary}]${row.session?.restore ? `; camera restore: ${row.session.restore.mode}${row.session.restore.ok ? '' : ` (${row.session.restore.reason || 'not confirmed'})`}` : ''}`);
     } catch (err) {
       console.error(`[Snapshot] Noon capture for ${dateStr} failed:`, err.message);
     }

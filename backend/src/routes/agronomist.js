@@ -25,31 +25,34 @@ const localToday = () => {
 
 const withUrl = r => ({ ...r, image_url: `/api/agronomist/captures/${r.id}/image` });
 
-// POST /api/agronomist/capture-now — take a canopy SESSION immediately (testing, or a
-// missed noon): `capture_frames` frames `capture_spacing_seconds` apart, scored for
-// sharpness. Body: { date?: 'YYYY-MM-DD', camera_id?, preset_id?, frames?, spacing_seconds? }
-// Defaults come from agronomist_config. Rows are stored as source='manual'.
+// POST /api/agronomist/capture-now — take a canopy session immediately (testing, or a
+// missed noon). With capture_presets configured (default "Agronomist 1/2/3") this is the
+// preset tour: one view per preset, camera put back afterwards. A body preset_id forces
+// the legacy burst (`frames` frames `spacing_seconds` apart from that one preset).
+// Body: { date?: 'YYYY-MM-DD', camera_id?, preset_id?, frames?, spacing_seconds? }
+// Rows are stored as source='manual'.
 router.post('/capture-now', requireRole('admin', 'operator'), async (req, res) => {
   const cfg = agronomistService.getConfig();
   const body = req.body || {};
   const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : localToday();
   try {
-    const row = await agronomistCaptureService.captureForDate(date, {
-      cameraId: body.camera_id ? parseInt(body.camera_id, 10) : (cfg.capture_camera_id || null),
-      presetId: body.preset_id !== undefined ? (parseInt(body.preset_id, 10) || null) : (cfg.capture_preset_id || null),
+    const row = await agronomistCaptureService.runConfiguredSession(date, cfg, {
       source: 'manual',
-      frames: body.frames !== undefined ? parseInt(body.frames, 10) : (cfg.capture_frames || 3),
-      spacingMs: (body.spacing_seconds !== undefined ? parseInt(body.spacing_seconds, 10) : (cfg.capture_spacing_seconds ?? 30)) * 1000,
+      cameraId: body.camera_id ? parseInt(body.camera_id, 10) : null,
+      presetId: body.preset_id !== undefined ? (parseInt(body.preset_id, 10) || null) : null,
+      frames: body.frames !== undefined ? parseInt(body.frames, 10) : undefined,
+      spacingMs: body.spacing_seconds !== undefined ? parseInt(body.spacing_seconds, 10) * 1000 : undefined,
     });
-    const { frames, session, ...best } = row;
+    const { frames, session, views, ...best } = row;
     res.json({
       ok: true,
       session,
+      views: views || null,
       frames: frames.map(withUrl),
-      capture: withUrl(best),   // best (sharpest) frame — compatibility
+      capture: withUrl(best),   // first view / sharpest frame — compatibility
     });
   } catch (err) {
-    res.status(502).json({ error: err.message });
+    res.status(502).json({ error: err.message, session: err.session || null });
   }
 });
 

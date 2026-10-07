@@ -78,7 +78,10 @@
     "sourcesSomeOut_one": "{{inUse}} in use, {{count}} out of service: {{names}}",
     "sourcesSomeOut_other": "{{inUse}} in use, {{count}} out of service: {{names}}",
     "sourcesAllIn_one": "{{count}} in use, all sources in service",
-    "sourcesAllIn_other": "{{count}} in use, all sources in service"
+    "sourcesAllIn_other": "{{count}} in use, all sources in service",
+    "captureViews_one": "{{count}} preset view at {{time}}",
+    "captureViews_other": "{{count}} preset views at {{time}}",
+    "viewsOf": "{{captured}} of {{total}} views"
   },
   "count": {
     "frame_one": "{{count}} frame",
@@ -88,7 +91,9 @@
     "recommendation_one": "{{count}} recommendation",
     "recommendation_other": "{{count}} recommendations",
     "note_one": "{{count}} note",
-    "note_other": "{{count}} notes"
+    "note_other": "{{count}} notes",
+    "view_one": "{{count}} view",
+    "view_other": "{{count}} views"
   },
   "empty": {
     "noReports": "No reports yet. Click \"Generate Now\" to create one.",
@@ -175,11 +180,26 @@
     "refusal": "declined"
   },
   "section": {
-    "crop": { "label": "Crop", "title": "State of the Crop" },
-    "irrigation": { "label": "Irrigation", "title": "Irrigation & Fertigation" },
-    "nutrients": { "label": "Nutrients", "title": "Nutrient Status (AMIC + Lab)" },
-    "climate": { "label": "Climate", "title": "Climate" },
-    "risks": { "label": "Risks", "title": "Risks & Anomalies" },
+    "crop": {
+      "label": "Crop",
+      "title": "State of the Crop"
+    },
+    "irrigation": {
+      "label": "Irrigation",
+      "title": "Irrigation & Fertigation"
+    },
+    "nutrients": {
+      "label": "Nutrients",
+      "title": "Nutrient Status (AMIC + Lab)"
+    },
+    "climate": {
+      "label": "Climate",
+      "title": "Climate"
+    },
+    "risks": {
+      "label": "Risks",
+      "title": "Risks & Anomalies"
+    },
     "numbered": "{{label}} {{n}}",
     "noDetail": "No further detail in this section.",
     "empty": "This section is empty in the report."
@@ -257,7 +277,8 @@
     "noHighPriority_one": "{{count}} recommendation, none high priority.",
     "noHighPriority_other": "{{count}} recommendations, none high priority.",
     "onlyTasks_one": "No structured recommendations; {{count}} operator task from this run.",
-    "onlyTasks_other": "No structured recommendations; {{count}} operator tasks from this run."
+    "onlyTasks_other": "No structured recommendations; {{count}} operator tasks from this run.",
+    "viewsUsed": "Canopy views used"
   },
   "details": {
     "title": "Report details",
@@ -358,5 +379,51 @@
     "noEquipment": "No equipment registered.",
     "unsaved": "Unsaved changes — the next AI run still uses the saved settings.",
     "save": "Save data sources"
+  },
+  "canopyViews": {
+    "help": "Noon: one view from each camera preset ({{names}}), each checked for sharpness and light; the camera goes back to where it was afterwards. Every view goes to the report, labelled. Without a noon session the report falls back to the 10:00–14:00 4-hourly snapshots.",
+    "toastCaptured": "Captured {{captured}} of {{total}} views",
+    "justTaken": "Manual tour just taken — {{captured}} of {{total}} views",
+    "latest": "{{date}} ({{source}}) — {{captured}} of {{total}} views",
+    "notRestored": "The camera was not put back after this tour — check the live view.",
+    "incomplete": "{{captured}} of {{total}} views captured; the missing ones are marked.",
+    "tablist": "Canopy views",
+    "tabAria": "View {{n}}: {{name}}",
+    "viewN": "View {{n}}",
+    "openFull": "Open full size",
+    "imageAlt": "Canopy view {{name}}",
+    "viewOf": "View {{n}} of {{total}}",
+    "presetId": "preset {{id}}",
+    "sharpness": "sharpness {{value}}",
+    "poorQuality": "blurry or dark",
+    "notCaptured": "{{name}} — not captured",
+    "status": {
+      "missing": "No preset with this name on the camera. Save the preset on the camera, or fix the name in the settings below.",
+      "goto_failed": "The camera did not move to this preset.",
+      "capture_failed": "The camera moved, but no image could be taken.",
+      "auth_stopped": "The camera rejected the login, so the tour stopped at once to avoid a camera lockout. Check the camera password.",
+      "not_attempted": "Not attempted: the camera’s preset list could not be read.",
+      "missing_file": "The image file is no longer stored.",
+      "unknown": "No image for this view."
+    },
+    "settings": {
+      "title": "Agronomist views",
+      "help": "Camera presets visited at noon, by name — one image each goes to the report (up to 3). Leave all empty to fall back to a single-preset burst. The camera returns to where it was, or to the preset named under “Return to”.",
+      "namePlaceholder": "Preset name, e.g. Agronomist 1",
+      "unused": "unused",
+      "returnTo": "Return to",
+      "returnPlaceholder": "where it was (default)",
+      "perView": "Per view",
+      "noneConfigured": "No preset named: the noon capture will use the single-preset burst.",
+      "checkFailed": "Could not read the camera’s presets: {{error}}",
+      "check": "Check on camera",
+      "checking": "Checking…",
+      "save": "Save views",
+      "saving": "Saving…",
+      "reset": "Reset",
+      "found": "preset {{id}}",
+      "notFound": "not on camera",
+      "noCamera": "No camera configured"
+    }
   }
 }

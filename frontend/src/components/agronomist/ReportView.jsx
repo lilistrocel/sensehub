@@ -4,6 +4,7 @@ import { useFormat } from '../../i18n/useFormat';
 import { normalizeLanguage } from '../../i18n/languages';
 import { Button, Card, Kpi, Label, RAIL_CLASSES, StatusPill, ProvenanceBadge } from '../../ui';
 import { FrameStrip } from './CaptureStrip';
+import CaptureViews from './CaptureViews';
 import ClarificationsPanel from './ClarificationsPanel';
 import ReportActions, { RecommendationCard, groupRecommendations } from './ReportActions';
 import ReportMarkdown from './ReportMarkdown';
@@ -412,12 +413,14 @@ function Overview({ report, intro, chips, glance, onOpenTab, taskCount }) {
       {frames.length > 0 && (
         <Card data-testid="report-frames">
           <div className="flex flex-wrap items-baseline gap-x-2 mb-2">
-            <Label as="h3">{t('overview.framesUsed')}</Label>
+            <Label as="h3">{t(report.capture_layout === 'views' ? 'overview.viewsUsed' : 'overview.framesUsed')}</Label>
             {report.capture_mode && (
               <span className="text-xs text-muted">{CAPTURE_MODES.includes(report.capture_mode) ? t(`captureMode.${report.capture_mode}`) : report.capture_mode}</span>
             )}
           </div>
-          <FrameStrip frames={frames} bestId={report.capture_id ?? report.capture?.id ?? null} />
+          {report.capture_layout === 'views'
+            ? <CaptureViews views={report.capture_views} frames={frames} />
+            : <FrameStrip frames={frames} bestId={report.capture_id ?? report.capture?.id ?? null} />}
           {/* photo_line is not among the backend's translated fields: let the text pick its own direction. */}
           {report.photo_line && <p dir="auto" className="mt-2 text-sm text-muted max-w-prose break-words">{report.photo_line}</p>}
         </Card>

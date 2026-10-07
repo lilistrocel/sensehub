@@ -166,8 +166,30 @@ class PtzService {
     this.lastMoveAt = new Map();  // camera.id -> ms
     this.capsCache = new Map();   // camera.id -> { caps, at }
     this.authBackoff = new Map(); // camera.id -> { until, message }
+    this.activity = new Map();    // camera.id -> { at, source, action } — last move/goto by a person (UI)
+    this.busy = new Map();        // camera.id -> { label, since } — an automatic PTZ session (agronomist capture)
     this.watchdogFired = 0;       // counter (tests / diagnostics)
   }
+
+  // ---- who is using the camera ---------------------------------------------
+  // Every move / stop / preset goto from the live-view UI is recorded as user
+  // activity, so an automatic session (the agronomist's noon capture tour) can
+  // see that someone is driving the camera and log it instead of fighting them.
+  // Automatic callers pass { source: 'agronomist' } and are not recorded.
+
+  _noteActivity(cameraId, source, action) {
+    if (source && source !== 'user') return;
+    this.activity.set(cameraId, { at: Date.now(), source: 'user', action });
+  }
+
+  /** Last user PTZ action on the camera ({ at: ms, source, action }) or null. */
+  lastActivity(cameraId) {
+    return this.activity.get(cameraId) || null;
+  }
+
+  setBusy(cameraId, label) { this.busy.set(cameraId, { label, since: Date.now() }); }
+  clearBusy(cameraId) { this.busy.delete(cameraId); }
+  getBusy(cameraId) { return this.busy.get(cameraId) || null; }
 
   /** Forget cached digest state and auth backoff (call after credentials change). */
   clearAuthState(cameraId) {
@@ -291,9 +313,10 @@ class PtzService {
   // ---- PTZ operations -----------------------------------------------------
 
   /** Continuous move. Values -100..100; all zeros == stop. */
-  async move(camera, { pan = 0, tilt = 0, zoom = 0 } = {}) {
+  async move(camera, { pan = 0, tilt = 0, zoom = 0 } = {}, { source = 'user' } = {}) {
     const p = clampSpeed(pan), t = clampSpeed(tilt), z = clampSpeed(zoom);
-    if (p === 0 && t === 0 && z === 0) return this.stop(camera);
+    if (p === 0 && t === 0 && z === 0) return this.stop(camera, { source });
+    this._noteActivity(camera.id, source, 'move');
 
     const now = Date.now();
     const last = this.lastMoveAt.get(camera.id) || 0;
@@ -316,7 +339,8 @@ class PtzService {
     return { ok: true, pan: p, tilt: t, zoom: z, watchdogMs: this.watchdogMs };
   }
 
-  async stop(camera) {
+  async stop(camera, { source = 'user' } = {}) {
+    this._noteActivity(camera.id, source, 'stop');
     this._disarmWatchdog(camera.id);
     await this._sendStop(camera);
     return { ok: true, pan: 0, tilt: 0, zoom: 0 };
@@ -343,10 +367,38 @@ class PtzService {
     return presets;
   }
 
-  async gotoPreset(camera, presetId) {
+  async gotoPreset(camera, presetId, { source = 'user' } = {}) {
     const id = this._presetId(presetId);
+    this._noteActivity(camera.id, source, 'goto');
     await this.request(camera, 'PUT', `/ISAPI/PTZCtrl/channels/1/presets/${id}/goto`);
     return { ok: true, id };
+  }
+
+  /**
+   * Current absolute position (GET /ISAPI/PTZCtrl/channels/1/status):
+   * { elevation, azimuth, zoom } in the camera's native units (0.1 deg / 0.1x), or
+   * null when the camera does not report AbsoluteHigh. Throws PtzError (auth, unreachable).
+   */
+  async getPosition(camera) {
+    const res = await this.request(camera, 'GET', '/ISAPI/PTZCtrl/channels/1/status', null, { timeoutMs: this.statusTimeoutMs });
+    const xml = res.body || '';
+    const elevation = parseInt(xmlTag(xml, 'elevation'), 10);
+    const azimuth = parseInt(xmlTag(xml, 'azimuth'), 10);
+    const zoom = parseInt(xmlTag(xml, 'absoluteZoom'), 10);
+    if (![elevation, azimuth, zoom].every(Number.isFinite)) return null;
+    return { elevation, azimuth, zoom };
+  }
+
+  /** Absolute move to a position from getPosition() (used to put the camera back). */
+  async gotoAbsolute(camera, pos, { source = 'user' } = {}) {
+    const n = (v) => Math.round(Number(v));
+    if (!pos || ![pos.elevation, pos.azimuth, pos.zoom].every(v => Number.isFinite(Number(v)))) {
+      throw new PtzError('error', 'Absolute position needs elevation, azimuth and zoom', { httpStatus: 400 });
+    }
+    this._noteActivity(camera.id, source, 'absolute');
+    const body = `<PTZData><AbsoluteHigh><elevation>${n(pos.elevation)}</elevation><azimuth>${n(pos.azimuth)}</azimuth><absoluteZoom>${n(pos.zoom)}</absoluteZoom></AbsoluteHigh></PTZData>`;
+    await this.request(camera, 'PUT', '/ISAPI/PTZCtrl/channels/1/absolute', body);
+    return { ok: true, ...pos };
   }
 
   async savePreset(camera, presetId, name) {
@@ -401,6 +453,7 @@ class PtzService {
       serial: xmlTag(xml, 'serialNumber'),
       deviceName: xmlTag(xml, 'deviceName'),
       moving: this.isMoving(camera.id),
+      busy: this.getBusy(camera.id),
     };
     try {
       info.capabilities = await this.getCapabilities(camera);

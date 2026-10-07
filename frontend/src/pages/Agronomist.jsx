@@ -314,7 +314,10 @@ export default function Agronomist() {
       out.scheduleLine = `${out.schedule} · ${config.model} · ${out.weekly}`;
       const frames = config.capture_frames || 3;
       out.captureOn = config.capture_enabled !== false;
-      out.capture = out.captureOn ? t('summary.captureFrames', { count: frames, time: NOON_CAPTURE_TIME }) : t('summary.captureOff');
+      const views = Array.isArray(config.capture_presets) ? config.capture_presets.length : 0;
+      out.capture = !out.captureOn ? t('summary.captureOff')
+        : views ? t('summary.captureViews', { count: views, time: NOON_CAPTURE_TIME })
+          : t('summary.captureFrames', { count: frames, time: NOON_CAPTURE_TIME });
       const byId = Object.fromEntries((equipment || []).map(e => [e.id, e.name]));
       const ref = (id) => (id ? (byId[id] || `#${id}`) : t('summary.none'));
       out.reference = t('summary.reference', {
@@ -328,7 +331,9 @@ export default function Agronomist() {
       const n = lastCapture.frames.length;
       out.captureLast = t('summary.lastSession', {
         time: first?.captured_at ? fmt.dateTime(first.captured_at, { year: undefined, second: undefined }) : '',
-        frames: t('count.frame', { count: n }),
+        frames: lastCapture.layout === 'views'
+          ? t('summary.viewsOf', { captured: n, total: lastCapture.session?.views?.length || n })
+          : t('count.frame', { count: n }),
       });
     } else if (lastCapture !== null || config) {
       out.captureLast = t('summary.noSession');
@@ -524,7 +529,7 @@ export default function Agronomist() {
               <DataSourcesPanel embedded headers={headers} canEdit={canControl} equipment={equipment} onSaved={setDataSources} />
             </SettingsSection>
             <SettingsSection id="capture" title={t('settings.captureTitle')} summary={[summaries.capture, summaries.captureLast].filter(Boolean).join(' · ')} open={!!openSections.capture} onToggle={() => toggleSection('capture')}>
-              <CapturePanel embedded headers={headers} canControl={canControl} config={config} />
+              <CapturePanel embedded headers={headers} canControl={canControl} config={config} isAdmin={isAdmin} onSaveConfig={saveConfig} />
             </SettingsSection>
             {isAdmin && config && (
               <SettingsSection id="reference" title={t('settings.referenceTitle')} summary={summaries.reference} open={!!openSections.reference} onToggle={() => toggleSection('reference')}>

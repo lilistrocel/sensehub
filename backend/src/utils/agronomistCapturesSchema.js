@@ -13,10 +13,46 @@
  * rows keeping ids → drop → rename) inside a transaction, with foreign keys switched
  * off around it so agronomist_reports.capture_id (ON DELETE SET NULL) is untouched.
  * Idempotent: a v2 table is left alone.
+ *
+ * v3 (preset views, operator request 2026-10-07): additive, nullable columns
+ *   preset_name  the camera preset's name at capture time ("Agronomist 1")
+ *   session_id   agronomist_capture_sessions.id of the tour that took the frame
+ * plus agronomist_capture_sessions: one row per capture tour, with every view the
+ * tour was asked for (captured, missing, goto failed, auth stop), the settle /
+ * retry details per view and how the camera was put back. Added with ALTER TABLE
+ * ADD COLUMN / CREATE TABLE IF NOT EXISTS — no rebuild, no data touched.
  */
 
 const TABLE = 'agronomist_captures';
 const NEW_COLUMNS = ['sequence', 'sharpness', 'source', 'captured_at'];
+const V3_COLUMNS = [['preset_name', 'TEXT'], ['session_id', 'INTEGER']];
+
+const SESSIONS_SQL = `
+  CREATE TABLE IF NOT EXISTS agronomist_capture_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    camera_id INTEGER NOT NULL,
+    capture_date TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'noon',
+    status TEXT NOT NULL DEFAULT 'complete',
+    started_at TEXT,
+    finished_at TEXT,
+    views TEXT,
+    restore TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_agronomist_capture_sessions_date ON agronomist_capture_sessions(capture_date);
+`;
+
+/** v3: add preset_name / session_id and the sessions table (idempotent, additive). */
+function ensureV3(db) {
+  const cols = db.pragma(`table_info(${TABLE})`).map(c => c.name);
+  for (const [name, type] of V3_COLUMNS) {
+    if (!cols.includes(name)) db.exec(`ALTER TABLE ${TABLE} ADD COLUMN ${name} ${type}`);
+  }
+  db.exec(SESSIONS_SQL);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_agronomist_captures_session ON ${TABLE}(session_id)`);
+}
 
 const columnsSql = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +67,9 @@ const columnsSql = `
     sequence INTEGER DEFAULT 1,
     sharpness REAL,
     source TEXT DEFAULT 'noon',
-    captured_at TEXT`;
+    captured_at TEXT,
+    preset_name TEXT,
+    session_id INTEGER`;
 
 const indexSql = `
   CREATE INDEX IF NOT EXISTS idx_agronomist_captures_date ON ${TABLE}(capture_date);
@@ -43,6 +81,8 @@ const AGRONOMIST_CAPTURES_SQL = `
   CREATE TABLE IF NOT EXISTS ${TABLE} (${columnsSql}
   );
   ${indexSql}
+  CREATE INDEX IF NOT EXISTS idx_agronomist_captures_session ON ${TABLE}(session_id);
+  ${SESSIONS_SQL}
 `;
 
 /** True when the table exists in the v1 shape (UNIQUE constraint and/or missing columns). */
@@ -67,6 +107,7 @@ function ensureAgronomistCapturesSchema(db, { log = console, tz = null } = {}) {
   }
   if (!needsRebuild(db)) {
     db.exec(indexSql);
+    ensureV3(db);
     return { created: false, migrated: false, rows: null };
   }
 
@@ -118,8 +159,9 @@ function ensureAgronomistCapturesSchema(db, { log = console, tz = null } = {}) {
       if (hour < 11 || hour >= 14) { upd.run(r.id); relabelled++; }
     }
   }
+  ensureV3(db);
   log.log(`[agronomist_captures] migrated to multi-frame schema (${before} rows preserved, ${relabelled} relabelled as manual)`);
   return { created: false, migrated: true, rows: before, relabelled };
 }
 
-module.exports = { AGRONOMIST_CAPTURES_SQL, ensureAgronomistCapturesSchema, needsRebuild, NEW_COLUMNS };
+module.exports = { AGRONOMIST_CAPTURES_SQL, SESSIONS_SQL, ensureAgronomistCapturesSchema, needsRebuild, NEW_COLUMNS, V3_COLUMNS };

@@ -22,7 +22,7 @@ const AnthropicModule = require('@anthropic-ai/sdk');
 const Anthropic = AnthropicModule.default || AnthropicModule.Anthropic || AnthropicModule;
 const { db } = require('../utils/database');
 const { slimOperatorTasks, sectionStats } = require('./AiSnapshotSlimming');
-const { agronomistCaptureService, buildImageBlock, describeSelection, MAX_IMAGES_PER_REPORT } = require('./AgronomistCaptureService');
+const { agronomistCaptureService, buildImageBlock, describeSelection, MAX_IMAGES_PER_REPORT, DEFAULT_VIEW_PRESETS, DEFAULT_FRAMES_PER_VIEW, normalisePresetNames, missingReason, localParts } = require('./AgronomistCaptureService');
 const { getSystemTimezone } = require('../utils/systemTimezone');
 const {
   aiDataSources, filterLabRows, applyToAgronomistSnapshot, SYSTEM_PROMPT_LINE: DATA_SOURCES_PROMPT_LINE,
@@ -73,7 +73,9 @@ Be skeptical of physically implausible sensor readings:
 // Appended to the system prompt (also when system_prompt_override is set) so the
 // model knows how to treat the noon canopy photo that precedes the JSON snapshot.
 const CANOPY_PHOTO_INSTRUCTION = `Canopy photos:
-- The user message may start with up to three JPEGs from the greenhouse camera. When several are attached they are the SAME scene taken seconds to minutes apart (a burst, so one blurry frame does not spoil the day): use the sharpest one for detail and the others only to confirm what you see — do not describe them as different views or different times of day.
+- The user message may start with up to three JPEGs from the greenhouse PTZ camera. Read the photo line to know which kind they are:
+  - VIEWS (the normal noon capture): each image is a DIFFERENT part of the crop, taken from its own camera preset and labelled just before it ("View 1 of 3 — preset \"Agronomist 1\" ..."). Assess every view; refer to them as "View 1", "View 2", "View 3" (with the preset name the first time) and say which view shows what. If a view is listed as MISSING, say so once and do not guess what it would have shown.
+  - BURST (older sessions and manual captures without presets): the SAME scene taken seconds to minutes apart, so one blurry frame does not spoil the day: use the sharpest one for detail and the others only to confirm what you see — do not describe them as different views or different times of day.
 - The text right after the images states exactly what they are (today's noon session, a manual capture, routine 4-hourly snapshots, or an older frame), their local capture times, their age and a sharpness score per frame. Cite that time and provenance when you refer to a photo; never call a fallback frame "the noon capture".
 - Assess what the sensors cannot see: canopy colour (chlorosis, purpling, scorch), turgor and wilting, leaf posture (epinasty, cupping, curling), visible pests, disease, mildew or rot, fruit set, algae or salt crust on the substrate, dripper/valve leaks, anything out of place. Flag it in the risks section and tie it to the sensor data where possible.
 - Keep it proportionate: a single wide frame cannot confirm early-stage pests — say what would need a close-up or a physical check.
@@ -117,6 +119,20 @@ function buildPhotoLine(sel, { date, tz }) {
   const n = items.length;
   const c0 = items[0].capture || {};
   const what = describeSelection(sel, { date, tz });
+  if (sel.layout === 'views') {
+    const scores = items.map(it => `View ${it.capture?.sequence ?? '?'} ${it.capture?.sharpness == null ? 'n/a' : Math.round(it.capture.sharpness)}`);
+    const parts = [
+      `${n === 1 ? 'The image above is' : `The ${n} images above are`} from camera "${c0.camera_name || c0.camera_id}", times in ${tz}: ${what}.`,
+      `Sharpness (variance of Laplacian, higher = sharper; compare a view with itself on other days, not with the other views): ${scores.join(', ')}.`,
+      'These are DIFFERENT parts of the crop, one per camera preset, each labelled just before its image: assess every view and refer to it as "View N".',
+    ];
+    const missing = (sel.views || []).filter(v => v.status !== 'ok' || v.capture_id == null);
+    if (missing.length) parts.push(`Only ${n} of ${(sel.views || []).length} views are available: say which part of the crop was not seen today.`);
+    if (sel.mode === 'manual') parts.push(`Manual capture, ${items[0].ageHours} h old at report time.`);
+    else if (sel.mode === 'manual_night') parts.push('Taken outside daylight hours (likely IR/night mode): colour judgements are unreliable — limit yourself to structure, wilting and anything obviously wrong.');
+    else parts.push(`${items[0].ageHours} h old at report time.`);
+    return parts.join(' ');
+  }
   const scores = items.map(it => (it.capture?.sharpness == null ? 'n/a' : Math.round(it.capture.sharpness)));
   const lead = n === 1 ? 'The image above is' : `The ${n} images above are`;
   const parts = [
@@ -141,6 +157,15 @@ function buildPhotoLine(sel, { date, tz }) {
       parts.push(`${items[0].ageHours} h old at report time.`);
   }
   return parts.join(' ');
+}
+
+/** The text block placed right before each view's image. */
+function viewImageLabel(it, { total, tz }) {
+  const c = it.capture || {};
+  let at = '';
+  try { at = c.captured_at ? ` at ${localParts(new Date(c.captured_at), tz).hms} ${tz}` : ''; } catch { /* no time */ }
+  const sharp = c.sharpness == null ? 'n/a' : Math.round(c.sharpness);
+  return `View ${c.sequence ?? '?'} of ${total} — preset "${c.preset_name || '?'}"${c.preset_id ? ` (id ${c.preset_id})` : ''}${at}, sharpness ${sharp}:`;
 }
 
 /**
@@ -195,7 +220,12 @@ class AgronomistService {
       capture_preset_id: null,   // null = do not move the PTZ before capturing
       capture_frames: 3,             // frames per session (1-5)
       capture_spacing_seconds: 30,   // gap between frames
-      capture_frames_to_send: 3,     // frames attached to the report (1-3)
+      capture_frames_to_send: 3,     // frames attached to the report (1-3; burst sessions only)
+      // Preset tour (operator request 2026-10-07): one view per named preset. An empty
+      // list falls back to the single-preset burst above (capture_preset_id).
+      capture_presets: [...DEFAULT_VIEW_PRESETS],
+      capture_home_preset: null,     // preset name to finish on; null = where the camera was
+      capture_frames_per_view: DEFAULT_FRAMES_PER_VIEW, // frames per view, sharpest kept (1-3)
       // Turkish / Arabic versions produced right after each report (AgronomistTranslationService).
       // The report itself is always written in English.
       translation_enabled: true,
@@ -234,6 +264,9 @@ class AgronomistService {
       capture_frames: clampInt(merged.capture_frames, 1, 5, 3),
       capture_spacing_seconds: clampInt(merged.capture_spacing_seconds, 5, 120, 30),
       capture_frames_to_send: clampInt(merged.capture_frames_to_send, 1, MAX_IMAGES_PER_REPORT, 3),
+      capture_presets: Array.isArray(merged.capture_presets) ? normalisePresetNames(merged.capture_presets) : [...DEFAULT_VIEW_PRESETS],
+      capture_home_preset: merged.capture_home_preset ? String(merged.capture_home_preset).trim().slice(0, 64) || null : null,
+      capture_frames_per_view: clampInt(merged.capture_frames_per_view, 1, 3, DEFAULT_FRAMES_PER_VIEW),
       translation_enabled: merged.translation_enabled !== false,
       translation_languages: Array.isArray(merged.translation_languages)
         ? [...new Set(merged.translation_languages.filter(l => ['tr', 'ar'].includes(l)))]
@@ -244,7 +277,7 @@ class AgronomistService {
     db.prepare(
       "INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP"
     ).run(DEFAULT_CONFIG_KEY, JSON.stringify(persisted));
-    return merged;
+    return { ...merged, ...persisted };
   }
 
   /** UTC 'YYYY-MM-DD HH:MM:SS' timestamp of the last config save (system_settings.updated_at), or null. */
@@ -1090,8 +1123,12 @@ class AgronomistService {
     const tz = snap.timezone || getSystemTimezone(db);
 
     // Normalise the capture selection: up to MAX_IMAGES_PER_REPORT frames (cost guard).
+    // Preset views are all sent (they are different scenes, <= 3 by construction);
+    // capture_frames_to_send only trims a burst of the same scene.
     const selection = normaliseSelection(capture, date);
-    const maxImages = Math.min(MAX_IMAGES_PER_REPORT, Math.max(1, parseInt(cfg.capture_frames_to_send, 10) || MAX_IMAGES_PER_REPORT));
+    const isViews = selection?.layout === 'views';
+    const maxImages = isViews ? MAX_IMAGES_PER_REPORT
+      : Math.min(MAX_IMAGES_PER_REPORT, Math.max(1, parseInt(cfg.capture_frames_to_send, 10) || MAX_IMAGES_PER_REPORT));
     const items = selection ? selection.items.slice(0, maxImages) : [];
 
     let photoLine;
@@ -1124,9 +1161,15 @@ class AgronomistService {
     }
     const userText = userMessageParts.join('\n');
 
-    // Image blocks FIRST (sharpest first), then the text (Anthropic recommends image-before-text).
+    // Image blocks FIRST, then the text (Anthropic recommends image-before-text). Bursts go
+    // sharpest first; preset views go in view order, each preceded by its own label so the
+    // model can refer to "View 2" unambiguously.
     const content = [];
-    for (const it of items) content.push(buildImageBlock(it.buffer));
+    const total = isViews ? (selection.views?.length || items.length) : items.length;
+    for (const it of items) {
+      if (isViews) content.push({ type: 'text', text: viewImageLabel(it, { total, tz }) });
+      content.push(buildImageBlock(it.buffer));
+    }
     content.push({ type: 'text', text: userText });
     const imageBytes = items.reduce((a, it) => a + it.buffer.length, 0);
     const imageBase64Chars = content.filter(c => c.type === 'image').reduce((a, c) => a + c.source.data.length, 0);
@@ -1165,6 +1208,8 @@ class AgronomistService {
       capture_id: items[0]?.capture?.id ?? null,
       capture_ids: items.map(it => it.capture?.id).filter(id => id != null),
       capture_mode: items.length ? selection.mode : null,
+      capture_layout: items.length ? (selection.layout || 'burst') : null,
+      capture_views: items.length && isViews ? (selection.views || null) : null,
       capture_age_hours: items[0]?.ageHours ?? null,
       photo_line: photoLine,
       // Effective data-source policy at build time, so a report shows what was excluded.
@@ -1729,6 +1774,7 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
         id: c.id, camera_id: c.camera_id, camera_name: c.camera_name, capture_date: c.capture_date,
         width: c.width, height: c.height, bytes: c.bytes, preset_id: c.preset_id, created_at: c.created_at,
         sequence: c.sequence, sharpness: c.sharpness, source: c.source, captured_at: c.captured_at || c.created_at,
+        preset_name: c.preset_name ?? null, session_id: c.session_id ?? null,
         image_url: `/api/agronomist/captures/${c.id}/image`,
       };
     } catch { return null; }
@@ -1738,14 +1784,22 @@ Do NOT just bullet the days. Synthesize. Drop ephemeral details. Output ONLY the
   _captureFields(row) {
     const ids = parseIds(row.capture_ids, row.capture_id);
     const captures = ids.map(id => this._captureSummary(id)).filter(Boolean);
-    let photoLine = null;
-    try { photoLine = row.input_snapshot ? JSON.parse(row.input_snapshot)?.snapshot_stats?.photo_line ?? null : null; } catch {}
+    let stats = null;
+    try { stats = row.input_snapshot ? JSON.parse(row.input_snapshot)?.snapshot_stats ?? null : null; } catch {}
+    // Views as they were when the report was written (incl. missing ones); older
+    // reports have none and render as a frame strip.
+    const views = Array.isArray(stats?.capture_views) ? stats.capture_views.map(v => ({
+      index: v.index, name: v.name, preset_id: v.preset_id ?? null, status: v.status,
+      capture_id: v.capture_id ?? null, reason: v.status === 'ok' ? null : missingReason(v),
+    })) : null;
     return {
       capture_ids: ids,
       capture: row.capture_id ? this._captureSummary(row.capture_id) : (captures[0] || null),
       captures,
-      capture_mode: (() => { try { return row.input_snapshot ? JSON.parse(row.input_snapshot)?.snapshot_stats?.capture_mode ?? null : null; } catch { return null; } })(),
-      photo_line: photoLine,
+      capture_mode: stats?.capture_mode ?? null,
+      capture_layout: stats?.capture_layout || (captures.some(c => c.session_id != null) ? 'views' : (captures.length ? 'burst' : null)),
+      capture_views: views,
+      photo_line: stats?.photo_line ?? null,
     };
   }
 
