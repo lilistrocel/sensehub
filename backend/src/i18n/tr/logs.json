@@ -47,6 +47,7 @@
     "summary": "{lead}: {where}",
     "lead_automation": "'{name}' {what}",
     "lead_auto_off": "Süre sonunda otomatik kapatma ('{name}') {what}",
+    "lead_auto_off_superseded": "Eski otomatik kapatma ('{name}') atlandı — daha yeni bir komut açık tutuyor:",
     "lead_actor": "{who} {what}",
     "switched_on": "AÇTI",
     "switched_off": "KAPATTI",

@@ -49,6 +49,7 @@
     "summary": "{lead} {where}",
     "lead_automation": "'{name}' {what}",
     "lead_auto_off": "Auto-off after duration ('{name}') {what}",
+    "lead_auto_off_superseded": "Stale auto-off ('{name}') skipped — a newer command keeps ON:",
     "lead_actor": "{who} {what}",
     "switched_on": "switched ON",
     "switched_off": "switched OFF",

@@ -396,6 +396,8 @@ function listNames(names, max = 3) {
 const RELAY_ACTORS = {
   automation: { label: null, action: 'relay.automation' },
   automation_auto_off: { label: null, action: 'relay.auto_off' },
+  // a stale auto-off that did NOT switch the channel OFF: a newer ON owns it (2026-10-07)
+  automation_auto_off_superseded: { label: null, action: 'relay.auto_off_superseded' },
   stop_all: { label: 'Stop All', action: 'relay.stop_all', severity: 'warning' },
   stop_irrigation: { label: 'Stop Irrigation', action: 'relay.stop_irrigation', severity: 'warning' },
   manual: { label: null, action: 'relay.control' },
@@ -437,11 +439,13 @@ function relayGroupItem(g, refs, ctx) {
   const where = n === 1 ? names[0] : `${n} channels${eqIds.length > 1 ? ` on ${eqIds.length} boards` : ` on ${refs.eqName(eqIds[0])}`} (${listNames(names)})`;
 
   let actorLabel = meta.label;
-  if (src === 'automation' || src === 'automation_auto_off') actorLabel = autoName ? `Automation '${autoName}'` : 'Automation';
+  const autoSrc = src === 'automation' || src === 'automation_auto_off' || src === 'automation_auto_off_superseded';
+  if (autoSrc) actorLabel = autoName ? `Automation '${autoName}'` : 'Automation';
   if (isUser) actorLabel = first.user_email || 'Unknown user';
   let lead;
   if (src === 'automation') lead = `'${autoName || 'automation'}' ${what}`;
   else if (src === 'automation_auto_off') lead = `Auto-off after duration ('${autoName || 'automation'}') ${what}`;
+  else if (src === 'automation_auto_off_superseded') lead = `Stale auto-off ('${autoName || 'automation'}') skipped — a newer command keeps ON:`;
   else if (isUser) lead = `${first.user_email || 'Someone'} ${what}`;
   else lead = `${meta.label || src} ${what}`;
   let summary = `${lead} ${where}`;
@@ -461,6 +465,7 @@ function relayGroupItem(g, refs, ctx) {
   let leadSpec;
   if (src === 'automation') leadSpec = M('logs.relay.lead_automation', { name: autoNameSpec, what: whatSpec });
   else if (src === 'automation_auto_off') leadSpec = M('logs.relay.lead_auto_off', { name: autoNameSpec, what: whatSpec });
+  else if (src === 'automation_auto_off_superseded') leadSpec = M('logs.relay.lead_auto_off_superseded', { name: autoNameSpec });
   else if (isUser) leadSpec = M('logs.relay.lead_actor', { who: first.user_email || M('logs.someone'), what: whatSpec });
   else leadSpec = M('logs.relay.lead_actor', { who: labelSpec(meta.label) || src, what: whatSpec });
   const extra = [];
@@ -468,7 +473,7 @@ function relayGroupItem(g, refs, ctx) {
   if (unconfirmed) extra.push(M('logs.relay.unconfirmed', { count: unconfirmed }));
   if (ctx && ctx.device) extra.push(M('logs.relay.from_device', { device: ctx.device }));
   let actorSpec = labelSpec(meta.label);
-  if (src === 'automation' || src === 'automation_auto_off') actorSpec = autoName ? autoLabelSpec(autoName) : labelSpec('Automation');
+  if (autoSrc) actorSpec = autoName ? autoLabelSpec(autoName) : labelSpec('Automation');
   if (isUser) actorSpec = first.user_email || labelSpec('Unknown user');
 
   const related = eqIds.map(id => ({ type: 'equipment', id: String(id) }));

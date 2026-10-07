@@ -12,6 +12,7 @@ const { logRelayEvent } = require('./RelayEventLogger');
 const { fertigationDoseScheduler } = require('./FertigationDoseScheduler');
 const { automationArmingService } = require('./AutomationArmingService');
 const interlock = require('./RelayInterlockService');
+const commandLedger = require('./RelayCommandLedger');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -65,9 +66,37 @@ const { applyRelayCache } = require('./RelayStateCache');
 const readback = require('./RelayReadback');
 
 /**
+ * Is the command with generation `sinceGen` on (eq, ch) superseded by a newer
+ * command, so that re-writing (or writing) it would override that newer
+ * command? (operator-approved fix 2026-10-07, zone-4 pump-off)
+ *
+ *  - requested ON: ANY newer command wins — an ON is never re-energised after
+ *    a newer OFF (stop-all, manual, auto-off) or ON was issued on the channel.
+ *  - requested OFF: only when the caller is a stale timer OFF (`staleOff`),
+ *    the newer command is an ON, and that ON is BOUNDED by its own pending
+ *    auto-off on the channel. An OFF is never suppressed in favour of an ON
+ *    that nothing would switch off again; a newer OFF never suppresses an OFF.
+ *
+ * @returns {object|null} the superseding ledger entry, or null
+ */
+function supersedingCommand(equipmentId, channel, requested, sinceGen, { staleOff = false } = {}) {
+  const newer = commandLedger.newerThan(equipmentId, channel, sinceGen);
+  if (!newer) return null;
+  if (requested === true) return newer;
+  if (staleOff && newer.state === true && relayTimerService.getOffTimer(equipmentId, channel)) return newer;
+  return null;
+}
+
+/**
  * Write one coil, read it back (FC01, unless write-only), and return the
  * confirmation result. A disagreeing read-back triggers ONE re-write + re-read
  * before the result is decided; genuine disagreement raises a warning alert.
+ *
+ * Every write is recorded in the RelayCommandLedger first (context.gen when the
+ * caller already recorded it). The re-write is skipped when a newer command on
+ * the channel explains the disagreeing read-back (see supersedingCommand); the
+ * result then carries `superseded` (the newer command), `retried: false` and
+ * raises no unconfirmed alert.
  */
 async function writeCoilConfirmed(equipment, target, address, value, context = {}, writeOptions = undefined) {
   const { host, port, unitId } = target;
@@ -78,22 +107,38 @@ async function writeCoilConfirmed(equipment, target, address, value, context = {
       await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value, writeOptions);
     }
   };
+  const gen = Number.isFinite(context.gen) ? context.gen
+    : commandLedger.record(equipment.id, address, value, { source: context.source, automationId: context.automationId });
+  let superseded = null;
+  const retry = async () => {
+    superseded = supersedingCommand(equipment.id, address, value === true, gen, { staleOff: !!context.staleOff });
+    if (superseded) {
+      console.warn(`[Relay] ${equipment.name} ch ${address}: read-back disagrees with ${value ? 'ON' : 'OFF'} (gen ${gen}) but a newer ${superseded.state ? 'ON' : 'OFF'} (gen ${superseded.gen}, ${superseded.source || '?'}) owns the channel — not re-writing`);
+      return;
+    }
+    await sendWrite();
+  };
   await sendWrite();
-  const rb = await readback.confirmCoilWrite(modbusTcpClient, target, address, value, {
+  let rb = await readback.confirmCoilWrite(modbusTcpClient, target, address, value, {
     writeOnly: !!equipment.write_only,
-    retry: sendWrite
+    retry
   });
+  if (superseded) return { ...rb, retried: false, superseded, gen };
   if (rb.source === 'readback' && !rb.confirmed) {
     readback.reportUnconfirmed(equipment, address, value, rb.readback, context);
   } else if (rb.source === 'readback_failed') {
     console.warn(`[Relay] read-back unavailable for ${equipment.name} ch ${address} (requested ${value ? 'ON' : 'OFF'}) — logged as unconfirmed`);
   }
-  return rb;
+  return { ...rb, superseded: null, gen };
 }
 
 /**
  * Write a contiguous run of coils (FC15), read the run back and return the
  * per-channel confirmation. Same retry / alert policy as writeCoilConfirmed().
+ * Every channel is recorded in the RelayCommandLedger; the run is NOT re-sent
+ * when a disagreeing channel requested ON has a newer command since this write
+ * (an FC15 re-send rewrites the whole run, so it is skipped as a whole). Those
+ * channels are listed in `superseded` and raise no unconfirmed alert.
  */
 async function writeCoilsConfirmed(equipment, target, start, values, context = {}, writeOptions = undefined) {
   const { host, port, unitId } = target;
@@ -104,19 +149,36 @@ async function writeCoilsConfirmed(equipment, target, start, values, context = {
       await modbusTcpClient.writeMultipleCoils(host, port, unitId, start, values, writeOptions);
     }
   };
+  const gens = values.map((v, i) => commandLedger.record(equipment.id, start + i, v === true, { source: context.source, automationId: context.automationId }));
+  const superseded = [];
+  const retry = async (firstReadback) => {
+    for (let i = 0; i < values.length; i++) {
+      const req = values[i] === true;
+      if (!req || !Array.isArray(firstReadback) || firstReadback[i] === req) continue;
+      const newer = supersedingCommand(equipment.id, start + i, true, gens[i]);
+      if (newer) superseded.push({ channel: start + i, by: newer });
+    }
+    if (superseded.length) {
+      console.warn(`[Relay] ${equipment.name} coils ${start}..${start + values.length - 1}: not re-sending — newer command(s) on ch ${superseded.map(s => s.channel).join(',')}`);
+      return;
+    }
+    await sendWrite();
+  };
   await sendWrite();
   const rb = await readback.confirmWrite(modbusTcpClient, target, start, values, {
     writeOnly: !!equipment.write_only,
-    retry: sendWrite
+    retry
   });
+  const skip = new Set(superseded.map(s => s.channel));
   if (rb.source === 'readback') {
     for (const it of rb.items) {
-      if (!it.confirmed) readback.reportUnconfirmed(equipment, it.channel, it.requested, it.readback, context);
+      if (!it.confirmed && !skip.has(it.channel)) readback.reportUnconfirmed(equipment, it.channel, it.requested, it.readback, context);
     }
   } else if (rb.source === 'readback_failed') {
     console.warn(`[Relay] read-back unavailable for ${equipment.name} coils ${start}..${start + values.length - 1} — logged as unconfirmed`);
   }
-  return rb;
+  if (superseded.length) return { ...rb, retried: false, superseded };
+  return { ...rb, superseded };
 }
 
 /**
@@ -373,6 +435,101 @@ async function executeAutomation(automation, source = 'manual') {
   return { executedActions };
 }
 
+// Never arm an auto-off shorter than this, however late the ON was.
+const MIN_AUTO_OFF_S = 1;
+
+/**
+ * Auto-off delay for a timed ON: what is left of the PLANNED window
+ * (plannedStart + duration) at `nowMs`, clamped to [MIN_AUTO_OFF_S, duration].
+ * Never longer than the configured duration, so max-on stays bounded.
+ */
+function autoOffSeconds(durationSeconds, plannedStartMs, nowMs) {
+  const d = Number(durationSeconds);
+  const lateS = Math.max(0, (nowMs - plannedStartMs) / 1000);
+  return Math.min(d, Math.max(MIN_AUTO_OFF_S, d - lateS));
+}
+
+/**
+ * The stale auto-off guard (2026-10-07 zone-4 pump-off): the newer bounded ON
+ * that now owns the channel, or null. `ownerGen` = the ON that armed this
+ * auto-off; see supersedingCommand for the rule.
+ */
+function staleAutoOffOwner(equipmentId, channel, ownerGen) {
+  return supersedingCommand(equipmentId, channel, false, ownerGen, { staleOff: true });
+}
+
+/**
+ * A suppressed stale auto-off is logged through RelayEventLogger (via
+ * applyRelayCache) with source 'automation_auto_off_superseded' and state = 1:
+ * the channel stays ON under the newer command. Logging it as OFF would end the
+ * newer ON's max-on clock in the safety watchdog and its pump window in the
+ * dose controller / run builder. readback/confirmed are the coil's actual value.
+ */
+function logSupersededAutoOff(equipment, channel, automationId, owner, readbackValue, stage) {
+  console.warn(`[Automation] Stale auto-off SUPPRESSED (${stage}) for ${equipment.name} ch ${channel} (automation ${automationId}): newer ON gen ${owner.gen} from ${owner.source || '?'}${owner.automationId != null ? ` (automation ${owner.automationId})` : ''} owns the channel and has its own auto-off`);
+  const rbv = typeof readbackValue === 'boolean' ? readbackValue : null;
+  try {
+    applyRelayCache(equipment, [{ channel, requested: true, readback: rbv, confirmed: rbv === null ? null : rbv === true }], {
+      source: 'automation_auto_off_superseded', automationId
+    });
+  } catch (err) {
+    console.error('[Automation] failed to log a suppressed auto-off:', err.message);
+  }
+}
+
+/**
+ * The auto-off of a timed control ON. `ownerGen` is the generation of the ON
+ * that armed it. Skipped (and logged) when a newer bounded ON owns the channel,
+ * before the write or on its read-back verify; otherwise OFF write -> FC01
+ * read-back -> one re-write on disagreement -> alert if still ON.
+ */
+async function runControlAutoOff(targetEquipment, target, address, automationId, ownerGen) {
+  try {
+    const owner = staleAutoOffOwner(targetEquipment.id, address, ownerGen);
+    if (owner) {
+      let rbv = null;
+      if (!targetEquipment.write_only) {
+        const vals = await readback.readBackCoils(modbusTcpClient, target, address, 1);
+        rbv = vals ? vals[0] === true : null;
+      }
+      logSupersededAutoOff(targetEquipment, address, automationId, owner, rbv, 'before_write');
+      return;
+    }
+
+    const offRb = await writeCoilConfirmed(targetEquipment, target, address, false, {
+      source: 'automation_auto_off', automationId, staleOff: true
+    });
+    if (offRb.superseded) {
+      // The OFF's read-back saw the newer ON — expected, not a failed OFF: no re-write.
+      logSupersededAutoOff(targetEquipment, address, automationId, offRb.superseded, offRb.readback, 'verify');
+      return;
+    }
+    if (offRb.retried) {
+      try {
+        db.prepare(`
+          INSERT INTO relay_drift_log (equipment_id, equipment_name, channel, expected_state, actual_state, context, detail, created_at)
+          VALUES (?, ?, ?, 0, 1, ?, ?, datetime('now'))
+        `).run(targetEquipment.id, targetEquipment.name, address,
+          offRb.confirmed ? 'auto_off_verify_failed' : 'auto_off_retry_failed',
+          JSON.stringify({ automation_id: automationId, retry: true, stuck: !offRb.confirmed }));
+      } catch (e) {}
+      if (!offRb.confirmed) {
+        console.error(`[Automation] Auto-off RETRY FAILED for equipment ${targetEquipment.id} ch ${address} — STILL STUCK ON`);
+      }
+    }
+
+    // Cache the READ-BACK value, log with confirmed/readback_state, broadcast
+    applyRelayCache(targetEquipment, [{ channel: address, requested: false, readback: offRb.readback, confirmed: offRb.confirmed }], {
+      source: 'automation_auto_off',
+      automationId
+    });
+
+    console.log(`[Automation] Auto-off completed for equipment ${targetEquipment.id} channel ${address} (confirmed=${offRb.confirmed})`);
+  } catch (err) {
+    console.error(`[Automation] Auto-off failed for equipment ${targetEquipment.id} channel ${address}:`, err.message);
+  }
+}
+
 /**
  * Execute a single control action (relay / equipment control).
  *
@@ -399,6 +556,12 @@ async function executeControlAction(action, automation, options = {}) {
     const address = parseInt(action.channel, 10);
     const value = action.action === 'on' ? true : action.action === 'off' ? false : true;
 
+    // When this action is MEANT to switch: scheduling time + its delay. The
+    // auto-off is timed from this planned schedule, not from the (possibly
+    // late) actual ON — a late pump ON on a busy bus must not push its OFF into
+    // the next zone's pump window (2026-10-07 zone-4 pump-off).
+    const plannedStartMs = Date.now() + (action.delay_seconds > 0 ? action.delay_seconds * 1000 : 0);
+
     // Helper: execute the relay write + cache update + broadcast + auto-off scheduling
     const executeRelayAction = async () => {
       // Hard interlock: an ON write must first drive the partner channel OFF
@@ -413,9 +576,24 @@ async function executeControlAction(action, automation, options = {}) {
         if (guard.partner !== null) cacheStates.push({ channel: guard.partner, requested: false, readback: false, confirmed: true });
       }
 
+      // This command's generation on the channel, recorded before anything is written.
+      const gen = commandLedger.record(targetEquipment.id, address, value, { source: eventSource, automationId: automation.id });
+
+      // Auto-off for a timed ON, armed BEFORE the ON write: the channel always has
+      // its OFF owner (also when the write times out but the board took it), and
+      // arming replaces — cancels — any older pending auto-off on this channel.
+      // checkEnabled is deliberately NOT set: auto-off only ever de-energises,
+      // so disabling the automation must never cancel it and strand a relay ON.
+      if (action.duration_seconds && action.duration_seconds > 0 && value === true) {
+        const offSeconds = autoOffSeconds(action.duration_seconds, plannedStartMs, Date.now());
+        relayTimerService.scheduleOff(targetEquipment.id, address, offSeconds,
+          () => runControlAutoOff(targetEquipment, { host, port, unitId }, address, automation.id, gen),
+          { automationId: automation.id });
+      }
+
       // write -> read back -> (retry once on disagreement) -> alert on disagreement
       const rb = await writeCoilConfirmed(targetEquipment, { host, port, unitId }, address, value, {
-        source: eventSource, automationId: automation.id
+        source: eventSource, automationId: automation.id, gen
       });
       cacheStates.unshift({ channel: address, requested: value, readback: rb.readback, confirmed: rb.confirmed });
 
@@ -425,43 +603,6 @@ async function executeControlAction(action, automation, options = {}) {
         automationId: automation.id,
         userEmail: options.userEmail || null
       });
-
-      // Schedule auto-off if duration_seconds is set and action is "on"
-      if (action.duration_seconds && action.duration_seconds > 0 && value === true) {
-        // checkEnabled is deliberately NOT set: auto-off only ever de-energises,
-        // so disabling the automation must never cancel it and strand a relay ON.
-        relayTimerService.scheduleOff(targetEquipment.id, address, action.duration_seconds, async () => {
-          try {
-            // OFF write -> FC01 read-back -> one retry on disagreement -> alert if still ON
-            const offRb = await writeCoilConfirmed(targetEquipment, { host, port, unitId }, address, false, {
-              source: 'automation_auto_off', automationId: automation.id
-            });
-            if (offRb.retried) {
-              try {
-                db.prepare(`
-                  INSERT INTO relay_drift_log (equipment_id, equipment_name, channel, expected_state, actual_state, context, detail, created_at)
-                  VALUES (?, ?, ?, 0, 1, ?, ?, datetime('now'))
-                `).run(targetEquipment.id, targetEquipment.name, address,
-                  offRb.confirmed ? 'auto_off_verify_failed' : 'auto_off_retry_failed',
-                  JSON.stringify({ automation_id: automation.id, retry: true, stuck: !offRb.confirmed }));
-              } catch (e) {}
-              if (!offRb.confirmed) {
-                console.error(`[Automation] Auto-off RETRY FAILED for equipment ${targetEquipment.id} ch ${address} — STILL STUCK ON`);
-              }
-            }
-
-            // Cache the READ-BACK value, log with confirmed/readback_state, broadcast
-            applyRelayCache(targetEquipment, [{ channel: address, requested: false, readback: offRb.readback, confirmed: offRb.confirmed }], {
-              source: 'automation_auto_off',
-              automationId: automation.id
-            });
-
-            console.log(`[Automation] Auto-off completed for equipment ${targetEquipment.id} channel ${address} (confirmed=${offRb.confirmed})`);
-          } catch (err) {
-            console.error(`[Automation] Auto-off failed for equipment ${targetEquipment.id} channel ${address}:`, err.message);
-          }
-        }, { automationId: automation.id });
-      }
 
       console.log(`[Automation] Relay control executed: equipment ${targetEquipment.id} ch ${address} -> ${value}`);
     };
@@ -896,6 +1037,8 @@ async function stopAllRelays(options = {}) {
         continue;
       }
       try {
+        // newest command on these channels: an in-flight ON's read-back retry must not re-energise them
+        commandLedger.recordMany(equipment.id, channels, false, { source: 'stop_all' });
         if (equipment.write_only) {
           await modbusTcpClient.writeMultipleCoilsFireAndForget(host, port, unitId, run.start, run.values);
         } else {
@@ -955,4 +1098,5 @@ module.exports = {
   // exported for tests / reuse (flow-watch run shutdown + cold-restart retry)
   planStopAll, buildCoilRuns, parseHostPort, applyRelayCache,
   writeCoilConfirmed, writeCoilsConfirmed, doseCycleSeconds,
+  executeControlAction, autoOffSeconds, supersedingCommand,
 };

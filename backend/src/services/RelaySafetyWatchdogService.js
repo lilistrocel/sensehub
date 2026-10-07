@@ -263,6 +263,8 @@ class RelaySafetyWatchdogService {
     const unitId = slave_id || 1;
 
     // Modbus OFF — single coil. Use writeSingleCoil so we get retry behavior.
+    // Recorded as the newest command so no in-flight ON re-energises it on a read-back retry.
+    require('./RelayCommandLedger').record(equipment_id, channel, false, { source: 'watchdog_force_off' });
     if (write_only) {
       await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, channel, false);
     } else {

@@ -52,6 +52,7 @@
     "summary": "{lead}: {where}",
     "lead_automation": "'{name}' {what}",
     "lead_auto_off": "إيقاف تلقائي بعد المدة ('{name}') {what}",
+    "lead_auto_off_superseded": "تم تخطي إيقاف تلقائي قديم ('{name}') — أمر أحدث يُبقيه قيد التشغيل:",
     "lead_actor": "{who} {what}",
     "switched_on": "شغّل",
     "switched_off": "أوقف",

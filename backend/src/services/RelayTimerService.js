@@ -34,20 +34,17 @@ class RelayTimerService {
   scheduleDelayedStart(equipmentId, channel, delaySeconds, executeFn, options = {}) {
     const { automationId = null, checkEnabled = false, actionKey = null } = options;
     const key = actionKey ? `delay:${equipmentId}:${channel}:${actionKey}` : `delay:${equipmentId}:${channel}`;
-    const offKey = `off:${equipmentId}:${channel}`;
-
     if (this.timers.has(key)) {
       clearTimeout(this.timers.get(key).timer);
       console.log(`[RelayTimer] Cancelled existing delayed start for ${key}`);
     }
 
-    // Also cancel any pending auto-off for this channel — a new delayed start
-    // means the previous cycle's auto-off is stale and could conflict.
-    if (this.timers.has(offKey)) {
-      clearTimeout(this.timers.get(offKey).timer);
-      this.timers.delete(offKey);
-      console.log(`[RelayTimer] Cancelled stale auto-off for ${offKey} (new delayed start takes over)`);
-    }
+    // A pending auto-off on this channel is NOT cancelled here (2026-10-07):
+    // if this start were later refused (disarmed / automation disabled) nothing
+    // would switch the channel OFF. The newer ON replaces the older auto-off
+    // when it actually fires (scheduleOff on the same key, armed before its
+    // write), and the RelayCommandLedger keeps an already-firing stale auto-off
+    // from overriding it.
 
     const firesAt = new Date(Date.now() + delaySeconds * 1000);
     const timer = setTimeout(async () => {

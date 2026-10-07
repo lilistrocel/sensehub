@@ -47,7 +47,8 @@ async function readBackCoils(client, target, start, quantity) {
  * @param {boolean[]} values - requested states, one per coil
  * @param {object} [opts]
  * @param {boolean} [opts.writeOnly] - device cannot answer: skip the read-back
- * @param {Function} [opts.retry]    - async fn re-issuing the write; called once when the first read-back disagrees
+ * @param {Function} [opts.retry]    - async fn(firstReadback) re-issuing the write; called once when the first
+ *                                     read-back disagrees (it may decline to re-write — the second read-back decides)
  * @returns {Promise<{
  *   confirmed: boolean,           // every coil read back as requested
  *   source: 'readback'|'write_only'|'readback_failed',
@@ -80,7 +81,8 @@ async function confirmWrite(client, target, start, values, opts = {}) {
 
   const mismatch = requested.some((req, i) => readback[i] !== req);
   if (mismatch && typeof opts.retry === 'function') {
-    try { await opts.retry(); } catch (err) { /* the second read-back decides */ }
+    // the first read-back is passed so the caller can see which coils disagreed
+    try { await opts.retry(readback.slice()); } catch (err) { /* the second read-back decides */ }
     const again = await readBackCoils(client, target, start, requested.length);
     if (again === null) return build(readback, 'readback', true); // keep the first read
     return build(again, 'readback', true);

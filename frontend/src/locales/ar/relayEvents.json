@@ -12,6 +12,7 @@
     "manual": "يدوي",
     "automation": "أتمتة",
     "automation_auto_off": "إطفاء تلقائي بالأتمتة",
+    "automation_auto_off_superseded": "تخطي إيقاف تلقائي قديم (تشغيل أحدث)",
     "watchdog_force_off": "إطفاء قسري من خدمة المراقبة",
     "all_channels": "كل القنوات",
     "automation_transition": "انتقال الأتمتة",

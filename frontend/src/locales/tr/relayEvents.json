@@ -12,6 +12,7 @@
     "manual": "manuel",
     "automation": "otomasyon",
     "automation_auto_off": "otomasyon otomatik kapatma",
+    "automation_auto_off_superseded": "eski otomatik kapatma atlandı (daha yeni AÇIK)",
     "watchdog_force_off": "izleme servisi zorla kapatma",
     "all_channels": "tüm kanallar",
     "automation_transition": "otomasyon geçişi",

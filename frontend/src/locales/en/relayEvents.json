@@ -12,6 +12,7 @@
     "manual": "manual",
     "automation": "automation",
     "automation_auto_off": "automation auto-off",
+    "automation_auto_off_superseded": "stale auto-off skipped (newer ON)",
     "watchdog_force_off": "watchdog force-off",
     "all_channels": "all channels",
     "automation_transition": "automation transition",

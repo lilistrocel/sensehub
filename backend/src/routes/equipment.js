@@ -8,6 +8,7 @@ const interlock = require('../services/RelayInterlockService');
 const readback = require('../services/RelayReadback');
 const { applyRelayCache } = require('../services/RelayStateCache');
 const { relayTimerService } = require('../services/RelayTimerService');
+const commandLedger = require('../services/RelayCommandLedger');
 const { clampSeconds, resolveRelayLimits } = require('../services/AutomationGuards');
 
 function getRelayLimits() {
@@ -889,6 +890,8 @@ router.post('/:id/relay/control', requireRole('admin', 'operator'), async (req, 
         await modbusTcpClient.writeSingleCoil(host, port, unitId, address, value);
       }
     };
+    // newest command on the channel (stale auto-off / in-flight ON retry guard, 2026-10-07)
+    commandLedger.record(equipment.id, address, value, { source: 'manual' });
     await sendWrite();
     const rb = await readback.confirmCoilWrite(modbusTcpClient, target, address, value, {
       writeOnly: !!equipment.write_only, retry: sendWrite
@@ -919,6 +922,7 @@ router.post('/:id/relay/control', requireRole('admin', 'operator'), async (req, 
             if (equipment.write_only) await modbusTcpClient.writeSingleCoilFireAndForget(host, port, unitId, address, false);
             else await modbusTcpClient.writeSingleCoil(host, port, unitId, address, false);
           };
+          commandLedger.record(equipment.id, address, false, { source: 'manual_auto_off' });
           await sendOff();
           const offRb = await readback.confirmCoilWrite(modbusTcpClient, target, address, false, {
             writeOnly: !!equipment.write_only, retry: sendOff
@@ -1018,6 +1022,7 @@ router.post('/:id/relay/all', requireRole('admin', 'operator'), async (req, res)
         await modbusTcpClient.writeMultipleCoils(host, port, unitId, minAddress, values);
       }
     };
+    commandLedger.recordMany(equipment.id, values.map((_, i) => minAddress + i), value, { source: 'all_channels' });
     await sendWrite();
     const rb = await readback.confirmWrite(modbusTcpClient, target, minAddress, values, {
       writeOnly: !!equipment.write_only, retry: sendWrite

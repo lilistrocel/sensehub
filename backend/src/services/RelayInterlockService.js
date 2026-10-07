@@ -183,6 +183,7 @@ async function prepareEnergise(row, channel, modbusClient) {
   }
 
   try {
+    require('./RelayCommandLedger').record(row.id, partner, false, { source: 'interlock' });
     await modbusClient.writeSingleCoil(host, port, unitId, partner, false, PARTNER_WRITE_OPTIONS);
   } catch (err) {
     throw new InterlockViolation(
@@ -318,6 +319,7 @@ async function resolveHardwareConflict(row, relayStates, modbusClient, context =
     if (hostPort) {
       for (const ch of [a, b]) {
         try {
+          require('./RelayCommandLedger').record(row.id, ch, false, { source: 'interlock' });
           await modbusClient.writeSingleCoil(hostPort.host, hostPort.port, unitId, ch, false, PARTNER_WRITE_OPTIONS);
           let ok = false;
           try {
